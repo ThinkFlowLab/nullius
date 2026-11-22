@@ -10,31 +10,67 @@
 .bench-shelf.st-community .shelf-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--status-color); }
 .shelf-n { color: var(--text-faint); font-weight: 500; }
 /* four cards a line on a wide screen, two on a narrower one, one on a phone */
-.bench-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-@media (max-width: 1180px) { .bench-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 640px) { .bench-grid { grid-template-columns: minmax(0, 1fr); } }
+.bench-grid { --n: 4; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1180px) { .bench-grid { --n: 2; } }
+@media (max-width: 640px) { .bench-grid { --n: 1; } }
+/* more than three stats (--stats, from _cards.html): every card wide enough for them on one line, 72px a stat, so
+   fewer cards a line - at most --n, and at least one however narrow the screen */
+.bench-grid:has(.bench-stats > :nth-child(4)) { grid-template-columns: repeat(auto-fill, minmax(min(100%, max((100% - (var(--n) - 1) * 16px) / var(--n) - .1px, var(--stats) * 80px + 34px)), 1fr)); }
 /* a card (templates/_cards.html): its title's link stretched over it, so the whole card opens it; a checkbox, a
    button or a value with a tooltip sits above that link */
-.bench-card { position: relative; display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-soft); color: var(--text); transition: border-color .13s ease; }
+.bench-card { container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-soft); color: var(--text); transition: border-color .13s ease; }
 .bench-card:hover { border-color: var(--accent); }
 .card-link, .card-link:hover { color: inherit; text-decoration: none; }
 .card-link::after { content: ""; position: absolute; inset: -1px; border-radius: 12px; }
 .card-link:focus-visible { outline: none; }
 .card-link:focus-visible::after { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
+/* a pick card (_cards.html `pick`): its title a toggle; chosen, it is marked; disabled, its reason says why */
+button.card-link { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: left; cursor: pointer; }
+button.card-link:disabled { cursor: not-allowed; }
+/* a pick row: chosen, tinted to its pinned name; disabled, faint (not translucent: its pinned name covers what scrolls under) */
+.table-wrap .grid tbody tr:has([data-pick]:checked) > td { background: var(--accent-soft); }
+.table-wrap .grid tbody tr:has([data-pick]:disabled) > td { color: var(--text-faint); }
+tr:has([data-pick]:disabled) .row-name > :first-child { opacity: .55; }
+tr:has([data-pick]:not(:disabled)) { cursor: pointer; }
+.bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]) { border-color: var(--accent); background: var(--accent-soft);
+  --pick-fill: color-mix(in srgb, var(--accent) 16%, var(--accent-soft)); --pick-line: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+/* inside it, what is filled with --accent-soft (a category tag, a mark) or outlined with --border (a tag) stands out from
+   that background as it does on any card: a shade nearer the accent */
+.bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]) > * { --accent-soft: var(--pick-fill); --border: var(--pick-line); }
+.pick-check { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--btn-fg); visibility: hidden; }
+.pick-check .ic { width: 12px; height: 12px; stroke-width: 3; }
+.bench-card:has([data-pick][aria-pressed="true"]) .pick-check { visibility: visible; }
+.bench-card:has(> .bench-card-title [data-pick]:disabled) { opacity: .55; }
+.bench-card:has(> .bench-card-title [data-pick]:disabled):hover { border-color: var(--border-soft); }
 .bench-card :is(input, button, .btn, [title]) { position: relative; z-index: 1; }
 .bench-card [title]:not(input, button, .btn) { cursor: pointer; }   /* raised for its tooltip, it still opens the card */
-.bench-card-top .bench-harness { margin-left: auto; }
-.bench-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.bench-card .card-link { position: static; z-index: auto; }   /* with a tooltip too: its ::after stretches over the card, not round its name */
+.bench-card-foot .bench-harness { margin-left: auto; text-align: right; }
+/* the foot on a card's last line, wherever its badges or stats would put it */
+.bench-card-foot:not(.bench-card-runs ~ *, .bench-stats ~ *) { margin-top: auto; }
+.bench-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .bench-shelf.st-community .bench-card { background: transparent; border-style: dashed; border-color: var(--border); }
 .bench-shelf.st-community .bench-card:hover { border-color: var(--accent); }
-.bench-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bench-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; line-height: 18px; min-height: 18px; }   /* one height with or without a status glyph, so stats line up across a row */
 .bench-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .bench-harness { font: 12px var(--mono); color: var(--text-faint); }
 .bench-card-title { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 500; letter-spacing: -.01em; }
+/* the check and the delete at the title row's right, level with its first line however the title wraps */
+.bench-card-corner { flex: none; align-self: flex-start; display: flex; align-items: center; gap: 6px; height: 1lh; margin-left: auto; }
+.bench-card-corner [data-check] { margin: 0; }
+/* a name with a control of its own after its last word (a title's `after`), wrapping as text */
+.bench-card-name { min-width: 0; }
+.bench-card-name > .icon-btn { vertical-align: middle; }
 .bench-mark { flex: none; width: 22px; height: 22px; color: var(--accent); }
-.bench-card-domain { margin-top: -6px; font-size: 14px; line-height: 1.5; color: var(--text-dim); }
-/* up to three stats in columns of one width, each its label then its value */
-.bench-stats { display: grid; grid-template-columns: repeat(3, minmax(min-content, 1fr)); gap: 8px; margin: auto 0 0; padding-top: 14px; border-top: 1px solid var(--border-soft); }
+/* a table row's name (_cards.html rows): its icon, then its link */
+.row-name { display: inline-flex; align-items: center; gap: 8px; overflow-wrap: break-word; }   /* a name wraps between its words, never inside one: an expand column breaks anywhere, the table scrolls instead */
+.bench-card-domain { margin-top: -6px; font-size: 14px; line-height: 1.5; color: var(--text-dim); overflow-wrap: anywhere; }   /* a long file name breaks rather than spills */
+/* the stats in columns of one width, a column each, each its label then its value; on a card too narrow for one
+   line (a phone), two balanced rows: 4 as 2+2, 5 as 3+2, 6 as 3+3 */
+.bench-stats { display: grid; grid-template-columns: repeat(var(--cols, var(--stats, 3)), minmax(min-content, 1fr)); gap: 8px; margin: auto 0 0; padding-top: 14px; border-top: 1px solid var(--border-soft); }
+@container (max-width: 311.9px) { .bench-stats:has(> :nth-child(4)) { --cols: 2; } }
+@container (max-width: 391.9px) { .bench-stats:has(> :nth-child(5)) { --cols: 3; } }
+@container (max-width: 471.9px) { .bench-stats:has(> :nth-child(6)) { --cols: 3; } }
 .bench-stats > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .bench-stats dd { margin: 0; font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .bench-stats dd.word { font-size: 14px; line-height: 1.35; padding-top: 3px; }

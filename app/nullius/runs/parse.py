@@ -7,6 +7,7 @@ and redact on the way in.
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import shlex
@@ -990,6 +991,14 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
     job.merged_from = [s["job"] for s in merged if isinstance(s, dict) and isinstance(s.get("job"), str) and s["job"]] if isinstance(merged, list) else []
     job.budget = _budget(res.get("budget"))
     job.standard = bool(std)
+    setup = std.get("setup") if isinstance(std.get("setup"), dict) else {}
+    was = (std.get("benchmark_options") or {}).get("agent") if isinstance(std.get("benchmark_options"), dict) else None
+    if setup and not setup.get("agent") and job.agent_name == setup.get("name") and isinstance(was, str):
+        own = _own_agent_key(str(std.get("benchmark") or ""), was)       # a job from before: named as a new one is
+        if own:
+            job.agent_name = own
+            for t in job.trials:
+                t.agent_info_name = own
     job.retries = _retries_of(cfg)
     # a runner's job was never a `harbor run`: there is no command to rebuild
     job.harbor_command = "" if job.runner else redact(harbor_command(
@@ -1006,6 +1015,23 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
     job.harbor_version = str(harbor.get("version") or "")
     job.harbor_editable = harbor.get("is_editable") if isinstance(harbor.get("is_editable"), bool) else None
     return job
+
+
+def _own_agent_key(bench: str, upstream: str) -> str:
+    """The key of the benchmark's own agent the upstream names ``upstream`` (its ``agents.json``,
+    ``start.driver.agent``); empty for a benchmark without, or a name none has."""
+    from nullius.standard import definitions          # the catalogue, read only for a job from before
+    folder = definitions.entry_dir("benchmark", bench) if re.fullmatch(r"[a-z][a-z0-9-]{0,39}", bench) else None
+    path = os.path.join(folder, definitions.AGENTS_FILE) if folder else ""
+    return _own_keys(path, os.path.getmtime(path)).get(upstream, "") if path and os.path.isfile(path) else ""
+
+
+@functools.lru_cache(maxsize=16)
+def _own_keys(path: str, mtime: float) -> dict:
+    rows = (verifier._read_json(path) or {}).get("agents")
+    return {e["start"]["driver"]["agent"]: k for k, e in rows.items()
+            if isinstance(e, dict) and isinstance((e.get("start") or {}).get("driver"), dict) and "agent" in e["start"]["driver"]} \
+        if isinstance(rows, dict) else {}
 
 
 def _agent_of(t, agents: list) -> int:

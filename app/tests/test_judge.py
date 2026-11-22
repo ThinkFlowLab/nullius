@@ -193,7 +193,7 @@ class Store(unittest.TestCase):
         rec = {"questions": "judgement.questions.v1", "judge": {"provider": "typesafe.ai", "model": "jev-latest"}, "asked_at": "2026-09-17T09:00:00Z",
                "state_chars": 10, "truncated": False, "answers": {"task_completed": {"noul": 0.9}}, "usage": {"input_tokens": 1, "output_tokens": 1}}
         store.save(self.ws.dir, "job-1", "task__abc/def", rec)
-        path = Path(self.ws.dir) / "judgements" / "job-1" / "task__abc_def.json"
+        path = Path(self.ws.dir) / "judgements" / "job-1" / (store.key("task__abc/def") + ".json")
         self.assertTrue(path.exists()); self.assertFalse((self.tmp / "jobs").exists())                   # under the workspace, never the job tree
         self.assertEqual(store.load(self.ws.dir, "job-1", "task__abc/def")["answers"], {"task_completed": {"noul": 0.9}})
         later = dict(rec, asked_at="2026-09-17T10:00:00Z", answers={"transcript_quality": {"score": 2.0, "legend": ["a", "b", "c"], "probabilities": {}, "confidence": 0.9}})
@@ -201,7 +201,8 @@ class Store(unittest.TestCase):
         got = store.load(self.ws.dir, "job-1", "task__abc/def")
         self.assertEqual(sorted(got["answers"]), ["task_completed", "transcript_quality"]); self.assertEqual(got["asked_at"], "2026-09-17T10:00:00Z")   # answers merge per version
         self.assertIsNone(store.load(self.ws.dir, "job-1", "task__abc/def", version="judgement.questions.v3"))
-        self.assertEqual(list(store.for_job(self.ws.dir, "job-1")), ["task__abc_def"]); self.assertEqual(store.for_job(self.ws.dir, "job-2"), {})
+        trials = {"task__abc/def": None, "other": None}
+        self.assertEqual(list(store.for_job(self.ws.dir, "job-1", trials)), ["task__abc/def"]); self.assertEqual(store.for_job(self.ws.dir, "job-2", trials), {})
         (Path(self.ws.jobs_dir)).mkdir(parents=True, exist_ok=True); (Path(self.ws.jobs_dir) / "x.json").write_text("{}")
         workspace.clear_cache(self.ws)                                                                      # a re-parse of the job
         self.assertEqual(store.load(self.ws.dir, "job-1", "task__abc/def")["answers"]["task_completed"], {"noul": 0.9})
@@ -233,7 +234,7 @@ class Versions(unittest.TestCase):
         store.save(d, "job", "t", self.record("judgement.questions.v1", task_completed={"noul": 0.2}))
         got = store.load(d, "job", "t")
         self.assertEqual(got["questions"], "judgement.questions.v1"); self.assertFalse(store.is_current(got))      # only v1: shown, marked earlier
-        self.assertEqual(store.for_job(d, "job")["t"]["questions"], "judgement.questions.v1")
+        self.assertEqual(store.for_job(d, "job", {"t": None})["t"]["questions"], "judgement.questions.v1")
         store.save(d, "job", "t", self.record(questions.VERSION, task_completed={"noul": 0.9}))
         data = json.loads((self.tmp / "judgements" / "job" / "t.json").read_text())
         self.assertEqual(sorted(data), ["judgement.questions.v1", "judgement.questions.v2"])                        # both kept in one file
@@ -241,7 +242,7 @@ class Versions(unittest.TestCase):
         got = store.load(d, "job", "t")
         self.assertEqual((got["questions"], got["answers"]["task_completed"]["noul"]), ("judgement.questions.v2", 0.9)); self.assertTrue(store.is_current(got))
         self.assertEqual(store.load(d, "job", "t", version="judgement.questions.v1")["answers"]["task_completed"]["noul"], 0.2)
-        self.assertEqual(store.for_job(d, "job")["t"]["questions"], "judgement.questions.v2")
+        self.assertEqual(store.for_job(d, "job", {"t": None})["t"]["questions"], "judgement.questions.v2")
         self.assertFalse(store.is_current(None))
 
     def test_a_record_is_the_try_it_judged_and_no_retry_under_its_name(self):
@@ -252,7 +253,7 @@ class Versions(unittest.TestCase):
         store.save(d, "job", "t", self.record(questions.VERSION, task_completed={"noul": 0.2}), started=first)
         self.assertEqual(store.load(d, "job", "t", started=first)["trial_started_at"], first)
         self.assertIsNone(store.load(d, "job", "t", started=retry))
-        self.assertEqual(store.for_job(d, "job", started={"t": retry}), {})
+        self.assertEqual(store.for_job(d, "job", {"t": retry}), {})
         self.assertIsNotNone(store.load(d, "job", "t"))                       # a read that names no start takes it as it is
         store.save(d, "job", "t", self.record(questions.VERSION, failure_cause={"choice": "x"}), started=retry)
         got = store.load(d, "job", "t", started=retry)
@@ -310,7 +311,7 @@ class Batch(unittest.TestCase):
         self.assertEqual(store.load(str(self.tmp), "job", "t", lane="llm")["answers"], {"task_completed": {"noul": 0.3}})
         self.assertIsNone(store.load(str(self.tmp), "job", "t"))                                                    # Decision's is its own
         self.assertTrue((self.tmp / "judgements-llm" / "job" / "t.json").is_file())
-        self.assertEqual(store.for_job(str(self.tmp), "job"), {}); self.assertEqual(list(store.for_job(str(self.tmp), "job", lane="llm")), ["t"])
+        self.assertEqual(store.for_job(str(self.tmp), "job", {"t": None}), {}); self.assertEqual(list(store.for_job(str(self.tmp), "job", {"t": None}, lane="llm")), ["t"])
 
 
 ADVERSARIAL = HERE / "fixtures" / "judge" / "adversarial-trajectory.json"

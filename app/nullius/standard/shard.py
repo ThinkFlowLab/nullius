@@ -18,6 +18,11 @@ A trial keeps its unit's place in the whole dataset as its tag (``u0042`` is
 the 43rd unit in every shard), so the shards' trials never share a name and
 merge without renaming (``merge``).
 
+A launch where each machine takes one unit (a Boat VM per unit, ``boat_units``)
+splits by place instead (``BY``, ``position``): shard ``I`` of ``N`` holds the
+units at places ``I-1``, ``I-1+N``, ... of the dataset's order, so ``N`` equal to
+the dataset's units gives each shard exactly one.
+
 Every shard of one launch records the same ``launch`` id: ``--launch``, or by
 default the day (UTC), the benchmark, the agent or capability and the model, so
 shards started separately - on other machines, minutes apart - still say
@@ -32,6 +37,7 @@ import time
 from typing import List, Optional, Tuple
 
 PARTITION = "sha256(unit id) mod N"
+BY = {"id": PARTITION, "position": "place in the dataset mod N"}
 _SPEC = re.compile(r"^\s*(\d+)\s*/\s*(\d+)\s*$")
 _WORD = re.compile(r"[^A-Za-z0-9_.-]+")
 
@@ -52,10 +58,11 @@ def of(unit: str, n: int) -> int:
     return int.from_bytes(hashlib.sha256(str(unit).encode("utf-8")).digest()[:8], "big") % n + 1
 
 
-def select(units: List[str], index: int, n: int) -> List[Tuple[int, str]]:
+def select(units: List[str], index: int, n: int, by: str = "id") -> List[Tuple[int, str]]:
     """The units of shard ``index`` of ``n``, each with its place in the whole
-    list (what its trial's tag is made of), in the dataset's order."""
-    return [(i, u) for i, u in enumerate(units) if n == 1 or of(u, n) == index]
+    list (what its trial's tag is made of), in the dataset's order; ``by`` the
+    unit's id (its hash) or its place (``BY``)."""
+    return [(i, u) for i, u in enumerate(units) if n == 1 or (i % n + 1 if by == "position" else of(u, n)) == index]
 
 
 def launch_id(bench_word: str, other_word: str, model: str, day: Optional[str] = None) -> str:
@@ -65,9 +72,9 @@ def launch_id(bench_word: str, other_word: str, model: str, day: Optional[str] =
     return "__".join(_WORD.sub("_", w).strip("_") for w in words)
 
 
-def record(index: int, n: int, total: int, planned: List[str], limit: Optional[int] = None) -> dict:
+def record(index: int, n: int, total: int, planned: List[str], limit: Optional[int] = None, by: str = "id") -> dict:
     """What a shard's config says of it (``standard.shard``): which shard, of
     how many, over how many units, split how; the units it planned to run, so
     a merge can name a unit planned and never run; and its own ``limit``."""
-    return {"index": index, "of": n, "units_total": total, "partition": PARTITION, "planned": list(planned),
+    return {"index": index, "of": n, "units_total": total, "partition": BY[by], "planned": list(planned),
             **({"limit": limit} if limit else {})}

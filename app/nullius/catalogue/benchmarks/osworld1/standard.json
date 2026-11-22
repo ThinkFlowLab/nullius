@@ -124,8 +124,7 @@
       "turn_seconds": 7200,
       "side_models": [
         "UI-TARS-1.5-7B"
-      ],
-      "reference_agent": "OSWorld's agents"
+      ]
     },
     "model": {
       "summary": "The same agent with any model in its own model's place: the upstream's code asks for the agent's first published model, with its prompt and action format, and the relay sends the model chosen, every side call included. Its scores compare with other runs of this setup.",
@@ -136,53 +135,10 @@
     "agent": {
       "label": "Agent",
       "summary": "Which of OSWorld's own agents runs: each its script as published, with its own prompts, action format and step limit.",
-      "values": [
-        "m3",
-        "prompt",
-        "claude",
-        "gpt54",
-        "openai_cua",
-        "qwen",
-        "os_symphony",
-        "evocua",
-        "autoglm",
-        "autoglm_v",
-        "mano",
-        "muse_spark"
-      ],
-      "default": "m3",
       "setups": [
         "original",
         "model"
-      ],
-      "names": {
-        "m3": "M3 Agent",
-        "prompt": "PromptAgent",
-        "claude": "Claude computer use",
-        "gpt54": "GPT-5.4",
-        "openai_cua": "OpenAI CUA",
-        "qwen": "Qwen",
-        "os_symphony": "OS-Symphony",
-        "evocua": "EvoCUA",
-        "autoglm": "AutoGLM",
-        "autoglm_v": "AutoGLM-V",
-        "mano": "Mano",
-        "muse_spark": "Muse Spark"
-      },
-      "about": {
-        "m3": "MiniMax's M3Agent: run_multienv_m3.py, MiniMax-M3 over Anthropic's Messages API, 100 steps",
-        "prompt": "OSWorld's PromptAgent: run_multienv.py, GPT-4o on screenshots over Chat Completions, 15 steps",
-        "claude": "Anthropic's computer-use agent: run_multienv_claude.py, Claude with the computer-use beta tool, 50 steps",
-        "gpt54": "OpenAI's GPT-5.4 computer use: run_multienv_gpt54.py, the Responses API's computer tool, 50 steps",
-        "openai_cua": "OpenAI's CUA: run_multienv_openaicua.py, computer-use-preview over the Responses API, 50 steps",
-        "qwen": "Qwen-CUA: run_multienv_qwen.py, qwen3.7-plus over Chat Completions, 50 steps",
-        "os_symphony": "OS-Symphony: run_multienv_os_symphony.py, GPT-5 roles with a UI-TARS-1.5-7B grounder and a search VM, 50 steps",
-        "evocua": "EvoCUA: run_multienv_evocua.py, the EvoCUA-S2 or S1 checkpoint on a model server, 50 steps",
-        "autoglm": "AutoGLM-OS: run_autoglm.py, autoglm-os on the accessibility tree, on a model server, 50 steps",
-        "autoglm_v": "AutoGLM-OS with vision: run_autoglm_v.py, autoglm-os on screenshots, on a model server, 50 steps",
-        "mano": "Mano: run_multienv_mano.py, the mano model on a model server, 15 steps",
-        "muse_spark": "Meta's Muse Spark: run_multienv_muse_spark.py, muse-spark-1.1 over the Responses API, 100 steps"
-      }
+      ]
     },
     "thinking": {
       "summary": "M3_THINKING_MODE: adaptive, as run_multienv_m3.py's own documented invocation exports it (the model decides whether to think; temperature 1, no top_p), or off, the agent's code default when the variable is unset.",
@@ -254,7 +210,10 @@
         "docker": {
           "host": [
             "docker"
-          ]
+          ],
+          "vm": {
+            "memory_gb": 4
+          }
         }
       }
     },
@@ -286,57 +245,241 @@
       }
     }
   },
-  "proven": {
-    "test_nogdrive": {
-      "units": {
-        "units": 361,
-        "passed": "361 ids, the same twice, unique",
-        "on": "2026-11-13"
+  "default": "desktop-env-v1.0.3",
+  "versions": {
+    "desktop-env-v1.0.3": {
+      "upstream": {
+        "tag": "desktop-env-v1.0.3",
+        "tested": "9d6f711d234b84cbff1b5199211610baa03b000c",
+        "tested_date": "2026-11-19"
       },
-      "nop": {
-        "passed": "0/8",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
+      "datasets": [
+        {
+          "id": "test_nogdrive",
+          "label": "Without Google Drive",
+          "summary": "The upstream's test_nogdrive.json: every task but the 8 that need a Google account's credentials. The live MBTA booking task is retired at this release.",
+          "path": "evaluation_examples/test_nogdrive.json",
+          "sha256": "9270c11fe809eb4c4e35a78a47cdb50717ea76557c1b9164c183e8e8b8d9ce91",
+          "units": 360
         },
-        "units": 8,
-        "job": "2026-10-29__18-38-14__osworld1__test_nogdrive__prove-nop",
-        "source": "nullius",
-        "on": "2026-10-29",
-        "limit": 8
-      }
-    },
-    "test_all": {
-      "units": {
-        "units": 369,
-        "passed": "369 ids, the same twice, unique",
-        "on": "2026-11-13"
-      }
-    },
-    "test_infeasible": {
-      "units": {
-        "units": 25,
-        "passed": "25 ids, the same twice, unique",
-        "on": "2026-11-13"
-      }
-    },
-    "test_small": {
-      "units": {
-        "units": 39,
-        "passed": "39 ids, the same twice, unique",
-        "on": "2026-11-13"
+        {
+          "id": "test_all",
+          "label": "All tasks",
+          "summary": "The upstream's test_all.json, its runners' default: the 8 Google Drive tasks need credentials under evaluation_examples/settings, which the upstream does not ship. The live MBTA booking task is retired at this release.",
+          "path": "evaluation_examples/test_all.json",
+          "sha256": "47c54203369bd438abf279f6b9836bffc5aa43de6cbaccdfed546993f3fe9149",
+          "units": 368
+        },
+        {
+          "id": "test_small",
+          "label": "Small",
+          "summary": "The upstream's test_small.json: a few tasks of each domain.",
+          "path": "evaluation_examples/test_small.json",
+          "sha256": "bb29275171b78728d71825b125af311d74e66bb2a6d693c45c497d380b1fc640",
+          "units": 39
+        },
+        {
+          "id": "test_infeasible",
+          "label": "Infeasible",
+          "summary": "The upstream's test_infeasible.json: tasks that cannot be done, passed by answering FAIL.",
+          "path": "evaluation_examples/test_infeasible.json",
+          "sha256": "1b447d0462b1bdac4b660e0dd6e6add6d01c17a9e684702c701abcffda409abb",
+          "units": 25
+        }
+      ],
+      "driver": {
+        "command": [
+          "{install}/.venv/bin/python",
+          "{here}/driver.py",
+          "{here}/agents.json",
+          "{here}/nop.py",
+          "{here}/runner.py"
+        ],
+        "install": {
+          "python": "3.12",
+          "project": ".",
+          "locked": true,
+          "virtual": true
+        },
+        "participant": true,
+        "unit_end": true,
+        "task_given": true
       },
-      "nop": {
-        "passed": "0/8",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
+      "setups": {
+        "original": {
+          "summary": "OSWorld's own agents as published: the agent option's script (scripts/python/run_*.py) on the task, with its own prompts, parser, history and step limit, asking one of the models it is published with, on the docker provider's VM, scored by DesktopEnv.evaluate. At OSWorld's desktop-env 1.0.3 release: its evaluator fixes change the score of some tasks and one task is retired, so its runs compare with each other only, not with the paper's or the earlier pin's.",
+          "models": [
+            "MiniMax-M3",
+            "gpt-4o",
+            "claude-sonnet-4-5-20250929",
+            "claude-opus-4-5",
+            "claude-opus-4-6",
+            "claude-opus-4-7",
+            "gpt-5.4",
+            "computer-use-preview",
+            "qwen3.7-plus",
+            "gpt-5",
+            "EvoCUA-S2",
+            "EvoCUA-S1",
+            "autoglm-os",
+            "mano",
+            "muse-spark-1.1"
+          ],
+          "default": "MiniMax-M3",
+          "served_as": {
+            "MiniMax-M3": "minimax/minimax-m3",
+            "gpt-4o": "openai/gpt-4o",
+            "claude-sonnet-4-5-20250929": "anthropic/claude-sonnet-4.5",
+            "claude-opus-4-5": "anthropic/claude-opus-4.5",
+            "claude-opus-4-6": "anthropic/claude-opus-4.6",
+            "claude-opus-4-7": "anthropic/claude-opus-4.7",
+            "gpt-5.4": "openai/gpt-5.4",
+            "qwen3.7-plus": "qwen/qwen3.7-plus",
+            "gpt-5": "openai/gpt-5",
+            "UI-TARS-1.5-7B": "bytedance/ui-tars-1.5-7b"
+          },
+          "providers": {
+            "openrouter": "",
+            "openai": "",
+            "custom": ""
+          },
+          "turn_seconds": 7200,
+          "side_models": [
+            "UI-TARS-1.5-7B"
+          ],
+          "comparable": false
         },
-        "units": 8,
-        "job": "2026-11-13__14-08-41__osworld1__test_small__prove-nop",
-        "source": "nullius",
-        "on": "2026-11-13",
-        "limit": 8
+        "model": {
+          "summary": "The same agent with any model in its own model's place: the upstream's code asks for the agent's first published model, with its prompt and action format, and the relay sends the model chosen, every side call included. Its scores compare with other runs of this setup.",
+          "runs_as": "MiniMax-M3"
+        }
+      },
+      "proven": {
+        "test_nogdrive": {
+          "units": {
+            "units": 360,
+            "passed": "360 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/360",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 360,
+            "options": {
+              "max_steps": "default",
+              "vm_provider": "docker"
+            }
+          }
+        },
+        "test_all": {
+          "units": {
+            "units": 368,
+            "passed": "368 ids, the same twice, unique"
+          }
+        },
+        "test_small": {
+          "units": {
+            "units": 39,
+            "passed": "39 ids, the same twice, unique"
+          },
+          "failed": {
+            "nop": {
+              "passed": "0/39",
+              "value": 0.0,
+              "expect": {
+                "at_most": 0.0
+              },
+              "units": 39,
+              "problems": [
+                "5 unit(s) ended in an error before the score"
+              ]
+            }
+          }
+        },
+        "test_infeasible": {
+          "units": {
+            "units": 25,
+            "passed": "25 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/25",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 25,
+            "options": {
+              "max_steps": "default",
+              "vm_provider": "docker"
+            }
+          }
+        }
+      }
+    },
+    "044bc33": {
+      "upstream": {
+        "branch": "main"
+      },
+      "proven": {
+        "test_nogdrive": {
+          "units": {
+            "units": 361,
+            "passed": "361 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/361",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 361,
+            "options": {
+              "max_steps": "default",
+              "vm_provider": "docker"
+            }
+          }
+        },
+        "test_all": {
+          "units": {
+            "units": 369,
+            "passed": "369 ids, the same twice, unique"
+          }
+        },
+        "test_infeasible": {
+          "units": {
+            "units": 25,
+            "passed": "25 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/25",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 25,
+            "options": {
+              "max_steps": "default",
+              "vm_provider": "docker"
+            }
+          }
+        },
+        "test_small": {
+          "units": {
+            "units": 39,
+            "passed": "39 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/8",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 8,
+            "limit": 8
+          }
+        }
       }
     }
   }

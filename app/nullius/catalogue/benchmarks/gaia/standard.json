@@ -122,8 +122,7 @@
     "gaia-validation": {
       "units": {
         "units": 165,
-        "passed": "165 ids, the same twice, unique",
-        "on": "2026-11-11"
+        "passed": "165 ids, the same twice, unique"
       },
       "leak": {
         "units": 165,
@@ -134,8 +133,7 @@
           "units": 1,
           "why": "A question that asks for one of the choices it lists names its answer among those choices."
         },
-        "note": "120 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 1 prompt(s) name their answer, as the benchmark says they may: A question that asks for one of the choices it lists names its answer among those choices.",
-        "on": "2026-11-11"
+        "note": "120 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 1 prompt(s) name their answer, as the benchmark says they may: A question that asks for one of the choices it lists names its answer among those choices."
       },
       "nop": {
         "passed": "0/165",
@@ -143,10 +141,7 @@
         "expect": {
           "at_most": 0.0
         },
-        "units": 165,
-        "job": "2026-11-11__23-16-20__gaia__gaia-validation__prove-nop",
-        "source": "nullius",
-        "on": "2026-11-11"
+        "units": 165
       },
       "oracle": {
         "passed": "165/165",
@@ -154,17 +149,13 @@
         "expect": {
           "at_least": 1.0
         },
-        "units": 165,
-        "job": "2026-11-11__23-16-20__gaia__gaia-validation__prove-oracle",
-        "source": "adapter",
-        "on": "2026-11-11"
+        "units": 165
       }
     },
     "gaia-validation-level1": {
       "units": {
         "units": 53,
-        "passed": "53 ids, the same twice, unique",
-        "on": "2026-11-11"
+        "passed": "53 ids, the same twice, unique"
       },
       "leak": {
         "units": 53,
@@ -175,8 +166,7 @@
           "units": 1,
           "why": "A question that asks for one of the choices it lists names its answer among those choices."
         },
-        "note": "37 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 1 prompt(s) name their answer, as the benchmark says they may: A question that asks for one of the choices it lists names its answer among those choices.",
-        "on": "2026-11-11"
+        "note": "37 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 1 prompt(s) name their answer, as the benchmark says they may: A question that asks for one of the choices it lists names its answer among those choices."
       },
       "nop": {
         "passed": "0/53",
@@ -184,10 +174,7 @@
         "expect": {
           "at_most": 0.0
         },
-        "units": 53,
-        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level1__prove-nop",
-        "source": "nullius",
-        "on": "2026-11-11"
+        "units": 53
       },
       "oracle": {
         "passed": "53/53",
@@ -195,25 +182,20 @@
         "expect": {
           "at_least": 1.0
         },
-        "units": 53,
-        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level1__prove-oracle",
-        "source": "adapter",
-        "on": "2026-11-11"
+        "units": 53
       }
     },
     "gaia-validation-level2": {
       "units": {
         "units": 86,
-        "passed": "86 ids, the same twice, unique",
-        "on": "2026-11-11"
+        "passed": "86 ids, the same twice, unique"
       },
       "leak": {
         "units": 86,
         "looked_for": 106,
         "short": 66,
         "passed": "86/86",
-        "note": "66 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
-        "on": "2026-11-11"
+        "note": "66 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
       },
       "nop": {
         "passed": "0/86",
@@ -221,10 +203,7 @@
         "expect": {
           "at_most": 0.0
         },
-        "units": 86,
-        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level2__prove-nop",
-        "source": "nullius",
-        "on": "2026-11-11"
+        "units": 86
       },
       "oracle": {
         "passed": "86/86",
@@ -232,25 +211,20 @@
         "expect": {
           "at_least": 1.0
         },
-        "units": 86,
-        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level2__prove-oracle",
-        "source": "adapter",
-        "on": "2026-11-11"
+        "units": 86
       }
     },
     "gaia-validation-level3": {
       "units": {
         "units": 26,
-        "passed": "26 ids, the same twice, unique",
-        "on": "2026-11-11"
+        "passed": "26 ids, the same twice, unique"
       },
       "leak": {
         "units": 26,
         "looked_for": 35,
         "short": 17,
         "passed": "26/26",
-        "note": "17 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
-        "on": "2026-11-11"
+        "note": "17 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
       },
       "nop": {
         "passed": "0/26",
@@ -258,10 +232,7 @@
         "expect": {
           "at_most": 0.0
         },
-        "units": 26,
-        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level3__prove-nop",
-        "source": "nullius",
-        "on": "2026-11-11"
+        "units": 26
       },
       "oracle": {
         "passed": "26/26",
@@ -269,10 +240,7 @@
         "expect": {
           "at_least": 1.0
         },
-        "units": 26,
-        "job": "2026-11-11__23-16-20__gaia__gaia-validation-level3__prove-oracle",
-        "source": "adapter",
-        "on": "2026-11-11"
+        "units": 26
       }
     }
   }

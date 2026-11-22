@@ -80,7 +80,8 @@
    "timeouts",
    "title",
    "upstream_limitations",
-   "usable_routes"
+   "usable_routes",
+   "versions"
   ],
   "Catalog": [
    "_folders",

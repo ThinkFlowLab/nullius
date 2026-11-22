@@ -60,9 +60,11 @@ NEEDS_SPAN = ("/trial/<job_id>/<trial_name>/trace-span",)
 
 # The Harbor source routes answer 400 without the source they are asked
 # about; asked with one, offline: refs with git unreachable (NO_GIT), the
-# agents of a release pin from the cache only (a GET never builds).
+# agents of a release pin from the cache only (a GET never builds); the
+# builder's agent grid answers 404 without the benchmark it draws.
 HARBOR_QUERY = {"/new-run/harbor/refs": "repo=example/harbor",
-                "/new-run/harbor/agents": "kind=release&version=0.24.0"}
+                "/new-run/harbor/agents": "kind=release&version=0.24.0",
+                "/new-run/agents": "benchmark=gsm8k"}
 NO_GIT = "/nonexistent/nullius-route-test/git"
 
 
@@ -242,7 +244,7 @@ class EveryRoute(unittest.TestCase):
         with patch.object(judge, "judge_trial", stub), patch.object(judge, "judge_side", stub), \
              patch.object(judge, "judge_task", stub), patch.object(judge, "judge_control", stub), \
              patch.object(judge, "tasks_todo", lambda j: list(j.trials)), \
-             patch.object(judge, "_sides_todo", lambda view: [(t.task_base, job, t) for t in job.trials]), \
+             patch.object(judge, "_sides_todo", lambda view: [(t.task_base, job, t, None) for t in job.trials]), \
              patch.dict(os.environ, TYPESAFE_API_KEY="ts-fake"):
             with self.client.session_transaction() as sess:
                 sess["csrf"] = "route-token"

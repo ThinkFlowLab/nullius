@@ -1108,10 +1108,10 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('<h3>Docker Hub</h3>', providers)
         self.assertIn('<h3>Hugging Face</h3>', providers)
         self.assertIn('name="token" type="password"', providers)
-        with patch.object(sandbox, "docker_state", lambda: {"ok": True, "version": "29.0"}), \
-                patch.object(sandbox, "login_user", lambda: self.fail("asked")):
+        self.assertNotIn("data-docker-state", section)
+        with patch.object(sandbox, "login_user", lambda: self.fail("asked")):
             r = self.client.get("/settings/sandbox"); self.addCleanup(r.close)
-        self.assertEqual(r.json, {"docker": {"ok": True, "version": "29.0"}, "boat": {"set": False, "env": False}})
+        self.assertEqual(r.json, {"boat": {"set": False, "env": False}})
         seen = []
         headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
         with patch.object(sandbox, "login", lambda u, t: seen.append((u, t)) or {"ok": True, "user": u}):
@@ -1140,8 +1140,7 @@ class SettingsPage(unittest.TestCase):
             self.assertNotIn("boat_synthetic", response.get_data(as_text=True))
             self.assertEqual(secrets.value(boat.STORE, boat.NAME), b"boat_synthetic")
             self.assertEqual(boat.key({}), "boat_synthetic")
-            with patch.object(sandbox, "docker_state", lambda: {"ok": True, "version": "29.0"}):
-                state = self.client.get("/settings/sandbox").json
+            state = self.client.get("/settings/sandbox").json
             self.assertEqual(state["boat"], {"set": True, "env": False})
             self.assertNotIn("boat_synthetic", json.dumps(state))
             self.assertIsNone(self.file())

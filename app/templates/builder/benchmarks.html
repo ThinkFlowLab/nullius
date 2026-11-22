@@ -1,0 +1,11 @@
+{#- The builder's Benchmark step grid (web/builder.py, new_run_benchmarks): the Benchmarks page's cards
+    (web/catalogue.py, benchmark_cards) as single-choice pick cards of the card toolkit (_cards.html), or its rows
+    (`layout` 'table'), loaded by command-builder.js, which keeps the choice and switches the view in place. -#}
+{% from '_cards.html' import cards %}
+{#- the category a row of pills; what it evaluates (agents or capabilities) a menu of its own, beside Filter (runner) -#}
+{% set cols = [dict(key='icon', label='Mark', card='icon', table=false, class='bench-mark'), dict(key='title', label='Name', card='title', width='expand'),
+               dict(key='evaluates', label='Evaluates', card='badge', class='std-tag', filter='dropdown', filter_icon='target'),
+               dict(key='tasks', label='Tasks', card='stat', type='num'),
+               dict(key='category', label='Category', card='tag', class='cat-tag', filter='pills'), dict(key='origin', label='Origin', card='tag', class='origin-tag'),
+               dict(key='runs', label='Runner', class='run-tag'), dict(key='domain', label='Domain', off=true)] %}
+{{ cards('nb-benchmarks', cols, items, search='Search benchmarks', choices=choices, sort=['title', 'tasks'], empty='No benchmark matches.', noun='benchmarks', layout=layout, default='cards') }}

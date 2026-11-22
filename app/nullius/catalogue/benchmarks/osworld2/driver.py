@@ -60,6 +60,9 @@ AGENTS_FILE, NOP, SITE, websites.OVERRIDE, gitlab_server.OVERRIDE = (_ARGS + _FI
 websites.SITE = SITE
 with open(AGENTS_FILE, encoding="utf-8") as _f:
     AGENTS = json.load(_f)
+# each entry an agent of the catalogue (start.driver): the driver's spec by its upstream value, the agent option's
+AGENTS["agents"] = {e["start"]["driver"]["agent"]: dict(e["start"]["driver"], models=e["models"])
+                    for e in AGENTS["agents"].values()}
 PASSWORD = AGENTS["common"][AGENTS["common"].index("--client_password") + 1]
 EXAMPLES = os.path.join(UP, "evaluation_examples")
 VM = os.path.join(UP, "docker_vm_data", "osworld-v2-ubuntu-x86.qcow2")

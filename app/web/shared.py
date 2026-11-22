@@ -335,11 +335,11 @@ def adopt_roots(roots, label="", new=False, into=""):
     Without a label, roots that already have a workspace reopen it — so a
     restart with the same argv lands in the same place, cache and all.
     ``into``: the workspace to add them to while it exists, left closed
-    unless it is open already.
+    unless it is open already; once it is gone, never the open one.
     """
     ws = STATE["workspace"]
     if into and not (ws and ws.name == into):
-        ws = workspace.load(WS_HOME, into) or ws
+        ws = workspace.load(WS_HOME, into)
     if ws and not new:
         ws.roots = list(ws.roots) + [r for r in roots if r not in ws.roots]
         workspace.save(ws)
@@ -348,7 +348,8 @@ def adopt_roots(roots, label="", new=False, into=""):
         return ws
     ws = None if label else workspace.find_by_roots(WS_HOME, roots, besides=execution.runs_root())
     ws = ws or workspace.create(WS_HOME, roots, label)
-    open_workspace(ws)
+    if new or not into or STATE["workspace"] is None:   # a gone ``into`` leaves the open workspace open
+        open_workspace(ws)
     return ws
 
 
@@ -418,8 +419,11 @@ def _jobs_for_workspace(name=None):
     return jobs
 
 
-def _record_workspace():
-    name = request.args.get("workspace") if has_request_context() else None
+def _record_workspace(name=None):
+    """The workspace that holds the record on screen: `name` ("" the open
+    one), else this request's `?workspace=`, else the open one."""
+    if name is None:
+        name = request.args.get("workspace") if has_request_context() else None
     if not name:
         return STATE["workspace"]
     ws = workspace.load(WS_HOME, name)
@@ -436,7 +440,8 @@ def _jobs_for_request():
 def _preserve_record_workspace(endpoint, values):
     """Carry evidence provenance through links, forms, and lazy detail requests."""
     record_endpoints = {"job", "trial", "save_trace", "artifact_page", "conversation_data",
-                        "trace_span_data"}
+                        "trace_span_data", "reconcile_page", "feasibility_page", "judge_trial_route",
+                        "judge_job_route", "judge_tasks_route", "judge_feasibility_route"}
     if has_request_context() and endpoint in record_endpoints and "workspace" not in values:
         name = request.args.get("workspace")
         if name:

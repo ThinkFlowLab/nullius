@@ -10,7 +10,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 <tr><th>Category</th><td>Computer use</td></tr>
 <tr><th>Origin</th><td><a href="https://github.com/xlang-ai/OSWorld">Official</a></td></tr>
 <tr><th>Runs on</th><td>Nullius</td></tr>
-<tr><th>Tasks</th><td>369</td></tr>
+<tr><th>Tasks</th><td>368</td></tr>
 <tr><th>Paper</th><td><a href="https://arxiv.org/abs/2404.07972">OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments</a>, arXiv · 2024</td></tr>
 <tr><th>Needs, ports proven</th><td><code>agent.<wbr>computer/<wbr>v1</code></td></tr>
 </tbody></table>
@@ -19,7 +19,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 | Dataset | Key | Tasks | From | Verifier |
 |---|---|---|---|---|
-| OSWorld, Ubuntu tasks | `osworld1` | 369 | GitHub [xlang-ai/OSWorld](https://github.com/xlang-ai/OSWorld/tree/044bc33901cb893808e3f91ebc9a17ed8e54b44c) | OSWorld's own evaluator, DesktopEnv.evaluate: the task's evaluator functions on the VM's final state. |
+| OSWorld, Ubuntu tasks | `osworld1` | 368 | GitHub [xlang-ai/OSWorld](https://github.com/xlang-ai/OSWorld/tree/9d6f711d234b84cbff1b5199211610baa03b000c) | OSWorld's own evaluator, DesktopEnv.evaluate: the task's evaluator functions on the VM's final state. |
 
 ## On the standard
 
@@ -31,7 +31,10 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `osworld1` | Original · OSWorld's agents · Like the paper or Any of your choice | `agent`, `max_steps`, `pause`, `thinking`, `vm_provider` |
+| `osworld1@desktop-env-v1.0.3` (default) | Original · its own agents · Like the paper or Any of your choice | `agent`, `max_steps`, `pause`, `thinking`, `vm_provider` |
+| `osworld1@044bc33` | Original · its own agents · Like the paper or Any of your choice | `agent`, `max_steps`, `pause`, `thinking`, `vm_provider` |
+
+- `key@version`: a revision of the definition and driver; a recipe pins one, the builder offers the default.
 
 ## Options
 
@@ -45,14 +48,14 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 | Option | Value | Refused without (`host`: the driver's machine; `embeddings`: a model the provider serves) |
 |---|---|---|
-| `vm_provider` | `docker` | host: docker |
+| `vm_provider` | `docker` | host: docker; vm: a 4 GB VM per unit |
 
 ## Good to know
 
 - An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. A step's observation is the screenshot that loop hands its agent for the next decision, with no capture added; the files a step names are read once its actions and their pauses have run. Steps (100) and Pause (3.0 seconds) set that loop.
 - Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.
 - Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.
-- Only M3, PromptAgent and Qwen-CUA have completed tasks through Nullius. The other agents were checked up to their first model call.
+- At this version only the null control has run through Nullius. OSWorld's agents are the same code as in main (044bc33), where M3, PromptAgent and Qwen-CUA completed tasks.
 - Each task's VM takes 4 cores and 4 GB of memory; OS-Symphony can start a second. Run no more tasks at once than the machine holds.
 - Prepare the machine before the first run (Docker, KVM, five system libraries, a VM image of about 25 GB): see OSWorld1 machine setup under Benchmarks in the documentation.
 - Scores depend on the machine's speed, because OSWorld waits a fixed time after each action. Compare runs made on similar machines.
@@ -80,6 +83,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 - Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.
 - The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.
 - A task run by one of OSWorld's own agents and still running after 2 hours is stopped and gets no score. For an agent, the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes; past any of them the task gets no score.
+- Its evaluator fixes, key repeat turned off in the VM and one retired task make its scores comparable only with this version's, not with the paper's or main (044bc33)'s.
 
 ## Cite
 

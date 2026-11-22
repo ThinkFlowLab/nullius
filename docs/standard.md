@@ -9,7 +9,7 @@ A pair is an **agent benchmark** × an **agent**, or a **capability benchmark** 
 | Idea | Rule |
 | --- | --- |
 | Ports, not tags | A port is a named, versioned contract (`agent.workspace/v1`); its contract never changes. A benchmark lists the ports it **needs**, an agent or capability those it **offers**; a pair fits when every needed port is offered and every needed [skill](#basic-checks-and-skills) shown |
-| A claim is proven, not written | A port enters `offers` only through its **conformance kit**, `cli conform`, which records the date, score, model, kit version, skills shown and the job; a claim whose basic checks later fail is taken back |
+| A claim is proven, not written | A port enters `offers` only through its **conformance kit**, `cli conform`, which records the score, model, kit version and skills shown; a claim whose basic checks later fail is taken back |
 | Nullius stands in the middle | It starts the agent, hands it the environment, and is its model endpoint: the **relay** holds the key and records every call |
 
 ## Protocols
@@ -143,7 +143,7 @@ record); verifier/reward.txt and score.json
 | Units | Run `-j` at a time, each with its own workspace (a git repository of its own), home and relay |
 | A relay per unit | Its record is the trial's `.work/relay`; the judge and simulated user are routes on it (`<unit>-judge`, `<unit>-simulator`). An option whose driver embeds gets a relay of the run's own before any unit, recorded in `.work/relay-benchmark` as the benchmark's cost. A 200 with no reply, not streamed, reaches the caller as a 502 (or the 429 or 402 its error held); the record keeps `answered: 200`. A call refused with 400, 413 or 422 records its inline images' types and sizes as `images`, never their bytes |
 | Job name | One run at a time per job name: another is refused before it writes anything. A later run under the same name moves each trial's earlier record aside to the trial's `.work/earlier.<ns>` |
-| Backends (`--backend`) | `local`: processes on this machine. `container`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing or is podman under that name. Podman needs no Docker API socket and no `containers.conf` change. Where a `docker` program is on the PATH, Nullius runs it even when it does not answer. The reason it gives then says that podman is on the machine. `docker`, the old name of `container`, is still accepted. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`); in a container a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image. `boat`: each unit's agent or capability in a boat.dev VM of its own (`standard/boat.py`, [The boat backend](#the-boat-backend)) |
+| Backends (`--backend`) | `local`: processes on this machine. `container`: each unit's agent or capability in a container, its relay beside it (`standard/container.py`), on Docker, or on Podman 4.7 or later where `docker` is missing, is podman under that name, or does not answer (`docker ps` fails) while `podman ps` succeeds. Podman needs no Docker API socket and no `containers.conf` change. Where neither answers, Nullius keeps `docker` and its reason says that podman is on the machine. A host is probed by the same rule. `docker`, the old name of `container`, is still accepted. For agent and capability runs the driver stays on the machine; Original setups instead containerize the driver and its answerer (`standard/setup_container.py`); in a container a check that runs what the agent left (the workspace kit's test) runs it in a throwaway, network-less container of the unit's image (`container.check_argv`), and no check reads through a link the agent planted; `config.json` records the backend and the image. `boat`: each unit's agent or capability in a boat.dev VM of its own (`standard/boat.py`, [The boat backend](#the-boat-backend)) |
 | Progress | One line per stage on stderr and in `progress.jsonl`: `[nullius] stage=install agent=codex@2.2.2 state=done seconds=41 at=...` (`start`, `done`, `cached`, `failed`; a download's bytes every 5 s) for the base image, an environment, the upstream, a dataset, `driver.install` and the agent; then `stage=units n=10`, `stage=unit i=3 of=10 unit=... outcome=passed`, `stage=done`; `stage=refused` alone for a run refused first. From `stage=units` the job also writes `events.jsonl`, Harbor's live feed |
 | Outcomes | A last model call that got a 429 is `rate_limited` (calls in the order they began; a side model's later 200 does not cover the agent's own), a refused key an API error, both outside the agent's rate, unless the unit passed; a unit asked to stop (a `stop` beside its relay's records) keeps the score its driver gave despite the agent's own last 429; the agent's own last call over the model's context window is `ContextWindowExceededError`, the agent's; an agent past its limit for the unit, every turn included, is the agent's timeout ([time limits](cli/run.md#time-limits)). `"kind": "score"` leaves a score and no pass |
 | Rate limits | After a `rate_limited` end no unit starts for 60 s, or the provider's `Retry-After`, doubling to 300 s while units keep ending so |
@@ -181,15 +181,20 @@ A rootful Docker with `userns-remap` maps the uids of each container to sub-uids
 
 `--backend boat`: each unit's agent or capability in its own [boat.dev](https://boat.dev) VM. Driver, relay, spending cap and scoring stay with the run.
 
-A computer-port run is refused before any unit: its server's local socket cannot be reached from the agent's VM. Choose local processes or the container backend.
+Except for VM benchmarks below, computer-port runs, Original setups and checks require Hosts.
+
+VM benchmarks such as OSWorld run each task entirely inside Boat, including scoring. Model keys and declared benchmark credentials enter those VMs.
+
+For these runs, spending caps are split equally across tasks; unused shares cannot transfer. Use a dataset and limit instead of `--units` or `--shard`.
 
 | Piece | Rule |
 | --- | --- |
 | Key | Settings → Sandbox, or `BOAT_API_KEY` |
-| VM | One per unit, `--boat-size` (`small` by default). Always deleted. Free trial: 2 hours at most |
-| Units at a time | Capped by the account's VM limit. The run warns when it cannot start every unit |
+| VM | One per unit, `--boat-size` (`small` by default). Always deleted. Free trial: 2 hours at most. VM benchmarks need more RAM than their guest VM |
+| Machines | Runs from this machine; never mixed with hosts |
+| Units at a time | The account's VM limit; a recipe may set fewer. The run warns when it cannot start every unit |
 | Agent time | Excludes the VM's start-up |
-| Isolation | The agent reaches loopback only: no internet, no DNS, no model key |
+| Isolation | Agent-only VMs reach loopback only: no internet, no DNS, no model key. VM benchmarks isolate the whole task |
 | Files | A link into your home or keys refuses the unit. Links out of the workspace are not copied back |
 | Code checks | A `runs_code` check needs Docker where the run runs |
 | Not run | Units needing the public web, their own image, a licence file or server of this machine, or MCP servers. No GPUs |
@@ -479,6 +484,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `indexes` | Packages from another index |
 | `wheels` | A wheel served by URL only (a model package such as spaCy's `en_core_web_sm`), `{url, sha256}`: refused unless the file matches, resolved with `pip` |
 | `project` | The upstream itself, from its clone; `locked: true` installs it at its own lock file's pins (`uv export --frozen`), `pip` resolved beside them |
+| `virtual` | With `locked`: the lock's pins without the project itself, as `uv sync` leaves a project with no build system; the driver imports the upstream from its clone |
 | `extras`, `prefetch` | The project's extras; what to download ahead |
 
 #### Benchmark options
@@ -489,7 +495,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `datasets` | The datasets it applies to |
 | `about` | A line about each value |
 | `names` | A name for some values, shown in their place; a recipe and the CLI keep the value |
-| `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, or named `files` |
+| `needs` | What a value needs: an `embeddings` model, a `reranker` model, `host` requirements, named `files`, or on a Where option the `vm` each unit boots (`{"memory_gb": 4}`) |
 | `when` | Another option's values that make it apply |
 | `limit` | `true`: a bound of the upstream's own (steps, errors). The builder shows it in Limits, under the benchmark's name |
 | `step` | `where`: where the work runs, such as the VMs' provider, asked on Where, one value as fixed; `dataset`: what its datasets need, asked on Dataset for the datasets it applies to |
@@ -534,6 +540,8 @@ An agent or a capability may keep several versions in its one file: an older rel
 | Naming | `KEY@VERSION` in `cli run`, `cli prove`, `cli fit` and the recipe's `benchmark` |
 | In jobs | `…__KEY-VERSION__…` in the name; `standard.benchmark_version` and `standard.benchmark_ref` in `config.json` |
 | A fork is a version | `versions.<name>.upstream = {repository, tag, tested}`, never a patch of ours; cloned at its commit (`upstreams/<key>/<commit>/`), its datasets checked by their own `sha256`; a private repository uses the machine's git credentials. It proves its own controls (`cli prove KEY@NAME`) |
+| A release is the default | An earlier untagged pin stays as a version with `upstream.branch` (`main`): shown as `main (044bc33)` |
+| Its page | `benchmark.json` `versions.<name>`: whole `good_to_know`, `upstream_limitations`, `limitations`, and `datasets.<key>` `tasks`, `notes`, `verifier`; the page and builder switch all of it with the version |
 
 ### Options
 
@@ -625,9 +633,36 @@ already accepts arbitrary models needs only the `original` method.
 | `units` | A setup may count its own units; `units` is sent `setup` |
 | `answer` | Runs the upstream's answerer through the unit's relay; `score` is sent `setup` too. Local processes or the Original setup driver container |
 | `comparable` | `false` when no model of `models` is the paper's, so its runs compare with each other only; or the list of those models whose runs compare with the paper's (`paper`), when the setup runs several agents and only some are the paper's: the builder offers those alone as Like the paper, the others as Any of your choice |
-| Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper` |
+| Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper`, and the benchmark's own agent that ran (`agent`), whose key is also the job's agent (`agent_info.name`) |
 | Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries [`pass_hat_k`](field-guide.md#attempts) |
 | Retries | `cli run --retries N` runs a failed attempt again: [which failures](cli/run.md#retries) |
+
+### A benchmark's own agents
+
+A benchmark whose upstream ships several agent scripts (OSWorld's) keeps them in
+`agents.json` beside its `standard.json`. Each entry of its `agents` is an agent
+definition (`nullius.agent/v1`) that starts with `start.driver`: the upstream's
+own name for it (`agent`) and what the driver runs in the Original setup
+(`script`, `argv`, `env`, and whatever else the driver reads), with the `models`
+it is published with. It speaks no port, so it has no `offers` or `proven`.
+`common` and `aws` beside `agents` stay driver data.
+
+```json title="agents.json · one entry"
+"openai-cua": {
+  "key": "openai-cua", "label": "OpenAI CUA", "summary": "...",
+  "models": ["computer-use-preview"],
+  "start": {"driver": {"agent": "openai_cua", "script": "scripts/python/run_multienv_openaicua.py", "argv": ["..."], "env": {"...": "..."}}}
+}
+```
+
+| Rule | Detail |
+| --- | --- |
+| Named | `<benchmark>:<key>`, e.g. `osworld1:openai-cua`; the key follows the key rule (lower case, digits, dashes) |
+| Derived, never written | Where it comes from (`from`: `benchmark`; a catalogue agent's is `bundled` or `yours`) and `only_for`, its benchmark. A written `only_for` names that benchmark alone |
+| `options.agent` | `standard.json` writes its `label`, `summary` and `setups`; the loader rebuilds `values` (each entry's `start.driver.agent`, in order), `names`, `about` and `default` (the first), so `when`, `by`, `--bench-option agent=...` and `NULLIUS_OPTION_AGENT` read as before |
+| Checked | Each entry's `models` are among `setups.original.models`; each upstream name once |
+| Offered | On the Agents page behind its From filter, and shown whenever Runs on chooses its benchmark (Runs on lists each benchmark's agents, as the builder enables them), and in the builder beside the catalogue's agents; another benchmark greys it with the reason |
+| Run | As the Original setup, its upstream name as the agent option: `nullius standard run osworld1 original --bench-option agent=openai_cua`. Its jobs name it by its key (`openai-cua`); an older job, recorded as `original`, is read the same way from its agent option |
 
 ### Every setting, inventoried
 
@@ -679,7 +714,7 @@ A benchmark proves itself by its two **controls**, `nop` and `oracle`, and two c
 
 `--bench-option NAME=VALUE` sets the benchmark's own options for the units check's driver and each control's run, resolved and refused as `cli run` does them, the programs a value needs on this machine included, before anything is installed or started; the control job's config records the values.
 
-What passed is written into `standard.json` per dataset, dated; a failing check is taken back, and a run on fewer units does not replace one on more.
+What passed is written into `standard.json` per dataset; a failing check is taken back, and a run on fewer units does not replace one on more.
 
 ```json title="standard.json · proven"
 "proven": {
@@ -699,7 +734,7 @@ What passed is written into `standard.json` per dataset, dated; a failing check 
 
 ## What is proven
 
-Each `proven` record names the job behind it, with its date, model, score, kit version, skills shown and, for a repeated check, its counts; `cli list` shows them all.
+Each `proven` record holds its model, score, kit version, skills shown and, for a repeated check, its counts; never its job or date, which only the machine that ran it could read. `cli list` shows them all.
 
 ## Not in version 1
 

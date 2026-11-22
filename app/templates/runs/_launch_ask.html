@@ -21,7 +21,7 @@
       <template class="launch-ask">{% call ask(L, gone, back) %}{{ items }}{% endcall %}</template>{% endif %}
 {%- endmacro %}
 
-{#- One dialog for every launch: a button fills it from its launch's template (`asks`: button class -> template class),
+{#- One dialog for every launch: a button fills it from its launch's template, else the page's (`asks`: button class -> template class),
     or from the server (the button's data-ask);
     ?delete=<key> opens the Delete question on load. #}
 {% macro dialogs(asks={'launch-delete-btn': 'launch-ask'}) %}
@@ -40,7 +40,7 @@
       const r = await nulliusFetch(b.dataset.ask);
       if (!r.ok) { b.title = await r.text(); return; }
       d.innerHTML = await r.text();
-    } else d.replaceChildren(l.querySelector('template.' + asks[cls]).content.cloneNode(true));
+    } else d.replaceChildren((l.querySelector('template.' + asks[cls]) || document.querySelector('template.' + asks[cls])).content.cloneNode(true));   // the row's own, or the page's one
     d.showModal();
   };
   const sel = Object.keys(asks).map(c => '.' + c).join(',');

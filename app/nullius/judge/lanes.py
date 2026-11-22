@@ -38,7 +38,7 @@ GUTTER_WORD = {NOT_ASKED: "not asked", R.NOT_JUDGED: "not judged", R.GATED: "bel
 _LINE_ORDER = {AGREE_LANE: 0, DISAGREE_LANE: 1, GUTTER: 2}
 
 
-def board(job, records: dict, threshold: float = R.THRESHOLD, key=None) -> dict | None:
+def board(job, records: dict, threshold: float = R.THRESHOLD) -> dict | None:
     """The lanes for one job, or None for a control (nothing to reconcile).
 
     Returns ``rows`` (one per outcome present, in the classifier's order,
@@ -48,8 +48,7 @@ def board(job, records: dict, threshold: float = R.THRESHOLD, key=None) -> dict 
     trial) and which lanes any line reaches."""
     if not R.applies(job):
         return None
-    key = key or (lambda name: name)
-    rows = {t.trial_name: R.row_of(t, records.get(key(t.trial_name)), threshold) for t in job.trials}
+    rows = {t.trial_name: R.row_of(t, records.get(t.trial_name), threshold) for t in job.trials}
     status = {}
     out = []
     for label in classify.ORDER:

@@ -28,7 +28,7 @@ from pathlib import Path
 from flask import abort, flash, redirect, render_template, request, url_for
 from nullius import execution, paths, providers
 from nullius.catalogue import storage
-from nullius.standard import conform, definitions, howto, match, ports
+from nullius.standard import conform, definitions, howto, ports
 from nullius.standard import recipe as standard_recipe
 
 from .core import app
@@ -38,80 +38,67 @@ from .filters import agent_mark_url
 from . import settings as settings_web
 
 
-def _install_words(o: dict) -> list:
-    """What a definition installs, in a few words each."""
-    inst, up = o.get("install") or {}, o.get("upstream") or {}
-    out = [f"npm {p}" for p in inst.get("npm") or []] + [f"pip {p}" for p in inst.get("pip") or []]
-    if inst.get("project"):
-        extras = "[" + ",".join(inst["extras"]) + "]" if inst.get("extras") else ""
-        out.append(f"{inst['project']}{extras} from {up.get('repository', '').removeprefix('https://')} at {(up['tag'] + ' (' + str(up.get('tested', ''))[:12] + ')') if up.get('tag') else str(up.get('tested', ''))[:12]}")
-    if inst.get("python"):
-        out.append(f"on Python {inst['python']}")
-    out += [f"{', '.join(x['packages'])} from {x['url'].removeprefix('https://')}" for x in inst.get("indexes") or []]
-    out += [f"the model {m}" for m in inst.get("prefetch") or []]
-    return out
-
-
-def _entries(kind: str, every: bool = False) -> dict:
-    others, bad = definitions.load(kind, every=every)
-    benches = [b for b in definitions.load("benchmark")[0] if b["family"] == kind]
-    jobs = {j.job_id for j in shared._jobs_for_request()}
-    out = []
-    for o in others:
-        cand = set(conform.candidates(o))
-        rows = []
-        for p, spec in ports.PORTS.items():
-            if ports.family(p) != kind or (kind == "capability" and p.split(".", 1)[1].split("/")[0] != o.get("kind")):
-                continue
-            rec = (o.get("proven") or {}).get(p) if p in (o.get("offers") or []) else None
-            state = "proven" if rec else ("not offered" if p in cand else ("no kit yet" if not spec["kit"] else "not for it"))
-            kit = definitions.kit(p) if spec["kit"] else None
-            rows.append({"port": p, "label": spec.get("label") or p, "summary": spec["summary"], "state": state, "record": rec,
-                         "proof_kit": definitions.proof_kit(rec) if rec else None,
-                         "kit": {"says": kit["summary"], "checks": kit["datasets"][0]["units"], "key": kit["key"], "version": definitions.kit_version(kit)} if kit else None,
-                         "job": rec["job"] if rec and rec.get("job") in jobs else None,
-                         "older_kit": definitions.older_kit(p, rec),
-                         "skills": standard_recipe.skills_of(p, rec)})
-        fits = [{"key": b["key"], "label": b["label"], "needs": b["needs"], "why": match.fit(b, o)} for b in benches]
-        fid = (o.get("proven") or {}).get("fidelity")
-        out.append({"d": o, "protocol": standard_recipe.protocol(o), "ports": rows, "fits": fits,
-                    "install": _install_words(o),
-                    # its options, each with its default and what else it takes; its fidelity proof, when it has one
-                    "options": [{"name": n, "summary": x.get("summary", ""), "default": x.get("default"),
-                                 "values": list(x.get("values") or []), "pattern": x.get("pattern", ""), "example": x.get("example", "")}
-                                for n, x in (o.get("options") or {}).items()],
-                    "fidelity": fid if isinstance(fid, dict) else None})
-    out.sort(key=lambda e: (not e["d"].get("example", False), definitions.title(e["d"]).casefold()))
-    return {"entries": out, "problems": bad}
-
-
 def _page(kind: str):
     example = os.path.join(definitions.CATALOGUE, "agents", "reference") if kind == "agent" else \
         os.path.join(definitions.CATALOGUE, "capabilities", "keyword-memory")
-    found = _entries(kind)
+    found = standard_recipe.entries(kind, own=True)
     return render_template("agents/standard.html", kind=kind, how=howto.steps(kind), prompts=howto.prompts(),
                            catalogue_dir=paths.catalogue_dir(), example_dir=example, problems=found["problems"],
-                           items=[_card(kind, e) for e in found["entries"]])
+                           items=[_card(kind, e) for e in found["entries"]], choices=_choices(kind, found["entries"]), only=ONLY.get(kind, {}))
+
+
+def _choices(kind: str, entries: list) -> dict:
+    """A list's filters: the benchmarks each entry runs (its ``fits``, what Benchmarks it runs counts); for
+    agents also how Nullius talks to it, the ports it proves and where it comes from."""
+    runs_on = list(dict.fromkeys((f["key"], f["label"]) for e in entries for f in e["fits"]))
+    if kind != "agent":
+        return {"runs_on": runs_on} if runs_on else {}
+    proven = {p["port"] for e in entries for p in e["ports"] if p["state"] == "proven"}
+    have = {e["d"].get("from") for e in entries}
+    return {"protocol": [(x, x) for x in dict.fromkeys(e["protocol"] for e in entries)],
+            "proves": [(p, spec.get("label") or p) for p, spec in ports.PORTS.items() if p in proven],
+            "from": [(k, v) for k, v in definitions.FROM.items() if k in have], "runs_on": runs_on}
+
+
+# The From filter's default: the catalogue's own agents; a benchmark's own are one click away, and shown whenever
+# Runs on chooses their benchmark (their card's `unless`).
+ONLY = {"agent": {"from": ["bundled", "yours"]}}
+
+
+def _runs_on(e: dict) -> list:
+    """The benchmarks an entry runs, by its fits: the Runs on filter's values."""
+    return [{"text": f["label"], "value": f["key"]} for f in e["fits"] if not f["why"]]
 
 
 def _card(kind: str, e: dict) -> dict:
-    """An agent's or a capability's card on its list (templates/_cards.html)."""
+    """An agent's or a capability's card on its list (templates/_cards.html). A benchmark's own agent's
+    opens its benchmark's page and shows its published models in place of ports, installs and versions."""
     d = e["d"]
+    if d.get("from") == "benchmark":
+        computer = any(p.startswith("agent.computer/") for b in definitions.load("benchmark")[0]
+                       if b["key"] == d["benchmark"] for p in b.get("needs") or [])
+        return {"href": url_for("benchmark_page", key=d["benchmark"]), "id": d["_ref"].replace(":", "-"),
+                "search": " ".join([d["label"], d["key"], d["benchmark_label"], e["protocol"], d.get("summary", "")]),
+                "protocol": e["protocol"], "icon": agent_mark_url(d["key"]), "title": d["label"], "summary": d.get("summary"),
+                "from": {"text": d["benchmark_label"], "value": "benchmark"},
+                "uses": "Computer use" if computer else None, "models": ", ".join(d.get("models") or []),
+                "runs_on": _runs_on(e), "unless": {"from": "runs_on"}, "hide": ["ports", "runs", "installs"]}
     version, n = (d.get("upstream") or {}).get("version"), len(d.get("_versions") or ())
     return {"href": url_for("agent_page" if kind == "agent" else "feature_page", key=d["key"]), "id": d["key"],
             "search": " ".join([d["label"], d["key"], d.get("kind", ""), e["protocol"], d.get("summary", "")]),
             "kind": d.get("kind") if kind == "capability" else None, "protocol": e["protocol"],
             "example": {"text": "example", "title": "Nullius's own, to read or copy - not an agent to compare"} if d.get("example") else None,
             "version": ("v" + str(version) if version else "") + (f" · {n} versions" if n > 1 else ""),
-            "icon": agent_mark_url(d["key"]) if kind == "agent" else None, "title": d["label"],
-            "summary": d.get("summary"),
+            "icon": agent_mark_url(d["key"]) if kind == "agent" else None, "title": {"text": d["label"], "after": str(version or "")},
+            "summary": d.get("summary"), "from": {"text": definitions.FROM[d["from"]], "value": d["from"]} if d.get("from") else None,
+            "proves": [{"text": p["label"], "value": p["port"]} for p in e["ports"] if p["state"] == "proven"],
             "ports": "{}/{}".format(sum(p["state"] == "proven" for p in e["ports"]), len(e["ports"])),
-            "runs": "{}/{}".format(sum(not f["why"] for f in e["fits"]), len(e["fits"])),
+            "runs": "{}/{}".format(sum(not f["why"] for f in e["fits"]), len(e["fits"])), "runs_on": _runs_on(e),
             "installs": "yes" if e["install"] else "no"}
 
 
 def _entry(kind: str, key: str):
-    every = _entries(kind, every=True)["entries"]
+    every = standard_recipe.entries(kind, every=True)["entries"]
     mine = [x for x in every if x["d"]["key"] == key]
     v = request.args.get("v")
     e = next((x for x in mine if x["d"]["_version"] == v), None) if v else \

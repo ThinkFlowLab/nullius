@@ -146,19 +146,7 @@
 /* Consent to run without a sandbox. */
 #nullius-builder .nb-consent { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--nb-line); border-radius: 8px; background: var(--nb-surface); }
 #nullius-builder .nb-consent > span { display: flex; align-items: center; gap: 9px; color: var(--nb-text); font-size: 13px; }
-/* The benchmark and agent steps: a search and filter chips above a grid of tiles, as the Benchmarks page draws its
-   cards. A tile: its mark and name, its tags, one line on what it is, then its facts; chosen, it takes the accent. */
-#nullius-builder .nb-pick { display: grid; gap: 16px; }
-#nullius-builder .nb-pick-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-#nullius-builder .nb-pick-find { position: relative; flex: 1 1 240px; max-width: 360px; display: flex; align-items: center; }
-#nullius-builder .nb-pick-find svg { position: absolute; left: 11px; width: 15px; height: 15px; color: var(--nb-muted); pointer-events: none; }
-#nullius-builder .nb-pick-find input { width: 100%; min-height: 38px; padding: 8px 12px 8px 33px; font: inherit; font-size: 13px; color: var(--nb-text); background: var(--nb-surface); border: 1px solid var(--nb-line); border-radius: 8px; }
-#nullius-builder .nb-pick-find input:focus { outline: none; border-color: var(--nb-blue); box-shadow: inset 0 0 0 1px var(--nb-blue); }
-#nullius-builder .nb-pick-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-#nullius-builder .nb-pick-chips + .nb-pick-chips { padding-left: 14px; border-left: 1px solid var(--nb-line); }
-#nullius-builder .nb-pick-chip { font: inherit; font-size: 12px; color: var(--nb-muted); background: transparent; border: 1px solid var(--nb-line); border-radius: 999px; padding: 6px 13px; min-height: 32px; cursor: pointer; }
-#nullius-builder .nb-pick-chip:hover { color: var(--nb-text); border-color: var(--nb-muted); }
-#nullius-builder .nb-pick-chip[aria-pressed=true] { color: var(--nb-bg); background: var(--nb-blue); border-color: var(--nb-blue); }
+/* A choice as a tile: its mark and name, one line on what it is, then its facts; chosen, it takes the accent. */
 #nullius-builder .nb-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
 #nullius-builder .nb-tile { position: relative; display: flex; flex-direction: column; gap: 9px; min-width: 0; text-align: left; padding: 15px 16px; border-radius: 10px; background: var(--nb-surface); border: 1px solid var(--nb-line); color: var(--nb-text); cursor: pointer; transition: border-color .12s ease, background .12s ease; }
 #nullius-builder .nb-tile[hidden] { display: none; }
@@ -172,10 +160,6 @@
 #nullius-builder .nb-tile-head strong { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #nullius-builder .nb-tile-check { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; color: var(--nb-bg); }
 #nullius-builder .nb-tile[aria-pressed=true] .nb-tile-check { background: var(--nb-blue); }
-#nullius-builder .nb-tile-tags { display: flex; flex-wrap: wrap; gap: 5px; }
-#nullius-builder .nb-tile-tags > span { font-size: 11px; font-weight: 500; letter-spacing: .02em; padding: 1px 7px; border-radius: 4px; color: var(--nb-muted); background: var(--nb-soft); }
-#nullius-builder .nb-tile-tags .nb-tile-cat { color: var(--nb-blue); background: var(--nb-tint); }
-#nullius-builder .nb-tile-tags .nb-tile-community { color: var(--origin-community, #b8741a); background: color-mix(in srgb, var(--origin-community, #b8741a) 16%, transparent); }
 #nullius-builder .nb-tile-line { font-size: 12.5px; line-height: 1.5; color: var(--nb-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 #nullius-builder .nb-tile-note { font-size: 11.5px; color: var(--nb-warn); }
 #nullius-builder .nb-tile-foot { margin-top: auto; padding-top: 9px; border-top: 1px solid var(--nb-line); display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; font-size: 11.5px; color: var(--nb-muted); }
@@ -185,12 +169,18 @@
 #nullius-builder .nb-tick.ok { color: var(--nb-ok); }
 #nullius-builder .nb-tick.no { color: var(--nb-warn); }
 #nullius-builder .nb-tile-unfit { opacity: .5; cursor: not-allowed; background: transparent; }
-#nullius-builder .nb-pick-none { color: var(--nb-muted); font-size: 13px; margin: 0; }
-@media (max-width: 640px) { #nullius-builder .nb-pick-chips + .nb-pick-chips { padding-left: 0; border-left: 0; } #nullius-builder .nb-pick-find { max-width: none; } #nullius-builder .nb-pick-find input { font-size: 16px; } }
 /* The Where step's machine setup: each chosen machine, its state for the search's requirements, check and install. */
-#nullius-builder .nb-hostreq { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
-#nullius-builder .nb-hostreq li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--nb-line); border-radius: 8px; font-size: 12.5px; }
-#nullius-builder .nb-hostreq small { color: var(--nb-muted); }
+#nullius-builder .std-hostreq { padding: 16px; border: 1px solid var(--nb-line); border-radius: 8px; font-size: 13px; }
+#nullius-builder .std-hostreq-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+#nullius-builder .std-hostreq-row + .std-hostreq-row { margin-top: 12px; }
+#nullius-builder .std-hostreq-names { flex: 1 1 240px; }
+#nullius-builder .std-hostreq-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+#nullius-builder .std-hostreq small { color: var(--nb-muted); }
+#nullius-builder .std-hostreq details { margin-top: 12px; }
+#nullius-builder .std-hostreq summary { color: var(--nb-muted); cursor: pointer; }
+#nullius-builder .std-hostreq .std-code { margin: 12px 0 0; display: flex; align-items: center; }
+#nullius-builder .std-hostreq .std-code-head { order: 1; border: 0; }
+#nullius-builder .std-hostreq .std-code pre { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 #nullius-builder .std-code { border: 1px solid var(--nb-line); border-radius: 8px; background: var(--nb-bg); overflow: hidden; margin-bottom: 12px; }
 #nullius-builder .std-code-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--nb-line); font: 11.5px var(--mono); color: var(--nb-muted); }
 #nullius-builder .std-copy { border: 1px solid var(--nb-line); background: var(--nb-surface); color: var(--nb-muted); border-radius: 6px; padding: 2px 9px; font-size: 11.5px; cursor: pointer; }
@@ -250,7 +240,8 @@
 #nullius-builder .std-backends .nb-tile-note { font-size: 11px; padding-left: 30px; }
 #nullius-builder .std-boat-sizes { grid-template-columns: repeat(4, minmax(0, 160px)); grid-auto-rows: auto; }
 #nullius-builder .std-boat-sizes .nb-tile { flex-direction: column; align-items: stretch; gap: 2px; }
-#nullius-builder .std-boat-sizes .nb-tile-note { white-space: normal; }
+#nullius-builder .std-boat-sizes .nb-tile-note { white-space: normal; padding-left: 0; }
+#nullius-builder .std-boat-sizes .nb-tile:not([disabled]) .nb-tile-note { color: var(--nb-muted); }
 @media (max-width: 760px) { #nullius-builder .std-boat-sizes { grid-template-columns: repeat(2, minmax(0, 180px)); } }
 @media (max-width: 560px) { #nullius-builder .std-backends { grid-template-columns: minmax(0, 320px); } #nullius-builder .std-boat-sizes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* Served by: a row after its model's row, as that row is: the label left, the picker right, the providers chosen
@@ -265,3 +256,33 @@
 @media (max-width: 650px) { #nullius-builder .std-served-list { grid-column: 1; } #nullius-builder label.std-served:has(.std-served-list:not(:empty)) > .ui-field-copy { grid-row: auto; margin-top: 0; } }
 /* a limit the benchmark or the agent declares: its placeholder reads as a value; Nullius's default stays grey */
 #nullius-builder .nb-field input.nb-declared::placeholder { color: var(--nb-text); opacity: 1; }
+
+/* Where: machine kind, its machines, then isolation. Fixed values are not controls. */
+#nullius-builder .std-machines { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--nb-line); border-radius: 999px; }
+#nullius-builder .std-machines button { padding: 6px 16px; border: 0; border-radius: 999px; background: transparent; color: var(--nb-text); font: 14px/1.4 var(--sans); }
+#nullius-builder .std-machines button[aria-pressed=true] { background: var(--nb-tint); }
+#nullius-builder .std-machines button:focus-visible { outline: 2px solid var(--nb-blue); outline-offset: 2px; }
+#nullius-builder .std-machines button:disabled { opacity: .45; cursor: not-allowed; }
+#nullius-builder .std-boat-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: fit-content; max-width: 100%; min-width: 190px; margin-top: 20px; padding: 12px 14px; border: 1px solid var(--nb-blue); border-radius: 10px; background: var(--nb-tint); }
+#nullius-builder .std-boat-card strong { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; }
+#nullius-builder .std-boat-logo { width: 20px; height: 20px; flex: none; }
+#nullius-builder .std-boat-card > span { font-size: 13px; color: var(--nb-muted); }
+#nullius-builder .std-boat-card.off { border-color: var(--nb-line); background: transparent; cursor: not-allowed; }
+#nullius-builder .std-boat-card.off > :not(.std-boat-key) { opacity: .5; }
+#nullius-builder .std-boat-card.off .std-boat-key { cursor: pointer; }
+#nullius-builder .std-hosts { margin-top: 20px; grid-template-columns: repeat(auto-fill, minmax(190px, 240px)); }
+#nullius-builder .std-isolation { padding: 12px 14px; border: 1px solid var(--nb-line); border-radius: 10px; background: var(--nb-soft); }
+#nullius-builder .std-isolation small { display: block; margin-top: 4px; font-size: 13px; color: var(--nb-muted); }
+#nullius-builder .std-isolation small:empty { display: none; }
+#nullius-builder .std-boat-sizes .nb-tile { min-height: 60px; }
+#nullius-builder .std-boat-sizes .nb-tile-note { font-size: 13px; line-height: 1.4; }
+/* the Benchmark and Agent steps' grids: the card toolkit's (catalogue.css), fitted to the form */
+#nullius-builder .nb-step { border-radius: 0; margin: 0; }   /* catalogue.css has a .nb-step of its own */
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) { margin-bottom: 20px; }
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .bench-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 12px; grid-auto-rows: 1fr; }
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .bench-card { padding: 16px; gap: 10px; }
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .bench-card-title { font-size: 15px; }
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .std-tag { white-space: nowrap; }
+#nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .card-link:focus-visible { outline: none; }
+/* its outlined pills (Protocol, Proven) want more air than snug's text beside text; a phone keeps snug's, for the pinned name */
+@media (min-width: 641px) { #nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .grid.snug :is(th, td):not(.pick-col) { padding-left: .6rem; padding-right: .6rem; } }   /* the card's ring (catalogue.css), not a box round the name */

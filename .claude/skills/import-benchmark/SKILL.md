@@ -217,5 +217,6 @@ detailed prerequisites and single/multiple datasets should remain readable.
 The catalogue presents one Original procedure. Put a published Harbor agent in
 `benchmark.json.published.agent` so the builder promotes it to the reference
 group. For a standard benchmark, follow import-standard's `reference_agent`
-and paper-model declarations. Keep participant choice on Agent/Memory and
+and paper-model declarations, or its own agents (`agents.json`, `start.driver`)
+when the upstream ships several agent scripts. Keep participant choice on Agent/Memory and
 model filtering on Model; do not add separate Original/your-model setup rows.
