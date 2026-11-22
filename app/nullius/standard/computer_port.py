@@ -102,7 +102,9 @@ NAMES = ["info", "screenshot", "upload", "prepare", "click", "move", "drag", "sc
 WINDOW = ("upload", "prepare")                       # the tools of the window before the task
 FILES_ROOM = LINE_BYTES - 64 * 1024                  # of an answer, what its files and image may take
 TASK_GIVEN = b"task-given"                           # the lifeline's message: the agent is being given its task
-PREPARE = "import pyautogui\nimport time\npyautogui.FAILSAFE = False\n{code}"   # a prepare's action, as a step's is
+# a prepare's action, as a step's is; pyautogui's own SyntaxWarnings, printed as it is compiled, kept out of its error
+PREPARE = ("import warnings\nwith warnings.catch_warnings():\n    warnings.simplefilter('ignore', SyntaxWarning)\n"
+           "    import pyautogui\nimport time\npyautogui.FAILSAFE = False\n{code}")
 SCREEN_TOOLS = ("click", "move", "drag", "scroll", "type", "key", "wait")   # answered with the screen after the pause
 ACTING = SCREEN_TOOLS + ("step", "done", "fail")
 FINAL = {"done": "DONE", "fail": "FAIL"}
@@ -539,7 +541,8 @@ class Bridge:
             if reply is None:
                 raise Refused(f"the desktop did not end actions[{i}] in time; the actions after it were not run")
             if reply.get("returncode", 0) != 0:
-                raise Refused(f"the desktop failed actions[{i}]: {reply.get('error') or reply.get('output') or reply}; "
+                said = (reply.get("error") or "").strip() or (reply.get("output") or "").strip() or "nothing printed"
+                raise Refused(f"the desktop failed actions[{i}] (exit code {reply['returncode']}): {said}; "
                               "the actions after it were not run")
         return {"files": self._files(call.files or [])}
 
