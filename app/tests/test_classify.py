@@ -92,7 +92,7 @@ class LiveBoardAgrees(unittest.TestCase):
                     self.assertIn(outcome(name), ("agent_error", "timeout"))
 
     def test_a_unit_the_runs_spending_cap_cut_off_has_its_own_outcome_outside_the_rate_on_both(self):
-        """The standard's own: its relay refused the call (``standard.ledger``), so the unit had no attempt.
+        """The standard's own: its relay refused the call (``standard.calls.ledger``), so the unit had no attempt.
         Not an API error: nothing failed. The live feed's word for it is ``budget``."""
         from nullius.standard.calls import ledger
         from nullius.standard.runner import job

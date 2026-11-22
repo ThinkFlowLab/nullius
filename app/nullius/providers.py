@@ -451,7 +451,7 @@ def decision_models(env=None, *, fetch: bool = True, opener=None, clock=time.tim
 
 # A model OpenRouter serves: its maker, a slash, its name (a variant after a colon: ``:free``).
 _ROUTED = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._:-]*")
-# A serving provider's slug, as ``--served-by`` takes it (``standard.relay.SLUG``).
+# A serving provider's slug, as ``--served-by`` takes it (``standard.calls.relay.SLUG``).
 _SLUG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9._-]+)*")
 
 

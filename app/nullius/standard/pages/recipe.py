@@ -414,7 +414,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     key, and there the programs that reach a VM (a host's are its prerequisites);
     ``boat_size_problem``, why the account cannot start a VM of the size.
 
-    ``max_usd``: the run's spending cap (``standard.ledger``), one amount for
+    ``max_usd``: the run's spending cap (``calls.ledger``), one amount for
     the whole run: its jobs that call a model - each dataset with each
     participant, on each machine - take equal shares (``--max-usd``), so
     none spends another's and the amount typed is the most the run spends.
@@ -609,7 +609,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         repeat = 1
     if lb and repeat < lb.get("repeat", 1):
         add("limits", f"Like the leaderboard runs each {(b.get('units') or {}).get('noun', 'unit')} at least {lb['repeat']} times.")
-    # each attempt run again up to N times when it ends in a failure a further try may mend (standard.retries)
+    # each attempt run again up to N times when it ends in a failure a further try may mend (runner.retries)
     retries = 0 if recipe.get("retries") in (None, "") else _int(recipe.get("retries"), 0, MAX_RETRIES)
     if retries is None:
         add("limits", f"Retries per attempt: a whole number from 0 to {MAX_RETRIES}.")
