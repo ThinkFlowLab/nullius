@@ -69,33 +69,27 @@
   "proven": {
     "agent.task/v1": {
       "passed": "3/3",
-      "on": "2026-11-02",
       "model": "openai/gpt-5-mini",
       "provider": "openrouter",
       "version": "1.18.35",
       "kit_version": 1,
-      "backend": "docker",
-      "job": "2026-11-02__14-10-35__kit__agent-task-v1__opencode"
+      "backend": "docker"
     },
     "agent.workspace/v1": {
       "passed": "2/2",
-      "on": "2026-11-02",
       "model": "openai/gpt-5-mini",
       "provider": "openrouter",
       "version": "1.18.35",
       "kit_version": 1,
-      "backend": "docker",
-      "job": "2026-11-02__14-12-08__kit__agent-workspace-v1__opencode"
+      "backend": "docker"
     },
     "agent.tools/v1": {
       "passed": "2/2",
-      "on": "2026-11-02",
       "model": "openai/gpt-5-mini",
       "provider": "openrouter",
       "version": "1.18.35",
       "kit_version": 2,
       "backend": "docker",
-      "job": "2026-11-02__14-12-40__kit__agent-tools-v1__opencode",
       "skills": {
         "decoys": {
           "passed": "1/1",
@@ -113,23 +107,19 @@
     },
     "agent.conversation/v1": {
       "passed": "2/2",
-      "on": "2026-11-02",
       "model": "openai/gpt-5-mini",
       "provider": "openrouter",
       "version": "1.18.35",
       "kit_version": 1,
-      "backend": "docker",
-      "job": "2026-11-02__14-14-07__kit__agent-conversation-v1__opencode"
+      "backend": "docker"
     },
     "agent.search/v1": {
       "passed": "3/3",
-      "on": "2026-11-12",
       "model": "meta/muse-spark-1.3-contributor",
       "provider": "openrouter",
       "version": "1.18.35",
       "kit_version": 1,
-      "backend": "docker",
-      "job": "2026-11-12__11-10-20__kit__agent-search-v1__opencode"
+      "backend": "docker"
     }
   }
 }

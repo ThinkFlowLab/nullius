@@ -62,15 +62,13 @@
     "kit": {
       "units": {
         "units": 3,
-        "passed": "3 ids, the same twice, unique",
-        "on": "2026-11-11"
+        "passed": "3 ids, the same twice, unique"
       },
       "leak": {
         "units": 3,
         "looked_for": 3,
         "short": 0,
-        "passed": "3/3",
-        "on": "2026-11-11"
+        "passed": "3/3"
       },
       "nop": {
         "passed": "0/3",
@@ -78,10 +76,7 @@
         "expect": {
           "at_most": 0.0
         },
-        "units": 3,
-        "job": "2026-11-11__23-26-20__agent-search-v1__kit__prove-nop",
-        "source": "nullius",
-        "on": "2026-11-11"
+        "units": 3
       },
       "oracle": {
         "passed": "3/3",
@@ -89,10 +84,7 @@
         "expect": {
           "at_least": 1.0
         },
-        "units": 3,
-        "job": "2026-11-11__23-26-20__agent-search-v1__kit__prove-oracle",
-        "source": "nullius",
-        "on": "2026-11-11"
+        "units": 3
       }
     }
   }

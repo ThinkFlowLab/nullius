@@ -148,7 +148,7 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
             refused[p] = str(e)
             continue
         o = outcome(kit, _runs(parse.parse_job(job_dir)), repeat)
-        got[p] = {"passed": o["passed"], "ok": o["ok"], "on": time.strftime("%Y-%m-%d"), "model": model, "provider": provider,
+        got[p] = {"passed": o["passed"], "ok": o["ok"], "model": model, "provider": provider,
                   "version": str((other.get("upstream") or {}).get("version") or ""),
                   "kit_version": definitions.kit_version(kit), "backend": backend, "job": os.path.basename(job_dir),
                   **{k: o[k] for k in ("repeat", "checks", "skills") if k in o}}
@@ -167,7 +167,7 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
             # was refused here, is not this run's to take back
             proven = {p: r for p, r in (cur.get("proven") or {}).items()
                       if p in offers or p in refused or not ports.known(p)}
-            proven.update({p: {k: v for k, v in r.items() if k != "ok"} for p, r in got.items() if r["ok"]})
+            proven.update({p: {k: v for k, v in r.items() if k not in ("ok", "job")} for p, r in got.items() if r["ok"]})
             cur["offers"] = [p for p in ports.PORTS if p in offers]
             cur["proven"] = proven
         definitions.save(other, change)

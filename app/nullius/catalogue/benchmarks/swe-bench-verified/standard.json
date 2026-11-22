@@ -67,8 +67,7 @@
     "verified": {
       "units": {
         "units": 500,
-        "passed": "500 ids, the same twice, unique",
-        "on": "2026-10-23"
+        "passed": "500 ids, the same twice, unique"
       },
       "leak": {
         "units": 2,
@@ -76,7 +75,6 @@
         "short": 0,
         "passed": "2/2",
         "note": "2 unit(s) whose oracle gave nothing to look for",
-        "on": "2026-10-23",
         "limit": 2
       },
       "nop": {
@@ -86,9 +84,6 @@
           "at_most": 0.0
         },
         "units": 2,
-        "job": "2026-10-23__15-24-36__swe-bench-verified__verified__prove-nop",
-        "source": "nullius",
-        "on": "2026-10-23",
         "limit": 2
       },
       "oracle": {
@@ -98,9 +93,6 @@
           "at_least": 1.0
         },
         "units": 2,
-        "job": "2026-10-23__15-24-36__swe-bench-verified__verified__prove-oracle",
-        "source": "official",
-        "on": "2026-10-23",
         "limit": 2
       }
     }

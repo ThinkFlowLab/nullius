@@ -36,7 +36,7 @@ class ConformTest(unittest.TestCase):
                             say=lambda s: None, env={"MODEL_API_URL": "http://127.0.0.1:9/v1"}, unsandboxed=True)
         return got, definitions.get(kind, key, self.root)
 
-    def test_a_kit_that_passes_is_recorded_with_its_job(self):
+    def test_a_kit_that_passes_names_its_job_and_its_record_does_not(self):
         with mock.patch.object(conform.run, "run", wraps=conform.run.run) as ran:
             got, d = self.check("capability", "fakemem", ["cap.memory/v1"])
         # a rate-limited unit runs once more, after its pause, and nothing else: a proof is never the endpoint's busy minute
@@ -46,7 +46,8 @@ class ConformTest(unittest.TestCase):
         self.assertEqual(rec["passed"], "2/2")
         self.assertEqual(rec["kit_version"], definitions.kit_version(definitions.kit("cap.memory/v1")))   # the kit it passed
         self.assertTrue(definitions.on_current_kit("cap.memory/v1", rec))
-        self.assertTrue(os.path.isdir(os.path.join(self.tmp, "jobs", rec["job"])))
+        self.assertTrue(os.path.isdir(os.path.join(self.tmp, "jobs", got["cap.memory/v1"]["job"])))
+        self.assertNotIn("job", rec)               # a folder on the machine that ran it
         self.assertEqual(d["offers"], ["cap.memory/v1"])
 
     def test_a_memory_that_refuses_credentials_still_proves_the_memory_port(self):
@@ -115,7 +116,7 @@ class ConformTest(unittest.TestCase):
         saved = definitions.get("agent", "fake", self.root)
         for port in (ports[0], ports[2]):
             self.assertEqual(saved["proven"][port]["passed"], "1/1")
-            self.assertIn("job", saved["proven"][port])
+            self.assertNotIn("job", saved["proven"][port])
             self.assertIn(port, saved["offers"])
         self.assertEqual(saved["proven"][ports[1]], old)
         self.assertIn(ports[1], saved["offers"])
@@ -149,7 +150,7 @@ class ConformTest(unittest.TestCase):
                           say=lambda s: None, env={"MODEL_API_URL": "http://127.0.0.1:9/v1"}, unsandboxed=True)
         saved = definitions.get("agent", "fake", self.root)
         self.assertEqual(saved["proven"].get("agent.workspace/v1"), kept)
-        self.assertIn("job", saved["proven"]["agent.task/v1"])
+        self.assertEqual(saved["proven"]["agent.task/v1"]["passed"], "1/1")
 
     def test_every_kit_refused_saves_nothing_and_exits_two(self):
         other = definitions.get("agent", "fake", self.root)

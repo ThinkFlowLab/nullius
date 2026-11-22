@@ -228,13 +228,13 @@ def _other_page(o: dict) -> dict:
             "default": o.get("_version") == o.get("_default"),
             "offers": list(o.get("offers") or []),
             # each proof with the kit version it passed and, on an older kit than the current one, a note saying so
-            "proven": {p: {**{k: r.get(k) for k in ("passed", "on", "model")}, "kit": definitions.proof_kit(r),
+            "proven": {p: {**{k: r.get(k) for k in ("passed", "model")}, "kit": definitions.proof_kit(r),
                            "older": definitions.older_kit(p, r), "label": ports.PORTS[p]["label"], "skills": skills_of(p, r)}
                        for p, r in (o.get("proven") or {}).items() if ports.known(p)},
             "options": {n: {"summary": x.get("summary", ""), "default": x.get("default"),
                             **({"values": list(x["values"])} if "values" in x else {"pattern": x.get("pattern"), "example": x.get("example")})}
                         for n, x in (o.get("options") or {}).items()},
-            **({"fidelity": {k: o["proven"]["fidelity"].get(k) for k in ("verdict", "on", "model")}}
+            **({"fidelity": {k: o["proven"]["fidelity"].get(k) for k in ("verdict", "model")}}
                if isinstance((o.get("proven") or {}).get("fidelity"), dict) else {})}
 
 
@@ -264,11 +264,10 @@ def _install_words(o: dict) -> list:
     return out
 
 
-def entries(kind: str, benches: Optional[List[dict]] = None, every: bool = False, own: bool = False, jobs=()) -> dict:
+def entries(kind: str, benches: Optional[List[dict]] = None, every: bool = False, own: bool = False) -> dict:
     """The agents (or capabilities) as the Agents page and the builder's Agent step list them, each with its ports
     and its fits (``match.fit``) on ``benches`` (default: every benchmark of its family, default versions), and
-    the definitions with problems. ``own``: and the benchmarks' own agents (``definitions.benchmark_agents``);
-    ``jobs``: the job ids whose proof links to its job."""
+    the definitions with problems. ``own``: and the benchmarks' own agents (``definitions.benchmark_agents``)."""
     from nullius.standard import conform
     others, bad = definitions.load(kind, every=every)
     loaded = definitions.load("benchmark")[0]
@@ -289,7 +288,6 @@ def entries(kind: str, benches: Optional[List[dict]] = None, every: bool = False
             rows.append({"port": p, "label": spec.get("label") or p, "summary": spec["summary"], "state": state, "record": rec,
                          "proof_kit": definitions.proof_kit(rec) if rec else None,
                          "kit": {"says": kit["summary"], "checks": kit["datasets"][0]["units"], "key": kit["key"], "version": definitions.kit_version(kit)} if kit else None,
-                         "job": rec["job"] if rec and rec.get("job") in jobs else None,
                          "older_kit": definitions.older_kit(p, rec),
                          "skills": skills_of(p, rec)})
         fits = [{"key": b["key"], "ref": definitions.ref_of(b) if "_version" in b else b["key"], "label": b["label"], "needs": b["needs"], "why": match.fit(b, o)} for b in benches]
