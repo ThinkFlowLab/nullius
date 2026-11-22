@@ -359,6 +359,18 @@
           "units": {
             "units": 360,
             "passed": "360 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/360",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 360,
+            "options": {
+              "max_steps": "default",
+              "vm_provider": "docker"
+            }
           }
         },
         "test_all": {
@@ -372,24 +384,36 @@
             "units": 39,
             "passed": "39 ids, the same twice, unique"
           },
-          "nop": {
-            "passed": "0/8",
-            "value": 0.0,
-            "expect": {
-              "at_most": 0.0
-            },
-            "units": 8,
-            "options": {
-              "max_steps": "default",
-              "vm_provider": "docker"
-            },
-            "limit": 8
+          "failed": {
+            "nop": {
+              "passed": "0/39",
+              "value": 0.0,
+              "expect": {
+                "at_most": 0.0
+              },
+              "units": 39,
+              "problems": [
+                "5 unit(s) ended in an error before the score"
+              ]
+            }
           }
         },
         "test_infeasible": {
           "units": {
             "units": 25,
             "passed": "25 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/25",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 25,
+            "options": {
+              "max_steps": "default",
+              "vm_provider": "docker"
+            }
           }
         }
       }
@@ -405,13 +429,16 @@
             "passed": "361 ids, the same twice, unique"
           },
           "nop": {
-            "passed": "0/8",
+            "passed": "0/361",
             "value": 0.0,
             "expect": {
               "at_most": 0.0
             },
-            "units": 8,
-            "limit": 8
+            "units": 361,
+            "options": {
+              "max_steps": "default",
+              "vm_provider": "docker"
+            }
           }
         },
         "test_all": {
@@ -424,6 +451,18 @@
           "units": {
             "units": 25,
             "passed": "25 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/25",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 25,
+            "options": {
+              "max_steps": "default",
+              "vm_provider": "docker"
+            }
           }
         },
         "test_small": {
