@@ -431,8 +431,8 @@
   const bound = e => { const [k, v] = Object.entries(e || {})[0] || ['at_least', 1]; return [k === 'at_most' ? '>' : '<', v]; };
   // short: a proof that met a bound short of the full mark (prove.short_of) - its tick is not green, its bound on hover
   function proofOf(proven, failed, expect, short) {
-    if (proven) return {state: short ? 'part' : 'ok', text: '✓ ' + (proven.passed || '') + (proven.limit ? ' · first ' + proven.limit : ''), title: (short ? short + ' · ' : '') + 'proven on ' + (proven.on || '?') + (proven.shard ? ', shard ' + proven.shard : '')};
-    if (failed && failed.value !== undefined) { const [op, v] = bound(failed.expect || expect); return {state: 'no', text: '✕ ' + failed.value + ' ' + op + ' ' + v, title: 'not proven: ' + [failed.passed, failed.on, ...(failed.problems || [])].filter(Boolean).join(' · ')}; }
+    if (proven) return {state: short ? 'part' : 'ok', text: '✓ ' + (proven.passed || '') + (proven.limit ? ' · first ' + proven.limit : ''), title: [short, proven.limit && 'over the first ' + proven.limit, proven.shard && 'shard ' + proven.shard].filter(Boolean).join(' · ')};
+    if (failed && failed.value !== undefined) { const [op, v] = bound(failed.expect || expect); return {state: 'no', text: '✕ ' + failed.value + ' ' + op + ' ' + v, title: 'not proven: ' + [failed.passed, ...(failed.problems || [])].filter(Boolean).join(' · ')}; }
     if (failed) return {state: 'no', text: '✕ not proven', title: (failed.problems || []).join(' · ')};
     return {state: 'none', text: 'not run'};
   }

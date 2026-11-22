@@ -52,13 +52,11 @@
   "proven": {
     "agent.workspace/v1": {
       "passed": "2/2",
-      "on": "2026-11-02",
       "model": "openai/gpt-5-mini",
       "provider": "openrouter",
       "version": "0.24.0",
       "kit_version": 1,
-      "backend": "docker",
-      "job": "2026-11-02__14-57-08__kit__agent-workspace-v1__terminus-2"
+      "backend": "docker"
     }
   }
 }

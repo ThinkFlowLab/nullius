@@ -39,6 +39,7 @@ import signal
 import subprocess
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -109,6 +110,40 @@ def _inside(path: str, root: str) -> bool:
     return path == root or path.startswith(root + os.sep)
 
 
+REAP_VAR = "NULLIUS_REAP"
+
+
+def reap(tag: str) -> int:
+    """Kill every process whose environment carries ``REAP_VAR=tag``. An agent
+    may start servers in a session of their own (JiuwenSwarm does), which the
+    group kill misses and init then adopts; the environment they inherited
+    still names the unit. Linux only: without ``/proc`` nothing is found.
+    Returns how many were killed."""
+    needle = f"{REAP_VAR}={tag}".encode()
+    killed = 0
+    for _ in range(5):                       # one that forked mid-scan is caught by the next pass
+        found = 0
+        try:
+            pids = [int(d) for d in os.listdir("/proc") if d.isdigit()]
+        except OSError:
+            return killed
+        for pid in pids:
+            if pid == os.getpid():
+                continue
+            try:
+                with open(f"/proc/{pid}/environ", "rb") as f:
+                    if needle not in f.read().split(b"\0"):
+                        continue
+                os.kill(pid, signal.SIGKILL)
+                found += 1
+            except OSError:
+                pass
+        killed += found
+        if not found:
+            break
+    return killed
+
+
 class Client:
     def __init__(self, cmd: List[str], env: dict, log: str, cwd: Optional[str] = None, grant: bool = False,
                  fs: bool = True, stopped=None):
@@ -132,7 +167,9 @@ class Client:
         if self.stopped is not None and self.stopped.is_set():
             raise CancelledError("the run was stopped")
         self.err = open(self.log, "a")
-        self.p = subprocess.Popen(self.cmd, cwd=self.cwd, env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        self.tag = uuid.uuid4().hex
+        env = dict(os.environ if self.env is None else self.env, **{REAP_VAR: self.tag})
+        self.p = subprocess.Popen(self.cmd, cwd=self.cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=self.err, bufsize=0, start_new_session=True)
         threading.Thread(target=self._read, daemon=True).start()
         self.info = self.request("initialize", {"protocolVersion": PROTOCOL_VERSION,
@@ -297,6 +334,7 @@ class Client:
                 os.killpg(self.p.pid, signal.SIGKILL)
             except OSError:
                 pass
+            reap(self.tag)                       # and whatever it started in a session of its own
             try:
                 self.p.wait(timeout=3)
                 self.p.stdout.close()

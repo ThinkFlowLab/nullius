@@ -196,8 +196,8 @@ def check(agent: dict, *, model: str, provider: str, jobs_root: str = "jobs", pa
         json.dump(result, f, indent=2)
     say(table(result))
     if write:
-        rec = {"verdict": result["verdict"], "on": time.strftime("%Y-%m-%d"), "model": model, "provider": provider,
-               "version": result["version"], "job": os.path.basename(r.job_dir), "passes": passes,
+        rec = {"verdict": result["verdict"], "model": model, "provider": provider,
+               "version": result["version"], "passes": passes,
                "differs": result["differing"]}
         changed = {k: v for k, v in r.options.items() if v != ((agent.get("options") or {}).get(k) or {}).get("default")}
         if changed:

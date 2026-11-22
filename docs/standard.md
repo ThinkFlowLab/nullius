@@ -701,7 +701,7 @@ A benchmark proves itself by its two **controls**, `nop` and `oracle`, and two c
 
 `--bench-option NAME=VALUE` sets the benchmark's own options for the units check's driver and each control's run, resolved and refused as `cli run` does them; the control job's config records the values.
 
-What passed is written into `standard.json` per dataset, dated; a failing check is taken back, and a run on fewer units does not replace one on more.
+What passed is written into `standard.json` per dataset; a failing check is taken back, and a run on fewer units does not replace one on more.
 
 ```json title="standard.json · proven"
 "proven": {
@@ -721,7 +721,7 @@ What passed is written into `standard.json` per dataset, dated; a failing check 
 
 ## What is proven
 
-Each `proven` record names the job behind it, with its date, model, score, kit version, skills shown and, for a repeated check, its counts; `cli list` shows them all.
+Each `proven` record holds its model, score, kit version, skills shown and, for a repeated check, its counts; never its job or date, which only the machine that ran it could read. `cli list` shows them all.
 
 ## Not in version 1
 

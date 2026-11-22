@@ -666,6 +666,29 @@ class DockerDesktop(unittest.TestCase):
         sudo = self.d.python("import shutil; print(shutil.which('sudo'))")
         self.assertEqual(sudo["output"].strip(), "None")
 
+    def test_a_failed_prepare_action_says_its_exit_code_and_cause_without_pyautoguis_warnings(self):
+        from nullius.standard import computer_port as cp
+        bridge = cp.Bridge(self.d, 3, 0, desktop.SCREEN, "/tmp/agent", window=True)
+        bridge._begin(None)
+        self.addCleanup(bridge.finish)
+
+        def error(actions):
+            replies = []
+            call = cp.Call("prepare", {"actions": actions}, lambda c, v, i, e: replies.append(e))
+            cp.checked(call, bridge.screen, bridge.folder)
+            bridge._serve(call)
+            return replies[0]
+        said = error(["import sys; sys.exit(3)"])
+        self.assertIn("actions[0]", said)
+        self.assertIn("exit code 3", said)
+        self.assertNotIn("SyntaxWarning", said)
+        said = error(["print('fine')", "raise RuntimeError('installation failed')"])
+        self.assertIn("actions[1]", said)
+        self.assertIn("exit code 1", said)
+        self.assertIn("RuntimeError: installation failed", said)
+        self.assertNotIn("SyntaxWarning", said)
+        self.assertEqual(bridge.used, 0)
+
     def test_the_fixture_is_read_from_the_screen_alone(self):
         values, exp = checks.draw("see")
         self.d.start_fixture(values)

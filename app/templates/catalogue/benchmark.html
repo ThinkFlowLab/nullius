@@ -44,8 +44,8 @@
       {% if std %}
       {#- The standard's proofs of it, per dataset (standard/prove.py): its controls as chips, their source in the title, then its units and leak checks; and Prove it, cli prove as a run. -#}
       {% macro proof(rec, failed, expect, short='') -%}
-        {%- if rec %}<span class="std-proof std-proof-{{ 'part' if short else 'ok' }}" title="{% if short %}{{ short }} · {% endif %}proven on {{ rec.on }}{% if rec.limit %}, over the first {{ rec.limit }}{% endif %}{% if rec.shard %}, shard {{ rec.shard }}{% endif %}">✓ {{ rec.passed }}{% if rec.limit %} · first {{ rec.limit }}{% endif %}</span>
-        {%- elif failed and failed.value is defined %}{% set e = (failed.expect or expect or {'at_least': 1}) %}{% set k = e|list|first %}<span class="std-proof std-proof-no" title="not proven: {{ ([failed.passed, failed.on] + (failed.problems or []))|select|join(' · ') }}">✕ {{ failed.value }} {{ '>' if k == 'at_most' else '<' }} {{ e[k] }}</span>
+        {%- if rec %}{% set notes = [short, ('over the first ' ~ rec.limit) if rec.limit, ('shard ' ~ rec.shard) if rec.shard]|select|list %}<span class="std-proof std-proof-{{ 'part' if short else 'ok' }}"{% if notes %} title="{{ notes|join(' · ') }}"{% endif %}>✓ {{ rec.passed }}{% if rec.limit %} · first {{ rec.limit }}{% endif %}</span>
+        {%- elif failed and failed.value is defined %}{% set e = (failed.expect or expect or {'at_least': 1}) %}{% set k = e|list|first %}<span class="std-proof std-proof-no" title="not proven: {{ ([failed.passed] + (failed.problems or []))|select|join(' · ') }}">✕ {{ failed.value }} {{ '>' if k == 'at_most' else '<' }} {{ e[k] }}</span>
         {%- elif failed %}<span class="std-proof std-proof-no" title="{{ (failed.problems or [])|join(' · ') }}">✕ not proven</span>
         {%- else %}<span class="std-proof std-proof-none">not run</span>{% endif -%}
       {%- endmacro %}
@@ -53,7 +53,7 @@
         <span class="std-ctl" title="{{ {'nop': 'no answer at all', 'oracle': 'the reference answers'}.get(c.key, '') }}: must score {{ c.must }} - {{ {'official': 'from the authors', 'adapter': 'from Harbor\'s adapter', 'nullius': 'made by Nullius'}.get(c.source, c.source) }}: {{ c.from }}"><b>{{ c.key }}</b>{{ proof(c.proven, c.failed, c.expect, c.short) }}</span>
       {%- endmacro %}
       {% macro check(name, says, rec, failed) -%}
-        <span class="std-ctl std-checkchip"><b>{{ name }}</b>{% if rec %}<span class="std-proof std-proof-ok" title="{{ says }} · {{ rec.passed }} · on {{ rec.on }}">✓</span>{% else %}{{ proof(rec, failed) }}{% endif %}</span>
+        <span class="std-ctl std-checkchip"><b>{{ name }}</b>{% if rec %}<span class="std-proof std-proof-ok" title="{{ says }} · {{ rec.passed }}">✓</span>{% else %}{{ proof(rec, failed) }}{% endif %}</span>
       {%- endmacro %}
       {#- One version's proofs: its pin, each dataset's checks, and the form that runs them on it. -#}
       {% macro proofs(s) -%}

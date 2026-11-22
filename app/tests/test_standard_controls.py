@@ -280,7 +280,7 @@ class Prove(unittest.TestCase):
     def prove(self, b, **kw):
         return prove.prove(b, jobs_root=os.path.join(self.tmp, "jobs"), env={}, say=lambda s: None, stamp="2026-01-02__03-04-05", **kw)
 
-    def test_the_result_has_every_check_and_proven_is_written_with_the_jobs(self):
+    def test_the_result_has_every_check_and_its_jobs_and_proven_is_written_without_them(self):
         b = kit("agent-workspace-v1", os.path.join(self.tmp, "kits"))
         got = self.prove(b)
         self.assertEqual(set(got), {"kit"})
@@ -292,8 +292,9 @@ class Prove(unittest.TestCase):
             written = json.load(f)
         proven = written["proven"]["kit"]
         self.assertEqual(list(proven), ["units", "leak", "nop", "oracle"])
-        self.assertEqual(proven["oracle"]["job"], "2026-01-02__03-04-05__agent-workspace-v1__kit__prove-oracle")
-        self.assertTrue(os.path.isdir(os.path.join(self.tmp, "jobs", proven["nop"]["job"])))
+        self.assertEqual(got["kit"]["oracle"]["job"], "2026-01-02__03-04-05__agent-workspace-v1__kit__prove-oracle")
+        self.assertTrue(os.path.isdir(os.path.join(self.tmp, "jobs", got["kit"]["nop"]["job"])))
+        self.assertFalse({"job", "on", "source"} & {k for r in proven.values() for k in r})
         self.assertEqual(proven["oracle"]["expect"], {"at_least": 1.0})
         self.assertNotIn("ok", proven["oracle"])
         self.assertNotIn("limit", proven["oracle"])
@@ -464,7 +465,7 @@ class ProveOptions(unittest.TestCase):
         kept = self.b["proven"]["kit"]
         self.assertNotIn("nop", kept)
         self.assertNotIn("units", kept)
-        self.assertEqual(kept["failed"]["nop"]["job"], "nop-merged")
+        self.assertNotIn("job", kept["failed"]["nop"])
         self.assertIn("the units check failed, so this job cannot be checked against the dataset",
                       kept["failed"]["nop"]["problems"])
 
@@ -542,7 +543,7 @@ class ProveOptions(unittest.TestCase):
         got = self.prove(dataset="kit", bench_options={"sites": "on"}, jobs={"nop": whole})["kit"]
         self.assertTrue(got["nop"]["ok"], got["nop"])
         self.assertEqual((got["nop"]["job"], got["nop"]["units"], got["nop"]["passed"]), ("nop-merged", 3, "0/3"))
-        self.assertEqual(self.b["proven"]["kit"]["nop"]["job"], "nop-merged")
+        self.assertNotIn("job", self.b["proven"]["kit"]["nop"])
         self.assertEqual(self.b["proven"]["kit"]["nop"]["options"],
                          [{"lane": "a", "sites": "on", "tool": "none"}, {"lane": "b", "sites": "on", "tool": "none"}])
         self.assertEqual(sorted(set(os.listdir(self.jobs)) - set(before)), ["2026-01-02__03-04-05__agent-task-v1__kit__prove-oracle"])
@@ -563,7 +564,7 @@ class ProveOptions(unittest.TestCase):
         blank = self.prove(dataset="kit", bench_options={"sites": "on"}, jobs={"nop": whole}, write=False,
                            stamp="2026-01-02__03-04-08")["kit"]["nop"]
         self.assertFalse(blank["ok"])
-        self.assertIn("1 unit(s) ended with no reward from 0 to 1 and no error: read the job's trials", blank["problems"])
+        self.assertIn("1 unit(s) ended with no reward from 0 to 1 and no error", blank["problems"])
         for kw in ({"limit": 1}, {"shard": (1, 2)}):
             with self.assertRaises(run.Refused):
                 self.prove(dataset="kit", jobs={"nop": whole}, **kw)
@@ -617,7 +618,7 @@ class HeldJob(unittest.TestCase):
             self.edit("u2", lambda res: res["verifier_result"].update(rewards=value))
             r = self.held()
             self.assertFalse(r["ok"], value)
-            self.assertIn("1 unit(s) ended with no score from 0 to 1 and no error: read the job's trials", r["problems"], value)
+            self.assertIn("1 unit(s) ended with no score from 0 to 1 and no error", r["problems"], value)
             self.assertEqual(r["value"], 0.0)
 
     def test_a_trial_another_run_wrote_is_refused(self):

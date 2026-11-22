@@ -378,16 +378,14 @@
     "airline": {
       "units": {
         "units": 50,
-        "passed": "50 ids, the same twice, unique",
-        "on": "2026-10-13"
+        "passed": "50 ids, the same twice, unique"
       },
       "leak": {
         "units": 50,
         "looked_for": 46,
         "short": 4,
         "passed": "50/50",
-        "note": "4 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
-        "on": "2026-10-13"
+        "note": "4 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
       },
       "nop": {
         "passed": "0/50",
@@ -396,10 +394,7 @@
           "at_most": 0.0
         },
         "units": 50,
-        "job": "2026-10-13__14-48-52__tau3-bench__airline__prove-nop",
-        "source": "nullius",
-        "judge": "gpt-4.1-2025-04-14",
-        "on": "2026-10-13"
+        "judge": "gpt-4.1-2025-04-14"
       },
       "oracle": {
         "passed": "50/50",
@@ -408,25 +403,20 @@
           "at_least": 1.0
         },
         "units": 50,
-        "job": "2026-10-13__14-48-52__tau3-bench__airline__prove-oracle",
-        "source": "nullius",
-        "judge": "gpt-4.1-2025-04-14",
-        "on": "2026-10-13"
+        "judge": "gpt-4.1-2025-04-14"
       }
     },
     "retail": {
       "units": {
         "units": 114,
-        "passed": "114 ids, the same twice, unique",
-        "on": "2026-10-13"
+        "passed": "114 ids, the same twice, unique"
       },
       "leak": {
         "units": 114,
         "looked_for": 97,
         "short": 17,
         "passed": "114/114",
-        "note": "17 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
-        "on": "2026-10-13"
+        "note": "17 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
       },
       "nop": {
         "passed": "0/114",
@@ -435,10 +425,7 @@
           "at_most": 0.0
         },
         "units": 114,
-        "job": "2026-10-13__14-48-52__tau3-bench__retail__prove-nop",
-        "source": "nullius",
-        "judge": "gpt-4.1-2025-04-14",
-        "on": "2026-10-13"
+        "judge": "gpt-4.1-2025-04-14"
       },
       "oracle": {
         "passed": "114/114",
@@ -447,24 +434,19 @@
           "at_least": 1.0
         },
         "units": 114,
-        "job": "2026-10-13__14-48-52__tau3-bench__retail__prove-oracle",
-        "source": "nullius",
-        "judge": "gpt-4.1-2025-04-14",
-        "on": "2026-10-13"
+        "judge": "gpt-4.1-2025-04-14"
       }
     },
     "telecom": {
       "units": {
         "units": 114,
-        "passed": "114 ids, the same twice, unique",
-        "on": "2026-10-14"
+        "passed": "114 ids, the same twice, unique"
       },
       "leak": {
         "units": 114,
         "looked_for": 114,
         "short": 0,
-        "passed": "114/114",
-        "on": "2026-10-14"
+        "passed": "114/114"
       },
       "nop": {
         "passed": "0/114",
@@ -473,10 +455,7 @@
           "at_most": 0.0
         },
         "units": 114,
-        "job": "2026-10-14__09-00-42__tau3-bench__telecom__prove-nop",
-        "source": "nullius",
-        "judge": "gpt-4.1-2025-04-14",
-        "on": "2026-10-14"
+        "judge": "gpt-4.1-2025-04-14"
       },
       "oracle": {
         "passed": "114/114",
@@ -485,24 +464,19 @@
           "at_least": 1.0
         },
         "units": 114,
-        "job": "2026-10-14__09-00-42__tau3-bench__telecom__prove-oracle",
-        "source": "nullius",
-        "judge": "gpt-4.1-2025-04-14",
-        "on": "2026-10-14"
+        "judge": "gpt-4.1-2025-04-14"
       }
     },
     "banking_knowledge": {
       "units": {
         "units": 97,
-        "passed": "97 ids, the same twice, unique",
-        "on": "2026-10-14"
+        "passed": "97 ids, the same twice, unique"
       },
       "leak": {
         "units": 97,
         "looked_for": 97,
         "short": 0,
-        "passed": "97/97",
-        "on": "2026-10-14"
+        "passed": "97/97"
       },
       "nop": {
         "passed": "0/97",
@@ -511,10 +485,7 @@
           "at_most": 0.0
         },
         "units": 97,
-        "job": "2026-10-14__09-10-48__tau3-bench__banking_knowledge__prove-nop",
-        "source": "nullius",
-        "judge": "gpt-4.1-2025-04-14",
-        "on": "2026-10-14"
+        "judge": "gpt-4.1-2025-04-14"
       },
       "oracle": {
         "passed": "97/97",
@@ -523,24 +494,19 @@
           "at_least": 1.0
         },
         "units": 97,
-        "job": "2026-10-14__09-10-48__tau3-bench__banking_knowledge__prove-oracle",
-        "source": "nullius",
-        "judge": "gpt-4.1-2025-04-14",
-        "on": "2026-10-14"
+        "judge": "gpt-4.1-2025-04-14"
       }
     },
     "telecom-workflow": {
       "units": {
         "units": 114,
-        "passed": "114 ids, the same twice, unique",
-        "on": "2026-10-16"
+        "passed": "114 ids, the same twice, unique"
       },
       "leak": {
         "units": 114,
         "looked_for": 114,
         "short": 0,
-        "passed": "114/114",
-        "on": "2026-10-16"
+        "passed": "114/114"
       },
       "nop": {
         "passed": "0/114",
@@ -549,10 +515,7 @@
           "at_most": 0.0
         },
         "units": 114,
-        "job": "2026-10-16__15-32-40__tau3-bench__telecom-workflow__prove-nop",
-        "source": "nullius",
-        "judge": "gpt-4.1-2025-04-14",
-        "on": "2026-10-16"
+        "judge": "gpt-4.1-2025-04-14"
       },
       "oracle": {
         "passed": "114/114",
@@ -561,10 +524,7 @@
           "at_least": 1.0
         },
         "units": 114,
-        "job": "2026-10-16__15-32-40__tau3-bench__telecom-workflow__prove-oracle",
-        "source": "nullius",
-        "judge": "gpt-4.1-2025-04-14",
-        "on": "2026-10-16"
+        "judge": "gpt-4.1-2025-04-14"
       }
     }
   }
