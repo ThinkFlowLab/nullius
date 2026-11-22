@@ -430,7 +430,8 @@ def _option(name, default, kind):
 
 def _runner_env():
     """The runner's environment: this driver's, its import path the upstream's folder and the nullius package's."""
-    package = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_port().__file__))))
+    import nullius                                   # asked of the package itself, wherever the port sits inside it
+    package = os.path.dirname(os.path.dirname(os.path.abspath(nullius.__file__)))
     return dict(os.environ, PYTHONPATH=os.pathsep.join([UP, package]), PYTHONIOENCODING="utf-8")
 
 

@@ -231,6 +231,16 @@ class StartAndReap(unittest.TestCase):
                              env=dict(os.environ, TMPDIR=folder, NULLIUS_UPSTREAM=self.tmp))
         self.assertEqual(got.stdout.strip(), "/tmp/nullius-osworld1-vm-start.lck", got.stderr[-2000:])
 
+    def test_the_runners_import_path_holds_the_nullius_package_and_not_its_inside(self):
+        env = self.d._runner_env()
+        up, package = env["PYTHONPATH"].split(os.pathsep)
+        self.assertEqual(up, self.tmp)
+        code = "import secrets\nfrom nullius.standard.protocols import computer_port\nprint(secrets.__file__)\n"   # as runner.py
+        got = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60, cwd=self.tmp,
+                             stdin=subprocess.DEVNULL, env={"PATH": os.environ["PATH"], "PYTHONPATH": env["PYTHONPATH"]})
+        self.assertEqual(got.returncode, 0, got.stderr[-2000:])
+        self.assertNotIn(os.path.join(package, ""), got.stdout)               # the standard library's, not nullius/secrets.py
+
     def test_an_already_reaped_runner_gets_no_signal(self):
         p = child("pass")
         p.wait()
