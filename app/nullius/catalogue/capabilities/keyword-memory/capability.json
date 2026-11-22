@@ -21,13 +21,11 @@
   "proven": {
     "cap.memory/v1": {
       "passed": "2/2",
-      "on": "2026-11-02",
       "model": "openai/gpt-5-mini",
       "provider": "openrouter",
       "version": "1",
       "kit_version": 1,
-      "backend": "docker",
-      "job": "2026-11-02__14-19-42__kit__cap-memory-v1__keyword-memory"
+      "backend": "docker"
     }
   }
 }

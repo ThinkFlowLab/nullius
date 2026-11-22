@@ -38,14 +38,10 @@ from .filters import agent_mark_url
 from . import settings as settings_web
 
 
-def _job_ids() -> set:
-    return {j.job_id for j in shared._jobs_for_request()}
-
-
 def _page(kind: str):
     example = os.path.join(definitions.CATALOGUE, "agents", "reference") if kind == "agent" else \
         os.path.join(definitions.CATALOGUE, "capabilities", "keyword-memory")
-    found = standard_recipe.entries(kind, own=True, jobs=_job_ids())
+    found = standard_recipe.entries(kind, own=True)
     return render_template("agents/standard.html", kind=kind, how=howto.steps(kind), prompts=howto.prompts(),
                            catalogue_dir=paths.catalogue_dir(), example_dir=example, problems=found["problems"],
                            items=[_card(kind, e) for e in found["entries"]], choices=_choices(kind, found["entries"]), only=ONLY.get(kind, {}))
@@ -102,7 +98,7 @@ def _card(kind: str, e: dict) -> dict:
 
 
 def _entry(kind: str, key: str):
-    every = standard_recipe.entries(kind, every=True, jobs=_job_ids())["entries"]
+    every = standard_recipe.entries(kind, every=True)["entries"]
     mine = [x for x in every if x["d"]["key"] == key]
     v = request.args.get("v")
     e = next((x for x in mine if x["d"]["_version"] == v), None) if v else \

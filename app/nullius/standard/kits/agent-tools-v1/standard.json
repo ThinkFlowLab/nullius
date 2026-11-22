@@ -54,16 +54,14 @@
     "kit": {
       "units": {
         "units": 5,
-        "passed": "5 ids, the same twice, unique",
-        "on": "2026-10-12"
+        "passed": "5 ids, the same twice, unique"
       },
       "leak": {
         "units": 5,
         "looked_for": 1,
         "short": 4,
         "passed": "5/5",
-        "note": "4 reference(s) under 12 characters not looked for: too short to tell a leak from chance",
-        "on": "2026-10-12"
+        "note": "4 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
       },
       "nop": {
         "passed": "0/5",
@@ -71,10 +69,7 @@
         "expect": {
           "at_most": 0.0
         },
-        "units": 5,
-        "job": "2026-10-12__16-28-38__agent-tools-v1__kit__prove-nop",
-        "source": "nullius",
-        "on": "2026-10-12"
+        "units": 5
       },
       "oracle": {
         "passed": "5/5",
@@ -82,10 +77,7 @@
         "expect": {
           "at_least": 1.0
         },
-        "units": 5,
-        "job": "2026-10-12__16-28-38__agent-tools-v1__kit__prove-oracle",
-        "source": "nullius",
-        "on": "2026-10-12"
+        "units": 5
       }
     }
   },
