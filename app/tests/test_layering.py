@@ -1,5 +1,7 @@
-"""The backend imports no Flask: it is exercisable from a bare shell or a notebook
-(AGENTS.md, Core Architecture)."""
+"""Where code sits. The backend imports no Flask: it is exercisable from a bare shell or a
+notebook (AGENTS.md, Core Architecture). The standard's modules sit in one folder per purpose,
+and its folders import one way."""
+import ast
 import pathlib
 import unittest
 
@@ -19,6 +21,55 @@ class NoFlask(unittest.TestCase):
             if bad:
                 offenders[str(module.relative_to(backend))] = bad
         self.assertEqual(offenders, {})
+
+
+class StandardFolders(unittest.TestCase):
+    """``nullius/standard/`` is one folder per purpose; its ``__init__`` says what each is for."""
+
+    def setUp(self):
+        self.root = pathlib.Path(nullius.__file__).parent / "standard"
+        self.folders = sorted(d.name for d in self.root.iterdir() if (d / "__init__.py").is_file())
+        self.assertGreater(len(self.folders), 5)
+
+    def test_only_the_cli_and_the_kits_sit_at_the_top(self):
+        where = "a module of the standard goes in the folder of its purpose: " + ", ".join(self.folders)
+        self.assertEqual(sorted(p.name for p in self.root.glob("*.py")), ["__init__.py", "cli.py"], where)
+        beside = sorted(d.name for d in self.root.iterdir() if d.is_dir() and d.name not in self.folders + ["__pycache__"])
+        self.assertEqual(beside, ["kits"], "a folder of modules is a package: it has an __init__.py that says what it is for")
+
+    def named(self, node, folder):
+        """The folders an import statement in a module of ``folder`` names."""
+        if isinstance(node, ast.Import):
+            names = [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            # .x is this folder's, ..x the standard's, ...x the backend's
+            package = ["nullius", "standard", folder][:4 - node.level] if node.level else []
+            base = ".".join(package + ([node.module] if node.module else []))
+            names = [base] + [f"{base}.{a.name}" for a in node.names]
+        else:
+            return set()
+        parts = [n.split(".") for n in names]
+        return {p[2] for p in parts if p[:2] == ["nullius", "standard"] and len(p) > 2 and p[2] in self.folders}
+
+    def test_the_folders_import_one_way(self):
+        """No folder imports one that imports it, at a module's top or inside a function, directly or
+        through others: each has what it uses below it, and a reader can take them in that order."""
+        lines = {}                                                  # (a folder, the folder it imports) -> where
+        for folder in self.folders:
+            for path in sorted((self.root / folder).glob("*.py")):
+                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                    for other in self.named(node, folder) - {folder}:
+                        lines.setdefault((folder, other), []).append(f"{folder}/{path.name}:{node.lineno}")
+        self.assertGreater(len(lines), 10)
+        left = set(self.folders)                                    # a folder that imports none of those left, or that
+        while True:                                                 # none of them imports, is taken away, again and
+            free = {f for f in left if not any(a == f and b in left for a, b in lines)     # again: what stays is a circle
+                    or not any(b == f and a in left for a, b in lines)}
+            if not free:
+                break
+            left -= free
+        circle = {f"{a} imports {b}": where for (a, b), where in sorted(lines.items()) if a in left and b in left}
+        self.assertEqual(circle, {}, "folders of the standard that import each other")
 
 
 if __name__ == "__main__":

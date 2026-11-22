@@ -21,4 +21,7 @@ container), ``runner`` (a run, on one machine or several), ``proofs`` (kits,
 fidelity, a benchmark's controls) and ``pages`` (the builder's recipe, the How
 to add steps). ``cli`` is the shell command over all of them; ``kits/`` holds the
 conformance kits, each a benchmark.
+
+A new module goes in the folder of its purpose, not beside ``cli``, and no
+folder imports one that imports it (``tests/test_layering.py``).
 """

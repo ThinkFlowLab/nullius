@@ -91,6 +91,7 @@ import json
 import os
 import re
 from typing import Callable, Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
 from nullius.standard.contract import ports
 from nullius import ondisk, paths
@@ -963,8 +964,7 @@ def _environments(envs, here: Optional[str]) -> List[str]:
         if "local_ok" in e and not isinstance(e["local_ok"], bool):
             bad.append(f"{w}.local_ok: true or false")
         if "network" in e:
-            from ..requirements import network_requirements
-            bad += [f"{w}.{message}" for message in network_requirements.problems(e["network"])]
+            bad += [f"{w}.{message}" for message in _network(e["network"])]
         bad += _secrets(w, e.get("needs_secrets"), bool(e.get("local_ok")), settings)
     kinds: Dict[str, set] = {}
     sources: Dict[str, set] = {}
@@ -978,6 +978,21 @@ def _environments(envs, here: Optional[str]) -> List[str]:
     bad += [f"environments: {n} comes from {' and from '.join(sorted(k))} - one name, one source, in every environment"
             for n, k in sources.items() if len(k) > 1]
     return bad
+
+
+def _network(value) -> List[str]:
+    """An environment's ``network``: public web access for its agents, with the HTTPS URL a run
+    asks before its first unit (``requirements.network_requirements``)."""
+    if not isinstance(value, dict) or set(value) != {"access", "probe"}:
+        return ["network: {access: public, probe: an HTTPS URL}"]
+    try:
+        u = urlsplit(value["probe"])
+        valid = (value["access"] == "public" and u.scheme == "https" and u.hostname
+                 and not u.username and not u.password and not u.query and not u.fragment
+                 and u.port in (None, 443))
+    except (TypeError, ValueError, AttributeError):
+        valid = False
+    return [] if valid else ["network: public access with an HTTPS probe URL without credentials, query or fragment"]
 
 
 def _secrets(w: str, secrets, local_ok: bool, settings) -> List[str]:

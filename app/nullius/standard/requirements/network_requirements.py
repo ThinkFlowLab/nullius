@@ -3,21 +3,7 @@
 Original setups and controls are separate protocols. A reachable HTTPS probe
 proves connectivity, not that an agent can search, browse or interpret media.
 """
-from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
-
-
-def problems(value):
-    if not isinstance(value, dict) or set(value) != {"access", "probe"}:
-        return ["network: {access: public, probe: an HTTPS URL}"]
-    try:
-        u = urlsplit(value["probe"])
-        valid = (value["access"] == "public" and u.scheme == "https" and u.hostname
-                 and not u.username and not u.password and not u.query and not u.fragment
-                 and u.port in (None, 443))
-    except (TypeError, ValueError, AttributeError):
-        valid = False
-    return [] if valid else ["network: public access with an HTTPS probe URL without credentials, query or fragment"]
 
 
 def required(bench, other):

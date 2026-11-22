@@ -20,12 +20,12 @@ class NetworkRequirements(unittest.TestCase):
         self.agent = {'_kind': 'agent'}
 
     def test_schema_rejects_missing_unknown_and_credential_fields(self):
-        self.assertEqual(net.problems(self.bench['environments']['web']['network']), [])
+        self.assertEqual(definitions._network(self.bench['environments']['web']['network']), [])
         for value in ('public', {}, {'access': 'private', 'probe': 'https://example.org/'},
                       {'access': 'public', 'probe': 'http://example.org/'},
                       {'access': 'public', 'probe': 'https://user:secret@example.org/'},
                       {'access': 'public', 'probe': 'https://example.org/?token=secret'}):
-            self.assertTrue(net.problems(value), value)
+            self.assertTrue(definitions._network(value), value)
 
     def test_a_container_run_is_refused_before_any_task_when_the_public_web_is_unreachable(self):
         opener = Mock(side_effect=OSError('offline'))
