@@ -5,11 +5,21 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import time
 import unittest
 
 from nullius.standard import acp
 
 FAKE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "fake_acp_agent.py")
+
+
+def _alive(pid):
+    """Running, not a zombie waiting for init to reap it."""
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] != "Z"
+    except OSError:
+        return False
 
 
 def ev(kind, text=None, **fields):
@@ -126,6 +136,21 @@ class ClientTest(unittest.TestCase):
     def test_mcp_servers_reach_the_session(self):
         sid = self.c.new_session(self.ws, [{"name": "bench", "command": "python3", "args": ["x.py"], "env": {"A": "1"}}])
         self.assertEqual(self.c.prompt(sid, "call secret", timeout=20).text, "servers bench")
+
+    @unittest.skipUnless(os.path.isdir("/proc"), "finding escaped processes reads /proc")
+    def test_closing_stops_what_the_agent_started_in_a_session_of_its_own(self):
+        pid = os.path.join(self.tmp, "escaped.pid")
+        code = ("import os,subprocess,sys\n"
+                f"p=subprocess.Popen(['sleep','60'],start_new_session=True); open({pid!r},'w').write(str(p.pid))\n"
+                f"os.execv(sys.executable,[sys.executable,{FAKE!r}])\n")
+        c = acp.Client([sys.executable, "-c", code], dict(os.environ), os.path.join(self.tmp, "c.log")).start()
+        escaped = int(open(pid).read())
+        self.assertNotEqual(os.getpgid(escaped), c.p.pid)        # out of the group the agent's kill reaches
+        c.close()
+        deadline = time.time() + 5
+        while time.time() < deadline and _alive(escaped):
+            time.sleep(0.05)
+        self.assertFalse(_alive(escaped))
 
     def test_a_turn_that_never_ends_times_out_and_the_agent_is_stopped(self):
         sid = self.c.new_session(self.ws)
