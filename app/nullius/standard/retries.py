@@ -31,7 +31,7 @@ NOT_RETRIED = frozenset({
     "AgentTimeoutError", "VerifierTimeoutError", "RewardFileNotFoundError", "RewardFileEmptyError",
     "VerifierOutputParseError", "ApiUsageLimitError", "AgentSafetyRefusalError", "AgentAuthenticationError",
     "ModelNotFoundError",
-    # this runner's own: a secret no second try provides, the spending caps and the calls cap, a stopped run
+    # this runner's own
     "EnvironmentSecretMissingError", ledger.ERROR, ledger.UNIT_ERROR, relay.CALLS_ERROR, "CancelledError",
     relay.CONTEXT_ERROR,
 })
@@ -45,5 +45,5 @@ def retryable(res: Optional[dict]) -> bool:
 
 
 def rate_limited(res: Optional[dict]) -> bool:
-    """Whether an attempt ended refused by the provider's rate limit: what a proof run tries again after."""
+    """Whether an attempt ended refused by the provider's rate limit."""
     return ((res or {}).get("exception_info") or {}).get("exception_type") == pace.RATE_LIMITED

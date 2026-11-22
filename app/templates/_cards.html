@@ -2,9 +2,8 @@
     static/tables.js (NulliusTable.cards) and styled in catalogue/catalogue.css. A field's `card` names the slot it
     fills; a field without one is not on the card, and `table` false keeps a card-only field off a table. Slots, in
     order: `icon`, `title` (exactly one), `check`, `delete` (the title row, the two at its right); `text`; `badge`*, `note`*;
-    `stat`* (below a line, a column each, a missing value as —; a few, what reads at a glance); `alert`; `action`*;
-    `status`, `tag`*, `meta` (the last row, the meta at its right) (* any number, the others at most one). More than
-    three stats widen every card of the page so they keep one line; on a screen too narrow they wrap in two rows.
+    `stat`* (below a line, a column each, a missing value as —); `alert`; `action`*;
+    `status`, `tag`*, `meta` (the last row, the meta at its right) (* any number, the others at most one).
     An item is a dict of display values by field key: a string, a dict {text, class, title, label, href, value, attrs}
     or a list of them, empty for none; a filter and Sort by read a value's `value`, else its text; an action's
     `attrs` are its button's own attributes, its `class` added to the button's, and a `delete` takes the same shape (a quiet

@@ -40,13 +40,12 @@ Each page's command, or why there is none.
 | Unlink a workspace's root, delete its folder | `workspace.forget`, `execution.delete`; today `POST /workspaces/<name>/roots/unlink` and `/roots/delete` |
 | `/new-run` | `recipes.cli`; today `POST /new-run/runner` |
 | Delete a launch | `execution.delete`; today `POST /launch/<key>/delete` |
-| `/launches`, add a launch to a workspace | `execution.restore` reads every run record; today `POST /launch/<key>/add` |
+| `/launches`, add a launch to a workspace | today `POST /launch/<key>/add` |
 
 ## None needed
 
 | Page | Why |
 | --- | --- |
-| `/runs/pulse`, refresh a workspace | commands read fresh every call |
 | `/upload` | import the directory |
 | Test a host, install a key | `ssh -o BatchMode=yes <host> true`, `ssh-copy-id` |
 | A Harbor recipe: run, follow, continue, stop | the generated script |

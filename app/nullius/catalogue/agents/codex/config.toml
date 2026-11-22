@@ -6,8 +6,7 @@
 # no one is there to answer. The reasoning effort is always written (the
 # option reasoning_effort, its default Codex's own): left out, codex-acp and
 # Codex's CLI would each fill it in their own way. Its plugins are off: with
-# them on, Codex 0.160 fetches OpenAI's curated plugins repository (about
-# 103 MB) into .codex/.tmp/plugins at every start - a download per unit, into
+# them on, Codex 0.160 fetches OpenAI's curated plugins repository into .codex/.tmp/plugins at every start - a download per unit, into
 # every unit's home - and a run gives it no plugin to use.
 model = "{model}"
 model_reasoning_effort = "{opt_reasoning_effort}"

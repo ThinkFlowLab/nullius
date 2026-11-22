@@ -35,8 +35,7 @@ def _root(path, launched, memo) -> dict:
     """A root as its Roots dialog lists it: ``run``, the run Nullius made whose
     folder it is (``execution.run_of``), and ``why`` that folder cannot be
     deleted here, '' when it can: its launch has ended and its record reads,
-    as Delete launch asks (``execution.deletable``). What Delete would take is
-    worked out when it opens (``workspace_root_ask``). ``launched``:
+    as Delete launch asks (``execution.deletable``). ``launched``:
     ``runs._held_launches()``. ``memo``: by real path, a folder two roots
     name read once."""
     real = os.path.realpath(path)

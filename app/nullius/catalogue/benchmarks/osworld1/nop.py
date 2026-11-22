@@ -3,8 +3,7 @@
     nop.py VM_IMAGE TASK_JSON RESULT_DIR
 
 The upstream's DesktopEnv on its docker provider, as run_multienv_m3.py builds
-it for the docker provider (headless, pyautogui, screenshots, 1920x1080, the
-docker password, no proxy); its run_single_example, max_steps 1, with an agent
+it for the docker provider; its run_single_example, max_steps 1, with an agent
 whose one action is DONE; then the upstream's evaluator on the untouched VM,
 written to RESULT_DIR/result.txt by run_single_example. On SIGTERM the
 environment is closed, so its VM container is removed.

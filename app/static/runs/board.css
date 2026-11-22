@@ -3,7 +3,7 @@
    the pin at the start of its lanes). A judge reading is a neutral hollow ring and its cause in plain dim text, no box;
    dotted is kept for a reading below the confidence gate. The connector between them is a neutral 2px line: straight = the
    reading agrees, a 45° jog into the right-hand lane = it disagrees. What is not a finding about the claim (not asked, not
-   judged, below the gate, an Unknown's reading) stops in the gutter, left of both lanes. Every count comes from reconcile.
+   judged, below the gate, an Unknown's reading) stops in the gutter, left of both lanes.
    Everything here is scoped to .rp so the page's names never reach another page. */
 .rp {
   --hush: color-mix(in srgb, var(--text-faint) 80%, var(--surface));
@@ -367,7 +367,7 @@
 .rp dl.gl .mk { display: inline-flex; align-items: center; gap: 7px; margin: 0 18px 6px 0; color: var(--text); white-space: nowrap; }
 @media (max-width: 760px) { .rp .more { grid-template-columns: 1fr; } .rp dl.gl { grid-template-columns: 1fr; } }
 
-/* ---- one tooltip: hover and keyboard focus show the same words; it repeats the page, never gates it ---- */
+/* ---- one tooltip: hover and keyboard focus show the same words ---- */
 .rp-tip { position: fixed; z-index: 40; max-width: 340px; padding: 7px 10px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border);
   box-shadow: var(--shadow); font: 12px/1.45 var(--sans); color: var(--text); pointer-events: none; }
 

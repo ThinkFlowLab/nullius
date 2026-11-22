@@ -20,9 +20,9 @@ Open a trial for the verifier, answer, conversation and recorded model calls. To
 
 Benchmarks measure performance. Kits check that an agent or capability implements a port.
 
-- **Proven: 2/2.** Passed basic checks out of required basic checks. All must pass to prove the port. Skills are additional checks, required only by benchmarks that ask for them. Open the kit to inspect its checks and shared source.
+- **Proven: 2/2.** Passed basic checks out of required basic checks. All must pass to prove the port. Skills are additional checks, required only by benchmarks that ask for them.
 
-- **Original procedure, chosen participant and model.** The builder lists reference agents first (a benchmark's own agents, such as OSWorld's, in their place), or No agent · Original for direct model evaluation. Memory benchmarks offer Original memory alongside compatible capabilities. Like the paper filters documented models and keeps the official user simulator and judge; Like the leaderboard, where a benchmark declares one, runs its simulator, judge, options and attempts; Any of your choice opens the provider catalogue.
+- **Original procedure, chosen participant and model.** Reference agents, or No agent · Original for direct model evaluation. Memory benchmarks offer Original memory alongside compatible capabilities. Model choices: [Run builder](builder.md#stages).
 
 - **Native and combined setups.** A capability's proof does not prove an agent uses it. Native, augmented and replacement setups need separate evidence. A replacement must disable or redirect the native path; an extra tool alone is not a swap. General agent-plus-capability recipes are not supported yet.
 
@@ -50,11 +50,11 @@ The job page and Compare show both for any run that tried every task at least tw
 
 ## Compare like with like {#compare}
 
-Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs; a task row disagrees when its pass rate or its attempts' outcomes differ, and shows the last indexed attempt.
+Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs; a task row disagrees when its pass rate or its attempts' outcomes differ.
 
 Check dataset, model, provider, agent version, limits and execution backend before attributing a difference to the agent. Matched views omit whole-run wall time because it does not measure just the selected tasks.
 
-The first column is the baseline. Under each summary number of the other columns, Δ is its difference from the baseline's, in the row's unit: percentage points for a rate, the row's own unit for counts, tokens, cost and time. It is coloured by the row's direction, uncoloured for a check (`nop`, `oracle`), and absent when either value is missing. A run sharded over several machines is one column holding every shard's trials.
+The first column is the baseline. Under each summary number of the other columns, Δ is its difference from the baseline's, in the row's unit: percentage points for a rate, the row's own unit for counts, tokens, cost and time. Absent when either value is missing. A run sharded over several machines is one column holding every shard's trials.
 
 ## Reading the provenance column {#provenance}
 
@@ -87,7 +87,7 @@ Any Harbor run reads as is; a run from another harness once an importer has conv
 
 `nullius/importers/`
 
-A run Harbor never wrote (ATIF trajectories, an OpenTelemetry export), converted into a job directory first. On such rows the importer decides what a number is. A standard run is written in Harbor's shape by Nullius itself (nullius/standard/job.py).
+A run Harbor never wrote (ATIF trajectories, an OpenTelemetry export), converted into a job directory first. On such rows the importer decides what a number is.
 
 *Layer 1 · run*
 
@@ -139,7 +139,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `mean_score` | The mean graded score, weighted by each trial's number of scored parts when present. When no trial passes or fails, it is the headline and the rates read —. | derived | mixed |
 | `score_by_group · parts_by` | The mean score per value of the field the benchmark breaks it down by (a question's category), from `verifier/parts.json`. | derived | mixed |
 | `n_regressions` | Trials whose patch broke a previously passing test. | derived | swe-bench |
-| `counts` | Trials per outcome, as a stacked bar; on the run page each segment filters the trials. | derived | any |
+| `counts` | Trials per outcome. | derived | any |
 | `total_input_tokens` | Prompt tokens across the run. | derived | any |
 | `total_cache_tokens` | The part of those served from cache, as each trial's `result.json` records it. | derived | any |
 | `total_output_tokens` | Completion tokens. | derived | any |
@@ -148,8 +148,8 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `budget` | A standard run's spending cap, from `result.json`: `max_usd` and `spent_usd`, whether it `stopped` the run, the units `cut_off` and `not_run`, and with a cap per unit `unit_max_usd` and `over_unit`. Empty without a cap. | measured | any |
 | `agent_label` | The agent's name: the class of a `module:Class` path, or the trials' own name when the config gives none. | measured | any |
 | `agent_version` | The version the trial's `agent_info` reports. | measured | any |
-| `is_control` | An `oracle` or `nop` run: a check on the tasks, kept out of rankings and totals. Its row reads as a verdict, not a rate. A standard run is one only when its benchmark declares that control. An imported runner's arm without that declaration is not a control. On a benchmark that scores, a control's score of 1 reads as accepted and 0 as rejected. | measured | any |
-| `is_running` | The job records running or pending trials. Numbers are partial; a managed execution's terminal status takes precedence on the page. | measured | any |
+| `is_control` | An `oracle` or `nop` run: a check on the tasks, kept out of rankings and totals. Its row reads as a verdict, not a rate. A standard run is one only when its benchmark declares that control. On a benchmark that scores, a control's score of 1 reads as accepted and 0 as rejected. | measured | any |
+| `is_running` | The job records running or pending trials. Numbers are partial. | measured | any |
 | `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Repeated attempts are separate trials, not retries. | measured | any |
 | `retries` | Retries a standard run allows each attempt (`--retries`); 0 elsewhere. | measured | any |
 | `dataset` | The dataset folder, `name@version` for a registry fetch, or the task names' shared prefix. | measured | any |
@@ -170,8 +170,8 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `dur_env / dur_agent_setup / dur_agent / dur_verifier` | The four phases a trial records, drawn in order. An imported trial charges its whole window to `dur_agent`. | measured | any |
 | `dur_other` | `dur_total` minus the phases: waits and teardown. | derived | any |
 | `n_input_tokens` | Prompt tokens for the trial. | measured | any |
-| `n_cache_tokens` | Prompt tokens read from cache, excluding cache writes: a subset, never added to input tokens. Older standard records may include writes; stored results are not rewritten. | measured | any |
-| `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings (a search index its driver builds) are the run's, in `.work/relay-benchmark`, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
+| `n_cache_tokens` | Prompt tokens read from cache, excluding cache writes: a subset, never added to input tokens. | measured | any |
+| `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings are the run's, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
 | `exception_type` | What ended the trial, if anything. It decides the infra / agent split. | measured | any |
 | `n_retries` | Retries a standard run's attempt took. | measured | any |
@@ -183,12 +183,12 @@ These fields are stored in the standard's job and trial files ([Run a benchmark]
 
 | Field | What it is | Source | Works on |
 | --- | --- | --- | --- |
-| `standard.units_file` | In `config.json`: the units file's name, sha256 and ordered ids, before sharding and the limit. Units run in dataset order; merging requires the same listed units, even with `--force`, and keeps the first shard's file record. | measured | standard |
-| `standard.constraints` | In the same config: what the machine allowed the run, when set. These values can coexist with a units file and serving pins. Shards may have different machine constraints; merging keeps the first shard's config values. | measured | standard |
-| `standard.served_by` | In the same config: the allowed OpenRouter provider slugs by model, in the order tried. A job can record both its units file and its serving pins; merging different pins requires `--force`. | measured | standard |
-| `served / standard.served` | In the job's `result.json` and each trial's `result.json`, respectively: answered calls by provider (`calls`), calls naming none (`unnamed`), and each pinned model's `held`. Counts cover every relay route; the job also includes the benchmark's own relay. Tokens and cost retain their existing scope. | measured | standard |
+| `standard.units_file` | In `config.json`: the units file's name, sha256 and ordered ids, before sharding and the limit. | measured | standard |
+| `standard.constraints` | In the same config: what the machine allowed the run, when set. Shards may have different machine constraints; merging keeps the first shard's config values. | measured | standard |
+| `standard.served_by` | In the same config: the allowed OpenRouter provider slugs by model, in the order tried. | measured | standard |
+| `served / standard.served` | In the job's `result.json` and each trial's `result.json`, respectively: answered calls by provider (`calls`), calls naming none (`unnamed`), and each pinned model's `held`. Counts cover every relay route; the job also includes the benchmark's own relay. Tokens and cost are the agent's own calls'. | measured | standard |
 | `held` | `true` when every answered call names an allowed provider, `unknown` for an absent or different name, and `null` for no answered calls. Names are lowercased with spaces as dashes and compared with the slug before `/`; endpoint variants cannot be verified. Merging different pins marks the affected models `unknown`. | inferred | standard |
-| `request.routing / request.routing_asked / reply.served_by / reply.end / reply.error` | In `agent/calls.jsonl`: routing sent, the caller's routing when replaced, the answering provider, the reply's ending and any error inside a 200 response. These credential-cleaned fields leave the call's status and the unit's verdict unchanged. | measured | standard |
+| `request.routing / request.routing_asked / reply.served_by / reply.end / reply.error` | In `agent/calls.jsonl`: routing sent, the caller's routing when replaced, the answering provider, the reply's ending and any error inside a 200 response. | measured | standard |
 
 ## Trajectory metrics, inside a single run {#trajectory}
 
@@ -202,27 +202,27 @@ These fields are stored in the standard's job and trial files ([Run a benchmark]
 | `name_freq` | The tool names behind each category, in the agent's own words. Evidence of what a category folded, never a comparison key. | measured | any |
 | `files_touched` | Files the agent edited, made workspace-relative so two agents' sets compare. | inferred | any |
 | `n_failed_calls` | Tool calls that returned an error. | inferred | any |
-| `token_series` | Input tokens per LLM call, with the cached share shaded, from per-step metrics. A single call is drawn as one usage bar. | measured | any |
+| `token_series` | Input tokens per LLM call, with the cached share shaded, from per-step metrics. | measured | any |
 | `cache` | Cache reads ÷ every input token. Anthropic-style usage has its writes rebuilt from prompt growth; the file's own ratio shows when it differs. | inferred | any |
-| `steps[].dur` | Seconds until the next step opened, shown on the selected step in the conversation. | derived | any |
+| `steps[].dur` | Seconds until the next step opened. | derived | any |
 | `has_step_clock` | False when the step timestamps span under a second. Step durations and time to first edit are then left out, not shown as zeros. | derived | any |
 | `total_reasoning_tokens` | `None` when nothing reports it: "not reported" and "zero reasoning" are different claims. | measured | any |
-| `last_agent_message` | The agent's closing message, behind a toggle in the task comparison. | measured | any |
+| `last_agent_message` | The agent's closing message. | measured | any |
 
 ## Trace metrics, per-span clocks when a capture exists {#trace}
 
-The one place with a start and end per call. Spans are measured by instrumentation, or rebuilt from a transcript and marked *inferred*. Without a trace the trial page does not draw this.
+Spans are measured by instrumentation, or rebuilt from a transcript and marked *inferred*. Without a trace the trial page does not draw this.
 
 | Field | What it is | Source | Works on |
 | --- | --- | --- | --- |
 | `span.start_ns / end_ns` | One call's extent. Bars sit on **one global axis**, so a child starting before its parent is shown, not clamped. | measured | any |
 | `span.duration_ns` | `None` means no known end, not a zero. | measured | any |
-| `span.kind` | One of nine: `llm_request`, `reasoning`, `output`, `tool`, `subagent`, `session`, `user_message`, `compaction`, `group`. It colours the bar and the legend. | measured | any |
+| `span.kind` | One of nine: `llm_request`, `reasoning`, `output`, `tool`, `subagent`, `session`, `user_message`, `compaction`, `group`. | measured | any |
 | `kind group` | A span that only brackets a same-named child, re-kinded on load so one call draws as one row. Charged no time. | inferred | any |
 | `span.timing_quality` | `measured`, `inferred` or `unknown`. A trace with nothing measured is labelled as such, not dropped. | measured | any |
 | `totals` | **Displayed verbatim, never recomputed.** Spans nest, so summing them double-counts; the producer already resolved that. | measured | any |
 | `row.left_pct / width_pct` | A bar's position and width as a share of the axis: the whole trace, or the zoomed span. | derived | any |
-| `hide / hide_span` | Labels and single calls left out, each with its subtree. In the query string, so a view is a link and is what a save writes. | measured | any |
+| `hide / hide_span` | Labels and single calls left out, each with its subtree. | measured | any |
 | `charts / Bar` | Span durations on log-spaced bins, by count and by summed span time, split by kind. A share of span time, never of the run. | derived | any |
 
 ## Behaviour metrics, how the agent worked {#behaviour}
@@ -246,7 +246,7 @@ Thirteen classes. The five marked **yes** under Infrastructure leave the adjuste
 | Outcome | Label | Infrastructure | Meaning |
 | --- | --- | --- | --- |
 | `resolved` | Resolved | no | The verifier accepted the attempt. |
-| `scored` | Scored | no | A score and no pass or fail: a token F1, partial credit. The score is the result; such a run has no solve rate. |
+| `scored` | Scored | no | A score and no pass or fail: a token F1, partial credit. |
 | `patch_failed_tests` | Patch failed tests | no | Applied cleanly, tests still failed. |
 | `failed_verification` | Failed verification | no | The verifier said no, on a benchmark with no patch detail: Terminal-Bench, or one read only by its reward. |
 | `patch_not_applied` | Patch did not apply | no | Malformed context lines, or edits against the wrong revision. |
@@ -257,21 +257,15 @@ Thirteen classes. The five marked **yes** under Infrastructure leave the adjuste
 | `setup_error` | Setup error | yes | The environment or image never came up, or the unit was not run for want of a secret or docker it needs, so the agent never ran. |
 | `cancelled` | Run stopped | yes | The run stopped while this trial was in progress; its interrupted attempt is excluded. |
 | `spending_cap` | Spending cap | yes | The run reached its spending cap and its relay refused a call the unit needed. No attempt was had. |
-| `unknown` | Unknown | no | No verdict, or an exception on neither list. Counted, charged to nobody; the trial page shows the recorded type. |
+| `unknown` | Unknown | no | No verdict, or an exception on neither list. Counted, charged to nobody. |
 
 ## Caveats {#caveats}
 
-- **Cost is an estimate, and only where one was recorded.** A Harbor agent prices its own usage; a standard run's relay keeps the provider's figure when the reply carries one and otherwise estimates from the user's price list, when it prices that exact model. No bill is read. A trial without a cost shows —, and a run's total covers only the trials that have one.
+- **Cost is an estimate, and only where one was recorded.** Missing trial costs show —. Run totals cover only recorded costs.
 
-- **The infra/agent split is an explicit list.** Which exceptions leave the adjusted denominator and which count against the agent is pinned in `classify.py` and tested against Harbor's own classes; anything else is *Unknown*.
+- **The infra/agent split is an explicit list.** Which exceptions leave the adjusted denominator and which count against the agent are fixed; anything else is *Unknown*.
 
-- **Tool names don't compare across agents.** One writes `bash`, another a whole sentence. Compare on *category*.
-
-- **A flat step clock hides a run's interior.** When every step carries the same timestamp, the app leaves step durations out rather than drawing zeros.
-
-- **Large evidence loads in parts.** Span detail and conversation content arrive in bounded chunks.
-
-- **Trace totals are the producer's, not ours.** Spans nest, so summing them double-counts.
+- Compare tools by *category* across agents.
 
 - **The verifier has to be able to say no.** A `nop` run scoring 0 is what makes a passing score mean something. Check it on any new dataset with the builder's controls.
 

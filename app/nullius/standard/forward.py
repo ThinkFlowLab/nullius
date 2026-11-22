@@ -1,9 +1,7 @@
 """A one-address door: a TCP forwarder to a single ``host:port``, or to a
 single Unix socket (``unix:/path``).
 
-On the container backend the agent's container sits on an internal network with
-no route out; its relay is its way to the model. A licence of kind
-``server`` needs one more address: this forwarder, a container of its own
+A licence of kind ``server`` needs an address: this forwarder, a container of its own
 beside the relay (``container.Unit``), on the default bridge and on the
 unit's network under the server's own name, listening on the server's port
 and passing every connection to that one address - and to nothing else,

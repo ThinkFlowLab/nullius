@@ -1,20 +1,13 @@
 """Constraints: what Nullius may use on a machine, one table.
 
-Each entry of ``TABLE`` is one constraint: its key, its label, its kind
-(``cap``: the lowest value wins; ``pin``: which devices Nullius may use),
-its type, its minimum, how each backend applies a value (``apply``:
-``docker``, its flags on a container; ``systemd``, its properties on a scope), the cgroup v2 files a container or a scope reads
-back to show the value holds (``files``, ``enforced``), the capacity it is checked
-against (``capacity``, ``fits``) and what it gives the processes Nullius
-starts on the machine (``environment``). A new constraint is one entry.
+Each entry of ``TABLE`` is one constraint: a ``Constraint``. A new constraint is one entry.
 
 Constraints are set per machine in Settings, ``HOST_CONSTRAINTS``: a JSON
 object from a machine (``local`` for this machine, else a host's entry) to
 ``{key: value}``. A key not set is no constraint; a setting that is not valid
 refuses every run (``of``). Each container constraint is a ceiling per
 container, on every container a run starts on the machine, whatever the
-backend (``container.cap``): a unit's agent, its own image, its relay,
-doors, forwarders and proxy, the installs, the checks and a setup's driver.
+backend (``container.cap``).
 The connection test's probe containers are not capped. A task's own ``cpus``
 or ``memory_mb`` stays when it is lower (``argv``). An image build or pull
 takes none: the engine applies no limit there.
@@ -38,17 +31,11 @@ user systemd manager a local-backend run is refused its caps; a
 container-backend run keeps them on its containers, and its drivers run
 unlimited. ``cpu_set`` falls back to the run's affinity.
 
-``probe`` is the shell script the connection test runs on a machine: its
-capacity from ``nproc``, ``MemTotal`` and the GPUs ``nvidia-smi`` lists, then
-one throwaway container per container constraint, each started with that
-constraint alone, which prints its cgroup files back. The capacity is a
-ceiling: the lowest of ``nproc``, ``MemTotal`` and every cgroup v2 limit on
+The capacity is a ceiling: the lowest of ``nproc``, ``MemTotal`` and every cgroup v2 limit on
 the path from where the work lands up to the root, and the CPUs a process
 there may run on (``WALK``). Local processes land in the user's cgroup (a scope's, else
 the probe's own); containers land where the engine puts them, which a probe
-container in the host's cgroup namespace reads. ``read`` turns what it printed into ``{capacity, enforced,
-refused, applied, systemd}``; ``save`` keeps that per machine, and ``warnings`` is
-what Settings says of a value against it. A run checks again on its own
+container in the host's cgroup namespace reads. A run checks again on its own
 engine and its own systemd before its first unit (``standard/run.py``).
 """
 from __future__ import annotations
@@ -77,7 +64,7 @@ MIB = 1024 * 1024
 MAX_CPUS = 8192                       # the kernel's largest NR_CPUS
 SYSTEMD_RUN = ("systemd-run", "--user", "--scope", "-q")
 LITERAL = "--expand-environment=no"   # systemd 254 and later expand $ in a scope's command unless told not to
-CGROUP = "/sys/fs/cgroup"             # cgroup v2's mount
+CGROUP = "/sys/fs/cgroup"
 BOOTED = "/run/systemd/system"        # there when systemd runs the machine (sd_booted)
 # its own cgroup v2 path, in $d
 _OWN = "d=; while IFS= read -r l; do case $l in 0::*) d=${l#0::};; esac; done </proc/self/cgroup; "
@@ -171,7 +158,6 @@ TABLE: List[Constraint] = [
     Constraint("processes", "Processes and threads", "cap", int, 1, {"docker": lambda v: ["--pids-limit", str(int(v))],
                                                                      "systemd": lambda v: ["-p", f"TasksMax={int(v)}"]},
                ("pids.max",), lambda out, v: out == [str(int(v))]),
-    # the recipe sets its own (its concurrency, -j): the lower wins
     Constraint("concurrency", "Concurrent units", "cap", int, 1, machine="nullius"),
     # with cpus, a quota over these CPUs. systemd delegates no cpuset to users by default: the affinity stays
     Constraint("cpu_set", "CPUs Nullius may use", "pin", str, 0,
@@ -667,7 +653,7 @@ def not_enforced(values: dict, found: Optional[dict], backend: Optional[str] = N
     if backend in (None, "local") and sd is not None:
         held = sd.get("enforced") or []
         lost.update({k: "systemd" for k in scoped(values) if not BY_KEY[k].machine and k not in held})
-    # either backend: an engine's, where one answers (without one no container runs there, and Review says so)
+    # either backend: an engine's, where one answers (without one no container runs there)
     if backend == "container" or own or (backend is None and not engine_less(found)):
         lost.update({k: "engine" for k in container(values) if k not in (found.get("enforced") or [])})
     return {k: lost[k] for k in values if k in lost}

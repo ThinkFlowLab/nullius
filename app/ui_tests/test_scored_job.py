@@ -1,7 +1,7 @@
 """A runner's scored run, read from disk the way a run writes it: each
 trial's score in result.json and its questions in verifier/parts.json. The
 job page and the comparison break the mean score down by the field the
-parts name (`by`), from the files rather than from records built by hand."""
+parts name (`by`)."""
 from __future__ import annotations
 
 import json

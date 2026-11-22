@@ -10,9 +10,7 @@ so a module that patches a global patches only its own process. Prints the
 output of every module that failed and exits 1 if any did. Standard library
 only.
 
-The docker tier (``tests/docker_tier.py``) is the few tests that build and run
-containers for real, most of the suite's time on a machine that has the base
-image; they are skipped unless ``--docker`` is given, and run nightly in CI.
+The Docker tier builds and runs containers with `--docker`; CI runs it nightly.
 """
 from __future__ import annotations
 

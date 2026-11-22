@@ -1,10 +1,6 @@
 """OpenTelemetry span exports (OTLP/JSON), read as ``harbor-trace-v1`` traces.
 
-A production trace export and Harbor's ``agent/trace.json`` describe the same
-thing — spans with clocks and parentage — in two encodings. This reads the
-first and writes the second, so a trace that never went through a benchmark
-opens on the trial page and pools on ``/charts`` exactly as a recorded trial
-does. Nothing here measures anything: every clock, id and count comes off the
+This reads the export and writes Harbor's ``agent/trace.json``. Nothing here measures anything: every clock, id and count comes off the
 wire document, and what the document does not say stays absent.
 
 **Supported input format.** OTLP/JSON as the OpenTelemetry protocol 1.x JSON
@@ -13,7 +9,7 @@ each with ``resource.attributes``, ``scopeSpans[].scope`` and
 ``scopeSpans[].spans[]`` carrying ``traceId``, ``spanId``, ``parentSpanId``,
 ``name``, ``kind``, ``startTimeUnixNano``, ``endTimeUnixNano``, ``attributes``,
 ``events`` and ``status``. Ids are the hex strings OTLP/JSON specifies and are
-kept opaque; a base64 id would be kept opaque too. A file holds one request as
+kept opaque. A file holds one request as
 a JSON object, or one per line (what the collector's ``file`` exporter writes),
 and nothing else. A ``schemaUrl`` is accepted when it is
 an ``opentelemetry.io/schemas/1.*`` URL and refused otherwise. OTLP protobuf,
@@ -22,9 +18,7 @@ Jaeger and Zipkin JSON, and live collectors are out of scope.
 **Semantic conventions.** OpenInference 0.1.x attributes are read where present,
 and so are the Langfuse observation attributes (``langfuse.observation.*``) a
 Langfuse-instrumented application's spans carry. Every other attribute is kept
-verbatim, which is what keeps a generic span — no LLM attributes at all —
-inspectable: its name, clock, parent, status, events, resource and attributes
-all reach the detail pane.
+verbatim.
 
 Mapping, input → the fields the trial page reads
     spanId / parentSpanId / traceId      span_id / parent_span_id / trace_id
@@ -85,8 +79,7 @@ every call twice. A count the span does not carry is absent, never zero.
 ``totals`` is computed once, here, by the trial page's own partition
 (:func:`trace.breakdown`): every instant charged to one category at priority
 idle > tool > reasoning > llm, so nested and concurrent spans never sum past
-the clock. ``wall_ns`` is the trace's own window — first start to last end —
-which is what the coverage strip then compares the spans against. Spans are
+the clock. ``wall_ns`` is the trace's own window — first start to last end. Spans are
 ``timing_quality: measured``: these are the producer's clocks, not this
 reader's inference. Spans are ordered by start, out-of-order input included.
 
@@ -94,9 +87,7 @@ reader's inference. Spans are ordered by start, out-of-order input included.
 and its siblings, ``traceState`` and ``flags`` are not read. The OpenTelemetry
 GenAI conventions (``gen_ai.*``), OpenInference message lists
 (``llm.input_messages.*``), embeddings, retrieval documents and
-``llm.invocation_parameters`` are kept as attributes and not interpreted. Usage
-on a non-LLM span is not totalled (above). Content is clipped, and an export
-that was itself clipped is clipped again. Nothing here says whether the trace *succeeded*: a benchmark outcome is
+``llm.invocation_parameters`` are kept as attributes and not interpreted. Content is clipped. Nothing here says whether the trace *succeeded*: a benchmark outcome is
 the verifier's to record, so a span in ERROR marks that span and the trial's
 outcome stays unknown.
 
@@ -129,8 +120,7 @@ def clip(text, limit: int) -> str:
 SCHEMA = "harbor-trace-v1"
 PRODUCER = "app/nullius/traces/otel.py"
 
-# What this reader is written against. Named in the document it writes and in
-# the fixtures' README, so a claim of support can be checked against a version.
+# What this reader is written against.
 FORMAT = "OTLP/JSON ExportTraceServiceRequest, opentelemetry-proto 1.x"
 CONVENTIONS = "OpenInference semantic conventions 0.1.x"
 
@@ -561,9 +551,6 @@ def build(trace_id: str, records: list, limit: int = DEFAULT_MAX_CONTENT,
             "note": "wall_ns is the trace's own window, first start to last end",
         },
         "spans": roots,
-        # The trial page's partition, run once here: idle > tool > reasoning >
-        # llm, every instant charged to one category. Tokens are the sum over
-        # LLM spans, the only ones usage was read on.
         "totals": trace.breakdown(roots, wall_ns).as_totals(),
         "import": {
             "format": FORMAT,
@@ -576,7 +563,7 @@ def build(trace_id: str, records: list, limit: int = DEFAULT_MAX_CONTENT,
 
 
 def model_of(document: dict) -> str:
-    """The first LLM span's model name, or "" — what the importer shows."""
+    """The first LLM span's model name, or ""."""
     for raw in trace.raw_spans_of(document.get("spans") or []):
         if raw.get("kind") != "llm_request":
             continue
@@ -592,7 +579,7 @@ def read(paths: list, limit: int = DEFAULT_MAX_CONTENT) -> list:
 
     A trace may be split across files (a batch per export), which is why the
     files are read together and grouped afterwards. A file that does not read
-    raises :class:`ReadError` — the caller decides whether that is fatal.
+    raises :class:`ReadError`.
     """
     records = []
     where: dict = {}

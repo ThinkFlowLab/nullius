@@ -57,10 +57,8 @@ class ArtifactViews(unittest.TestCase):
         self.assertEqual(artifacts.read(self.trial, "result", "invalid")["page"], 1)
         self.assertEqual(artifacts.listing(self.trial)[0]["size"], 0)
 
-
     def test_the_artifact_manifest_is_listed_and_read_redacted(self):
-        # Harbor's artifacts/manifest.json — the last of a trial's nine files
-        # to reach a page. Listed by name like the rest, read through the
+        # Harbor's artifacts/manifest.json: listed by name like the rest, read through the
         # same redaction, and never reachable under another key.
         keys = [r["key"] for r in artifacts.listing(self.trial)]
         self.assertIn("manifest", keys)

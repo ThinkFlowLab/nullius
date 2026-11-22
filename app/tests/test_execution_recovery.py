@@ -100,7 +100,7 @@ class Restart(Base):
         said = ["  ✓ r-a · task-1 · resolved · reward 1.0", "  ✓ r-a · task-2 · resolved · reward 1.0", "  ✓ r-b · task-3 · resolved · reward 1.0"]
         self.assertEqual([l for l in again.lines if "task-" in l], said)
         self.assertEqual([l for l in (d / "nullius.log").read_text().splitlines() if "task-" in l], said)
-        # a record from before the trials were kept loads, with none said yet: each is said again, as before
+        # a record from before the trials were kept loads, with none said yet
         old = json.loads((d / "run.json").read_text()); old.pop("seen_trials", None)
         before = execution.Execution(execution.Plan(name="r", script="", parts=parts), root=str(self.tmp), record=old)
         before._trial_lines()
@@ -138,8 +138,7 @@ class Restart(Base):
         self.assertEqual(again.summary()["lines"], len(again.lines))
 
     def test_a_record_from_before_the_fixed_endpoint_still_restores(self):
-        """A plan written before ``base_url`` - an OpenRouter run then took the
-        model key and endpoint - loads with none, and goes on with the
+        """A plan written before ``base_url`` loads with none, and goes on with the
         settings it named."""
         old = execution.Plan(name="old", script="true", model="m").to_dict(); del old["base_url"]
         self.assertEqual((old["key_var"], old["url_var"]), ("MODEL_API_KEY", "MODEL_API_URL"))
@@ -412,8 +411,6 @@ class RestoreFindsThePart(Base):
         self.addCleanup(back[0].stop)
         return back[0]
 
-    # 3 - a restart before the part has written its pid
-
     def test_a_restart_before_the_part_wrote_its_pid_follows_it_and_never_starts_it_again(self):
         parts = [{"id": "a", "label": "a", "script": f"echo a >> {self.marker}; echo a-out"}]
         ex = execution.Execution(execution.Plan(name="r", script="", parts=parts), root=str(self.tmp))
@@ -456,8 +453,6 @@ class RestoreFindsThePart(Base):
         self.assertEqual(self.marker.read_text(), "a\n")
         self.assertEqual([l for l in again.lines if l.startswith("— running ")], ["— running a on this machine"])
 
-    # 4 - an old record saved as the next part was launched
-
     def test_an_old_record_saved_as_the_next_part_was_launched_follows_that_part(self):
         """A record names b but holds a's pid, and b has no pid file.
         Restore finds b by its command line, follows it to completion and
@@ -491,8 +486,6 @@ class RestoreFindsThePart(Base):
                     self.assertIn("b-out", again.lines)                                  # b's log, from its start
                     self.assertNotIn("gone without an exit code", "\n".join(again.lines))
                     self.assertFalse(any(l.startswith("— running ") for l in again.lines))   # b never started again
-
-    # 5 - an old part gone without an exit code
 
     def test_an_old_part_gone_without_an_exit_code_fails_and_the_run_goes_on(self):
         """No pid file, no exit code, no process running its script: the part

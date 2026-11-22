@@ -10,20 +10,16 @@ environment, ``driver.install``), and a unit's ``setup`` ask for one in its
 
     {"name": "airline", "server": "domain", "args": [...], "env": {...}}
 
-The agent's session is still given a stdio MCP server - every agent that
-proved ``agent.tools/v1`` takes one - and that server is the benchmark's:
+The agent's session is still given a stdio MCP server and that server is the benchmark's:
 
 - **local backend**: the entry is the server's own command, rendered
   (:func:`local_entry`): the agent starts it, on this machine, from the
-  driver's environment, as it starts any stdio server;
+  driver's environment;
 - **container backend**: the run starts a :class:`Listener` per server per unit
   on this machine - a Unix socket in a private folder; each connection to it
   is one start of the server, its stdin and stdout the connection - and the
-  unit gets one door to it (``container.Unit``'s ``doors``: ``forward.py``
-  on the unit's internal network only, the socket alone mounted into it,
-  passing every connection to that socket and nowhere else). The agent's
-  entry is ``mcp_bridge.py``, a file of the standard library mounted alone
-  into its container, which joins its stdin and stdout to the door
+  unit gets one door to it (``container.Unit``'s ``doors``). The agent's
+  entry is ``mcp_bridge.py``, which connects stdio to the door
   (:func:`bridge_entry`). Nothing of the server, its environment or its
   data enters the agent's container, and the door reaches nothing else.
 

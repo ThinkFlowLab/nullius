@@ -3,20 +3,15 @@ benchmark outside the repository.
 
 A licence belongs to the software of one benchmark's dataset, so it is kept
 under that benchmark: ``secrets/<benchmark>/<NAME>`` in the user configuration directory
-(``SECRETS_DIR`` moves the root). Two benchmarks may each ask for a
-``LICENSE_KEY``; they are two files in two folders and never mix. Each
-folder is 0700 and each entry a 0600 file holding the bytes it was given -
-a licence file keeps its bytes, a key or a server address its text - so
+(``SECRETS_DIR`` moves the root). Each
+folder is 0700 and each entry a 0600 file holding the bytes it was given so
 nothing of it is ever in the settings file or in this process's environment.
 A data provider's token (Settings → Data providers) has a folder of its own
 (``PROVIDERS``): a credential declared with that ``provider`` is read from
 there alone, never from the benchmark's (:func:`store_of`).
 
 ``index.json`` beside them says, per name, when it was set, when it expires
-(when said), its kind and the file it came from - never the value. A page
-reads :func:`status` or :func:`state`; only a run reads :func:`value` or
-:func:`path`, when a unit starts (``standard/run.py``), or to send it to a
-host over stdin (``execution``). Standard library only.
+(when said), its kind and the file it came from - never the value. Only a run reads :func:`value` or :func:`path`. Standard library only.
 """
 from __future__ import annotations
 
@@ -31,7 +26,6 @@ from nullius import paths
 
 KINDS = ("value", "file", "server")
 INDEX = "index.json"
-# Shared data-provider credentials remain in the owner-only secret store.
 HUGGINGFACE = "data-provider-huggingface"
 # The data providers a benchmark's credential may name (``provider`` in its ``needs_secrets``):
 # the folder each one's token is kept in, and its name there.

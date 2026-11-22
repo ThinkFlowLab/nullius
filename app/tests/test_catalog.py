@@ -1,6 +1,4 @@
 """The catalogue is consistent with the tree it describes.
-
-Pinning `validate` here means a wrong status word fails the app suite.
 """
 from __future__ import annotations
 
@@ -210,7 +208,7 @@ class Folders(unittest.TestCase):
 
     def test_an_entry_that_does_not_read_is_left_out_and_named(self):
         """A hand-edited user entry - a trailing comma, a list, no title -
-        returned 500 on every page, Settings included."""
+        must not fail every page."""
         with tempfile.TemporaryDirectory() as root:
             shutil.copytree(self.ROOT / catalog.BENCHMARKS / "gsm8k", pathlib.Path(root, catalog.BENCHMARKS, "gsm8k"))
             for name, text in (("comma", '{"key": "comma",}'), ("list", "[]"), ("bare", '{"key": "bare"}')):
@@ -274,7 +272,7 @@ class Routes(unittest.TestCase):
         self.assertEqual(cases["longmemeval"], "non-harbor")           # the standard only
         self.assertEqual(cases["tau3-bench"], "multi-route")           # Harbor's adapter, and the standard
         # every listed benchmark falls in one of the three; Harbor is every entry's route, and the
-        # standard only of the entries naming it (every Harbor benchmark here runs on the standard too)
+        # standard only of the entries naming it
         self.assertTrue(set(cases.values()) <= {"harbor-only", "multi-route", "non-harbor"})
         self.assertEqual(set(cases.values()), {"multi-route", "non-harbor"})
         for b in cat.listed_benchmarks:

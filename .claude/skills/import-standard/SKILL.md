@@ -18,28 +18,23 @@ description: >-
 
 # Import into the Nullius standard
 
-The user wants one thing: their benchmark, agent or capability to run in Nullius
-against everything it fits. Read `docs/standard.md` when working in a checkout;
+Read `docs/standard.md` when working in a checkout;
 for an installation, read the installed schema and examples located below.
-References below to sections of `docs/standard.md` are further explanation
-when that documentation is available; they do not require a checkout. An
-absent `app/` directory is normal in an installation.
+An absent `app/` directory is normal in an installation.
 
 ## Runtime and edit destination
 
 `cli` below means `nullius standard`. `python -m nullius standard` is equivalent
-only with a Python that has Nullius installed. From a source checkout root,
-`PYTHONPATH=app python3 -m nullius.standard.cli` remains supported. Direct
+only with a Python that has Nullius installed. From a source checkout root: `PYTHONPATH=app python3 -m nullius.standard.cli`. Direct
 standard commands write jobs to `jobs_standard/` relative to the current
 directory unless `--jobs` names another location; choose a writable location
-outside the installed package. Builder runs have their own user-data root.
+outside the installed package.
 
 Use `nullius paths --json` with the application's environment/profile to find
 settings, secrets, catalogue, workspaces, runs and cache. `NULLIUS_HOME` selects
 a profile with `config/`, `data/` and `cache/`; otherwise platform user paths
 apply (XDG on Linux). Explicit overrides such as `NULLIUS_CATALOGUE` still win.
-Keep personal state outside package resources. The private `_nullius_app`
-namespace holds the installed UI; launch it through `nullius serve`.
+Keep personal state outside package resources.
 
 Locate modules with the interpreter that runs this Nullius. A `uv tool`
 installation does not put its modules in the shell's `python3`. On POSIX, for
@@ -151,8 +146,7 @@ never a second key. Preserve both routes when it already runs through Harbor.
 - **A port that does not exist yet is a generic change, not a special case.**
   Propose it as a new port with a kit (`app/nullius/standard/ports.py` and
   `standard/kits/<name>/`), worded for every benchmark of its kind; never
-  shape it after the one at hand. Ask before adding it. This requires a
-  source contribution; a user catalogue cannot extend installed core code.
+  shape it after the one at hand. Ask before adding it. This is a source contribution.
 - **An agent or a capability never writes `offers` by hand.** `cli conform` does.
 
 ## 3. Build
@@ -227,7 +221,7 @@ prints the writable folder under the active user catalogue. Work there, then:
     the machine's own hardware (a CUDA GPU) is a `host` requirement with a
     `check` (`nvidia-smi`) and no `install`. An option's `setups` says which
     ways of running it belongs to (`original`, `model`, or `yours`, the agent
-    or capability under test), and the builder's Agent step shows it under that way; an
+    or capability under test); an
     option that only matters under another's values (a top-k, only with a
     retrieval) names them in `when`; `label` when the name does not read
     (an acronym, a run-together word); `summary` one sentence (a tooltip),
@@ -290,21 +284,18 @@ prints the writable folder under the active user catalogue. Work there, then:
   the scratchpad, diff it against the pinned upstream (`git diff
   <tested>..<fork commit> --stat`, then what changed in the code the driver
   calls) and say what the fork changes; hash each dataset again (its own
-  `datasets` when they differ); run `cli check` and `cli prove KEY@NAME`. The
-  fork's fixes are the fork's: the published version keeps the upstream's
-  behaviour;
+  `datasets` when they differ); run `cli check` and `cli prove KEY@NAME`. Keep the published version pinned to upstream behavior;
 - add `benchmark.json` with `standard` in `harness` (copy a standard
   benchmark's entry for the fields `catalog.validate` requires: `category`,
   `origin`, `citation`, the nested dataset). A benchmark's files name no other
-  benchmark. A personal entry uses the UI's fallback mark; no package or
-  sprite change is needed;
+  benchmark;
 - **bundled contributions only:** add the line-icon mark in
   `app/static/catalogue/marks.svg`, update the list in `app/tests/test_catalog.py`
   and the card count in `app/ui_tests/test_catalogue_routes.py` when a listed
   benchmark is added, and refresh its generated catalogue documentation with
   `python3 app/tests/catalogue_docs.py --write`.
 
-**Agent** (the `import-agent` skill has the full procedure). `cli new agent KEY`, then:
+**Agent** (see `import-agent`). `cli new agent KEY`, then:
 - `install` pinned (`npm` `name@version`, `pip` `name==version`);
 - `start.acp` with `{install}` or `{here}`: the agent's own ACP, or a
   maintained adapter (the vendor's first); an agent without either, its own
@@ -342,14 +333,8 @@ output to stderr: stdout carries the JSON lines.
    An agent or capability: `cli conform KEY --model <cheap model> [--unsandboxed]`.
    A value that needs a `host` requirement this machine lacks (a GPU) is
    proven on a machine that has it: choose a host from Settings and
-   launch the short trial from the builder's Review step. Execution snapshots
-   the current standard runtime and effective catalogue, including user
-   additions, and sends that payload to the host. A `git archive` of the
-   repository alone would omit an installed user's definitions. User settings
-   and credential stores are excluded from snapshots; credentials travel
-   through the execution layer, never in entry folders or payloads.
-   Run one short trial per such value; an initial driver install can take
-   minutes. For a manual host workflow, use a matching Nullius installation
+   launch the short trial from the builder's Review step. A host run sends the current standard runtime and effective catalogue, user additions included; settings and credentials are never in entry folders or payloads.
+   Run one short trial per such value. For a manual host workflow, use a matching Nullius installation
    and the complete entry folders under that host's user catalogue.
 3. Read every failure's trial before believing it (`verifier/score.json`,
    `agent/acp.jsonl`, `agent/agent.log`, `agent/calls.jsonl`, the upstream
@@ -363,16 +348,13 @@ output to stderr: stdout carries the JSON lines.
    edited.
 4. Open the job in the app (`nullius serve /absolute/path/to/jobs_standard
    --no-debug`, using the same profile/catalogue) and look at the trial page.
-   From a checkout, `uv run --no-project --with-requirements app/requirements.txt
-   app/app.py /absolute/path/to/jobs_standard --no-debug` remains supported. The new
-   definition shows on the Agents or Capabilities tab, or as a benchmark of the
-   builder's *Nullius* runner, its reference participant first on the Agent
-   step and paper-model filter on the Model step: check it is offered where it should be. Use a focused browser
+   From a checkout: `uv run --no-project --with-requirements app/requirements.txt
+   app/app.py /absolute/path/to/jobs_standard --no-debug`. Check the new definition is offered where it should be: the Agents or Capabilities tab, the builder's *Nullius* runner. Use a focused browser
    check; `/ui-sweep --only KEY` is available when that skill and its script
    are present.
 5. **Personal import:** `cli check`, the authorized proofs/trials above, and
    focused UI inspection. Report unavailable prerequisites without claiming
-   a proof. No repository test, icon or documentation edits are required.
+   a proof.
    **Bundled contribution:** additionally refresh generated catalogue docs
    for every changed definition (`python3 app/tests/catalogue_docs.py --write`),
    run `python3 app/tests/parallel.py`, the route suite
@@ -380,14 +362,9 @@ output to stderr: stdout carries the JSON lines.
    and `python3 .claude/skills/docs-drift/scripts/check_docs.py` from the source
    root. Keep the test profile/catalogue isolated from personal entries.
 
-Downloaded standard recipes run with installed `nullius standard`, or with
-`--app /path/to/checkout` / `NULLIUS_STANDARD` for a source or runner-payload
-tree. Their job paths stay relative to where the script is started. Harbor
-recipe bundles need Nullius only for `--serve`, which uses `nullius serve` or
-an explicit source `--app`. Do not bake the importing machine's package or
+Do not bake the importing machine's package or
 catalogue path into a wrapper: use `{here}`, `{install}` and the driver's
-declared inputs. A recipe alone does not transfer personal entry folders;
-the builder's execution payload does.
+declared inputs.
 
 `--unsandboxed` is the user's word, not yours: the local backend runs the
 agent as the user. Ask once, with the question tool, before the first agent
@@ -426,8 +403,7 @@ asked about once it works, never by default.
 Keep the benchmark description and each option summary to a short sentence.
 Put per-value explanations in `about` and prerequisites in `needs` / `host`,
 rather than repeating them in the summary. Preserve exact model restrictions,
-scoring rules and comparison limits in the setup definition: the page keeps
-the full method under **How it runs**, with model and comparison scope visible.
+scoring rules and comparison limits in the setup definition.
 Do not add custom prose-heavy layout or one full-width row per simple value.
 Check the shared benchmark page at desktop and mobile widths; simple options,
 detailed prerequisites and single/multiple datasets should remain readable.
@@ -443,16 +419,11 @@ constraints, in two lists: `upstream_limitations` (**Upstream limitations**:
 what the benchmark as published gets wrong or leaves out, a fix for its
 maintainers) and `limitations` (**Nullius limitations**: where running it here
 differs, or what Nullius does not offer or should fix). Never describe an
-upstream rule as a Nullius defect. Show one **Original** procedure. Model selection belongs on the Model step:
-**Like the paper** filters documented models; **Any of your choice** uses the
-provider catalogue. Do not invent paper models. Declare `reference_agent` on
-`setups.original` when upstream runs a named agent; otherwise the builder shows
-**No agent · Original**, or **Original memory** for a memory benchmark. An
+upstream rule as a Nullius defect. Show one **Original** procedure. Do not invent paper models. Declare `reference_agent` on
+`setups.original` when upstream runs a named agent. An
 upstream that ships several agent scripts brings them as its own agents:
 `agents.json` beside `standard.json`, each entry an agent with `start.driver`
 and its published `models` (docs/standard.md, "A benchmark's own agents"),
 `options.agent` written with its label, summary and setups only; recipes then
-name one as `<benchmark>:<key>`. The
-`original` / `model` driver methods preserve upstream model aliases; they are
-not separate user-facing setups. Recipes select `others: ["original"]`, one
+name one as `<benchmark>:<key>`. Recipes select `others: ["original"]`, one
 `model`, and `model_choice: "paper" | "any"`.

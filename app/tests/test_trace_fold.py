@@ -13,12 +13,9 @@ job text enters the repo: one reply arrives as several records sharing a
 `message.id`, each record repeating the call's usage, some carrying a single
 typed block and some (a `tool_use`) carrying none.
 
-Three failures are worth more than the rest, and all three would still look
-plausible on screen:
-
 **A fold that moves a number.** The point is to re-parent rows. If the recomputed
 breakdown shifts — time or tokens — the fold has started editing the measurement
-rather than arranging it. The token case is real and was caught here: the
+rather than arranging it. The
 producer's own `totals.tokens` sums every span it wrote, duplicated usage and
 all, so a record that gave up its tokens on the way in made the breakdown
 disagree with the reported totals threefold.
@@ -311,7 +308,7 @@ class TheFoldMovesNoNumber(unittest.TestCase):
 
 
 class SavingSeesTheSameTree(unittest.TestCase):
-    """`filtered_document` folds too — see the module docstring."""
+    """`filtered_document` folds too."""
 
     def test_hiding_a_call_takes_the_blocks_it_adopted(self):
         out = trace.filtered_document(capture(*reply()), trace.Filter.of(span_ids=[CALL]))

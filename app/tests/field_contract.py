@@ -1,12 +1,12 @@
 """The field contract: what the templates render by attribute name.
 
-The templates' dependency on the backend is wider than its import list. The
+The
 templates reach into returned objects by attribute — ``trial.agent_version``,
 ``span.kind``, ``job.n_trials`` — and no import catches a renamed field. A
 rename lands as a blank cell or an UndefinedError in a rendered page, at run
 time, in whichever view happened to use it.
 
-So the fields are pinned here rather than trusted. ``snapshot()`` reads the
+``snapshot()`` reads the
 live classes; ``compare()`` diffs a snapshot against the committed manifest and
 reports removals separately from additions, because only removals break a
 template. Additions are recorded so the manifest can be refreshed deliberately.
@@ -14,9 +14,6 @@ template. Additions are recorded so the manifest can be refreshed deliberately.
 
     python3 app/tests/field_contract.py --write    # refresh the manifest
     python3 app/tests/field_contract.py            # check against it
-
-Module *names* are the manifest's keys and they survive a module changing
-repositories; :data:`PACKAGE_OF` says which package provides each one today.
 
 Properties count as fields: a template cannot tell ``Job.agent_version`` (a
 property) from ``Trial.agent_version`` (a dataclass field), so neither can this.
@@ -37,10 +34,7 @@ if APP not in sys.path:
 
 MANIFEST = os.path.join(HERE, "field_contract.json")
 
-# Every module whose objects reach a template or a route's return value. Kept
-# explicit rather than walked: the point is a deliberate list of what is
-# promised, and a module that stops being rendered should leave this list by
-# someone's decision rather than by a walker no longer finding it.
+# Every module whose objects reach a template or a route's return value. Explicit, not walked: a module leaves this list by decision.
 # Stable manifest keys map to the modules that provide each contract.
 # Moving a module must not reset the field comparison or conceal removals.
 PACKAGE_OF = {
@@ -85,7 +79,7 @@ def snapshot() -> dict:
     for mod_name in MODULES:
         try:
             mod = importlib.import_module(f"{PACKAGE_OF[mod_name]}.{MODULE_NAME.get(mod_name, mod_name)}")
-        except ImportError as exc:  # a module that moved into the package
+        except ImportError as exc:
             out[mod_name] = {"__unimportable__": str(exc)}
             continue
         entries = {}

@@ -143,10 +143,7 @@ def _requested_trace(trial, *, notify=False):
             abort(404)
     return (_parsed_trace(path, filt) if path else None), viewing
 
-
-# Traces parsed for a view: every span-detail click, filter and zoom link asked
-# for the whole fold, prune, redaction and breakdowns again (about a second at
-# 6k spans). Kept by file (path, size, mtime) and view, a few at a time; a Trace
+# Traces parsed for a view: the fold, prune, redaction and breakdowns take about a second at 6k spans. Kept by file (path, size, mtime) and view, a few at a time; a Trace
 # is not changed once parsed.
 _PARSED: "OrderedDict" = OrderedDict()
 _PARSED_MAX = 8
@@ -239,7 +236,7 @@ def trace_span_data(job_id, trial_name):
 
 def _imported_from(job) -> str:
     """The importer's name for a job an importer wrote (``harness`` in its ``config.json``: ATIF,
-    OpenTelemetry), else "". Such a job has no benchmark and no runner: its pages say where it came from."""
+    OpenTelemetry), else ""."""
     try:
         with open(os.path.join(job.dir, "config.json"), encoding="utf-8") as fh:
             name = json.load(fh).get("harness")
@@ -269,12 +266,9 @@ def trial(job_id, trial_name):
             pass
     loc = _gold_localization(j, t, traj) if ok else None
 
-    # `hide`/`hide_span` make a filtered view a plain link — shareable,
-    # bookmarkable, and the same thing `save_trace` writes out. `trace` opens a
+    # `trace` opens a
     # view saved earlier instead of the producer's own file.
-    # A second, narrower query key: which kinds each chart is drawing. Separate
-    # from `hide` because it changes one chart and not the trace — the waterfall,
-    # the breakdown and what `save_trace` writes are all blind to it.
+    # A second, narrower query key: which kinds each chart is drawing. Chart selections affect only chart drawing and are excluded from saved traces.
     cfilt = charts.ChartFilter.of(request.args.getlist("chart_off"))
     tr, viewing = _requested_trace(t, notify=True)
     # Over `tr.roots`, which `parse` has already pruned — the charts describe the
@@ -329,7 +323,7 @@ def save_trace(job_id, trial_name):
     _, t = _trial_evidence(job_id, trial_name, tries=True)
 
     # The zoom rides along only so the page comes back as it was; the file written
-    # is the filtered tree whole — a zoom is a way of looking, not a change.
+    # is the filtered tree whole.
     filt = trace.Filter.of(request.form.getlist("hide"), request.form.getlist("hide_span"),
                            request.form.get("zoom"))
     # Filtering a saved view again is allowed, so the source is whichever file the

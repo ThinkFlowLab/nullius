@@ -15,7 +15,7 @@
       <input type="file" accept=".json,application/json" id="nb-import-file" hidden aria-label="Import a recipe JSON file">
   {% endset %}
   {{ page_head('Set up the next experiment.', actions=actions) }}
-  {#- a message is a toast at the bottom left: it goes after a few seconds, its bar counting them, or on its ×.
+  {#- a message is a toast at the bottom left.
        A popover, so it shows above the Saved recipes dialog too -#}
   <div id="nb-status" class="nb-toast" role="status" aria-live="polite" popover="manual"><span class="nb-toast-text"></span><button type="button" class="nb-toast-close" aria-label="Dismiss">×</button><span class="nb-toast-bar" aria-hidden="true"></span></div>
   <dialog id="nb-saved" class="nb-dialog nb-saved" aria-labelledby="nb-saved-title">

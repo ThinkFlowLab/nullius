@@ -1,5 +1,5 @@
 /* Runs with no workspace open: build a run, or bring the ones made elsewhere,
-   or open a workspace already here. Colours are the app's tokens (style.css). */
+   or open a workspace already here. */
 .start { width: 100%; max-width: 1440px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
 .start > .page-head { margin-bottom: calc(var(--head-gap) - 28px); }   /* the column's gap is part of the head's */
 .start-ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 18px; }

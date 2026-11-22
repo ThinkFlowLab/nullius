@@ -4,8 +4,7 @@ Fixture construction, not tests: the trace, chart and aggregate suites build
 their spans with these, against the reader in `app/nullius/traces/trace.py`.
 
 `trace_rich.json` is a verbatim Harbor claude-code capture; `trace_degraded.json`
-is a capture with most of its timing missing, which is what the coverage strip
-and the `inferred` banner exist for.
+is a capture with most of its timing missing.
 """
 from __future__ import annotations
 

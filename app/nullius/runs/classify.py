@@ -57,8 +57,7 @@ ORDER = [
 # add later is classified correctly without us noticing it exists.
 #
 # The two below are the exceptions to that rule: they are provider or config
-# failures that don't carry the prefix. Everything Harbor ships is pinned by a
-# test, so this list cannot quietly fall behind theirs.
+# failures that don't carry the prefix.
 _API_PREFIX = "api"
 _INFRA_EXCEPTIONS = {
     "agentauthenticationerror",   # bad or missing credentials — config, not skill
@@ -79,9 +78,7 @@ _CAP_EXCEPTION = "spendingcaperror"
 # The list is explicit and short on purpose. An exception on none of these
 # lists is UNKNOWN: still in the denominator, charged to nobody. The
 # alternative — everything unmatched is the agent's fault — made a crash in
-# the harness, the verifier or this reader read as poor coding. The trial
-# page shows the recorded type beside the label, so a reader who meets a new
-# one can place it here.
+# the harness, the verifier or this reader read as poor coding.
 _AGENT_EXCEPTIONS = {
     "agenttimeouterror",            # the agent spent its budget — that is a result
     "unitspendingcaperror",         # the unit spent its own spending cap (the standard's relay): the same, in money
@@ -175,8 +172,7 @@ def from_verdict(exception_type, verdict):
     """Return an outcome label from the exception type and a `Verdict`.
 
     An exception outranks the verifier: a trial that crashed did not earn
-    whatever the verifier managed to say about it. Which side it is charged
-    to comes from the lists above; an exception on none of them is `UNKNOWN`.
+    whatever the verifier managed to say about it.
 
     The patch-shaped labels are reachable only for a benchmark whose reader
     fills `produced` / `usable`. A verdict that failed without that detail is
@@ -200,8 +196,6 @@ def from_verdict(exception_type, verdict):
             return API_ERROR
         if et in _AGENT_EXCEPTIONS:
             return AGENT_ERROR
-        # Neither side claims it. Not the agent's fault by default: the
-        # trial stays counted and nobody is charged.
         return UNKNOWN
 
     if verdict is None or verdict.succeeded is None:

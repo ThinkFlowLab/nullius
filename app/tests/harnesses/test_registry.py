@@ -2,10 +2,7 @@
 
 The point of discovery over a hand-maintained table is that no second place
 keeps naming a harness after its module is deleted. These pin that property
-rather than the current contents, so the suite does not have to be edited
-every time the benchmarks program picks up another runner — or drops one.
-The empty registry that dropping the last one would leave is pinned below
-against a patched registry.
+rather than the current contents.
 """
 
 import contextlib
@@ -31,8 +28,7 @@ class Registry(unittest.TestCase):
     def test_every_importer_satisfies_the_contract(self):
         # An empty registry is a valid state, not a failure: a harness is
         # removed by deleting its module and its tests, and the last one
-        # leaving must not fail a test that is not about it (the CLI class
-        # below pins what the CLI says then).
+        # leaving must not fail a test that is not about it.
         for name, module in harnesses.available().items():
             with self.subTest(harness=name):
                 self.assertTrue(callable(module.detect))
@@ -276,8 +272,7 @@ class Trees(unittest.TestCase):
     """`trees`: which directories under a root the picker converts one job
     each — the importer's answer, with the CLI's reading as the default.
 
-    The registry asks the importer how to group directories. An importer
-    without an answer uses the CLI's default: the root, as one job.
+    The default: the root, as one job.
     """
 
     def test_a_claimed_root_is_one_tree_by_default(self):
@@ -298,8 +293,7 @@ class Trees(unittest.TestCase):
 
     def test_every_registered_importer_answers_and_an_empty_directory_is_nothing(self):
         # Each importer there is says what one job is under a root — the
-        # answers differ (a nested directory of trajectories is one job, a
-        # parent of export directories is one per directory), which is why
+        # answers differ, which is why
         # the importer is asked — and none of them makes a job of nothing.
         for name, module in harnesses.available().items():
             with self.subTest(harness=name):

@@ -282,7 +282,7 @@ class Tabs(unittest.TestCase):
             for w in (skill, "{name}", "{source}", "Remark: {remark}", "docs/standard.md"):
                 self.assertIn(w, tpl, (url, w))
             hand = html[html.index('id="std-pane-hand"'):]
-            for w in words + ('class="std-copy"',):                                          # the steps by hand, unchanged
+            for w in words + ('class="std-copy"',):                                          # manual steps
                 self.assertIn(w, hand, (url, w))
             directory = "agents/my-agent" if url == "/agents" else "capabilities/my-memory"
             target = str(self.tmp / "user catalogue" / directory)
@@ -465,7 +465,7 @@ class BuilderStandard(unittest.TestCase):
         return r
 
     def test_the_schema_offers_the_standard_before_harbor_with_choices_only(self):
-        self.assertEqual([x["key"] for x in self.schema["runners"]], ["standard", "harbor"])     # Nullius first; no Native runner
+        self.assertEqual([x["key"] for x in self.schema["runners"]], ["standard", "harbor"])     # Nullius first
         st = self.schema["standard"]
         self.assertEqual([b["key"] for b in st["benchmarks"]], ["fakebench", "fakememo"])
         self.assertEqual(st["fits"]["fakebench"], {"fake": []})

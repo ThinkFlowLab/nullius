@@ -72,9 +72,7 @@ HARBOR_NEITHER = [
 
 
 class LiveBoardAgrees(unittest.TestCase):
-    """The live boards name a trial's error before its result is read: a wrong
-    model name (ModelNotFoundError) was the agent's there and an API error on
-    the results, and on Harbor's board so was every Api* failure."""
+    """The live boards name a trial's error before its result is read: it must be the results' name for it."""
 
     def test_both_boards_charge_the_infrastructure_as_the_classifier_does(self):
         from types import SimpleNamespace

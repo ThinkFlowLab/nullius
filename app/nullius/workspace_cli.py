@@ -4,21 +4,17 @@
     PYTHONPATH=app python3 -m nullius.workspace_cli list --home DIR
     PYTHONPATH=app python3 -m nullius.workspace_cli list --json
 
-A workspace is a named set of job roots and what the app read from them
-(``nullius.workspace``). ``list`` reads each ``workspace.json`` under the
+``list`` reads each ``workspace.json`` under the
 home directory the way the page does (``workspace.list_all``: most recently
 opened first) and prints, per workspace, its name, its label, its roots, the
 runs its parse cache holds (the page's *Cached runs*, and their ids from the
 cache's index, both known without parsing anything) and when it was last
-opened. It opens nothing: no workspace becomes active, no root is walked,
-no import converted, no cache touched.
+opened. It opens nothing and writes nothing.
 
 The home is ``--home``, else ``WORKSPACES_DIR``, else ``workspaces/`` in the
-working directory — the app's own rule (``workspace.home``). Renaming and
-deleting stay the page's: a delete removes the cache and the converted
-imports behind a confirmation, and nothing here writes.
+working directory — the app's own rule (``workspace.home``).
 
-Reading only. The exit codes are the contract in ``docs/cli.md``.
+The exit codes are the contract in ``docs/cli.md``.
 """
 from __future__ import annotations
 
@@ -50,7 +46,7 @@ With --json, stdout is exactly one JSON document; everything else goes to stderr
 
 def row(ws: workspace.Workspace) -> dict:
     """One workspace as the page's table shows it, plus the job ids its
-    cache index names — the rail's list, known without a parse."""
+    cache index names."""
     index = workspace.job_index(ws)
     return {
         "name": ws.name,

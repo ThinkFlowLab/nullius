@@ -13,7 +13,7 @@ nullius standard new version <key> <version>
 
 | Subcommand | Does |
 | --- | --- |
-| `list` | Every definition, which pairs fit, each `proven` record (kit job, date, model, score, kit version, skills) |
+| `list` | Every definition, which pairs fit, each `proven` record |
 | `check [path]` | The definitions, or one file, against the catalogue and the kits |
 | `fit <benchmark>` | What can run it, and why the rest cannot |
 | `pins <benchmark>` | Compare `images.json`, or literal image pins in `driver.py`, with registry tags; report same, moved (both digests), gone, or not checked |

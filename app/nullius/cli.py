@@ -1,7 +1,6 @@
-"""One entry point for the application and its existing command lines.
+"""One entry point for the application and its commands.
 
 Dispatch is lazy: reading runs or asking for help never imports the web stack.
-The original ``python -m nullius.<capability>.cli`` commands remain available.
 """
 from __future__ import annotations
 
@@ -36,9 +35,7 @@ MODULES = {
 
 
 def _serve(argv):
-    """Import the web entry point only when the server is requested.
-
-    The wheel keeps the web layer and assets in ``_nullius_app``; a source
+    """The wheel keeps the web layer and assets in ``_nullius_app``; a source
     checkout keeps them beside the backend in ``app/``. Neither layout adds
     a second implementation of ``nullius`` to the interpreter's path.
     """

@@ -9,9 +9,7 @@ Every version is kept, and under each every try of a retried trial: the
 try judged last under the version, each earlier one under
 ``<version>@<its start>``. A read without a version asks for the current one
 and falls back to the earlier ones the vocabulary still names
-(``questions.EARLIER``), newest first, so a judgement made under v1 is
-still shown after the bump - under its own version, which the record
-carries - and a write always lands under the version the record names."""
+(``questions.EARLIER``), newest first, so an earlier judgement is still shown, and a write always lands under the version the record names."""
 from __future__ import annotations
 
 import hashlib
@@ -148,8 +146,7 @@ def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "d
 def for_job(ws_dir: str, job_id: str, started: dict, version: Optional[str] = None, lane: str = "decision") -> dict:
     """The judged trials of a job: {trial_name: record} for each trial of
     `started` - {trial_name: its start}, every trial of the job - that has
-    one, as `load` picks it. Nothing else under the job's name is a trial of
-    it: a v1 pair record is not."""
+    one, as `load` picks it."""
     out = {}
     for name, start in started.items():
         rec = load(ws_dir, job_id, name, version, lane, start)
@@ -165,7 +162,7 @@ def job_dirs(ws_dir: str, job_ids) -> list:
 
 def count(ws_dir: str) -> int:
     """The stored judgements of a workspace, every lane: one per trial and
-    lane, its versions inside. What deleting the workspace loses for good."""
+    lane, its versions inside."""
     return sum(n.endswith(".json") for lane in ROOTS for _, _, names in os.walk(_root(ws_dir, lane)) for n in names)
 
 

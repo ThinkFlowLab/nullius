@@ -1,8 +1,7 @@
-{# A run started from the builder, as the page that follows it: state, host, the run's own log (uv, Harbor, the tasks, the run),
+{# A run started from the builder, as the page that follows it: state, host, the run's own log,
    a Stop while it lives. Shown on the job page beside the job, and instead of it while Harbor has not written the job yet. #}
 {# `csrf` is an argument, not a context lookup: an imported macro sees no
-   template context, so a `{{ csrf }}` inside it rendered empty and every
-   Stop and Continue answered 403. #}
+   template context. #}
 {# `own`: this job's own (state, finished) when the run is of several agents - an arm that
    answered everything is done though a later arm failed; the run's state is said beside it. #}
 {# `deletable`: the key of this job's launch when the Runs page offers its Delete (web/runs._deletable). #}

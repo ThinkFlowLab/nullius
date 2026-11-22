@@ -21,7 +21,7 @@ The client says it takes **notices** (``session.notices``): an adapter that
 knows them sends its warnings - a configuration it questions, a model it has
 no metadata for - as a ``notice`` update rather than as text in the agent's
 message, where a benchmark would read it as part of the answer. An adapter
-that does not know them sends text as before, and :func:`last_message` keeps
+that does not know them sends text, and :func:`last_message` keeps
 what it can of the answer apart.
 
 A turn that outlives its timeout is cancelled (``session/cancel``) and, if the
@@ -113,8 +113,7 @@ class Client:
     def __init__(self, cmd: List[str], env: dict, log: str, cwd: Optional[str] = None, grant: bool = False,
                  fs: bool = True, stopped=None):
         """``grant``: answer the agent's permission requests with yes (once
-        each). Off unless the caller turns it on: a benchmark run does, since
-        no one is there to answer, and records that it did. ``fs``: offer the
+        each). ``fs``: offer the
         agent this machine's files inside the session's ``cwd``; off when that
         ``cwd`` is a container's own (an own image), which this machine does
         not see, so the agent reads and writes there with its own tools."""

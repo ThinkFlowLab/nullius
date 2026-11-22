@@ -109,8 +109,6 @@ class ToolSummaryByCategory(unittest.TestCase):
         self.assertNotEqual(short_names, verbose_names)
         self.assertIn(("read", "read"), short_names)
         self.assertIn(("read", "Read the file where the symbol is defined"), verbose_names)
-        # The verbose names reach the page only as hover text and table rows -
-        # not as a chip category, so the legend has as many chips as categories.
         for html in (short, verbose):
             categories = [c for c, _ in self.chips(html)]
             self.assertEqual(len(categories), len(set(categories)))

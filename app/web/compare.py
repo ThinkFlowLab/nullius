@@ -23,7 +23,7 @@ def _dash(value, suffix=""):
 
 # Every cost this application shows is priced by the agent from its price
 # table over the usage it recorded — the ATIF RFC formula, never a provider's
-# invoice (the field guide: derived, not published). The row says so in its
+# invoice. The row says so in its
 # name, and a run whose agent priced nothing shows a dash, not a free run.
 COST_LABEL = "Cost (estimated)"
 COST_HINT = ("An estimate: priced by the agent from its price table over the recorded usage, "
@@ -53,7 +53,7 @@ def rank_cells(raw, direction, allow_single=False, cells=None, exclude=None):
     *direction* is 'lower', 'higher' or None (no meaningful winner). Cells with
     no value are never marked — a missing measurement isn't a loss. Normally a
     metric needs two values to have a winner; *allow_single* marks the only
-    reported value anyway (used for cost, which not every agent records yet).
+    reported value anyway (used for cost).
     A single column has nothing to win against.
 
     Ranking uses the raw numbers, but *cells* (the rendered text) decides
@@ -232,7 +232,6 @@ def compare_detail(row, jobs):
     controls = [j.is_control for j in jobs]
     kinds = [j.kind for j in jobs]
 
-    # Controls never compete, so every row in this block excludes them.
     field = partial(_row, exclude=controls)
 
     def fmt_time(t):
@@ -419,7 +418,7 @@ def compare():
     tasks_view = _view()
     summary = summary_rows(chosen, baseline=columns[0]["i"] == 0) if tasks_view != "tasks" and (view.cohort == "whole" or view.shared_tasks) else []
     # There is no truthful wall-clock interval for a subset of parallel trials.
-    # Whole-run intervals keep their existing ranking, explicitly labelled.
+    # Whole-run intervals are ranked, labelled as such.
     if view.cohort == "matched":
         summary = [row for row in summary if row["label"] != "Wall time"]
     else:
@@ -488,9 +487,7 @@ def _metric_groups(summary):
 
 @app.route("/compare/detail/<int:index>")
 def compare_detail_row(index):
-    """One task's detail row, built when it is opened: building every row of
-    the page loaded and analysed every trajectory of every run compared
-    (2 x 500 trials took 10 to 12 s and 4.8 MB of HTML)."""
+    """One task's detail row, built when it is opened: eager rendering analyzes every compared trajectory."""
     view, columns = _columns_requested()
     if not view.selected or not 0 <= index < len(view.tasks):
         abort(404)
@@ -629,8 +626,7 @@ def trace_panel(t, chart_filter=None):
     ``hide`` control, so there is nothing for a saved view to differ by. The
     charts go through :func:`charts.charts_for`, which is :func:`charts.charts_of`
     over that trace's own samples, so a side here shows the numbers the trial's
-    own page shows for it (`test_comparison_routes` pins the two as one
-    drawing). Each side is loaded on its own and never pooled: two trials never
+    own page shows for it. Each side is loaded on its own and never pooled: two trials never
     shared a clock, so nothing here carries a wall clock across them.
 
     Returns ``{"trace": Trace | None, "charts": Charts | None, "absent": str}``
@@ -665,9 +661,7 @@ def compare_task(task):
         abort(404, description="This task is not in the selected comparison cohort.")
     row = matches[0]
     # One legend state for every side: a kind switched off in a chart is off in
-    # that chart on both sides, so the two stay drawn over the same kinds. The
-    # trace filter (`hide`) is deliberately not offered here — a filtered view
-    # belongs to one trial, and is saved from its own page.
+    # that chart on both sides, so the two stay drawn over the same kinds.
     cfilt = charts.ChartFilter.of(request.args.getlist("chart_off"))
     # Each side shows one attempt: the one `attempt=<run>/<trial>` names, else
     # the last indexed, as the task table does.

@@ -5,10 +5,6 @@ description: Analyse benchmark runs made with Nullius (or any Harbor job output)
 
 # Run analysis
 
-Turns the raw output of benchmark runs into an analysis a colleague or manager can act on: what the
-score is, whether it can be trusted, what caused the failures, and what to fix. The same workflow
-serves one run (an analysis of that agent) or several (a comparison).
-
 The work splits cleanly in two. Counting is done by the bundled script, which reads only the standard
 Harbor files and therefore works for any benchmark and any agent. Explaining is done by you: reading
 trajectories, finding causes, and writing findings that are backed by counts.
@@ -28,8 +24,7 @@ Nullius writes one folder per run; a downloaded run is the same folder as a zip.
     <trial>/agent/, verifier/, exception.txt, trial.log   agent- and benchmark-specific detail
 ```
 
-The script finds `jobs/` at any depth, so a zip that unpacks one folder deeper (`<run>/<run>/jobs/`)
-needs no special handling. Times in these files are UTC; Nullius run ids carry local time, so the two
+The script finds `jobs/` at any depth. Times in these files are UTC; Nullius run ids carry local time, so the two
 can differ by a few hours.
 
 A run can hold several jobs (for example control agents next to the agent under test). Name the one
@@ -40,22 +35,14 @@ metric is defined.
 ## Workflow
 
 `S` below is the resolved path to `scripts/runs.py` beside this skill (`.claude/skills/run-analysis/scripts/runs.py`
-from a checkout root). The complete skill, including its script, references and template, must be
-available separately; installing the Nullius wheel does not install `.claude/skills`. It uses
-the standard library only (Python 3.8+), imports nothing from `app/`, and writes only the files named
-with `--out`; it can run from any directory. `nullius runs` and `nullius compare` are useful readers,
-but do not replace this script's `health`, `analyze`, `render` and `check` workflow. Nothing here
-depends on a particular assistant: the steps are a procedure any assistant or person can follow.
+from a checkout root). Standard library only (Python 3.8+); it writes only what `--out` names.
 
 ### 1. Locate the runs and agree on names
 
 Find the run folders or zips the user means. With only an id, use `nullius paths --json` in the
 application's environment/profile and search its `runs` directory. `NULLIUS_HOME` selects a profile;
 saved settings and explicit overrides such as `RUNS_DIR` can change that location. The Linux default
-is `~/.local/share/nullius/runs/`, outside the installation. `python -m nullius paths --json` works
-only with a Python that has Nullius (a `uv tool` environment may differ from the shell's Python);
-from a source checkout, `PYTHONPATH=app python3 -m nullius paths --json` is equivalent. Existing
-repository-local `runs/`, explicit job roots and downloaded archives remain valid inputs. Direct
+is `~/.local/share/nullius/runs/`, outside the installation. From a source checkout: `PYTHONPATH=app python3 -m nullius paths --json`. Direct
 standard commands use their `--jobs` path, defaulting to `jobs_standard/` in the caller's directory.
 Ask only if it is truly ambiguous which runs they mean. Pick short
 display labels from the user's own words ("baseline", "new prompt", the agent names); they appear in
@@ -67,9 +54,7 @@ every table, so avoid "ours" or "mine".
 python3 S health <run> [<run> ...]
 ```
 
-This step exists because a broken run produces numbers that look like results. A job in which every
-trial failed at the first model call still reports a mean reward, and comparing it to a healthy run
-would be meaningless. The command reports, per run: wrapper exit codes and log tail, trials found,
+A broken run produces numbers that look like results. The command reports, per run: wrapper exit codes and log tail, trials found,
 scored and passed, exception types with the most frequent messages, trials that used no model
 tokens, and verdicts such as "no trials ran", "systemic failure: 375/375 trials share one error",
 "it started mid-run", "the job never wrote a finish time".
@@ -126,7 +111,7 @@ Read the printed summary before going further and check four things:
 
 ### 4. Investigate the causes
 
-This is where the analysis earns its keep; the script cannot do it. Read
+Read
 `references/investigation.md` for the questions to ask and where the evidence lives. In short: start
 from the differences that matter (failed tasks, one-sided wins, the most expensive or slowest
 trials, the most frequent errors), open a few trajectories of each kind, form a hypothesis, then
@@ -150,7 +135,7 @@ Write the prose into a small JSON file that maps each slot name to its HTML, and
 re-render after recomputing metrics does not wipe your text. Edit the HTML by hand only for things
 the script does not produce, such as an extra table row, and do that last.
 
-The page has a fixed structure so that reports from different people read the same way: headline
+The page has a fixed structure: headline
 bullets, four tiles, Overall, By task group, Outcomes (paired boxes for two runs, overlap for more,
 failure table for one), Timing, Issues and fixes, Run details, Method. Keep the section order and the
 styling. Add an extra section (next steps, ideas) only when the user asks for one. Add rows to a
@@ -161,8 +146,7 @@ as a published score, to one group of the chart.
 
 The result is one self-contained HTML file. If the environment offers a way to publish a page and
 hand back a link (for Claude, an artifact), publish it as a new page unless the user names an
-existing one to update; otherwise deliver the file. The template is the design of this page: apply
-it as is rather than redesigning. Keep the source outside any temporary folder, because later edits
+existing one to update; otherwise deliver the file. Use the supplied template. Keep the source outside any temporary folder, because later edits
 start from it. Write outputs to a writable user-selected directory, outside installed package
 resources and outside the repository tree, or under a folder git ignores in a source checkout.
 
@@ -171,8 +155,6 @@ verify, and any question only they can answer. After publishing, change the page
 and start any later edit from the live version.
 
 ## Writing rules
-
-These come from what readers of such pages pushed back on.
 
 - **Facts, briefly.** One fact per sentence, a number in most sentences, no scene-setting. A
   manager should be able to follow the page without having watched the runs.

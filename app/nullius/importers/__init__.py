@@ -2,8 +2,7 @@
 
 The app walks one shape: a job directory whose subdirectories each carry a
 ``result.json``. Everything else — a run tree another harness wrote — is
-converted into that shape rather than taught to the walker: a job directory
-is all the app can walk, so emit one. That keeps `parse.py` a reader of one
+converted into that shape rather than taught to the walker. That keeps `parse.py` a reader of one
 format no matter how many harnesses there are.
 
 An importer knows how one harness lays out a whole run on disk; what a
@@ -20,8 +19,7 @@ under a harness already read needs nothing here.
 job. A directory that accumulates runs across sittings holds several, and
 pooling them would report the idle time between as though it were work.
 
-and optionally ``LABEL``, how a person should see it named — the picker shows
-it, and ``NAME.upper()`` is a poor guess for anything but an acronym —
+and optionally ``LABEL``, how a person should see it named —
 ``check``, ``(path) -> None``, which reads the tree the way `convert` would
 and raises ``SystemExit`` for what `convert` would refuse, writing
 nothing (without it, :func:`problem` converts into a scratch directory to
@@ -31,21 +29,13 @@ Without it a claimed root is one tree, which is how the CLI reads it. The
 picker uses the same boundaries so both surfaces produce the same jobs.
 
 **Refusing a tree** is `convert` raising ``SystemExit`` with a message
-that names the file and what is wrong with it — never a job with no trials,
-which reads as a run that did nothing, and never a traceback, which reads as
-the app breaking. The message is what a person sees, on the picker or from
+that names the file and what is wrong with it — never a job with no trials or a traceback. The message is what a person sees, on the picker or from
 the CLI, so it is redacted at construction: a tree is arbitrary bytes from
 wherever a run was made, and a credential in a bad file's path or content
 must not travel into an error just because the file was bad.
 
 **Removing one is deleting its module**, plus its tests. Registration is by
-discovery rather than a table here, so there is no second place that keeps
-naming a harness after its file is gone — the failure mode a hand-maintained
-registry has, where the import survives the deletion and the app stops
-loading. Nothing outside a harness module mentions the harness.
-
-An empty registry is a valid state - the CLI says ``no importers
-registered`` and every run tree is refused as unrecognised.
+discovery rather than a table here. Nothing outside a harness module mentions the harness.
 """
 from __future__ import annotations
 
@@ -86,9 +76,7 @@ def get(name: str) -> ModuleType | None:
 def detect(path: str) -> ModuleType | None:
     """The importer that recognises *path*, or None when nothing does.
 
-    First match wins in name order, which is stable rather than clever: two
-    harnesses claiming one directory is a conflict to fix in `detect`, not to
-    arbitrate here by scoring.
+    First match wins in name order.
     """
     for module in available().values():
         try:

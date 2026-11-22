@@ -2,7 +2,7 @@
 
 A worked Harbor entry to copy: `harbor/` holds a `benchmark.json`.
 
-Made up: its names and links show the shape. `app/tests/test_catalog.py` (`Example`) loads it with the catalogue's own checks.
+Made up: its names and links show the shape.
 
 !!! tip "The same path, without the typing"
     *+ Add a benchmark* writes the `/import-benchmark` prompt, or a user catalogue folder from a Harbor dataset (*Add a Harbor benchmark*).
@@ -28,8 +28,7 @@ Made up: its names and links show the shape. `app/tests/test_catalog.py` (`Examp
 
 2. Edit `benchmark.json`; every dataset key is unique across the catalogue.
 
-An installed application can create the same entry through the Harbor form;
-it needs no source checkout. Leave installed package files unchanged. A user
+Leave installed package files unchanged. A user
 folder replaces the entire bundled entry of the same key, and survives upgrades.
 
 | Field | Says |
@@ -61,7 +60,7 @@ line in `app/nullius/recipes/launch.py`; the builder then offers *Generate tasks
 ## The mark
 
 Personal entries use the default catalogue icon, or a logo uploaded through
-the benchmark form. No installed sprite edit is needed. A bundled contribution
+the benchmark form. A bundled contribution
 adds a `<symbol id="bm-my-bench" viewBox="0 0 24 24">` in
 `app/static/catalogue/marks.svg`, the maker's logo or a line icon.
 

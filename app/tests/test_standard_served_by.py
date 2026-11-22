@@ -33,7 +33,7 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "sta
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PIN = {"order": ["prov-a", "prov-b/fp8"], "allow_fallbacks": False}
 KEY = "or-test-relay-key-0123456789"
-NEW = ("served_by", "end", "error")           # what the record's reply gains, beside what it held
+NEW = ("served_by", "end", "error")
 
 
 def sse(*events) -> bytes:
@@ -215,7 +215,6 @@ class TheRelay(WithUpstream):
                 self.assertEqual(self.sent()["provider"], {"order": ["prov-a"], "allow_fallbacks": False})
                 reply = r.calls("u0")[-1]["reply"]
                 self.assertEqual((reply.get("served_by"), reply.get("end"), reply.get("error")), (who, end, None))
-                # what was read before is read as before, beside the new facts
                 self.assertEqual(without_new(reply), relay.read_reply(path, SHAPES[(path, stream)][0] if stream
                                                                       else json.dumps(SHAPES[(path, stream)][0]).encode(), stream))
 
@@ -317,10 +316,8 @@ class TheRelay(WithUpstream):
         self.assertFalse(relay.Relay("https://api.openai.com/v1", "k", os.path.join(self.tmp, "oa")).facts)
 
     def test_without_a_pin_every_request_goes_on_byte_for_byte_as_before(self):
-        """What a relay sent before pins existed: the caller's body with the model set (and a streamed Chat
-        Completions request's usage flag), serialised once, and the caller's headers but its credentials. The
-        three shapes, streamed or not, with and without a routing field of the caller's, as the run's model, a
-        side model and a judge's route's model; with no pin, or a pin on another model."""
+        """What a relay sends without a pin: the caller's body with the model set (and a streamed Chat
+        Completions request's usage flag), serialised once, and the caller's headers but its credentials."""
         for serving in (None, {"m-other": ["prov-a"]}):
             r = self.relay(model="m-run", side_models=("m-side",), serving=serving)
             for (path, stream) in SHAPES:
@@ -394,7 +391,7 @@ class TheSidecar(WithUpstream):
                               "--served-by", "m-run=prov-a,prov-b/fp8", "--routing"],
                              cwd=APP, env=dict(os.environ, PYTHONPATH=APP), stdout=subprocess.PIPE, text=True)
         try:
-            ready, _, _ = select.select([p.stdout], [], [], 20)              # its one line, or no more than 20 s
+            ready, _, _ = select.select([p.stdout], [], [], 20)
             self.assertTrue(ready, "the relay did not say it listens within 20 s")
             url = json.loads(p.stdout.readline())["listening"]
             post(url + "/u0/v1/chat/completions", body_for("/chat/completions", False))
@@ -550,7 +547,7 @@ class TheRun(WithUpstream):
             stack.enter_context(mock.patch.object(run.progress, "ECHO", None))
             res = r.unit(0, "good")
         self.assertEqual(res["standard"]["served"], {"calls": {"Prov A": 2, "Prov Z": 1}, "unnamed": 0, "held": {"m-1": "unknown"}})
-        self.assertEqual(res["agent_result"]["n_model_calls"], 1)          # the tokens and cost: the agent's calls, as before
+        self.assertEqual(res["agent_result"]["n_model_calls"], 1)          # the tokens and cost: the agent's calls
 
     def test_the_benchmarks_own_relay_counts_in_the_job(self):
         r = self.make(served_by={"m-1": ["prov-a"]})
@@ -607,7 +604,6 @@ class TheRecord(unittest.TestCase):
 
 
 class TheReview(unittest.TestCase):
-    """What a review of the pin found, each a rule of its own."""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

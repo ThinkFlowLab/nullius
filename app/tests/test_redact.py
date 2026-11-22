@@ -4,15 +4,6 @@ Two things can go wrong here and they pull in opposite directions. Under-redact
 and a credential reaches a browser. Over-redact and the page destroys the text
 someone opened it to read — a diff with its tail eaten is worse than useless,
 because it looks complete.
-
-``ReferenceCorpus`` pins the decision on each of a fixed set of texts, so a
-change to the patterns shows as a failed expectation.
-
-``Boundaries`` and ``RepeatedProcessing`` go past the reference. The first pins
-every boundary the anchoring relies on, with the text either side of the key
-kept verbatim; the second pins that the redactor is a fixed point — a marker it
-wrote, or a writer wrote before it, survives another pass — and that the fake
-keys in the live fixtures, which the live board redacts on read, come out.
 """
 
 import re

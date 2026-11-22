@@ -22,8 +22,7 @@ also supports `--only KEY` for a focused benchmark check.
 - **Every choice is a card** (`tile()`, the catalogue's shape), one size per
   group. Plain values are small cards, a select past five. Settings of
   several chosen things are sub-tabs. A notice is a toast.
-- **A set the user fills** (their providers, keys) is a select at any size,
-  so its input keeps one shape as the set grows.
+- **A set the user fills** (their providers, keys) is a select at any size.
 - **A delete that lists or selects** asks in a dialog. A delete that is one
   line of yes or no asks in place.
 - **One step, one question; a setting sits with what it changes.** Dataset:

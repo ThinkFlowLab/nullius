@@ -93,7 +93,7 @@ Keep the whole copied definition, `model.env` and `options` included.
 | Success | Passing checks write `offers` and `proven`, never by hand; the kit jobs under `jobs_standard/` |
 | The builder | The same ports and proofs as `fit` |
 
-A personal addition does not change package files or project tests. To
+To
 contribute it to the bundled catalogue, copy its whole folder into
 `app/nullius/catalogue/agents/` in a source checkout, run the relevant suites,
 and refresh `python3 app/tests/catalogue_docs.py --write`.

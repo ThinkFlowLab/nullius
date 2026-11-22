@@ -18,7 +18,7 @@ names the stages to come (``stages=image,install,units``), so a page can
 show them waiting before they start.
 
 The standard's ``cli`` writes them on stderr - its stdout stays the job's
-path and the units, as before - and into the job's ``progress.jsonl``, one
+path and the units - and into the job's ``progress.jsonl``, one
 JSON object per line, so a mirrored job carries them. ``execution`` writes
 its own for what it does on a host before the run starts (connect, uv, the
 tasks, app/), into the run's log; and reads every one that comes through the
@@ -40,7 +40,7 @@ from typing import IO, Iterable, List, Optional
 
 PREFIX = "[nullius]"
 FILE = "progress.jsonl"
-#: where every reporter also writes its lines, unless it was given a stream: the cli sets it to stderr
+#: where every reporter also writes its lines, unless it was given a stream
 ECHO: Optional[IO] = None
 #: seconds between two lines of one download's bytes
 EVERY = 5.0

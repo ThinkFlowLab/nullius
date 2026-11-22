@@ -151,7 +151,7 @@ class ControlsApart(unittest.TestCase):
         self.assertIn('data-control="nop" data-state="ok">', line); self.assertIn('data-control="oracle" data-state="ok">', line)
         self.assertIn("nop task check tau-x-nop finished ✓ 5/5 rejected ✓", text_of(line))
         self.assertIn("oracle task check tau-x-oracle finished ✓ 3/3 passed ✓", text_of(line))
-        # no start time recorded: each control is a launch of its own, and says what it checked alone
+        # each control says what it checked alone
         self.assertIn("An empty answer fails every task", text_of(line)); self.assertIn("The reference passes every task", text_of(line))
         self.assertNotIn("Failed verification", text_of(line))
 

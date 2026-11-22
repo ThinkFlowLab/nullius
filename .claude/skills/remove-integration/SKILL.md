@@ -54,8 +54,7 @@ the user's requested scope, including logs and stored data when requested.
 ## Verify and report
 
 - Repeat the content and path scans using every collected identifier. Inspect
-  archives separately. Zero text matches alone does not prove the catalogue
-  has no stale directories or the installed package has no old copy.
+  archives separately.
 - Check the loaded catalogue, builder choices and routes with an isolated user
   profile. Run affected backend and route tests, documentation drift checks,
   and a focused browser check for visible catalogue changes. Rebuild/check the
@@ -63,8 +62,6 @@ the user's requested scope, including logs and stored data when requested.
   solely to prove an entry was removed.
 - Report what was removed and verified, plus any inaccessible installations,
   logs, stored user overrides or published docs that still need updating.
-  Removing a bundled entry does not erase user copies or upgrade an existing
-  `uv` installation. Source changes do not publish the documentation website.
 - Git history and remote artifacts are separate from the working tree. Do not
   rewrite commits or delete remote deployments merely because source removal
   was requested; follow explicit authorization for those actions.

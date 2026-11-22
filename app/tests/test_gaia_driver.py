@@ -1,8 +1,7 @@
 """GAIA glue contracts with synthetic metadata and stubbed upstream modules.
 
 No Hugging Face packages, downloads, model calls or upstream installation are
-needed. Scoring must delegate to the upstream module; this suite does not
-reimplement or purport to validate the official matching algorithm.
+needed. Scoring must delegate to the upstream module.
 """
 import copy
 import hashlib

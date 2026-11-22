@@ -1,7 +1,5 @@
 # Exit codes and output
 
-The reading and import commands' contract is pinned by `app/tests/test_cli.py`.
-
 ## Exit codes
 
 | Code | Meaning |
@@ -17,7 +15,7 @@ a diagnostic and no planned files written. `--apply` performs the copy; the
 default is a preview.
 
 A refusal is one line on stderr, nothing partial written; the standard's commands exit non-zero on a failed check or a differing fidelity field.
-One exception: `conform` without `--port` passes over a kit refused for what its benchmark needs of this machine, writes the proofs of the other kits and exits 1; when every kit is refused, it writes nothing and exits 2.
+`conform` can write and exit 1: [Conform](conform.md).
 
 ## Output
 
@@ -25,9 +23,8 @@ One exception: `conform` without `--port` passes over a kit refused for what its
 | --- | --- |
 | Streams | stdout for output, stderr for diagnostics; `--json` is one document |
 | Job id | The job directory's name, everywhere |
-| Secrets | Saved settings load before unified dispatch; read commands make no model call and never print credentials. Job content is redacted (`app/nullius/redact.py`) |
+| Secrets | Read commands make no model call and never print credentials. Job content is redacted |
 | Writes | Reads write nothing, open no socket; import under `-o`; the standard its jobs, and a user definition on `new`, `prove`, `conform`, `fidelity`; migration writes only with `--apply` |
-| Paid actions | Will need `--confirm`. There is no judge command yet |
 
 <div class="grid cards" markdown>
 

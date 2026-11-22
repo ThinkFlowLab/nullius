@@ -2,8 +2,7 @@ name: documentation site
 
 # The host builds and publishes the site from docs-release, through its
 # GitHub integration (app/site/README.md, "Publishing"), so this workflow
-# is only the check, run by hand (Actions, "documentation site", Run
-# workflow, on any branch). It builds the site the way the host does and
+# is only the check, run by hand. It builds the site the way the host does and
 # fails on a broken link, asset, anchor or search target; the same check
 # runs locally with `bash app/site/host-build.sh`.
 on:

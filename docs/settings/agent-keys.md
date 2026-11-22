@@ -6,12 +6,11 @@ Hugging Face tokens belong under [Data providers](data-providers.md).
 ## Add an agent key
 
 Choose **+ Add key** and enter the name and value the Harbor agent expects.
-Existing agent keys save automatically when edited.
 
 | Setting | Holds |
 | --- | --- |
 | `AGENT_KEYS` | The variable **names**, comma-separated: `CURSOR_API_KEY,GH_TOKEN`; each its own variable with the credential |
-| Not allowed | A setting's or start-up option's name, such as `OPENAI` or `MODEL_<ID>`; Settings names it, and the other keys still reach runs |
+| Not allowed | A setting's or start-up option's name, such as `OPENAI` or `MODEL_<ID>` |
 
 Use the Settings page to save these values, or merge the shown properties into
 your existing `settings.json` ([location and precedence](README.md#save)).

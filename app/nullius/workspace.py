@@ -10,9 +10,7 @@ run tree — happens once per change rather than once per page.
     <home>/<name>/jobs/<id>.json   a parsed Job, keyed by the job dir's signature
 
 ``home`` is ``WORKSPACES_DIR`` or ``workspaces/`` in the persistent user data directory.
-A name is a slug the user typed, or two words picked at random — something
-to say out loud, the way Harbor suffixes a trial with ``__TKLnaSW`` and
-nobody can.
+A name is a slug the user typed, or two words picked at random.
 
 The cache is keyed by a *signature* of the job directory (every result.json
 and trajectory.json under it, with size and mtime), never by time: a run
@@ -20,8 +18,7 @@ still going changes its files, the signature moves, the job is parsed again.
 A cached job that was parsed by an older version of ``parse`` is refreshed
 too — the signature carries ``parse.SCHEMA`` so a change there invalidates.
 
-A job that has ended (``_ended``: its result records a finish and nothing
-running or pending) is checked by its *head* alone: its own result.json and
+A job that has ended (``_ended``) is checked by its *head* alone: its own result.json and
 config.json, and its folder, whose mtime moves when a trial folder comes or
 goes. A Harbor resume rewrites result.json, so it is caught; a file changed
 inside a trial of an ended job and nothing else is not. The workspace's
@@ -61,7 +58,7 @@ def home() -> str:
 
 NAME_MAX = 48
 # a name as slug() and _free() make it; one ending in a hyphen, or past 48 characters with a suffix, is how
-# an earlier slug() could cut it, and is read still: its workspace is on disk and its owner made it
+# an earlier slug() could cut it, and is read still
 _NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*-?")
 
 
@@ -122,9 +119,7 @@ def _write_atomically(path: str, dump) -> None:
 
     The temp name is this writer's own - process and thread - because two
     requests writing the same file at once are ordinary here: the job page and
-    its /live poll both re-parse a job whose files keep changing. With one
-    shared `<name>.tmp`, the first rename took the file away and the second
-    raised FileNotFoundError, a 500 on the page. Whichever rename lands
+    its /live poll both re-parse a job whose files keep changing. Whichever rename lands
     last wins, and both wrote a complete file."""
     tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
     try:
@@ -236,8 +231,7 @@ def touch(ws: Workspace) -> None:
 
 def delete(home_dir: str, name: str) -> bool:
     """Remove a workspace: its record, its parse cache and its converted
-    imports. The job roots it pointed at are not touched - they were never
-    its own. True when something was removed."""
+    imports. The job roots it pointed at are not touched. True when something was removed."""
     ws = load(home_dir, name)
     if ws is None:
         return False
@@ -283,8 +277,7 @@ def forget(ws: Workspace, roots, job_dirs) -> None:
 
 def signature(job_dir: str) -> str:
     """What the parse of *job_dir* depends on: the files it reads, by size
-    and mtime. Cheap — a few hundred stats — and honest: a running job moves
-    its result.json files, so its signature moves with it."""
+    and mtime."""
     return _signatures(job_dir)[0]
 
 
@@ -511,8 +504,7 @@ def load_jobs(ws: Workspace, roots, runs: dict | None = None) -> list:
     """Every job under *roots*, each from the cache when its files are
     unchanged. Same order and de-duplication as ``parse.load_all``.
     ``runs``: as ``load_job``'s."""
-    # the rail's index read once and written once, not once per job: re-reading it for
-    # each made a workspace of n jobs cost n parses of an index of n entries
+    # the rail's index read once and written once, not once per job
     index = job_index(ws)
     before = dict(index)
     jobs = [load_job(ws, d, index, runs)[0] for d in parse.find_job_dirs(roots)]

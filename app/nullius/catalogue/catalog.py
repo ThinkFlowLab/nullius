@@ -2,12 +2,8 @@
 each dataset comes from.
 
 Bundled JSON files beside this module, overlaid by the user's catalogue,
-one folder per benchmark. The app renders them as ``/benchmarks`` - a card
-per benchmark - and
-``/benchmarks/<key>``, one page per folder: how it runs, its datasets, its
-limitations (the upstream's, then Nullius's), its citation. ``validate`` gates it.
-The knowledge itself — what runs a benchmark, how its dataset is fetched —
-is written once, here::
+one folder per benchmark. ``validate`` gates it.
+The layout::
 
     benchmarks/<key>/             one folder per benchmark, named by its key
         benchmark.json            the entry, its datasets nested in it
@@ -17,14 +13,8 @@ is written once, here::
 Everything about a benchmark is in its folder. A dataset's ``benchmark`` is
 the folder it sits in, never written; its key is unique across the whole
 catalogue. ``load`` reads the folders in name order, so the catalogue's
-order is the folders', and nothing depends on it: the page and the builder's
-benchmark list sort by title, a lookup goes by key, and a benchmark's
-datasets keep the order its entry writes them in. ``layout`` is the check on
+order is the folders', and nothing depends on it. ``layout`` is the check on
 the tree itself - a folder named after its key - and ``validate`` runs it.
-
-A dataset's ``source`` is a short phrase (Harbor registry, Harbor hub,
-GitHub, …). Each benchmark carries a ``category`` (Coding, Terminal, Customer
-service, …) used as a tag and a filter.
 
 An optional ``task_count`` gives the number of distinct tasks when datasets
 overlap, such as a full split beside difficulty subsets. It controls the
@@ -32,9 +22,7 @@ benchmark headline only; every dataset keeps its own count.
 
 Every entry says where it comes from (``origin``): ``official``, the
 publisher's own benchmark, or
-``community``, adapted by the community. A card and a page show it as a tag
-beside the category, and the Benchmarks page shelves by it. Whether anyone
-has run it is not part of an entry.
+``community``, adapted by the community.
 
 Routes: a benchmark reaches a run through a harness, and ``Benchmark.routes``
 says, for each harness in ``HARNESSES``, whether that route is usable here.
@@ -52,19 +40,15 @@ from dataclasses import dataclass, field, replace
 from nullius import paths
 from . import storage
 
-# Where an entry comes from: the publisher's benchmark (official),
-# or adapted by the community (community).
 ORIGINS = ("official", "community")
 ROOT = os.path.dirname(os.path.abspath(__file__))
-BENCHMARKS = "benchmarks"          # the folder of benchmark folders, under ROOT
-ENTRY = "benchmark.json"           # a benchmark's entry, in its folder
+BENCHMARKS = "benchmarks"
+ENTRY = "benchmark.json"
 
 # The harnesses a benchmark can be run through, in the order the Benchmarks
 # page lists them: the Nullius standard first (benchmarks/<key>/standard.json,
-# nullius.standard), then Harbor, each a route of the entries that name it. A
-# benchmark's own scripts run as the standard's Original setup.
+# nullius.standard), then Harbor, each a route of the entries that name it.
 HARNESSES = (("standard", "Nullius"), ("harbor", "Harbor"))
-
 
 
 @dataclass(frozen=True)
@@ -72,11 +56,10 @@ class Route:
     """One harness route of a benchmark: usable, or unavailable with a reason.
 
     ``usable`` is the one thing a selector may act on. ``reason`` is filled
-    only when it is not — the text a page shows greyed beside the route, so a
-    reader learns *why* rather than only that it cannot be picked."""
+    only when it is not."""
 
     harness: str         # a key of HARNESSES: harbor or standard
-    label: str           # its label: Harbor
+    label: str
     usable: bool
     reason: str = ""
 
@@ -109,7 +92,7 @@ class Benchmark:
     origin: str = "official"
     #: how it runs as published when Harbor runs it: the upstream's own agent, by
     #: the name Harbor registers it (``agent``), and why it is the published one
-    #: (``says``); a benchmark on the standard says it in its ``setups`` instead
+    #: (``says``)
     published: dict = field(default_factory=dict)
     #: how its verifier's own report is read (``nullius.runs.verifier``):
     #: the file, the fields that say pass or fail, the words the pages use; empty
@@ -117,7 +100,6 @@ class Benchmark:
     report: dict = field(default_factory=dict)
     #: how to cite it: the BibTeX its official repository gives, else its paper's
     citation: str = ""
-    #: where that citation was taken from
     citation_source: str = ""
     #: Distinct tasks across dataset views, when known; otherwise show their count summary.
     task_count: int | None = None
@@ -154,8 +136,7 @@ class Benchmark:
 
     @property
     def blocker(self) -> str:
-        """Why nothing is usable, in one phrase — empty when a route is: the
-        reason a benchmark's page shows in place of Build a run."""
+        """Why nothing is usable, in one phrase — empty when a route is."""
         if self.usable_routes:
             return ""
         missing = [h for h in self.harness if h not in dict(HARNESSES)]
@@ -167,9 +148,7 @@ class Benchmark:
     def route_case(self) -> str:
         """Which of the four discovery cases this entry is — what a test and a
         walk-through name: `harbor-only`, `multi-route`, `non-harbor` (usable
-        routes, none of them Harbor) or `none`. A benchmark served only by the
-        Nullius standard is `non-harbor`; one with both a Harbor adapter and a
-        definition on the standard is `multi-route`."""
+        routes, none of them Harbor) or `none`."""
         usable = [r.harness for r in self.usable_routes]
         if not usable:
             return "none"
@@ -252,7 +231,7 @@ class Catalog:
                 [replace(d, **{k: v for k, v in (changed.get(d.key) or {}).items() if k in VERSIONED_DATASET}) for d in ds])
 
     def files(self, key: str) -> list:
-        """The files in a benchmark's folder, by name: what its page shows it is made of."""
+        """The files in a benchmark's folder, by name."""
         base = self.entry_dir(key)
         try:
             return sorted(n for n in os.listdir(base)
@@ -262,7 +241,7 @@ class Catalog:
 
     @property
     def listed_benchmarks(self) -> list:
-        """What the catalogue shows (the Benchmarks tab, the rail): the
+        """What the catalogue shows: the
         benchmarks with a usable route, alphabetically."""
         return sorted((b for b in self.benchmarks if b.can_run),
                       key=lambda b: sort_key(b.title))
@@ -349,7 +328,7 @@ def _entry(path: str, name: str) -> tuple:
     if not isinstance(entry, dict):
         raise ValueError("not a JSON object")
     if entry.get("experiment") or entry.get("origin") == "experiment":
-        entry = {**entry, "origin": "official"}   # experiment is now official
+        entry = {**entry, "origin": "official"}
     nested = [d for d in entry.get("datasets", []) if isinstance(d, dict)]
     return (_pick(Benchmark, {**entry, "datasets": [d.get("key") for d in nested]}),
             [_pick(Dataset, {**d, "benchmark": name}) for d in nested])
@@ -392,9 +371,7 @@ def _layout(selected: dict) -> list:
 
 def validate(cat: Catalog) -> list:
     """Everything that would make a tab lie. Empty means consistent.
-
-    The selected folders are checked too (`layout`): a folder named after
-    its key, whether from the bundle, the user catalogue or an explicit root."""
+    """
     bad = []
     if cat._folders:
         bad.extend(_layout(cat._folders))

@@ -15,7 +15,7 @@ description: >-
 
 # Import a benchmark
 
-The user wants one thing: the benchmark in Nullius. Find the route, say it,
+Find the route, say it,
 ask only what is theirs to decide.
 
 Nullius is a facilitator, not a re-implementer: every route runs what the
@@ -39,17 +39,9 @@ Original setup.
 
 ## Locate the installation and catalogue
 
-Use `nullius paths --json` with the same environment/profile as the app.
-`NULLIUS_HOME` selects a profile's `config/`, `data/` and `cache/`; otherwise
-platform user paths apply. `NULLIUS_CATALOGUE` overrides the user catalogue,
-whose Linux default is `~/.local/share/nullius/catalogue/`. Personal settings,
-secrets, run data and caches belong outside the installation.
+Run `nullius paths --json` in the app’s profile. Use `NULLIUS_HOME` for a separate profile and `NULLIUS_CATALOGUE` to override the catalogue. Keep personal state outside the package.
 
-For Python API calls, use the interpreter behind the `nullius` launcher.
-A `uv tool` installation is separate from the shell's `python3`. On POSIX,
-check `command -v nullius`, set `NULLIUS_PY="$(uv tool dir)/nullius/bin/python"`,
-and verify `"$NULLIUS_PY" -c 'import sys, nullius; print(sys.executable); print(nullius.__file__)'`.
-For another installation, inspect its launcher or virtual environment. From
+Use the launcher’s Python for APIs. On POSIX with `uv tool`, set `NULLIUS_PY="$(uv tool dir)/nullius/bin/python"` and verify `"$NULLIUS_PY" -c 'import nullius; print(nullius.__file__)'`. For other installs, inspect the launcher. From
 a source checkout root, use `NULLIUS_PY=python3` with `PYTHONPATH="$PWD/app"`
 on the command below:
 
@@ -69,7 +61,6 @@ PY
 
 Read the installed modules at those paths when no source tree is present;
 references below to `app/nullius/` are their source-checkout locations.
-Path APIs return strings; join with `os.path.join` or `Path(value)`.
 `catalog.entry_dir(key)` finds the selected benchmark folder, whether bundled
 or personal. Before editing, use `catalog.writable_dir(key)` in the same
 settings-loaded interpreter: it copies the entire bundled folder to the user
@@ -87,15 +78,13 @@ then copy the intended entry files to the checkout and follow its repository
 gates. CLI/API write helpers protect the bundled tree in either layout.
 
 Use `nullius standard` for the standard workflow and `nullius serve --no-debug`
-for the installed app. `python -m nullius` supports the same commands only
-with a Python that has Nullius. From a checkout root the legacy
-`PYTHONPATH=app python3 -m nullius.standard.cli` form remains valid. An absent
+for the installed app. From a checkout root: `PYTHONPATH=app python3 -m nullius.standard.cli`. An absent
 `app/` folder is normal for an installation, not a reason to stop the import.
 
 ## Route first
 
 Answer the route before any deep work, from the catalogue
-(`catalog.load()`, bundled entries plus whole-folder user overrides), the benchmark's README and its
+(`catalog.load()`), the benchmark's README and its
 repository's layout: minutes, no download.
 
 | what you find | route | recommend |
@@ -157,9 +146,7 @@ When they do, write it locally:
   report block - its `sources` in `benchmark.json`, matched exactly; a
   verifier that writes its own report also gets the block's `file`, pass and
   fail fields and `words` (`app/nullius/runs/verifier.py` says the shape).
-  Keep the description in the entry's fields. The legacy `DATASETS` text in
-  `app/web/shared.py` has a fallback for unknown datasets; a personal import
-  does not require editing that module.
+  Keep the description in the entry's fields.
 - **Personal checks.** In the same settings-loaded interpreter, run
   `catalog.validate(catalog.load())` and resolve every reported problem in
   the changed entry. Use `nullius standard check` too when it also has a
@@ -174,8 +161,7 @@ When they do, write it locally:
   backend and route suites from AGENTS.md, and
   `python3 .claude/skills/docs-drift/scripts/check_docs.py`. Use an isolated
   profile and an empty user catalogue so personal overrides cannot mask the
-  bundled entry. These repository gates do not apply to a personal addition;
-  it uses the fallback icon. Ask what, if anything, goes upstream only when
+  bundled entry. Ask what, if anything, goes upstream only when
   publication was not already authorized.
 
 ## The workflow

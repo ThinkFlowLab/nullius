@@ -244,8 +244,7 @@ class RunTest(unittest.TestCase):
 
     def test_an_unexpected_error_in_a_unit_is_that_units_alone(self):
         """A missing agent binary (OSError) or a driver reply without its
-        prompt (KeyError) ended the job with a traceback, the unit unwritten
-        and the rest miscounted as cancelled."""
+        prompt (KeyError) is written as that unit's error; the others run."""
         real = run.Run.drive_agent
 
         def drive(self_, unit, *a, **kw):
@@ -277,9 +276,7 @@ class RunTest(unittest.TestCase):
                 box.assert_not_called()
 
     def test_a_unit_still_running_when_the_run_is_stopped_ends_cancelled(self):
-        """Stop ends a unit's agent and relay under it, and it then failed
-        with whatever that broke - an EnvironmentSetupError for a relay
-        removed as it started - charged to the environment."""
+        """Stop ends a unit's agent and relay under it, which is no failure of the environment's."""
         import signal
         real = run.Run.drive_agent
 
@@ -874,8 +871,8 @@ class RunTest(unittest.TestCase):
             self.assertFalse(any("again" in (json.loads(line).get("detail") or "") for line in f))   # no round said that never ran
 
     def test_a_stop_during_a_retry_leaves_the_try_before_as_the_attempt(self):
-        """Stop is a SystemExit in the CLI (cli._exit_on_term), and a retry runs
-        on the run's own thread, where it lands: whether the retry was waiting
+        """A retry runs
+        on the run's own thread, where a Stop lands: whether the retry was waiting
         or running, the attempt keeps the try it had, counted."""
         Echo.status = 429
         b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])

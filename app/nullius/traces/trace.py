@@ -2,8 +2,7 @@
 
 A sidecar to the trajectory, not a replacement: where ``trajectory.json`` carries
 one timestamp per step with no duration, a trace carries measured start *and*
-end per LLM call, tool call and subagent, with causal parentage. It is the first
-artefact in this tree that can say where the wall clock actually went.
+end per LLM call, tool call and subagent, with causal parentage.
 
 Two rules shape everything here.
 
@@ -31,8 +30,7 @@ event of its own is re-kinded ``group`` and reads ``Bash [group]``: Harbor's
 Claude Code instrumentation opens a ``claude_code.tool`` span carrying
 ``tool_name: "Bash"`` and puts the permission wait and the actual ``Bash``
 execution inside it. Counting the wrapper as work would double-count the call.
-See :func:`is_group` for what qualifies and, more importantly, for the near
-misses that deliberately do not.
+See :func:`is_group`.
 
 The order is load-bearing. An ``llm_request`` holding a single ``reasoning`` or
 ``output`` block of byte-identical extent is the same
@@ -42,9 +40,7 @@ request's tokens and the block's text, where re-kinding leaves two rows and
 charges one of them nothing. Folding first leaves ``is_group`` only the wrappers
 fold could not match to a call, which is the case it is still needed for.
 
-Everything is redacted at load, so templates hold display text only. Stdlib
-only, and no Flask: ``python3 -m unittest discover -s app/tests -t app`` needs no
-install at all.
+Everything is redacted at load, so templates hold display text only. Stdlib only, no Flask.
 """
 
 from __future__ import annotations
@@ -81,13 +77,12 @@ KIND_ORDER = (
 )
 
 # What a namespace span becomes. A kind of its own rather than a flag, because
-# every consumer already switches on `kind` — the swatch, the legend, the chart
-# split, and `_KIND_CATEGORY` below, which by omitting it charges a group no time.
+# every consumer already switches on `kind`, and `_KIND_CATEGORY` omits groups so they accrue no time.
 GROUP_KIND = "group"
 
 # Said in the label, because the label is the only thing most of the page shows.
 # Appended rather than substituted: "Bash [group]" and "Bash" sort together and
-# read as the same call seen at two levels, which is what they are.
+# read as the same call seen at two levels.
 GROUP_SUFFIX = " [group]"
 
 # How far a namespace span's children may fall short of covering it and still
@@ -101,8 +96,7 @@ GROUP_SLACK_NS = 2 * NS_PER_MS
 
 # Kinds that already say they bracket their children. They are exempt from the
 # normalisation below, which exists to stop a span *claiming to be work* when it
-# is a container — a kind that never made the claim needs no correcting, and
-# `_KIND_CATEGORY` already charges these nothing.
+# is a container — a kind that never made the claim needs no correcting.
 _BRACKET_KINDS = ("session", "subagent", GROUP_KIND)
 
 # Breakdown segments, in a fixed left-to-right order. The order carries no
@@ -139,10 +133,7 @@ _BLOCKED_NAME = "claude_code.tool.blocked_on_user"
 _BLOCKED_ATTR = "blocked_on_user"
 
 # The OTel span for one API call, and the log-derived span for one *record* of
-# the reply. Harbor merges the two itself when the exporter reports a request id
-# (recorded in `harbor.merged_from`); when the provider returns none
-# it cannot, and the same call is left drawn twice — once under the interaction,
-# once under the parallel `session` subtree. `fold_llm_requests` finishes the job.
+# the reply. Without a request ID, Harbor can leave duplicate call spans for `fold_llm_requests` to join.
 _OTEL_LLM_NAME = "claude_code.llm_request"
 _LOG_LLM_NAME = "llm_request"
 
@@ -170,13 +161,12 @@ def segments_of(source) -> list:
     """[{key, label, ns, pct}] for a stacked strip, zero-length categories dropped.
 
     Shared by :class:`Totals` and :class:`Breakdown` so the reported strip and a
-    recomputed one are laid out and labelled identically — the only difference
-    between them should be the numbers, never the presentation.
+    recomputed one are laid out and labelled identically.
 
     Percentages are of the wall clock, so categories that do not close read as
     short of 100% instead of being silently rescaled to fill it; ``unaccounted``
     is what closes them. With no wall clock to divide by they fall back to the
-    segments' own sum, which is the only honest denominator left.
+    segments' own sum.
     """
     out = [
         {"key": key, "label": label, "ns": int(getattr(source, attr))}
@@ -236,7 +226,7 @@ class Totals:
         than its instrumented children, so a stacked bar that just leaves a gap
         reads as a rendering bug. Name the gap instead. Clamped at both ends —
         under an epsilon it is noise, and a negative would corrupt the geometry
-        silently (the same reasoning as `Trial.dur_other`).
+        silently.
         """
         if not self.wall_ns:
             return 0
@@ -255,18 +245,16 @@ class Breakdown:
     """Category time recomputed from a set of spans — for a filtered view only.
 
     The producer's ``totals`` stays authoritative and is never replaced by this
-    (see :class:`Totals`). It exists because hiding spans has to take their time
-    out of the picture, and the producer cannot be asked a second time.
+    (see :class:`Totals`).
 
     It is deliberately *not* the same arithmetic, and it does not reproduce the
     same numbers. Harbor's ``llm_ns`` is the plain sum of its LLM spans, while
     this partitions the timeline so an instant covered by both a tool call and
-    the LLM call that asked for it is charged once, to the tool. The two are
-    shown as separate strips because they measure different things.
+    the LLM call that asked for it is charged once, to the tool.
 
     ``wall_ns`` is carried over from the source unchanged: hiding a span does not
     make the run shorter, it makes more of the run unattributed. That is what
-    ``unaccounted_ns`` then absorbs, and it is the honest place for it to land.
+    ``unaccounted_ns`` then absorbs.
     """
 
     wall_ns: int = 0
@@ -295,7 +283,7 @@ class Breakdown:
     def compared_to(self, other: "Breakdown") -> list:
         """`segments`, each carrying `delta_ns` against *other*.
 
-        The comparison a filtered view actually needs. Both sides come from this
+        Both sides come from this
         same partition, so every delta is the filter's doing and nothing else —
         whereas the difference against the producer's reported strip mixes the
         filter up with two different ways of accounting for the same run, and on
@@ -345,8 +333,7 @@ def toggled(values: tuple, value: str) -> tuple:
 class Filter:
     """What a view is leaving out: span labels, and individual spans by id.
 
-    Two axes, because they answer different questions — "never mind Bash" is a
-    label, "not *that* call" is one span. Both take the span's subtree with them;
+    Both take the span's subtree with them;
     see :func:`prune`.
 
     Immutable and canonical: every mutation returns a new Filter with its values
@@ -442,8 +429,7 @@ class Span:
     def merged(self) -> bool:
         """Assembled from more than one source (OTLP span + agent log).
 
-        Either the producer said so, or `fold_llm_requests` did it here — the
-        badge means the same thing to a reader, so both keys light it.
+        Either the producer said so, or `fold_llm_requests` did it here.
         """
         return any(k in _MERGED_KEYS for k, _ in self.attributes)
 
@@ -567,7 +553,7 @@ def label_of(name: str, attributes: dict, kind: str = "", blocks: tuple = ()) ->
     Merged spans overwrite `name` with the log-derived tool name ("Write");
     unmerged ones keep the instrumentation name ("claude_code.tool") and put the
     tool name only in an attribute. Prefer the attribute, so both render as the
-    tool. The raw name stays on the span for the detail pane.
+    tool.
 
     An LLM call reads the same way. `claude_code.llm_request` is the exporter's
     name for the same thing the agent log calls `llm_request`, so it is shown
@@ -674,7 +660,7 @@ def extent_of(roots: list) -> Extent:
 
 
 def find_span(roots: list, span_id: str):
-    """The span called *span_id* in this tree, or None. Same walk as `all_spans`."""
+    """The span called *span_id* in this tree, or None."""
     if not span_id:
         return None
     return next((s for s in all_spans(roots) if s.span_id == span_id), None)
@@ -744,7 +730,7 @@ def _self_ns(raw: dict) -> int | None:
 def _same_extent(raw: dict, child: dict) -> bool:
     """Do these two spans start and end together, to within `GROUP_SLACK_NS`?
 
-    Both ends, and that is the point. Coverage alone is satisfied by a child that
+    Coverage alone is satisfied by a child that
     overruns its parent — a background subagent hung under the launch that
     returned in 47ms runs for minutes. Clipped
     to the parent it covers all of it, but the launch is a real 47ms event.
@@ -771,26 +757,19 @@ def is_group(raw: dict) -> bool:
       An `llm_request` may hold one `reasoning` or `output` block whose start
       and end are *byte-identical* to its own,
       because the producer splits a response into blocks and a one-block response
-      is the request again. `fold_llm_requests` runs first and collapses that
-      pair outright wherever it can match the request to the call it answered,
-      which is the better answer — one span keeping both clocks and both sets of
-      text. What reaches here is the remainder it could not match.
+      is the request again. `fold_llm_requests` runs first; this sees what it could not match.
 
-    Everything else with children stays what it is, and the near misses are worth
-    knowing because each one looks like this from a distance. OpenCode's
+    Everything else with children stays what it is. OpenCode's
     `ai.streamText` also brackets the stream call it is named for, but can spend
     time on its own transport; it is still a call. `claude_code.interaction`
     is covered by the calls inside it, and `session`/`subagent` are exempt
-    outright: a kind that already announces itself as a bracket is not claiming
-    to be work, and `_KIND_CATEGORY` already charges it nothing. A group is
-    specifically a span pretending to be the event nested inside it.
+    outright: they never claim to be work.
 
     A call `fold_llm_requests` gave children to is exempt for a sharper reason:
     it would match, always, and the match would be this reader's own doing. The
     fold moves the reply's blocks under the call and then labels the call after
     what it produced, so the parent shares a label with a child by construction
-    and the blocks span the call because they are the reply to it. Nothing was
-    pretending to be anything — and the call is the one span in that subtree with
+    and the blocks span the call because they are the reply to it. The call is the one span in that subtree with
     a measured clock, so re-kinding it would charge the only real measurement to
     nothing and leave the inferred blocks holding the time.
     """
@@ -905,8 +884,7 @@ def inventory(spans: list, filt: "Filter | None" = None) -> list:
         )
         for name, count in counts.items()
     ]
-    # Commonest first, then alphabetical — a stable order, and the labels worth
-    # filtering are the ones there are a lot of.
+    # Commonest first, then alphabetical — a stable order.
     out.sort(key=lambda f: (-f.count, f.name))
     return out
 
@@ -1033,11 +1011,10 @@ def _folded_child(raw: dict, parent: dict) -> dict:
     same instants twice more. The block keeps its identity and content; the
     request hands over its attributes and its tokens.
 
-    Handing the tokens over matters more than it looks. The producer's own
+    The producer's own
     `totals.tokens` is the sum over every span it wrote, duplicated usage
     included: dropping a record's copy here would leave the recomputed breakdown
-    disagreeing with the reported totals by a factor of three, and this reader
-    would appear to have invented the defect.
+    disagreeing with the reported totals by a factor of three.
     """
     children = [c for c in raw.get("children") or [] if isinstance(c, dict)]
     typed = [c for c in children if str(c.get("kind") or "") in _BLOCK_KINDS]
@@ -1066,7 +1043,7 @@ def fold_llm_requests(spans: list) -> list:
     Nothing is invented and nothing is dropped. Every span survives with its own
     start, end and tokens; a request span that collapsed into its one block is
     that block, carrying what the request knew. The rows move, the clocks do not,
-    and the producer's `totals` is untouched, as ever.
+    and the producer's `totals` is untouched.
 
     Copy-on-write, like `prune`: a document with nothing to fold is returned by
     reference.
@@ -1256,9 +1233,7 @@ def filtered_document(data: dict, filt: "Filter | None" = None) -> dict:
     # unfolded save would drop a different set of spans than the page showed;
     # `mark_groups` because `hide` carries the displayed label, and "Bash [group]"
     # only matches a span that has been re-kinded. Both are written out with the
-    # spans — the document already names this tree as its producer, and a saved
-    # view that reopened as a different shape than the one saved would be worse
-    # than a changed enum.
+    # spans.
     kept, removed = prune(mark_groups(fold_llm_requests(data.get("spans") or [])), filt)
     source_totals = data.get("totals") or {}
     view = breakdown(kept, _int_or_none(source_totals.get("wall_ns")) or 0)
@@ -1266,8 +1241,7 @@ def filtered_document(data: dict, filt: "Filter | None" = None) -> dict:
     out["spans"] = kept
     out["totals"] = view.as_totals()
     # This file was written here, whatever wrote the spans — `producer` naming a
-    # script that never saw these totals is exactly the kind of plausible-looking
-    # provenance that makes a derived artefact unfalsifiable. The original moves
+    # script that never saw these totals would misattribute them. The original moves
     # into the block below rather than being dropped.
     out["producer"] = FILTER_PRODUCER
     out["filtered"] = {
@@ -1300,7 +1274,7 @@ def place(span: Span, extent: Extent) -> tuple:
     """(left_pct, width_pct) on the global axis.
 
     All arithmetic is Python int until this line, so the nanosecond magnitudes
-    that overflow a JS double are exact here — no BigInt problem to work around.
+    that overflow a JS double are exact here.
     """
     left = _clamp((span.start_ns - extent.start_ns) / extent.span_ns * 100)
     duration = span.duration_ns or 0
@@ -1316,9 +1290,7 @@ def is_instant(span: Span) -> bool:
 def flatten(roots: list, collapsed=frozenset(), extent: Extent | None = None) -> tuple:
     """Depth-first rows, skipping the children of collapsed spans.
 
-    Returns (rows, truncated). Collapse is honoured here so it is testable, but
-    the template renders every row and lets the browser hide descendants — which
-    is what makes expanding a deep-linked span a no-round-trip operation.
+    Returns (rows, truncated). The template renders every row so the browser can expand descendants locally.
 
     *extent* is the window the rows are placed on and their offsets counted
     from. A zoomed view passes the subtree's own window here (`extent_of` over
@@ -1421,9 +1393,7 @@ def parse(data: dict, filt: "Filter | None" = None) -> Trace:
     # The zoom is a second, explicit window on top of the filter — never a
     # re-scaling of the filtered view. It is looked up in the *pruned* tree, so a
     # zoom on a span the filter hides falls back to the whole trace with a note,
-    # and the axis it re-bases on is the subtree's own extent (`extent_of` over
-    # the one span, the same walk the global axis uses — no second layout).
-    # Spans outside the subtree are left out of the rows, not squeezed in.
+    # and the axis it re-bases on is the subtree's own extent.
     axis, zoomed, zoom_lost = extent, None, ""
     if filt.zoom:
         zoomed = find_span(roots, filt.zoom)

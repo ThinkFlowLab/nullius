@@ -6,8 +6,7 @@ Harbor's Python instead of the ``harbor`` command: it registers the hooks
 every Harbor ``Job`` offers (``on_trial_started`` … ``on_trial_ended``), then
 hands its arguments to Harbor's own command line, unchanged. Each job then
 writes the feed ``nullius.runs.live`` folds into the job page's Live view -
-the same lines, in the same schema - whatever Harbor it is: a PyPI release or
-a repository at a commit.
+the same lines, in the same schema - whatever Harbor it is.
 
 What a Harbor without its own feed cannot give is left out, never made up:
 no agent-setup phase (its hooks go from the environment to the agent), no

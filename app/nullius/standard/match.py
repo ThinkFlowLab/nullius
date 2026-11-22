@@ -6,8 +6,7 @@ every port the benchmark needs - and, for a port whose kit has skills, has
 shown each skill the benchmark relies on (``needs_skills``). An agent with
 ``only_for`` - a benchmark's own reference agent - fits those benchmarks
 alone, whatever it has proven; a benchmark's own agent (``definitions.own_agents``)
-is bound the same way to its benchmark, and speaks no port to check. The
-reasons are sentences a page can show beside a greyed-out choice.
+is bound the same way to its benchmark, and speaks no port to check.
 """
 from __future__ import annotations
 
@@ -64,7 +63,7 @@ def table(benches: List[dict], agents: List[dict], capabilities: List[dict]) -> 
     ``oracle``, which always fit. A benchmark is keyed as an agent is: its
     key for its default version, ``key@version`` for another."""
     out = {}
-    agents = agents + definitions.benchmark_agents(benches)        # a benchmark's own agents beside the catalogue's
+    agents = agents + definitions.benchmark_agents(benches)
     for b in benches:
         others = agents if b.get("family") == "agent" else capabilities
         k = ref_of(b) if "_version" in b else b["key"]

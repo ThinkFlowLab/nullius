@@ -67,7 +67,7 @@ class Table(unittest.TestCase):
                                                  "--pids-limit", "100", "--cpuset-cpus", "0-1"])
 
     def test_a_task_s_own_memory_alone_keeps_its_swap(self):
-        self.assertEqual(constraints.argv({}, {"memory_mb": 1024, "cpus": 2}), ["--cpus", "2", "--memory", "1024m"])   # as before constraints
+        self.assertEqual(constraints.argv({}, {"memory_mb": 1024, "cpus": 2}), ["--cpus", "2", "--memory", "1024m"])
         for machine in (4096, 512):                       # the machine's memory: no swap, whichever value applies
             a = constraints.argv({"memory_mb": machine}, {"memory_mb": 1024})
             low = f"{min(machine, 1024)}m"
@@ -353,7 +353,7 @@ class Containers(unittest.TestCase):
             self.assertEqual((a[a.index("--cpus") + 1], a[a.index("--memory") + 1], a[a.index("--memory-swap") + 1]), ("2", "1024m", "1024m"))
             container.cap({})
             container.Box("j", "u1", "img", workdir="/w", network="net", task={"memory_mb": 1024}).start()
-            self.assertNotIn("--memory-swap", seen[-1])       # no machine constraint: the task's flags as they were
+            self.assertNotIn("--memory-swap", seen[-1])       # no machine constraint: the task's flags alone
 
     def test_the_engine_is_asked_before_the_first_unit(self):
         with mock.patch.object(container.subprocess, "run", return_value=mock.Mock(stdout="engine=29.9.3|Engine,|\ncpus=max 100000 \nprocesses=64 \n")):

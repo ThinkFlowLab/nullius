@@ -1,6 +1,6 @@
 # Prepare a machine for OSWorld2
 
-OSWorld2's driver, its VMs, the mock websites, GitLab and the proxies run on one machine: this one, or the host chosen in the builder's **Where** step ([Hosts](../settings/run-hosts.md)). Run every step below there, as the user that runs Nullius, from the root of a checkout of this repository; a run on a host starts from the builder's Review, which sends the key to it; the last step's commands run it here with this machine's keys. How a run is scored: [Read an OSWorld2 run](osworld2-results.md).
+OSWorld2's driver, its VMs, the mock websites, GitLab and the proxies run on one machine: this one, or the host chosen in the builder's **Where** step ([Hosts](../settings/run-hosts.md)). Run every step below there, as the user that runs Nullius, from the root of a checkout of this repository; a run on a host starts from the builder's Review. How a run is scored: [Read an OSWorld2 run](osworld2-results.md).
 
 ## What it needs
 
@@ -11,7 +11,7 @@ The minimum is one task at a time:
 | System | Linux on x86_64 with apt; the commands below are Ubuntu's |
 | Docker | `docker ps` answers without sudo; Docker Compose 2.24.4 or later and Buildx for the mock websites and GitLab |
 | Kernel | `ip_tables` and `iptable_nat` loaded (`lsmod`): without them the VM's ports are not forwarded and it never becomes ready |
-| Network | The subnet `10.213.0.0/24` free: Nullius makes the VMs' network `nullius-osworld2` on it, and the websites listen on its gateway, `10.213.0.1` |
+| Network | The subnet `10.213.0.0/24` free |
 | Libraries | `build-essential` to install the driver's environment, `libgl1` to run it |
 | Scoring programs | ImageMagick (`identify`, `convert`), `ffmpeg`, `ffprobe` and `tesseract`: the evaluate() of tasks 025, 046, 051, 056, 085 and 095 runs them on this machine, and a run, the null control's too, is refused until they are on PATH |
 | Programs | `git`, `python3`, `uv`, `curl` |
@@ -20,7 +20,7 @@ The minimum is one task at a time:
 | Network | GitHub, PyPI, Hugging Face and Docker Hub for the installs and the first GitLab task; OpenRouter for the agents and the LLM grader; the public internet for 29 tasks, 8 of them through a proxy of their own, which also install from the Ubuntu mirrors |
 | KVM | Recommended: `/dev/kvm`; without it the upstream runs the VM unaccelerated, slower |
 
-More at once is optional: `-j N` runs N tasks side by side, each with a VM of its own, so N times its cores, memory and disk. Their VMs start one after another. A machine's constraints in Settings (CPUs, memory, processes) do not reach the VMs, the mock websites, GitLab or the proxies: Docker starts them outside the run's limits, so bound them with `-j`.
+More at once is optional: `-j N` runs N tasks side by side, each with a VM of its own, so N times its cores, memory and disk. A machine's constraints in Settings (CPUs, memory, processes) do not reach the VMs, the mock websites, GitLab or the proxies: Docker starts them outside the run's limits, so bound them with `-j`.
 
 One Unix user runs a machine's VMs: the upstream's docker provider keeps its port lock in `/tmp`, and another user's VMs then fail to start. Task 082 takes this machine's port 3000 on 127.0.0.1 for its VM, so its units run one at a time per machine, and fail before the VM starts if another program listens on that port.
 
@@ -40,7 +40,7 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
 
 103 and 104 are not supported: their evaluate() runs FreeCAD's Python on this machine, which Nullius neither checks nor installs. They stay in the datasets; without FreeCAD the null control scores them 0, and an agent's unit ends in an error.
 
-**Website host suffix** is a wildcard DNS name of the address the mock websites listen on, the VMs' gateway: `10.213.0.1.nip.io`. **VM provider** offers `docker` alone: the upstream's other providers need cloud accounts or a hypervisor of their own.
+**Website host suffix** is a wildcard DNS name of the address the mock websites listen on, the VMs' gateway: `10.213.0.1.nip.io`. **VM provider** offers `docker` alone.
 
 ## Set it up
 
@@ -83,7 +83,7 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
     test -e /dev/kvm && echo "KVM: yes" || echo "KVM: no"
     ```
 
-3. **Install OSWorld-V2 and its environment**, with Nullius's own installer, as a run would: OSWorld-V2 at its tested commit, then its `uv.lock`. A run that finds both installs nothing.
+3. **Install OSWorld-V2 and its environment**.
 
     ```bash title="Clone and install"
     PYTHONPATH=app python3 -c '
@@ -117,13 +117,13 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
     docker pull happysixd/osworld-docker@sha256:0e6497a9295647cf05bf2b2af522fdd79bdeba2737595259cab310a3bcf6baa9
     ```
 
-7. **Build the proxy image**, for the 8 tasks that ask for a proxy (3 of Offline, none of No hosted services). Each such unit gets a tinyproxy of its own on this machine, given to the upstream in place of its DataImpulse entry, whose password is a placeholder. The upstream installs tinyproxy in the VM as each of the 8 is set up, through apt, which goes out directly: the 3 of Offline then need the Ubuntu mirrors too, and each is set up more slowly.
+7. **Build the proxy image**, for the 8 tasks that ask for a proxy (3 of Offline, none of No hosted services). The 3 of Offline need the Ubuntu mirrors.
 
     ```bash
     python3 "$HERE/proxy.py" --build
     ```
 
-8. **Build and start the mock websites**, for their 40 tasks: OSWorld-web at the tag `osworld-v2.1`, with its submodules, served under `10.213.0.1.nip.io` (no task of this release uses Moodle), here cloned into `/data`, a folder of this user's. The write limits are in MB/s and IOPS: the stack's share of the disk (below), and the builder's, here a whole budget of 120 and 1200 while nothing else runs.
+8. **Build and start the mock websites**, for their 40 tasks: OSWorld-web at the tag `osworld-v2.1`, with its submodules, served under `10.213.0.1.nip.io`, here cloned into `/data`, a folder of this user's. The write limits are in MB/s and IOPS: the stack's share of the disk (below), and the builder's, here a whole budget of 120 and 1200 while nothing else runs.
 
     ```bash title="Clone, build, start, check"
     git clone --recurse-submodules --branch osworld-v2.1 https://github.com/Task-Web/OSWorld-web.git /data/OSWorld-web

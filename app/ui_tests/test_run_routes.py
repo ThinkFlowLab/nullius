@@ -23,7 +23,7 @@ from .test_routes import web
 
 APP = Path(__file__).resolve().parents[1]
 
-# A Harbor τ³ config with defaults omitted (app/tests/test_parse.py has the same).
+# A Harbor τ³ config with defaults omitted.
 TAU3_SMOKE = {
     "job_name": "tau3-smoke-tau3-llm-agent", "jobs_dir": "/tmp/runs/tau3-smoke/jobs",
     "agent_timeout_multiplier": 1.0, "n_concurrent_trials": 10, "retry": {"max_retries": 3},
@@ -148,7 +148,7 @@ class RunRoutes(unittest.TestCase):
         self.assertNotIn("pw@", r.json["error"])
 
     def test_a_run_on_a_host_runs_the_host_s_harbor(self):
-        # a version posted by a page from before is not read: nothing names one any more
+        # a posted version is not read
         r = self.post({"name": "tau3-x3", "script": '"$NULLIUS_HARBOR" run', "where": "bench", "harbor_version": "0.22.1", "model": "openai/x"})
         self.assertEqual(r.status_code, 200, r.get_data(as_text=True)); self.wait()
         s = self.client.get(f"/run/{r.json['id']}"); self.addCleanup(s.close)
@@ -250,8 +250,7 @@ class RunRoutes(unittest.TestCase):
             self.assertEqual(like_links(self.client.get("/job/plain").get_data(as_text=True)), ["/new-run?like=plain"])
 
     def test_new_run_like_this_carries_a_recorded_limit_only(self):
-        """`n_planned` is how many trials Harbor set out to do - 375 for a whole
-        dataset - which made the prefill of an unlimited run a literal 375.
+        """`n_planned` is how many trials Harbor set out to do and is not a limit.
         Only a limit the config recorded travels."""
         d = self.tmp / "jobs"
         for name, dataset in (("whole", {"name": "sierra-research/tau3-bench"}), ("limited", {"name": "sierra-research/tau3-bench", "n_tasks": 30})):
@@ -330,8 +329,7 @@ class RunRoutes(unittest.TestCase):
 
     def test_the_page_carries_the_token_the_stop_button_sends(self):
         """The strip's `data-csrf` is what the page's Stop and Continue post
-        back; rendered empty (an imported macro sees no context) every
-        press answered 403 while the button only greyed out. Pinned on both
+        back; imported macros need the token passed explicitly. Pinned on both
         pages the strip is on, with the token the session holds, and the
         button's own request going through and ending the run."""
         r = self.post({"name": "tau3-x3", "script": "sleep 30", "where": "local", "jobs": [{"name": "tau3-x3"}]})
@@ -509,7 +507,7 @@ class ResumeIntoWorkspace(unittest.TestCase):
 class Credentials(unittest.TestCase):
     def test_a_run_on_openai_is_given_openais_endpoint(self):
         """A Harbor part's script binds its clients' endpoint from API_URL and
-        refuses to start without it: an OpenAI run was given none."""
+        refuses to start without it."""
         from web import execute as execute_web
         with tempfile.TemporaryDirectory() as tmp:
             plan = execution.Plan(name="oa", script='echo "url=${API_URL:?Set API_URL in your shell}"', model="m",
@@ -595,7 +593,7 @@ class WorkspaceDelete(unittest.TestCase):
         self.assertNotIn("gone-soon", page.get_data(as_text=True))
 
     def test_any_workspace_renames_from_its_row_open_or_not(self):
-        """Nothing open - after a restart, say - and every row still has its
+        """Nothing open and every row still has its
         name field; the one renamed is the one the row names. A form token is
         needed, as for the ×: a rename moves a directory."""
         from nullius import workspace
@@ -1072,7 +1070,7 @@ if __name__ == "__main__":
 class WorkspacesPage(unittest.TestCase):
     """The Workspaces page manages workspaces: one name, renamed in place; its
     roots in a dialog, each unlinked from it or its folder deleted, only a run
-    Nullius made and has ended; no Open (the sidebar's menu opens one)."""
+    Nullius made and has ended; no Open."""
     setUp, get = RunDelete.setUp, RunDelete.get
     post = LaunchesPage.post
 
@@ -1087,7 +1085,7 @@ class WorkspacesPage(unittest.TestCase):
         return r.get_data(as_text=True)
 
     def greyed(self, root, why):
-        """A greyed trash, its reason its description (as on the Launches page) and its tooltip."""
+        """A greyed trash, its reason its description and its tooltip."""
         return (rf'<button type="button" class="icon-btn danger" aria-disabled="true" aria-label="Delete folder {re.escape(str(root))}" aria-describedby="(why-[^"]+)" '
                 rf'title="Delete folder: {re.escape(why)}">.*?</button><span class="sr" id="\1">{re.escape(why)}</span>')
 

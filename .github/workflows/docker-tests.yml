@@ -1,9 +1,6 @@
 # The docker tier of the backend suite: the tests that build and run
-# containers for real (app/tests/docker_tier.py) - an agent in a task's own
-# image, a unit's environment and licences, what a check may reach, the
-# relay's network. Nightly and by hand, never on a pull request: the tests
-# workflow skips them. Builds the standard's base image first; hosted runner
-# time uses the account's Actions allowance.
+# containers for real (app/tests/docker_tier.py). Nightly and by hand, never on a pull request: the tests
+# workflow skips them. Builds the standard's base image first.
 name: docker tests
 
 on:

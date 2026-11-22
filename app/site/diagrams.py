@@ -237,7 +237,7 @@ class Figure:
 
 
 # ---------------------------------------------------------------------------
-# The figures. Coordinates are the layout; comments say what each decision keeps.
+# The figures. Coordinates are the layout.
 
 def pieces() -> Figure:
     f = Figure('pieces', 688, 480, 'The pieces of the application',

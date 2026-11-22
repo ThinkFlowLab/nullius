@@ -1,11 +1,6 @@
 name: judge-pr
 
-# The PR judge, this repository's own (.github/scripts/judge_pr.py): a merge
-# risk and a priority, then the questions (the linked issue's acceptance
-# criteria, the issue against the PR, the description against the diff,
-# scope, tests, docs, risk named, before and after), each asked of the
-# TypeSafe judge k=3 times over the redacted issue, description and diff;
-# plus the script's own checks. The verdict is posted on the pull request as
+# The PR judge, this repository's own (.github/scripts/judge_pr.py). The verdict is posted on the pull request as
 # a new comment on every run, the earlier ones collapsed as outdated, never
 # deleted, and kept as the step summary with the cost. No artifact: they
 # count against the account's storage.
@@ -16,7 +11,7 @@ name: judge-pr
 #
 # Two ways in: a non-draft pull request event, and a `/judge` comment on a pull
 # request from an owner, member or collaborator, which asks again on the
-# same commit, including a draft (a 👀 reaction, the answer below the request). The
+# same commit, including a draft. The
 # comment body is read only by the job's `if` expression, never by a shell
 # line. Because issue_comment runs the workflow from the default branch,
 # `/judge` works only once this file is on main.

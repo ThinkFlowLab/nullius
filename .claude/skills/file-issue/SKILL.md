@@ -12,13 +12,10 @@ judge (`.github/scripts/judge_pr.py`) reads the sections by their headings:
 `## Acceptance` in the issue, `## What`, `## Touches`, `## Before and after`,
 `## Verified` and `## Risk` in the pull request.
 
-These are contributor resources, not files an installed Nullius user must
-have. For an installed-runtime defect reported outside a checkout, select
+For an installed-runtime defect reported outside a checkout, select
 the repository that owns the cause explicitly with `gh ... --repo OWNER/REPO`
 on searches, issue creation and readback; read its templates through GitHub
-when needed. A PR requires the source checkout. Personal additions under the
-user catalogue do not require an issue, PR or edits to installed package
-resources merely to work.
+when needed. A PR requires the source checkout.
 
 Before anything: search the open and closed issues and pull requests of this
 repository and of the repository that owns the cause, with `gh issue list
@@ -66,12 +63,9 @@ The body follows the template: `Closes #n` first when an issue exists, then
 when the change is visible; leave the section out otherwise), `## Verified`
 (what was run and looked at; "not verified" is a valid answer), `## Risk`
 (what could break and how it is undone). Open it with `gh pr create
---body-file pr.md`, then read it back with `gh pr view`. The judge comments
-within minutes; `/judge` as a comment asks again.
+--body-file pr.md`, then read it back with `gh pr view`.
 
 ## What never goes in
 
 No key, token or password, no email address or personal message, no private
-link, no name of the host or the site's address. The judge redacts what
-looks like one before reading, but a redacted issue is a worse issue: leave
-it out at the source. No machine attribution trailer in a commit or a body.
+link, no name of the host or the site's address. No machine attribution trailer in a commit or a body.

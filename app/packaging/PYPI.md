@@ -23,8 +23,7 @@ Python 3.12 or later is required. Reading existing results needs no model key.
 Running benchmarks requires the appropriate provider credentials and benchmark
 prerequisites; Docker is needed for Harbor and the standard's container backend.
 
-Release validation targets Linux with Python 3.12. The wheel is a Python package with
-a local web UI, not a standalone desktop installer.
+Release validation targets Linux with Python 3.12.
 
 ## What it does
 
@@ -54,10 +53,6 @@ Add `--force` when replacing an existing installation. Explicit version pins
 are retained by `uv tool upgrade`; use `uv tool install --force nullius-eval`
 to return to the latest version without a pin.
 
-If you used an earlier private build installed under the distribution name
-`nullius`, remove that tool with `uv tool uninstall nullius` before installing
-`nullius-eval`. The user storage remains in place.
-
 ## Links
 
 - [Documentation](https://thinkflowlab.ai/nullius/docs/)
@@ -65,5 +60,5 @@ If you used an earlier private build installed under the distribution name
 - [Repository](https://github.com/thinkflowlab/nullius)
 - [Report an issue](https://github.com/thinkflowlab/nullius/issues)
 
-GitHub access follows the repository's permissions. Nullius is licensed under
+Nullius is licensed under
 Apache-2.0; bundled fonts retain their own included licences.
