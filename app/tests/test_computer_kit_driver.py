@@ -154,7 +154,7 @@ class Definition(unittest.TestCase):
         self.assertEqual(list(kit["check_details"]), list(driver.UNITS))
         self.assertEqual(kit["basic"], list(checks.BASIC))
         self.assertEqual(set(kit["skills"]), set(driver.UNITS) - set(checks.BASIC))
-        self.assertIn("This check does not bound the number of presses.", kit["skills"]["late"])
+        self.assertTrue(kit["skills"]["late"].endswith("and presses it once"))
         self.assertEqual(kit["environments"]["desktop"], dict(desktop.KIT["environments"]["desktop"],
                                                              summary=kit["environments"]["desktop"]["summary"]))
         self.assertEqual(kit["mcp_servers"]["computer"]["command"], ["python3", "{here}/pipe.py"])     # a file of its folder
@@ -1299,6 +1299,19 @@ class Window(unittest.TestCase):
         got = driver.score("late", ws, [], "done")
         self.assertFalse(got["passed"])
         self.assertIn("without looking again by a step", got["detail"]["why"])
+
+    def test_late_fails_more_than_one_press_even_after_a_look_by_a_step(self):
+        ws, s = self.unit("late")
+        u, c = driver.OPEN["late"], self.client(s)
+        driver.task_given("late", ws)
+        self.assertTrue(u.up.wait(5))
+        self.assertFalse(c.call("wait")[0])                                     # a look by a step, with the button up
+        x, y = driver.centre(u.boxes[u.expected["target"]])
+        self.assertFalse(c.call("click", {"x": 5, "y": 5})[0])                  # a guess, then the button
+        self.assertFalse(c.call("click", {"x": x, "y": y})[0])
+        got = driver.score("late", ws, [], "done")
+        self.assertFalse(got["passed"], got)
+        self.assertIn("2 presses", got["detail"]["why"])
 
     def test_late_draws_its_button_away_from_the_centre_at_a_place_drawn_for_each_unit(self):
         rng, places = random.Random(7), set()

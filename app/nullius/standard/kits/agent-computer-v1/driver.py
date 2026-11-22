@@ -16,7 +16,7 @@ as a client.
 
 **late.** One labelled button appears ``LATE_SECONDS`` after the task is given, away from the screen's centre at a
 place drawn for the unit (``late_place``), so that no click at a fixed point finds it; the agent clicks it. It passes
-when the click is the check ``click``'s, and a picture was taken as a step ended, after the button was up and before
+when the click is the check ``click``'s and the unit's only press, and a picture was taken as a step ended, after the button was up and before
 the action holding the press began. Its times are the driver's own clock (when the button was up,
 each picture of a step's end, each action's start), the press matched to its action on the desktop's clock.
 
@@ -454,10 +454,14 @@ def late_place(rng=None):
 
 
 def late_verdict(u, events, actions, message):
-    """``late``: the click's verdict, and an observation of the button, taken as a step ended, before the press."""
+    """``late``: the click's verdict, the unit's only press, and an observation of the button, taken as a step ended,
+    before the press."""
     v = checks.click(u.expected, events, actions, message)
     if not v["passed"]:
         return v
+    presses = [e for e in events if e.get("kind") == "press"]
+    if len(presses) != 1:
+        return {"passed": False, "why": f"{len(presses)} presses: the button is pressed once, with no other press"}
     if u.shown is None:
         return {"passed": False, "why": "the button was never drawn"}
     press = next(e for e in events if e.get("kind") == "press" and e.get("hit") == u.expected["target"]
