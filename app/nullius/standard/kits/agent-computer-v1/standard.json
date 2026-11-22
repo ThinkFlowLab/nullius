@@ -19,7 +19,7 @@
     "scroll": "scrolls a list to read what it shows at first below its edge",
     "recover": "reads an acting call's error and acts again",
     "batch": "sends several actions in one step",
-    "late": "looks again with a step to find what appeared after the task was given"
+    "late": "looks again with a step to find what appeared after the task was given, and presses it once"
   },
   "driver": {
     "unit_end": true,
@@ -131,10 +131,10 @@
       },
       "leak": {
         "units": 9,
-        "looked_for": 1,
-        "short": 8,
+        "looked_for": 2,
+        "short": 7,
         "passed": "9/9",
-        "note": "8 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
+        "note": "7 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
       },
       "nop": {
         "passed": "0/9",
