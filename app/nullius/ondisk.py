@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import os
+import stat
 import uuid
 
 
@@ -21,18 +22,21 @@ def write_whole(path, data, mode=None) -> None:
     FileNotFoundError, a 500 on the page. Whichever rename lands last wins, and
     both wrote a complete file. A write that fails leaves nothing behind.
 
+    The name is as long for every ``path``, so a file whose own name is as long
+    as a name may be is still written.
+
     ``mode``: the file's permissions, from its first byte (0o600 for what only
-    its owner reads); this process's default when not given. The folder is made
-    when it is missing."""
+    its owner reads); this process's default when not given.
+
+    The folder is the caller's to make. A folder that is gone is an error, and
+    is not made again: a user entry removed while its proof ran stays removed."""
     path = os.fspath(path)
-    folder = os.path.dirname(os.path.abspath(path))
-    os.makedirs(folder, exist_ok=True)
-    part = os.path.join(folder, f".{os.path.basename(path)}.{uuid.uuid4().hex}.part")
+    part = os.path.join(os.path.dirname(os.path.abspath(path)), f".{uuid.uuid4().hex}.part")
     fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666 if mode is None else mode)
     try:
-        if mode is not None:
-            os.fchmod(fd, mode)                       # the mode asked for, whatever the umask
         with (os.fdopen(fd, "w", encoding="utf-8") if isinstance(data, str) else os.fdopen(fd, "wb")) as f:
+            if mode is not None and stat.S_IMODE(os.fstat(fd).st_mode) != mode:
+                os.fchmod(fd, mode)                   # the umask took bits off: the mode asked for, exactly
             f.write(data)
         os.replace(part, path)
     except BaseException:

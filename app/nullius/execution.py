@@ -497,6 +497,7 @@ class Execution:
                     "catalogue_on_target": self.catalogue_on_target, "workspace": self.workspace,
                     "launched": self.launched, "seen_trials": [list(k) for k in sorted(self._seen_trials, key=str)]}
             try:
+                os.makedirs(self.dir, exist_ok=True)
                 ondisk.write_whole(os.path.join(self.dir, RECORD), json.dumps(data, indent=1))
             except OSError:
                 pass

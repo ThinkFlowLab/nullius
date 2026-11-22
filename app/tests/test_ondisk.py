@@ -16,15 +16,15 @@ class Whole(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        self.path = os.path.join(self.tmp, "deep", "file.json")
+        self.path = os.path.join(self.tmp, "file.json")
 
     def mode(self, path=None):
         return stat.S_IMODE(os.stat(path or self.path).st_mode)
 
     def left(self):
-        return sorted(os.listdir(os.path.dirname(self.path)))
+        return sorted(os.listdir(self.tmp))
 
-    def test_text_and_bytes_land_whole_in_a_folder_made_for_them(self):
+    def test_text_and_bytes_land_whole(self):
         ondisk.write_whole(self.path, "é\nsecond line\n")
         with open(self.path, "rb") as f:
             self.assertEqual(f.read(), "é\nsecond line\n".encode())
@@ -42,6 +42,48 @@ class Whole(unittest.TestCase):
         self.assertEqual(self.mode(), 0o600)
         ondisk.write_whole(self.path, "x", mode=0o644)
         self.assertEqual(self.mode(), 0o644)                       # the mode asked for, whatever the umask
+
+    def test_a_mode_the_umask_leaves_whole_is_the_files_from_its_creation(self):
+        with mock.patch.object(os, "fchmod", side_effect=PermissionError("no chmod here")):
+            ondisk.write_whole(self.path, "x", mode=0o600)         # as mkstemp gives it: asked for when made, never set after
+        self.assertEqual(self.mode(), 0o600)
+
+    def test_a_mode_that_is_refused_leaves_no_file_and_no_open_descriptor(self):
+        old = os.umask(0o027)
+        self.addCleanup(os.umask, old)
+        held = []
+        def refuse(fd, mode):
+            held.append(fd)
+            raise PermissionError("no chmod here")
+        with mock.patch.object(os, "fchmod", refuse):
+            with self.assertRaises(PermissionError):
+                ondisk.write_whole(self.path, "x", mode=0o644)     # the umask took a bit off: it has to be set
+        self.assertEqual(self.left(), [])
+        with self.assertRaises(OSError):
+            os.fstat(held[0])
+
+    def test_it_is_first_written_beside_its_path_under_a_name_of_its_own_with_its_mode(self):
+        seen, rename = [], os.replace
+        def spy(src, dst):
+            seen.append((os.path.dirname(src), os.path.basename(src), stat.S_IMODE(os.stat(src).st_mode)))
+            return rename(src, dst)
+        with mock.patch.object(os, "replace", spy):
+            ondisk.write_whole(self.path, "x", mode=0o600)
+            ondisk.write_whole(self.path, "y", mode=0o600)
+        self.assertEqual([s[0] for s in seen], [self.tmp, self.tmp])   # a rename within one folder, never across devices
+        self.assertNotEqual(seen[0][1], seen[1][1])
+        self.assertEqual([s[2] for s in seen], [0o600, 0o600])
+
+    def test_a_file_whose_name_is_as_long_as_a_name_may_be_is_written(self):
+        path = os.path.join(self.tmp, "n" * os.pathconf(self.tmp, "PC_NAME_MAX"))
+        ondisk.write_whole(path, "x")
+        self.assertEqual(self.left(), [os.path.basename(path)])
+
+    def test_a_folder_that_is_gone_is_an_error_and_is_not_made_again(self):
+        gone = os.path.join(self.tmp, "gone")
+        with self.assertRaises(FileNotFoundError):
+            ondisk.write_whole(os.path.join(gone, "file.json"), "x")
+        self.assertEqual(self.left(), [])
 
     def test_a_write_that_fails_leaves_the_file_as_it_was_and_nothing_beside_it(self):
         ondisk.write_whole(self.path, "kept")

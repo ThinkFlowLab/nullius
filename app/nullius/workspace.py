@@ -117,6 +117,7 @@ def _path(home_dir: str, name: str) -> str:
 
 
 def save(ws: Workspace) -> None:
+    os.makedirs(ws.dir, exist_ok=True)
     data = {k: v for k, v in asdict(ws).items() if k != "dir"}
     ondisk.write_whole(os.path.join(ws.dir, "workspace.json"), json.dumps(data, ensure_ascii=False, indent=1))
 
@@ -403,6 +404,7 @@ def _note_in_index(ws: Workspace, job_dir: str, job: parse.Job, index: dict | No
 
 
 def _write_index(ws: Workspace, index: dict) -> None:
+    os.makedirs(ws.jobs_dir, exist_ok=True)
     ondisk.write_whole(_index_path(ws), json.dumps(index, ensure_ascii=False, indent=1))
 
 
@@ -428,6 +430,7 @@ def _read_cache(path: str, job_dir: str) -> tuple | None:
 
 
 def _write_cache(ws: Workspace, path: str, sig: str, head: str, job: parse.Job) -> None:
+    os.makedirs(ws.jobs_dir, exist_ok=True)
     ondisk.write_whole(path, json.dumps({"signature": sig, "head": head, "dir": job.dir, "cached": _now(), "job": job_to_dict(job)},
                                        default=_encode, ensure_ascii=False))
 

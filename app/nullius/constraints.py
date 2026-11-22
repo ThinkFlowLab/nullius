@@ -627,7 +627,9 @@ def rekey(text: str, old: str, new: Optional[str]) -> Optional[str]:
 
 def _write(doc: dict, env=None) -> None:
     """The store, written whole to a file of its own, then renamed."""
-    ondisk.write_whole(store_path(env), json.dumps(doc, indent=1, sort_keys=True), mode=0o600)
+    out = store_path(env)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    ondisk.write_whole(out, json.dumps(doc, indent=1, sort_keys=True), mode=0o600)
 
 
 def engine_less(found: Optional[dict]) -> bool:

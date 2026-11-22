@@ -584,7 +584,9 @@ def remember(results: dict, env=None) -> None:
     """Set (a result) or forget (None) the last test of each choice, the file written whole and renamed."""
     with _TESTS_LOCK:
         kept = {k: v for k, v in {**tests(env), **results}.items() if v is not None}
-        ondisk.write_whole(_tests_file(env), json.dumps(kept, indent=1, sort_keys=True))
+        out = _tests_file(env)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        ondisk.write_whole(out, json.dumps(kept, indent=1, sort_keys=True))
 
 
 def mark(result: dict) -> str:

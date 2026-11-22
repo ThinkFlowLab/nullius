@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 import urllib.request
 from typing import Callable, Dict, Iterable, Optional, Tuple
@@ -76,7 +77,9 @@ def _number(v) -> bool:
 
 def save(doc: dict, env=None) -> None:
     """Written whole beside the file, then renamed: a reader never finds half a list."""
-    ondisk.write_whole(path(env), json.dumps(doc, indent=1, sort_keys=True) + "\n")
+    out = path(env)
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    ondisk.write_whole(out, json.dumps(doc, indent=1, sort_keys=True) + "\n")
 
 
 def table(env=None) -> Dict[str, dict]:

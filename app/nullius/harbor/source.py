@@ -444,6 +444,7 @@ def ensure(pin: dict, pins: str, run: Optional[Callable] = None, fetch: Optional
 
 
 def _write(directory: str, name: str, data: dict) -> None:
+    os.makedirs(directory, exist_ok=True)
     ondisk.write_whole(os.path.join(directory, name), json.dumps(data, indent=1))
 
 

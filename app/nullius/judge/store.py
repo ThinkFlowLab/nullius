@@ -122,6 +122,7 @@ def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "d
     one file take turns; each writes through a temporary file of its own."""
     paths = _paths(ws_dir, job_id, trial_name, lane)
     path = paths[0]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with _lock(path):
         data = _read(paths)
         version = record.get("questions", Q.VERSION)

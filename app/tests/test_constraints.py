@@ -303,6 +303,7 @@ class Probe(unittest.TestCase):
         [t.start() for t in each]; [t.join() for t in each]
         self.assertEqual((failed, len(constraints.load(env))), ([], 24))
         self.assertEqual([n for n in os.listdir(os.path.dirname(constraints.store_path(env))) if n.endswith(".part")], [])
+        self.assertEqual(os.stat(constraints.store_path(env)).st_mode & 0o777, 0o600)   # its owner's alone
         constraints.save("local", {"enforced": ["cpus"]}, env); constraints.save("bench", {"enforced": []}, env)
         self.assertEqual(constraints.load(env)["local"]["enforced"], ["cpus"])
         self.assertEqual(sorted(constraints.load(env))[:2], ["bench", "local"])
