@@ -13,7 +13,7 @@ import unittest
 from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from nullius import execution
 from nullius.standard.contract import definitions
@@ -332,11 +332,19 @@ class Tabs(unittest.TestCase):
                              headers={"Origin": "http://localhost"})
         self.addCleanup(r.close)
         self.assertEqual(r.status_code, 302)
-        plan = self.started[0]
+        (plan,) = self.started                                                            # started once
         self.assertEqual((plan.runner, plan.host, plan.key_var), ("standard", None, "OPENAI_API_KEY"))
         self.assertIn("conform fake --model gpt-5-mini --provider openai --stamp ", plan.script)
         self.assertNotIn("sk-test", plan.script)
         self.assertTrue(r.headers["Location"].endswith("/job/" + plan.jobs[0]["name"]))
+        going = SimpleNamespace(plan=SimpleNamespace(name=ANY), state="running")          # a run of that very name, still going
+        with patch.dict(execution.EXECUTIONS, {"going": going}):
+            r = self.client.post("/agents/fake/check", data={"csrf": self.csrf(), "provider": "openai", "model": "gpt-5-mini", "unsandboxed": "yes"},
+                                 headers={"Origin": "http://localhost"})
+        self.addCleanup(r.close)
+        self.assertEqual((r.status_code, r.headers["Location"], len(self.started)), (302, "/agents/fake", 1))   # back to its page, nothing started
+        with self.client.session_transaction() as s:
+            self.assertTrue(any(kind == "error" and said.endswith(" is running already") for kind, said in s["_flashes"]), s["_flashes"])
 
     def test_container_checks_require_an_engine_and_record_the_backend(self):
         from web import execute
@@ -698,6 +706,13 @@ class StandardPieces(unittest.TestCase):
         r = self.client.post("/benchmarks/gsm8k/prove", data={"dataset": "test"}); self.addCleanup(r.close)
         self.assertEqual(r.status_code, 403)                                             # no form token
         self.assertEqual(len(self.started), 1)
+        going = SimpleNamespace(plan=SimpleNamespace(name=ANY), state="running")          # a run of that very name, still going
+        with patch.dict(execution.EXECUTIONS, {"going": going}):
+            r = self.client.post("/benchmarks/gsm8k/prove", data={"csrf": csrf, "dataset": "test", "limit": "2"}, headers={"Origin": "http://localhost"})
+        self.addCleanup(r.close)
+        self.assertEqual((r.status_code, r.headers["Location"], len(self.started)), (302, "/benchmarks/gsm8k#standard", 1))   # back to its page, nothing started
+        with self.client.session_transaction() as s:
+            self.assertTrue(any(kind == "error" and said.endswith(" is running already") for kind, said in s["_flashes"]), s["_flashes"])
 
 
 if __name__ == "__main__":
