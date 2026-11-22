@@ -257,13 +257,13 @@ def control_check(bench: dict, ds: dict, which: str, *, limit: Optional[int], jo
     if not n:
         problems.append("no unit ran")
     if errored:
-        problems.append(f"{errored} unit(s) ended in an error before the score: read the job's trials")
+        problems.append(f"{errored} unit(s) ended in an error before the score")
     if unscored:
-        problems.append(f"{unscored} unit(s) ended with no {field} from 0 to 1 and no error: read the job's trials")
+        problems.append(f"{unscored} unit(s) ended with no {field} from 0 to 1 and no error")
     if n and not within:
         problems.append(f"{'pass rate' if bench['score']['kind'] == 'pass' else 'mean score'} {value:.4f}, expected {bound.replace('_', ' ')} {expected}")
     rec = {"ok": not problems, "passed": f"{top}/{n}", "value": round(value, 4), "expect": {bound: expected},
-           "units": n, "job": os.path.basename(job_dir), "source": other["source"], "problems": problems}
+           "units": n, "job": os.path.basename(job_dir), "problems": problems}
     ran_with = _options_of(cfg) if cfg else (options or {})
     if ran_with:
         rec["options"] = ran_with
@@ -432,7 +432,7 @@ def prove(bench: dict, *, dataset: Optional[str] = None, limit: Optional[int] = 
             shutil.rmtree(work, ignore_errors=True)
         for c in declared:
             if not checks["units"]["ok"] and not jobs.get(c):
-                checks[c] = {"ok": False, "units": 0, "source": definitions.control(bench, c)["source"],
+                checks[c] = {"ok": False, "units": 0,
                              "problems": [UNITS_FAILED + ": the control was not run"]}
             else:
                 checks[c] = control_check(bench, ds, c, limit=limit, jobs_root=jobs_root, stamp=stamp, provider=provider,
@@ -446,7 +446,6 @@ def prove(bench: dict, *, dataset: Optional[str] = None, limit: Optional[int] = 
             _say(say, c, checks[c])
         total = ds.get("units") if isinstance(ds.get("units"), int) else checks["units"]["units"]
         for name, r in checks.items():
-            r["on"] = time.strftime("%Y-%m-%d")
             if limit and name != "units" and limit < total:
                 r["limit"] = limit
             if shard and shard[1] > 1 and name != "units":
@@ -466,8 +465,9 @@ def record(bench: dict, got: Dict[str, dict]) -> None:
     """Write what passed into ``bench``'s ``proven`` and save it: a check that
     passed replaces its record unless that one covered more units; one that
     failed is taken back. The failure itself is kept under ``failed`` - what
-    it reached, against what bound, its job - so a page can say "0.9955 < 1"
-    rather than only "not proven"; the next pass of that check clears it.
+    it reached, against what bound - so a page can say "0.9955 < 1"
+    rather than only "not proven"; the next pass of that check clears it. The
+    record never names its job: that folder is on the machine that ran it.
     Units that may not be redistributed are never named (:func:`_unnamed`)."""
     if (bench.get("units") or {}).get("redistribute") is False:
         got = {ds: {name: _unnamed(r) for name, r in checks.items()} for ds, checks in got.items()}
@@ -491,14 +491,14 @@ def _merged(proven: dict, got: Dict[str, dict]) -> dict:
         for name, r in checks.items():
             if not r["ok"]:
                 cur.pop(name, None)
-                failed[name] = {k: r[k] for k in ("passed", "value", "expect", "units", "job", "on", "limit", "shard") if k in r}
+                failed[name] = {k: r[k] for k in ("passed", "value", "expect", "units", "limit", "shard") if k in r}
                 failed[name]["problems"] = list(r.get("problems") or [])[:3]
                 continue
             failed.pop(name, None)
             old = cur.get(name) or {}
             if old and old.get("units", 0) > r.get("units", 0):
                 continue
-            cur[name] = {k: v for k, v in r.items() if k not in ("ok", "problems")}
+            cur[name] = {k: v for k, v in r.items() if k not in ("ok", "problems", "job")}
         if cur or failed:
             proven[ds] = {**{k: cur[k] for k in CHECKS if k in cur}, **({"failed": failed} if failed else {})}
         else:

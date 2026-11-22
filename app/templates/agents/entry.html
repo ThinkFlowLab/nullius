@@ -65,7 +65,7 @@
               <td><b class="std-portname"{% if r.kit %} title="Kit v{{ r.kit.version }} · {{ r.kit.checks }} checks: {{ r.kit.says }}"{% endif %}>{% if r.kit %}<a href="{{ url_for('kit_page', key=r.kit.key) }}">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %}</b> <code class="std-portid">{{ r.port }}</code><small>{{ r.summary }}</small>
                   {% if r.skills %}<small class="std-skills">Skills: {% for s in r.skills %}<span class="std-fidelity {{ 'ok' if s.shown else 'no' }}" title="{{ s.id }}{% if s.passed %} · {{ s.passed }}{% endif %}">{{ s.says }} {{ '✓' if s.shown else '✗' }}</span>{{ ' · ' if not loop.last }}{% endfor %}</small>{% endif %}
                   {% if not r.kit %}<small class="std-kit">No kit yet: nothing can prove it until a benchmark needs it.</small>{% endif %}</td>
-              <td>{% if r.record %}<b title="proven on {{ r.record.on }}{% if r.record.model %} with {{ r.record.model }}{% endif %}, kit v{{ r.proof_kit }}{% if r.record.backend %}, {{ 'local processes' if r.record.backend == 'local' else 'container' }}{% endif %}">{{ r.record.passed }}</b>{% if r.older_kit %}<small class="std-kit" title="{{ r.older_kit }}">newer kit: worth running again</small>{% endif %}{% if r.job %}<small><a href="{{ url_for('job', job_id=r.job) }}">its job</a></small>{% endif %}
+              <td>{% if r.record %}<b title="kit v{{ r.proof_kit }}{% if r.record.backend %}, {{ 'local processes' if r.record.backend == 'local' else 'container' }}{% endif %}">{{ r.record.passed }}</b>{% if r.older_kit %}<small class="std-kit" title="{{ r.older_kit }}">newer kit: worth running again</small>{% endif %}
                   {%- else %}<b>{{ r.state }}</b>{% endif %}</td>
             </tr>
           {% endfor %}
@@ -75,7 +75,7 @@
         {# cli fidelity: the same tasks driven over ACP and through the agent's own command, the model's requests compared #}
         <h3 class="std-subhead">Fidelity</h3>
         <p class="std-fid {{ 'ok' if e.fidelity.verdict == 'same' else 'no' }}"><b>ACP {{ '= its own CLI ✓' if e.fidelity.verdict == 'same' else '≠ its own CLI: ' ~ e.fidelity.verdict }}</b>
-          <small title="{{ e.fidelity.on }} · {{ e.fidelity.model }}{% if e.fidelity.passes %} · {{ e.fidelity.passes }} passes each way{% endif %}">Its model gets the same requests over ACP as from its own command line{% if e.fidelity.differs %}; differs in {{ e.fidelity.differs|join(', ') }}{% endif %}.</small></p>
+          <small{% if e.fidelity.passes %} title="{{ e.fidelity.passes }} passes each way"{% endif %}>Its model gets the same requests over ACP as from its own command line{% if e.fidelity.differs %}; differs in {{ e.fidelity.differs|join(', ') }}{% endif %}.</small></p>
         {% endif %}
         {% if e.options %}
         <h3 class="std-subhead">Options</h3>

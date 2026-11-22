@@ -9,7 +9,7 @@ A pair is an **agent benchmark** × an **agent**, or a **capability benchmark** 
 | Idea | Rule |
 | --- | --- |
 | Ports, not tags | A port is a named, versioned contract (`agent.workspace/v1`); its contract never changes. A benchmark lists the ports it **needs**, an agent or capability those it **offers**; a pair fits when every needed port is offered and every needed [skill](#basic-checks-and-skills) shown |
-| A claim is proven, not written | A port enters `offers` only through its **conformance kit**, `cli conform`, which records the date, score, model, kit version, skills shown and the job; a claim whose basic checks later fail is taken back |
+| A claim is proven, not written | A port enters `offers` only through its **conformance kit**, `cli conform`, which records the score, model, kit version and skills shown; a claim whose basic checks later fail is taken back |
 | Nullius stands in the middle | It starts the agent, hands it the environment, and is its model endpoint: the **relay** holds the key and records every call |
 
 ## Protocols
@@ -714,7 +714,7 @@ A benchmark proves itself by its two **controls**, `nop` and `oracle`, and two c
 
 `--bench-option NAME=VALUE` sets the benchmark's own options for the units check's driver and each control's run, resolved and refused as `cli run` does them, the programs a value needs on this machine included, before anything is installed or started; the control job's config records the values.
 
-What passed is written into `standard.json` per dataset, dated; a failing check is taken back, and a run on fewer units does not replace one on more.
+What passed is written into `standard.json` per dataset; a failing check is taken back, and a run on fewer units does not replace one on more.
 
 ```json title="standard.json · proven"
 "proven": {
@@ -734,7 +734,7 @@ What passed is written into `standard.json` per dataset, dated; a failing check 
 
 ## What is proven
 
-Each `proven` record names the job behind it, with its date, model, score, kit version, skills shown and, for a repeated check, its counts; `cli list` shows them all.
+Each `proven` record holds its model, score, kit version, skills shown and, for a repeated check, its counts; never its job or date, which only the machine that ran it could read. `cli list` shows them all.
 
 ## Not in version 1
 
