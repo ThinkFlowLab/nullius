@@ -17,6 +17,8 @@ the launcher has fetched a dataset or built an image, so a board shows the
 preparation window instead of nothing (its ``stage`` names what is being
 prepared; ``job.start`` keeps meaning "trials are about to be scheduled").
 Payloads are read leniently — a missing counter is *absent*, never zero.
+A ``trial.end`` with ``back`` is a try put back in its place after the try
+that followed it was stopped: the card is that try's again, at its attempt.
 
 Four rules are load-bearing, and each has a test:
 
@@ -53,7 +55,7 @@ from __future__ import annotations
 
 import json
 import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -220,6 +222,7 @@ class TrialState:
     #: (ts, {token field: value}) per report — only the keys that report
     #: carried — for the rate window; see Board.tokens_per_sec.
     _series: list = field(default_factory=list, repr=False)
+    _previous: TrialState | None = field(default=None, repr=False)
 
     @property
     def state(self) -> str:
@@ -327,7 +330,7 @@ class Board:
         by_task: dict = {}
         for t in self.trials:
             if t.task is not None and t.agent is not None:
-                by_task.setdefault(t.task, []).append(t)
+                by_task.setdefault(t.task, []).append(t._previous or t)
         order = [a for a in self.lane_order() if a is not None]
         out = []
         for task, members in by_task.items():
@@ -498,7 +501,7 @@ def _ended(c: dict, finished_at: datetime | None) -> dict:
 def _counts(trials: list, n_total: int | None) -> dict:
     """The count block over a list of trials. ``n_total`` is what the feed
     declared for the job; a lane passes the trials it has seen."""
-    done = [t for t in trials if t.outcome is not None]
+    done = [t._previous or t for t in trials if t.outcome is not None or t._previous is not None]
     return {
         # Unknown until job.prepare/job.start says, or a trial appears: a
         # "0 tasks" header during preparation would be a lie.
@@ -516,6 +519,7 @@ def _counts(trials: list, n_total: int | None) -> dict:
 
 
 def _mean_reward(trials: list) -> float | None:
+    trials = [t._previous or t for t in trials]
     rewards = [t.reward for t in trials if t.outcome is not None and t.reward is not None]
     return sum(rewards) / len(rewards) if rewards else None
 
@@ -545,6 +549,7 @@ def fold(events: list[Event], now: datetime | None = None, notices: list[str] | 
     ``ts`` — replay of a finished file is exact; a live board passes the clock)."""
     board = Board(notices=list(notices or []))
     by_id: dict[str, TrialState] = {}
+    manual = False
 
     def trial_of(e: Event) -> TrialState:
         t = by_id.get(e.trial)
@@ -581,7 +586,9 @@ def fold(events: list[Event], now: datetime | None = None, notices: list[str] | 
             if not board.agents:
                 board.agents = list(d.get("agents") or [])
         elif e.event == "job.start":
+            manual = board.finished_at is not None and bool(d.get("tasks"))
             board.started_at = e.ts
+            board.finished_at = None           # a job begun again after its end (chosen tasks run again) runs until its next end
             board.n_total = _num(d.get("n_total"), int)
             board.n_concurrent = _num(d.get("n_concurrent"), int)
             board.wall_sec = _num(d.get("wall_sec"))
@@ -595,6 +602,9 @@ def fold(events: list[Event], now: datetime | None = None, notices: list[str] | 
         elif e.event == "trial.phase":
             t = trial_of(e)
             if t.outcome is not None:
+                if manual:
+                    # Result aggregates keep the earlier try while the card follows its replacement.
+                    t._previous = replace(t)
                 # A phase after the trial ended: Harbor retries a trial under its own name (max_retries), so this is
                 # its next attempt, running again; what the attempt before it ended with is kept beside it.
                 t.attempt += 1
@@ -630,6 +640,14 @@ def fold(events: list[Event], now: datetime | None = None, notices: list[str] | 
                 t.last_line = d["line"]
         elif e.event == "trial.end":
             t = trial_of(e)
+            t._previous = None
+            if d.get("back") is True and t.outcome in (None, "cancelled") and t.attempt > 1:
+                # A stopped try restores the earlier result even after its cancellation end.
+                # The restored cost is no longer an earlier attempt's cost.
+                t.attempt -= 1
+                t.retried.pop()
+                if t.cost_before is not None and _num(d.get("cost_usd")) is not None:
+                    t.cost_before = (t.cost_before - _num(d["cost_usd"])) or None
             t.outcome = d["outcome"]
             t.reward = _num(d.get("reward"))
             t.score, t.parts = _num(d.get("score")), _num(d.get("parts"), int)

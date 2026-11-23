@@ -28,7 +28,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "18"
+SCHEMA = "19"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness, so a limit the run survived leaves nothing in result.json —
@@ -62,6 +62,42 @@ def _retried_cost(trial_dir: str, n: int) -> float | None:
                        .get("cost_usd")]
              if isinstance(c, (int, float)) and not isinstance(c, bool)]
     return sum(costs) if costs else None
+
+
+def _rerun_mark(res: dict) -> dict:
+    """``standard.rerun`` of a standard trial's result, read leniently: the try a person asked for, its time and
+    reason as text; {} otherwise."""
+    std = res.get("standard") if isinstance(res.get("standard"), dict) else {}
+    mark = std.get("rerun")
+    if not isinstance(mark, dict):
+        return {}
+    return {"by": str(mark.get("by") or "hand"), "at": str(mark.get("at") or ""), "reason": redact(str(mark.get("reason") or "")),
+            "replaced": mark.get("replaced") if isinstance(mark.get("replaced"), dict) else {}}
+
+
+def _reruns(res: dict) -> list:
+    """A job's ``reruns`` (``standard/runner/rerun.py``), each read leniently: what a page lists of each re-run."""
+    rows = res.get("reruns")
+    num = lambda v: v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    said = lambda v: {str(k): x for k, x in v.items() if isinstance(x, (str, int, float))} if isinstance(v, dict) else {}
+    out = []
+    for r in rows if isinstance(rows, list) else ():
+        if not isinstance(r, dict):
+            continue
+        replaced = [x for x in r.get("replaced") or [] if isinstance(x, dict)] if isinstance(r.get("replaced"), list) else []
+        begun = [x for x in r.get("begun") or [] if isinstance(x, dict)] if isinstance(r.get("begun"), list) else []
+        empty = [str(t) for t in r.get("no_result") or [] if isinstance(t, str)] if isinstance(r.get("no_result"), list) else []
+        out.append({"at": str(r.get("at") or ""), "finished_at": str(r.get("finished_at") or ""),
+                    "reason": redact(str(r.get("reason") or "")),
+                    "trials": [str(t) for t in r.get("trials") or [] if isinstance(t, str)] if isinstance(r.get("trials"), list) else [],
+                    "replaced": [{"trial": str(x.get("trial") or ""), "unit": str(x.get("unit") or ""), "try": num(x.get("try")),
+                                  "was": said(x.get("was")), "now": said(x.get("now"))} for x in replaced],
+                    # the tasks it began, planned and never begun before; the trials it took that had no result
+                    **({"begun": [{"trial": str(x.get("trial") or ""), "unit": str(x.get("unit") or ""), "now": said(x.get("now"))}
+                                  for x in begun]} if begun else {}),
+                    **({"no_result": empty} if empty else {}),
+                    "max_usd": num(r.get("max_usd")), "spent_usd": num(r.get("spent_usd")), "stopped": r.get("stopped") is True})
+    return out
 
 
 def _retries_of(res: dict) -> int:
@@ -168,6 +204,10 @@ class Trial:
     # `standard.retries`). 0 when it did not, or does not say: Harbor retries
     # under the trial's own name and keeps no count in it.
     n_retries: int = 0
+    # A try a person asked for after the run ended (``standard.rerun``: by
+    # "hand", ``at``, ``reason``, the result it ``replaced``); {} for every
+    # other try.
+    rerun: dict = field(default_factory=dict)
     # What the tries before this one cost, summed: kept in the job's
     # `retried/` (`tries`), never a trial of their own, but paid for all the
     # same, so the job's cost counts them (`Job.total_cost_usd`). None when
@@ -309,6 +349,11 @@ class Job:
     # The task set a Nullius standard job ran (config ``standard.task_set``): its name, its label (its name for a
     # job from before labels) and id, its benchmark, and ``units``, its number of ids. {} for every other job.
     task_set: dict = field(default_factory=dict)
+    # Each time chosen trials of a Nullius standard job were run again in it (``result.json`` ``reruns``,
+    # ``standard/runner/rerun.py``): {at, reason, trials, replaced [{trial, unit, try, was, now}], begun [{trial, unit,
+    # now}] and no_result [trial] when it had any, max_usd, spent_usd, stopped}, oldest first. [] for a job never
+    # run again.
+    reruns: list = field(default_factory=list)
     # How the job was launched, as its config.json recorded it with Harbor's
     # defaults filled in (launch_of). Empty when config.json is absent.
     launch: dict = field(default_factory=dict)
@@ -698,6 +743,7 @@ def parse_trial(job_id: str, trial_dir: str) -> Trial | None:
         has_trace=os.path.isfile(trace_path),
         n_rate_limited_retries=count_rate_limits(os.path.join(trial_dir, "agent", "gateway.log")),
         n_retries=_retries_of(res),
+        rerun=_rerun_mark(res),
         retried_cost_usd=_retried_cost(trial_dir, _retries_of(res)),
         env_type=((res.get("config") or {}).get("environment") or {}).get("type", ""),
         started_at=_iso(res.get("started_at")),
@@ -973,6 +1019,7 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
                      "units": len(ts["units"]) if isinstance(ts.get("units"), list) else 0}
                     if isinstance(ts.get("name"), str) and ts["name"] else {})
     job.budget = _budget(res.get("budget"))
+    job.reruns = _reruns(res)
     job.standard = bool(std)
     setup = std.get("setup") if isinstance(std.get("setup"), dict) else {}
     was = (std.get("benchmark_options") or {}).get("agent") if isinstance(std.get("benchmark_options"), dict) else None

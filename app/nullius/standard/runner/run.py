@@ -460,6 +460,7 @@ class Run:
     timeouts: Dict[str, float] = {}           # the run's own time limits by phase (__init__)
     forced_turns: Optional[int] = None
     max_calls: Optional[int] = None           # the run's cap on a unit's agent's model calls (__init__)
+    _tries: Dict[str, int] = {}               # by trial, the try a re-run by hand begins it with (``rerun``); none in a run
     def __init__(self, bench: dict, other: dict, *, model: str, provider: str, dataset: Optional[str] = None,
                  limit: Optional[int] = None, concurrency: int = 4, jobs_root: str = "jobs", name: Optional[str] = None,
                  turn_seconds: Optional[int] = None, say: Callable[[str], None] = print, env=os.environ,
@@ -962,6 +963,52 @@ class Run:
                           if self.ledger is not None else {}))   # the live board says the cap
         for pos, (i, u, r) in enumerate(work):
             self.feed.emit("trial.queued", self.trial_name(i, u, r), agent=job.agent_name(self.other), position=pos)
+        results, budget, u0 = self.run_units(work, lambda results, budget: job.write_result(
+            self.job_dir, self.name, t0, time.time(), results, len(work), budget=budget,
+            served=job.served(self.benchmark_calls(), getattr(self, "serving", None))))
+        # the units' stage says why it ended early: a line of its own would be a stage that never starts
+        p.emit("units", "done", seconds=round(time.time() - u0, 1),
+               **({"detail": f"stopped at the spending cap of {ledgers.usd(budget['max_usd'])} USD: "
+                             f"{len(budget['cut_off'])} cut off, {len(budget['not_run'])} not run"} if budget and budget["stopped"] else {}))
+        self.n_verdicts, self.n_ended = sum(1 for x in results if x.get("verifier_result")), len(results)
+        if budget and budget["stopped"]:
+            spent = "unknown" if budget["spent_usd"] is None else ledgers.usd(budget["spent_usd"])
+            self.say(f"stopped: a call did not fit the spending cap of {ledgers.usd(budget['max_usd'])} USD "
+                     f"({spent} spent): {len(budget['cut_off'])} cut off, {len(budget['not_run'])} not run")
+        elif budget and budget["max_usd"] is not None:
+            self.say(f"spent {ledgers.usd(budget['spent_usd'] or 0)} of the {ledgers.usd(budget['max_usd'])} USD cap")
+        elif budget:
+            self.say(f"spent {ledgers.usd(budget['spent_usd'] or 0)} USD")
+        if budget and budget.get("over_unit"):
+            self.say(f"{len(budget['over_unit'])} of the {self.bench['units']['nouns']} reached the cap of "
+                     f"{ledgers.usd(budget['unit_max_usd'])} USD each and were cut off there")
+        if self.halted:
+            self.say(f"stopped: the endpoint refused {REFUSED_IN_A_ROW} units in a row ({self.halted[0]}: "
+                     f"{redact(str(self.halted[1]))[:200]}); the {len(work) - len(results)} units not begun were not run")
+        rewards = [(r.get("verifier_result") or {}).get("rewards", {}) for r in results]
+        if self.bench["score"]["kind"] == "pass":
+            ok = sum(1 for w in rewards if w.get("reward") == 1.0)
+            p.emit("done", n=len(results), passed=ok, seconds=round(time.time() - t0, 1))
+            self.say(f"done: {self.counted(results)}, {ok} passed")
+        else:
+            scores = [w["score"] for w in rewards if "score" in w]
+            mean = job.mean_score(results)
+            p.emit("done", n=len(results), scored=len(scores), mean=round(mean, 3) if mean is not None else None,
+                   seconds=round(time.time() - t0, 1))
+            self.say(f"done: {self.counted(results)}, {len(scores)} scored"
+                     + (f", mean {mean:.3f}" if mean is not None else ""))
+        return self.job_dir
+
+    def run_units(self, work: list, write: Callable[[List[dict], Optional[dict]], None], first=None) -> tuple:
+        """The units of ``work`` ((i, unit, r) each), as many at once as the
+        concurrency, then each attempt's retries (``run_again``). Whatever
+        ends them - their end, a Stop, an error - what the run holds is let
+        go, the spending cap's record is read, ``write`` is given the
+        attempts that ended (each its last try) and that record, and the feed
+        says the job's end. ``first``: how each item begins, given the item
+        and the unit's own run: the unit run (by default), or a further try
+        of a trial already in the job (``try_again``, a re-run by hand).
+        Returns (the attempts that ended, the cap's record, when they began)."""
         results = []
         u0 = time.time()
         self._halt, self._refused, self.halted = threading.Event(), [], None
@@ -997,7 +1044,7 @@ class Run:
             if (self.backend == "container" or self.relay_container) and self.base and container.on_loopback(self.base):
                 self.loopback = container.Loopback(self.base, image=self.image, job=self.name).start()
             for iur in work:
-                futures.append(pool.submit(work_unit, iur))
+                futures.append(pool.submit(work_unit, iur) if first is None else pool.submit(first, iur, work_unit))
             pending = set(futures)
             while pending:
                 # timed: Python runs signal handlers only in this thread, and Stop's SIGTERM can reach another thread
@@ -1031,42 +1078,10 @@ class Run:
                 self.loopback.stop()
             budget = self.budget([self.attempt_name(u, r) for n, (_, u, r) in enumerate(work) if n >= len(begun) or not begun[n]])
             self.capped = bool(budget and budget["stopped"])
-            job.write_result(self.job_dir, self.name, t0, time.time(), results, len(work), budget=budget,
-                             served=job.served(self.benchmark_calls(), getattr(self, "serving", None)))
+            write(results, budget)
             errored = sum(1 for x in results if x.get("exception_info"))
             self.feed.emit("job.end", n_completed=len(results) - errored, n_errored=errored, n_cancelled=len(work) - len(results))
-        # the units' stage says why it ended early: a line of its own would be a stage that never starts
-        p.emit("units", "done", seconds=round(time.time() - u0, 1),
-               **({"detail": f"stopped at the spending cap of {ledgers.usd(budget['max_usd'])} USD: "
-                             f"{len(budget['cut_off'])} cut off, {len(budget['not_run'])} not run"} if budget and budget["stopped"] else {}))
-        self.n_verdicts, self.n_ended = sum(1 for x in results if x.get("verifier_result")), len(results)
-        if budget and budget["stopped"]:
-            spent = "unknown" if budget["spent_usd"] is None else ledgers.usd(budget["spent_usd"])
-            self.say(f"stopped: a call did not fit the spending cap of {ledgers.usd(budget['max_usd'])} USD "
-                     f"({spent} spent): {len(budget['cut_off'])} cut off, {len(budget['not_run'])} not run")
-        elif budget and budget["max_usd"] is not None:
-            self.say(f"spent {ledgers.usd(budget['spent_usd'] or 0)} of the {ledgers.usd(budget['max_usd'])} USD cap")
-        elif budget:
-            self.say(f"spent {ledgers.usd(budget['spent_usd'] or 0)} USD")
-        if budget and budget.get("over_unit"):
-            self.say(f"{len(budget['over_unit'])} of the {self.bench['units']['nouns']} reached the cap of "
-                     f"{ledgers.usd(budget['unit_max_usd'])} USD each and were cut off there")
-        if self.halted:
-            self.say(f"stopped: the endpoint refused {REFUSED_IN_A_ROW} units in a row ({self.halted[0]}: "
-                     f"{redact(str(self.halted[1]))[:200]}); the {len(work) - len(results)} units not begun were not run")
-        rewards = [(r.get("verifier_result") or {}).get("rewards", {}) for r in results]
-        if self.bench["score"]["kind"] == "pass":
-            ok = sum(1 for w in rewards if w.get("reward") == 1.0)
-            p.emit("done", n=len(results), passed=ok, seconds=round(time.time() - t0, 1))
-            self.say(f"done: {self.counted(results)}, {ok} passed")
-        else:
-            scores = [w["score"] for w in rewards if "score" in w]
-            mean = job.mean_score(results)
-            p.emit("done", n=len(results), scored=len(scores), mean=round(mean, 3) if mean is not None else None,
-                   seconds=round(time.time() - t0, 1))
-            self.say(f"done: {self.counted(results)}, {len(scores)} scored"
-                     + (f", mean {mean:.3f}" if mean is not None else ""))
-        return self.job_dir
+        return results, budget, u0
 
     def counted(self, results: List[dict]) -> str:
         """What ended, as the run's last line says it: ``3 problems``, and
@@ -1143,7 +1158,7 @@ class Run:
                 return
             self.progress.emit("units", "progress", detail=f"trying {len(todo)} again: retry {retry} of {self.retries}")
             self.say(f"trying again: {len(todo)}, retry {retry} of {self.retries}")
-            tries = {pool.submit(self.try_again, name, by_name[name], retry, work_unit): name for name in todo}
+            tries = {pool.submit(self.try_again, name, by_name[name], self._tries.get(name, 0) + retry, work_unit): name for name in todo}
             pending = set(tries)
             while pending:
                 # Poll so this thread can handle Stop.
@@ -1191,7 +1206,25 @@ class Run:
                     os.rmdir(os.path.dirname(keep))
                 except OSError:
                     pass
+                self._back(name, iur[1], here)
         return res
+
+    def _back(self, name: str, unit: str, here: str) -> None:
+        """The try before, back in its place: said on the feed as its end once more (``back``), so the live
+        board's card reads it, and not a try that never ended."""
+        if self.feed is None:
+            return
+        try:
+            with open(os.path.join(here, "result.json"), encoding="utf-8") as f:
+                res = json.load(f)
+        except (OSError, ValueError):
+            return
+        ei = res.get("exception_info") or {}
+        exc = (str(ei["exception_type"]), str(ei.get("exception_message") or "")) if ei.get("exception_type") else None
+        self.feed.emit("trial.end", name, task=unit, agent=self.other["key"], back=True,
+                       **job.feed_outcome(self.bench["score"]["kind"], (res.get("verifier_result") or {}).get("rewards") or {}, exc),
+                       **{k: v for k, v in (res.get("agent_result") or {}).items() if k in FEED_TOTALS},
+                       durations=job.feed_durations(res))
 
     def ready(self) -> None:
         """What the run needs before its first unit, each a stage said as it
@@ -1404,6 +1437,7 @@ class Run:
         rl, environment, box, changes = None, None, None, None
         image, finished = None, False            # its own image; whether it ended, or was broken off (a Stop)
         retry_ok = True                          # whether its failure is one a further try may mend
+        again = retry - self._tries.get(name, 0)  # the run's own retry this try is: its tries before the run counted out
         try:
             try:
                 # a setup's unit needs none: the upstream's answerer reads its data itself. The unit is set up
@@ -1567,7 +1601,7 @@ class Run:
         install.prune(self.other, home)          # its declared caches: the trial is written, no one reads them now
         verdict = "error " + exc[0] if exc else f"reward {score.get('reward')}"
         self.say(f"  {unit}: {verdict}")
-        self.said_unit(unit, score, exc, retry)
+        self.said_unit(unit, score, exc, again)
         if self.feed is not None:
             self.feed.emit("trial.end", name, task=unit, agent=self.other["key"],
                            **job.feed_outcome(self.bench["score"]["kind"], score, exc),
@@ -1589,7 +1623,7 @@ class Run:
         self._counted[name] = tag
         if image:
             self._held_images[name] = image
-        if not (retry < self.retries and self.retry_if(res) and not self._stopped.is_set()
+        if not (again < self.retries and self.retry_if(res) and not self._stopped.is_set()
                 and not (getattr(self, "_halt", None) is not None and self._halt.is_set()) and not self.cap_spent(i, r)):
             self.let_go(name)                    # its rate limit's end stays: the next unit's pause reads it (``paced``)
         return res

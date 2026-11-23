@@ -102,6 +102,7 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | Cached input | Estimated as if not cached, so a unit can be cut off short of its cap |
 | The result | `result.json` carries `budget` |
 | From the builder | *Limits*: one cap shared in equal parts by the run's jobs, and one per unit |
+| Later parts | The job's one cap: each part has what the parts before it left ([Run tasks again](rerun.md#one-spending-cap-for-a-job)) |
 | Shards | A shard's cap is its own: [Shard and merge](shard-and-merge.md) |
 
 ## Retries
@@ -116,7 +117,7 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | Wrong key, spent credit | No; three in a row stop the run |
 | A setup this machine lacks, a missing secret, a cap reached, Stop, a unit a guard asked to stop, a full context window, failed task | No |
 
-`conform` and `prove` retry a rate limit once.
+`conform` and `prove` retry a rate limit once. Chosen tasks of an ended job run again by hand: [Run tasks again](rerun.md).
 
 ## A list of units
 

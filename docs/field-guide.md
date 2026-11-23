@@ -32,7 +32,7 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 ## Attempts and retries {#attempts}
 
-An attempt is one run of a task, counted whatever its result. A retry reruns an attempt after an infrastructure or agent failure; its last try is the trial.
+An attempt is one run of a task, counted whatever its result. A retry reruns an attempt after an infrastructure or agent failure; its last try is the trial. A task run again by hand after the run ended ([`standard rerun`](cli/rerun.md)) is a further try of the same attempt; a task the run planned and never began, run then, is its first try, and a try killed before its result is kept and counted as a try.
 
 Standard runs with repeated, scored attempts record both measures in `pass_hat_k`. They answer different questions.
 
@@ -181,7 +181,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings are the run's, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
 | `exception_type` | What ended the trial, if anything. It decides the infra / agent split. | measured | any |
-| `n_retries` | Retries a standard run's attempt took. | measured | any |
+| `n_retries` | Retries a standard run's attempt took, runs again by hand included. | measured | any |
 | `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log: no count, never 0. | inferred | any |
 
 ## Standard run records
