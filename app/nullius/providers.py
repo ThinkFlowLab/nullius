@@ -393,15 +393,26 @@ def _models(content: bytes, keep=lambda row: True) -> list[dict]:
     return sorted(models.values(), key=lambda m: (m["name"].casefold(), m["id"]))
 
 
-def list_models(provider: str, env=None, *, opener=None) -> list[dict]:
-    """Read model IDs from the selected provider, or ``custom:<id>``'s endpoint; credentials never leave its endpoint."""
+def list_models(provider: str, env=None, *, opener=None, include_embeddings: bool = False) -> list[dict]:
+    """Read model IDs from the selected provider; credentials never leave its endpoint.
+
+    OpenRouter keeps embeddings in a separate catalogue. Runs needing them
+    request both; the chat model picker still requests only the main list.
+    Failure of either requested catalogue makes the list unavailable, never
+    a partial list that would falsely reject a model during preflight.
+    """
     env = os.environ if env is None else env
     provider, endpoint = split(provider)
     if provider not in PROVIDERS:
         raise ValueError("Choose a model provider.")
     base, _, headers = _where(provider, endpoint, env)
     try:
-        return _models(_get(base + "/models" + ("?limit=1000" if provider == "anthropic" else ""), headers, opener))
+        models = _models(_get(base + "/models" + ("?limit=1000" if provider == "anthropic" else ""), headers, opener))
+        if provider == "openrouter" and include_embeddings:
+            embeddings = _models(_get(base + "/embeddings/models", headers, opener))
+            models = list({m["id"]: m for m in [*models, *embeddings]}.values())
+            models.sort(key=lambda m: (m["name"].casefold(), m["id"]))
+        return models
     except (OSError, ValueError, TypeError, http.client.HTTPException):
         # Provider errors can contain keys or private endpoint details; do not echo them.
         raise ValueError("Model list unavailable. Enter a model ID manually.") from None
