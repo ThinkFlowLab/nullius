@@ -437,8 +437,14 @@
   }
   const proofSpan = p => `<span class="std-proof std-proof-${p.state}"${p.title ? ` title="${esc(p.title)}"` : ''}>${esc(p.text)}</span>`;
   // A control or a check as a plain chip: its name and its proof; where the control comes from is in its title.
-  const controlChip = (c, proof = true) => `<span class="std-ctl" title="${esc((c.key === 'nop' ? 'no answer at all' : c.key === 'oracle' ? 'the reference answers' : '') + ': must score ' + (c.must || (c.key === 'nop' ? 'nothing' : 'everything')))} - ${esc(SOURCE_SAYS[c.source] || c.source)}: ${esc(c.from)}"><b>${esc(c.key)}</b>`
+  const controlChip = (c, proof = true, of = '') => `<span class="std-ctl" title="${of ? esc(of) + ' · ' : ''}${esc((c.key === 'nop' ? 'no answer at all' : c.key === 'oracle' ? 'the reference answers' : '') + ': must score ' + (c.must || (c.key === 'nop' ? 'nothing' : 'everything')))} - ${esc(SOURCE_SAYS[c.source] || c.source)}: ${esc(c.from)}"><b>${esc(c.key)}</b>${of ? `<em>${esc(of)}</em>` : ''}`
     + (proof ? proofSpan(proofOf(c.proven, c.failed, c.expect, c.short)) : '') + '</span>';
+  // A check's chips on the Agent step: its proof on each chosen dataset (the first when none is), never a sum,
+  // since a proof is a dataset's own and datasets can share tasks (GSM8K-Platinum is GSM8K test, cleaned).
+  // Several: one row each, named by its dataset.
+  const controlChips = (o, b, ids) => { const chosen = b.datasets.filter(x => ids.includes(x.id)), ds = chosen.length ? chosen : b.datasets.slice(0, 1);
+    const chip = x => controlChip(((x || {}).controls || []).find(c => c.key === o.key) || {...o, from: o.summary}, true, ds.length > 1 ? x.label : '');
+    return ds.length > 1 ? `<span class="std-ctls">${ds.map(chip).join('')}</span>` : chip(ds[0]); };
   const checkChip = (name, proven, failed, says) => { const p = proofOf(proven, failed); if (p.state === 'ok') { p.title = [says, proven.passed, p.title].filter(Boolean).join(' · '); p.text = '✓'; }
     return `<span class="std-ctl std-checkchip"><b>${esc(name)}</b>${proofSpan(p)}</span>`; };
   // The yes to an agent running as you: asked only for the local backend, where it is no sandbox.
@@ -710,7 +716,6 @@
     if (step === S.agent) {
       const agent = b.family === 'agent', all = C.standardOthers(rec), others = all.filter(o => !o.control && (!o.setup || o.own));
       const setups = all.filter(o => o.setup && !o.own), controls = all.filter(o => o.control);
-      const ds = b.datasets.find(x => C.datasetsOf(rec).includes(x.id)) || b.datasets[0];
       // each chosen agent's options, at its vendor's default unless changed: {ref: {name: word}}
       const chosen = others.filter(o => C.chosenOf(rec).includes(o.key) && !o.why.length), mine = chosen.filter(o => !o.own);
       const optionsOf = o => { const mine = (rec.options || {})[o.key] || {}, opts = Object.entries(o.options || {});
@@ -722,10 +727,8 @@
         }).join('') + '</div>'; };
       // the chosen ones' settings, one tab each: the benchmark's own way, the benchmark's settings every agent takes, each one's own
       const yoursWord = agent ? 'agent' : (b.kind || 'capability');
-      const ds2 = ds;
-      const controlTile = o => { const c = ((ds2 || {}).controls || []).find(x => x.key === o.key) || {...o, from: o.summary};
-        return tile({attr: 'std-other', key: o.key, on: C.chosenOf(rec).includes(o.key), mark: o.key === 'nop' ? '∅' : '≡', title: o.label,
-          tip: o.summary + (b.judged ? ' The judge still runs.' : ''), foot: controlChip(c)}); };
+      const controlTile = o => tile({attr: 'std-other', key: o.key, on: C.chosenOf(rec).includes(o.key), mark: o.key === 'nop' ? '∅' : '≡', title: o.label,
+        tip: o.summary + (b.judged ? ' The judge still runs.' : ''), foot: controlChips(o, b, C.datasetsOf(rec))});
       const setupsNamed = ls => ls.filter(l => !ls.some(m => m !== l && l.startsWith(m))).join(' and ');
       const onSetups = setups.filter(o => C.chosenOf(rec).includes(o.key)).concat(chosen.some(o => o.own) ? [{label: 'Original'}] : []);
       return `<div class="nb-sectionhead"><h2>Who runs it?</h2></div>`
