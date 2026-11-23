@@ -7,12 +7,13 @@ Basic: ``see``, ``click``, ``type``, ``limit``. Skills: ``drag``, ``scroll``, ``
 driver's process, the port's server over that desktop (``computer_port.Bridge`` and ``Server``, its socket in a
 folder of this user's alone) and the kit's loop: a thread that asks the bridge for a step, runs its actions with
 ``Desktop.act`` and waits the pause after each, as a desktop benchmark's own loop does. The session gets the
-server through ``computer_pipe.py`` (``mcp_servers.computer``). The server's window before the task is closed by
-``task_given`` (which the definition's ``driver.task_given`` asks Nullius to send) or, for the reference, as it
-starts; every prepare call is recorded in ``verifier/computer-prepare.jsonl``, the agent's folder is ``FOLDER``.
-``score`` ends the turn, waits for the loop, reads the fixture's log, the actions' times and the call log, judges,
-and removes the desktop and the socket. ``oracle`` is the reference: the right calls, sent to the unit's own server
-as a client.
+server through ``computer_pipe.py`` (``mcp_servers.computer``); setup's ``progress`` names the bridge's progress
+file, beside the call log. The server's window before the task is closed by ``task_given`` (which the definition's
+``driver.task_given`` asks Nullius to send) or, for the reference, as it starts; every prepare call is recorded in
+``verifier/computer-prepare.jsonl``, the agent's folder is ``FOLDER``. ``score`` ends the turn, waits for the loop,
+reads the fixture's log, the actions' times and the call log, judges, says the steps taken, the budget and what ended
+the loop, and removes the desktop and the socket. ``oracle`` is the reference: the right calls, sent to the unit's own
+server as a client.
 
 **late.** One labelled button appears ``LATE_SECONDS`` after the task is given, away from the screen's centre at a
 place drawn for the unit (``late_place``), so that no click at a fixed point finds it; the agent clicks it. It passes
@@ -70,6 +71,7 @@ LOOP_SECONDS = PYTHON_SECONDS + desktop.SETTLE + PAUSE + 30     # the loop's end
 USE = "Use the tools of the MCP server named computer, given to this session: they show and drive a desktop. "
 DONE = " Then reply with the word done."
 NOT_RUN = "The desktop could not run this step, and none of it was run. It may be sent again."
+PROGRESS = os.path.join("verifier", "computer-progress.json")
 
 
 def prompt(unit, expected):
@@ -250,6 +252,7 @@ class Unit:
             self.values, self.expected = checks.draw(unit)
         self.steps = checks.steps(unit)
         self.log = os.path.join(self.trial, "verifier", "computer-calls.jsonl")
+        self.progress = os.path.join(self.trial, PROGRESS)
         self.prepared = os.path.join(self.trial, "verifier", "computer-prepare.jsonl")
         self.desktop = self.bridge = self.server = self.loop = self.folder = self.boxes = None
         self.final, self.error = "", None
@@ -282,8 +285,8 @@ class Unit:
         REAPER.tell(f"+folder {folder}")             # named before it is made
         self.folder = folder
         os.mkdir(folder, 0o700)
-        self.bridge = KitBridge(Pictures(self.desktop, self), self.steps, PAUSE, desktop.SCREEN, FOLDER, window=True,
-                                prepared=self.prepared)
+        self.bridge = KitBridge(Pictures(self.desktop, self), self.steps, PAUSE, desktop.SCREEN, FOLDER,
+                                progress=self.progress, window=True, prepared=self.prepared)
         self.server = KitServer(self.bridge, self.socket(), log=self.log)
         self.loop = threading.Thread(target=self.run_loop, name=f"kit-loop-{self.unit}", daemon=True)
         self.loop.start()
@@ -492,7 +495,7 @@ def setup(unit, dir, **_):
         u.close()
         raise
     return {"prompt": prompt(unit, u.expected), "mcp": [{"name": "computer", "server": "computer", "args": [u.socket()]}],
-            "agent_seconds": AGENT_SECONDS}
+            "agent_seconds": AGENT_SECONDS, "progress": PROGRESS}
 
 
 def task_given(unit, dir, **_):
@@ -527,7 +530,8 @@ def score(unit, dir, transcript, answer, **_):
     else:
         v = checks.verdict(unit, u.expected, events, actions, message, calls, u.bridge.past)
     passed = v["passed"] and u.error is None
-    detail = {"said": (answer or "")[:200], "steps": u.steps, "steps_used": u.bridge.used, "past_budget": u.bridge.past,
+    detail = {"said": (answer or "")[:200], "steps": u.steps, "steps_used": u.bridge.used, "ended": u.bridge.ended_by,
+              "past_budget": u.bridge.past,
               "calls": [c.get("tool") for c in calls], "errors": sum(1 for c in calls if c.get("isError")),
               "actions": len(actions), "events": sum(1 for e in events if e.get("kind") in checks.POINTER + checks.KEYS)}
     why = v["why"] or u.error
