@@ -9,7 +9,8 @@
  *
  * One board, top to bottom: a header line, one stats strip, the outcome bar
  * with its filter chips (and, for more than one agent, the lanes and a winner
- * per task), every trial as a tile, one table with a row per trial in flight and, below them, each that ended,
+ * per task), every trial as a tile, one table with a row per trial in flight, then, while a part of a job's plan
+ * runs, each of its trials not yet begun (Queued) and, below them, each that ended,
  * and a drawer for one trial, where its phases are drawn on its own clock.
  *
  * Rules the fold already enforces are respected here rather than re-derived:
@@ -55,6 +56,8 @@
     return (t.n_input_tokens || 0) + (t.n_output_tokens || 0);
   }
   const pressure = t => (t.timeout_sec && t.elapsed_sec != null ? t.elapsed_sec / t.timeout_sec : 0);
+  // A planned trial outside the part of the plan now running (the snapshot's `part`): not run, not queued.
+  const outside = (s, t) => Array.isArray(s.part) && t.state === 'queued' && !s.part.includes(t.trial);
   function stateOf(s) {
     const C = s.counts || {};
     // Infer an omitted state from running and the counts.
@@ -104,7 +107,10 @@
   const pct = x => `${Math.round(100 * x)}<small>%</small>`;
   function renderStats(s, state, oc) {
     const C = s.counts || {};
-    const queued = C.total != null ? Math.max(0, C.total - C.completed - C.running) : null;
+    const later = (s.trials || []).filter(t => outside(s, t)).length;
+    // while a part runs, its trials not begun, as its table lists them: a task run again counts as done and as running
+    const queued = Array.isArray(s.part) ? (s.trials || []).filter(t => t.state === 'queued' && s.part.includes(t.trial)).length
+      : C.total != null ? Math.max(0, C.total - C.completed - C.running - later) : null;
     const rate = s.elapsed_sec > 60 && C.completed ? C.completed / (s.elapsed_sec / 60) : null;
     const ran = C.completed - (oc.infra_error || 0) - (oc.budget || 0);
     const when = state === 'finished' ? 'on the feed' : 'so far';   // the feed's outcomes, not the classifier's: Results has those
@@ -117,7 +123,8 @@
         + stat(`Adjusted <small>${when}</small>`, ran > 0 ? pct(oc.resolved / ran) : '—', 'rate', !(ran > 0));
     return stat('Done', `${C.completed}<small>/${C.total == null ? '?' : C.total}</small>`)
       + stat('Running', String(C.running))
-      + (C.not_run ? stat('Not run', String(C.not_run)) : stat('Queued', queued == null ? '—' : String(queued), '', queued == null))
+      + (C.not_run ? stat('Not run', String(C.not_run)) : stat('Queued', queued == null ? '—' : String(queued), '', queued == null)
+        + (later ? stat('Not run', String(later)) : ''))
       + stat('Rate', rate ? `${rate.toFixed(1)}<small>/min</small>` : '—', '', !rate)
       + rates;
   }
@@ -160,13 +167,13 @@
     return `<div class="lb-winners" data-winners="${winners.length}"><table><thead><tr><th>Winner per task</th>${agents.map(a => `<th class="num">${esc(a)}</th>`).join('')}<th>winner</th></tr></thead><tbody>${rows}</tbody></table>
       <p class="lb-note">Each agent's best reward on the task so far; a winner is named once every trial of the task ended and one best is strictly higher. A tie names nobody.</p></div>`;
   }
-  function renderTiles(trials, opts, agents, ended) {
+  function renderTiles(trials, opts, agents, ended, s) {
     return trials.map(t => {
       const st = t.state === 'done' ? 'done' : t.state === 'running' ? 'running' : 'queued';
       const cls = st === 'done' ? ` lbo-${esc(t.outcome || 'cancelled')}` : st === 'running' ? ` lbp-${esc(t.phase)}` : '';
       const w = st === 'running' && t.timeout_sec ? ` style="--p:${Math.min(1, pressure(t)).toFixed(3)}"` : '';
       const dim = opts.filter && t.outcome !== opts.filter ? ' dim' : '';
-      const label = `${shortTask(t)}${agents.length > 1 ? ' · ' + (t.agent || '') : ''}: ${st === 'done' ? (OUTCOME_LABEL[t.outcome] || 'ended') : st === 'running' ? PHASE_LABEL[t.phase] || t.phase : ended ? 'not run' : 'queued'}`;
+      const label = `${shortTask(t)}${agents.length > 1 ? ' · ' + (t.agent || '') : ''}: ${st === 'done' ? (OUTCOME_LABEL[t.outcome] || 'ended') : st === 'running' ? PHASE_LABEL[t.phase] || t.phase : ended || outside(s, t) ? 'not run' : 'queued'}`;
       return `<button type="button" class="lb-tile ${st}${cls}${dim}" data-trial="${esc(t.trial)}"${w} aria-current="${opts.selected === t.trial}" aria-label="${esc(label)}" title="${esc(label)}"><i></i></button>`;
     }).join('');
   }
@@ -188,11 +195,14 @@
     }
     const ended = (t) => ((s.timeline || {})[t.trial] || {}).ended || '';
     const done = trials.filter(t => t.state === 'done').sort((a, b) => ended(a).localeCompare(ended(b)));
-    if (!running.length && !done.length) return '<p class="lb-quiet">Nothing is running at this poll.</p>';
-    const busy = running.length > FLIGHT_SHOWN, many = done.length > FLIGHT_SHOWN;
+    // the tasks of the part now running that have not begun: a row each, under the running ones
+    const queued = Array.isArray(s.part) ? trials.filter(t => t.state === 'queued' && s.part.includes(t.trial)) : [];
+    if (!running.length && !done.length && !queued.length) return '<p class="lb-quiet">Nothing is running at this poll.</p>';
+    const busy = running.length > FLIGHT_SHOWN, many = done.length > FLIGHT_SHOWN, waits = queued.length > FLIGHT_SHOWN;
     const order = busy ? running.slice().sort((a, b) => pressure(b) - pressure(a)) : running;
     const rows = opts.showAll ? order : order.slice(0, FLIGHT_SHOWN);
     const doneRows = opts.showAll ? done : done.slice(-FLIGHT_SHOWN);
+    const queuedRows = opts.showAll ? queued : queued.slice(0, FLIGHT_SHOWN);
     // a column appears once some trial reported it; a single missing cell is "—"
     const has = {steps: trials.some(t => t.step != null), tokens: trials.some(t => tokensOf(t) != null), line: trials.some(t => t.activity || t.last_line)};
     const body = rows.map(t => {
@@ -205,6 +215,13 @@
         ${has.steps ? `<td class="num${t.step == null ? ' na' : ''}">${t.step == null ? '—' : esc(t.step)}</td>` : ''}
         ${has.tokens ? `<td class="num${tok == null ? ' na' : ''}">${count(tok)}</td>` : ''}
         ${has.line ? `<td><span class="lb-line${line ? '' : ' na'}" title="${esc(line || '')}">${line ? redacted(line) : '—'}</span></td>` : ''}<td class="lb-go"></td></tr>`;
+    }).join('') + queuedRows.map(t => {
+      // a trial never begun may have no task named yet: its name less the runner's tag (__u0042, __u0042r2)
+      const dim = opts.filter ? ' dim' : '', none = '<td class="num na">—</td>', named = t.task ? t : {trial: String(t.trial).replace(/__u\d{4,}(?:r\d+)?$/, '')};
+      return `<tr class="lb-row lb-queued${dim}" data-trial="${esc(t.trial)}" tabindex="0" aria-current="${opts.selected === t.trial}">
+        <td><span class="task" title="${esc(t.task || t.trial)}">${esc(shortTask(named))}</span>${agents.length > 1 ? `<small>${esc(t.agent || '')}</small>` : ''}</td>
+        <td><span class="lb-phase">Queued</span></td><td class="na">—</td>
+        ${has.steps ? none : ''}${has.calls ? none : ''}${has.tokens ? none : ''}${has.line ? '<td class="na">—</td>' : ''}<td class="lb-go"></td></tr>`;
     }).join('') + doneRows.map(t => {
       // an ended trial: its outcome, its time in all, its tokens, and its page
       const tok = tokensOf(t), line = t.activity || t.last_line, href = trialHref(t, opts);
@@ -218,8 +235,9 @@
         ${has.line ? `<td><span class="lb-line${line ? '' : ' na'}" title="${esc(line || '')}">${line ? redacted(line) : '—'}</span></td>` : ''}<td class="lb-go">${href ? `<a class="lb-open-row" href="${esc(href)}">Open →</a>` : ''}</td></tr>`;
     }).join('');
     const said = [busy ? (opts.showAll ? `All ${running.length} in flight` : `${rows.length} of ${running.length} in flight`) + ', nearest their limit first' : '',
+      waits ? (opts.showAll ? `all ${queued.length} queued` : `the first ${queuedRows.length} of ${queued.length} queued`) : '',
       many ? (opts.showAll ? `all ${done.length} ended` : `the last ${doneRows.length} of ${done.length} ended`) : ''].filter(Boolean).join(' · ');
-    const more = busy || many ? `<div class="lb-more"><span>${said}</span><button type="button" class="btn sm ghost" data-show-all>${opts.showAll ? 'Show fewer' : 'Show all'}</button></div>` : '';
+    const more = busy || many || waits ?`<div class="lb-more"><span>${said}</span><button type="button" class="btn sm ghost" data-show-all>${opts.showAll ? 'Show fewer' : 'Show all'}</button></div>` : '';
     return `<div class="lb-scroll"><table class="lb-table"><thead><tr><th>${busy ? 'Trial, the running nearest their limit first' : 'Trial'}</th><th>Phase, or how it ended</th><th>Time in phase, of its limit</th>${has.steps ? '<th class="num">Steps</th>' : ''}${has.tokens ? '<th class="num">Tokens</th>' : ''}${has.line ? '<th>Last line, redacted</th>' : ''}<th class="lb-go" aria-label="Trial page"></th></tr></thead><tbody>${body}</tbody></table></div>${more}`;
   }
   // One trial: its phases on its own clock, from the feed's own phase events
@@ -254,7 +272,7 @@
     const events = (s.tail || []).filter(e => e.trial === t.trial).slice(-6);
     const state = t.state === 'done' ? `${OUTCOME_LABEL[t.outcome] || 'Ended'}${t.total_sec != null ? ', ' + clock(t.total_sec) + ' in all' : ''}`
       : t.state === 'running' ? `${PHASE_LABEL[t.phase] || t.phase}, ${clock(t.elapsed_sec)} of ${t.timeout_sec ? clock(t.timeout_sec) : 'no limit'}`
-      : stateOf(s) === 'finished' ? 'Not run' : `Queued${t.position != null ? ', position ' + (t.position + 1) : ''}`;
+      : stateOf(s) === 'finished' || outside(s, t) ? 'Not run' : `Queued${t.position != null ? ', position ' + (t.position + 1) : ''}`;
     const href = trialHref(t, opts);
     return `<header><h3>${esc(shortTask(t))}<small>${esc(state)}${t.agent ? ' · ' + esc(t.agent) : ''}</small></h3><button class="lb-x" type="button" data-close aria-label="Close trial detail">×</button></header>
       <div class="lb-river"><div class="lb-rl"><span>${t0 == null ? 'not started' : hms(starts[keys[0]])}</span><span>${tl.ended ? 'ended ' + hms(tl.ended) : limEnd ? 'limit ' + clock(limEnd - t0) + ' in' : ''}</span></div>
@@ -292,7 +310,7 @@
       winners: renderWinners(winners),
       tilesLabel: `All ${trials.length} trial${trials.length === 1 ? '' : 's'}`,
       manyTiles: trials.length > MANY_TILES,
-      tiles: renderTiles(trials, opts, agents, state === 'finished'),
+      tiles: renderTiles(trials, opts, agents, state === 'finished', s),
       flight: renderFlight(s, state, opts, oc, agents),
       drawer: picked ? renderDrawer(s, picked, opts) : '',
     };

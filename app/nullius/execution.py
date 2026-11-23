@@ -48,6 +48,11 @@ Proofs update that copy, never the shared runner. Both ``jobs/`` and
 ``catalogue/`` are mirrored back beside the run record; remote proofs do
 not replace the local user's active definitions.
 
+A run that has ended can take one more part in its own folder, where it
+ran (``Execution.again``): the standard's ``rerun`` of chosen tasks of one
+of its jobs, started from the job's page. It is prepared, launched,
+followed and mirrored as a part is; each job's end stays its first part's.
+
 An agent's run that fails with more to come pauses the run and the page
 asks: continue or stop. Every state change lands in ``runs/<name>/run.json``;
 ``restore`` reads those records when Nullius starts and reattaches to what
@@ -255,6 +260,7 @@ class Plan:
     docker: bool = False                      # a runner that needs docker on its target though it is not Harbor (the standard's container backend)
     keyless: bool = False                     # nothing in it calls a model (the standard's controls): handed no key and no endpoint at all
     licences: dict = field(default_factory=dict)     # the standard's on a host: {"benchmark", "names", "providers"} - what it is sent of that benchmark's licences
+    caps: dict = field(default_factory=dict)         # a job's spending cap set on its page, {job: USD}: its next part runs under it
 
     def steps(self) -> List[dict]:
         return [p for p in self.parts if p.get("script")] or [{"id": "run", "label": "the run", "script": self.script}]
@@ -381,17 +387,7 @@ class Execution:
         # the first command cut short.
         self._run_plain = run or subprocess_run
         self._run = run or (lambda argv, timeout=600.0, stdin=None: subprocess_run(argv, timeout, stdin, stop=self._stop))
-        # an endpoint of the run's own (url_var: an OpenAI-compatible one) may check no key: it is sent the placeholder
-        self._key = (key if key is not None else env.get(plan.key_var, "")) or (settings.MODEL_KEY_PLACEHOLDER if plan.url_var else "")
-        self._url = url if url is not None else (providers.base_of(plan.url_var, env) if plan.url_var else plan.base_url)
-        if plan.keyless:                          # a run that calls no model is given nothing it could leak
-            self._key, self._url = "", ""
-        # the agent keys Settings holds (CURSOR_API_KEY, ...): a Harbor run's agent may need its own vendor's; the standard's never gets one
-        self._agent_keys = dict(agent_keys) if agent_keys is not None else (settings.agent_key_values(env) if plan.runner == "harbor" else {})
-        if plan.runner == "standard" and (plan.recipe or {}).get("backend") == "boat":
-            from nullius.standard.backends import boat      # the Boat key, to the standard run that starts VMs with it, and to no other command
-            if boat.key(env):
-                self._agent_keys[boat.NAME] = boat.key(env)
+        self._credentials(key, url, env, agent_keys)
         # the benchmark's licences a standard run on a host is sent: read from its store at each launch, unless given
         self._licences_given = licences
         self._redact: List[str] = []              # the licences' values sent, as text: never in a log line
@@ -442,6 +438,22 @@ class Execution:
             self._unread = True
             if self.state in ALIVE:
                 self._read_log()
+
+    def _credentials(self, key: Optional[str], url: Optional[str], env, agent_keys: Optional[Dict[str, str]] = None) -> None:
+        """The key, the endpoint and the agent keys the run is sent, read from ``env`` unless given: when it
+        starts, and again when it runs a part again (``again``)."""
+        plan = self.plan
+        # an endpoint of the run's own (url_var: an OpenAI-compatible one) may check no key: it is sent the placeholder
+        self._key = (key if key is not None else env.get(plan.key_var, "")) or (settings.MODEL_KEY_PLACEHOLDER if plan.url_var else "")
+        self._url = url if url is not None else (providers.base_of(plan.url_var, env) if plan.url_var else plan.base_url)
+        if plan.keyless:                          # a run that calls no model is given nothing it could leak
+            self._key, self._url = "", ""
+        # the agent keys Settings holds (CURSOR_API_KEY, ...): a Harbor run's agent may need its own vendor's; the standard's never gets one
+        self._agent_keys = dict(agent_keys) if agent_keys is not None else (settings.agent_key_values(env) if plan.runner == "harbor" else {})
+        if plan.runner == "standard" and (plan.recipe or {}).get("backend") == "boat":
+            from nullius.standard.backends import boat      # the Boat key, to the standard run that starts VMs with it, and to no other command
+            if boat.key(env):
+                self._agent_keys[boat.NAME] = boat.key(env)
 
     def _read_log(self) -> None:
         self._unread = False
@@ -554,17 +566,29 @@ class Execution:
         job = next((j for j in self.plan.jobs if str(j.get("name")) == job_id), None)
         if job is None:
             return None
+        steps = [p for p in steps if not p.get("again")]          # a part run again later writes no job of its own
         for p in steps:
             if job.get("agent") == p["id"] or job_id == f"{self.plan.name}-{p['id']}":
                 return p["id"]
         return steps[0]["id"] if len(steps) == 1 else None
+
+    def again_of(self, job_id: str) -> Optional[dict]:
+        """The part running tasks of this job again (``again``), while it is the run's part under way; else None."""
+        steps = self.plan.steps()
+        if self.state not in ALIVE or self.part >= len(steps):
+            return None
+        return steps[self.part] if steps[self.part].get("again") == job_id else None
 
     def job_state(self, job_id: str) -> Optional[tuple]:
         """``(state, finished_at)`` for one job of this run once it has ended:
         a complete, error-free standard result when jobs share a part, then
         its own part's result when that part ran to its end - an arm that
         answered every question is done though a later one failed - else the
-        run's, once the run has ended. None while it is still to come."""
+        run's, once the run has ended. None while it is still to come, or
+        while tasks of it run again (``again_of``); once they have, the job's
+        end is still its own part's."""
+        if self.again_of(job_id) is not None:
+            return None
         part = self.part_for(job_id)
         # Conformance runs several kits in one process. Its exit code belongs
         # to the whole step, not to each kit that already finished cleanly.
@@ -615,7 +639,7 @@ class Execution:
         if self.state not in ALIVE:
             return None
         part = self.part_for(job_id)
-        if self.state in ("preparing", "stopping") or part is None or part == self.launched:
+        if self.state in ("preparing", "stopping") or part is None or part == self.launched or self.again_of(job_id) is not None:
             return self.state
         return NOT_RUN if self.state == "paused" else "queued"
 
@@ -758,21 +782,80 @@ class Execution:
             problem = self.plan.check()
             if problem:
                 return self._fail("plan", problem)
-            harbor_model = "NULLIUS_HARBOR" in (self.plan.script + "".join(p.get("script", "") for p in self.plan.parts)) and self.plan.model
-            if not self._key and harbor_model:
-                return self._fail("credentials", f"{self.plan.key_var} is not set in Settings; the run would have no model key")
-            if not self._key and self.plan.runner != "harbor" and not self.plan.keyless:
-                return self._fail("credentials", f"{self.plan.key_var} is not set in Settings; the producers and the judge would have no model key")
-            if not self._url and self.plan.url_var and not self.plan.keyless and (harbor_model or self.plan.runner != "harbor"):
-                return self._fail("credentials", f"{self.plan.url_var} is not set in Settings; an OpenAI-compatible endpoint has no default, so the run would have nowhere to send its calls")
-            broken = self._line_break()
-            if broken:
-                return self._fail("credentials", broken)
+            missing = self._missing()
+            if missing:
+                return self._fail("credentials", missing)
             if not self._prepare(fresh=True):
                 return
             self._parts()
         except Exception as e:                           # a step that raised is a failed run, not a dead thread
             self._fail(self.step or "run", f"{type(e).__name__}: {e}")
+
+    def _missing(self) -> Optional[str]:
+        """Why the run's key or endpoint cannot be sent, or None: not set, or holding a line break."""
+        harbor_model = "NULLIUS_HARBOR" in (self.plan.script + "".join(p.get("script", "") for p in self.plan.parts)) and self.plan.model
+        if not self._key and harbor_model:
+            return f"{self.plan.key_var} is not set in Settings; the run would have no model key"
+        if not self._key and self.plan.runner != "harbor" and not self.plan.keyless:
+            return f"{self.plan.key_var} is not set in Settings; the producers and the judge would have no model key"
+        if not self._url and self.plan.url_var and not self.plan.keyless and (harbor_model or self.plan.runner != "harbor"):
+            return f"{self.plan.url_var} is not set in Settings; an OpenAI-compatible endpoint has no default, so the run would have nowhere to send its calls"
+        return self._line_break()
+
+    def again(self, part: dict, env=os.environ) -> "Execution":
+        """One more part, in this ended run's folder where it ran - here, or on
+        its host: a standard ``rerun`` of chosen tasks of one of its jobs
+        (``part["again"]``, the job; ``standard/pages/recipe.py`` ``again``). The run
+        is taken up as it was started: the target made ready again (its folder
+        is its own, so its name is not asked), the running backend and
+        catalogue sent again, the key and the endpoint read now from ``env``
+        and sent over stdin, the part launched detached and followed, the job
+        mirrored back as it goes. The part's files are its own
+        (``run-<part>``): nothing of a part before is read as its. Its end is
+        the run's; each job's own end stays its first part's (``job_state``).
+        ValueError while the run lives."""
+        with self._turn:
+            if self.state in ALIVE:
+                raise ValueError(f"{self.plan.name} is {self.state}: a run takes one more part once it has ended")
+            self.plan.parts.append(dict(part))
+            self._credentials(None, None, env)
+            self.part = [p["id"] for p in self.plan.steps()].index(part["id"])
+            self.state, self.step, self.exit_code, self.error, self.question, self.finished = "preparing", "", None, None, None, None
+            self.pid, self._live, self.log_offset, self.progress = None, None, 0, None
+            self._stop, self._decision = threading.Event(), threading.Event()
+            self.log(f"— {part['label']}, on {self.plan.host.label if self.on_host else 'this machine'}")
+            self._save()
+        self.thread = threading.Thread(target=self._main_again, name=f"run-{self.plan.name}", daemon=True)
+        self.thread.start()
+        return self
+
+    def _main_again(self) -> None:
+        try:
+            missing = self._missing()
+            if missing:
+                return self._fail("credentials", missing)
+            if not self._prepare(fresh=False, again=True):
+                return
+            self._parts()
+        except Exception as e:
+            self._fail(self.step or "run", f"{type(e).__name__}: {e}")
+
+    def holds(self, job_id: str) -> Optional[str]:
+        """Why this run cannot run tasks of its job ``job_id`` again where it
+        ran, or None when it can: the job's record is there - asked of its
+        host now, whose copy Delete launch may have taken."""
+        if job_id not in {str(j.get("name")) for j in self.plan.jobs}:
+            return f"{self.plan.name} wrote no job {job_id}"
+        if not self.on_host:
+            return None if os.path.isfile(os.path.join(self.jobs, job_id, "result.json")) else f"This machine no longer holds {job_id}"
+        record = _rq(f"{self._run_dir()}/jobs/{job_id}/result.json")
+        rc, out = self._run_plain(self.plan.host.argv(f"[ -f {record} ] && echo @held || echo @gone", timeout=15), 30)
+        words = out.split()
+        if rc == 0 and "@held" in words:
+            return None
+        if rc == 0 and "@gone" in words:
+            return f"{self.plan.host.label} no longer holds {job_id}: nothing was started"
+        return f"{self.plan.host.label} did not say whether it holds {job_id}: " + redact.redact(out.strip()[-200:])
 
     def _main_resumed(self) -> None:
         try:
@@ -916,6 +999,7 @@ class Execution:
         said = False
         for name in names:
             feed = os.path.join(self.jobs, name, "events.jsonl")
+            ends: Dict[str, int] = {}
             try:
                 with open(feed, encoding="utf-8", errors="replace") as fh:
                     for raw in fh:
@@ -925,8 +1009,12 @@ class Execution:
                             ev = json.loads(raw)
                         except ValueError:
                             continue
-                        key = (name, ev.get("trial"))
-                        if ev.get("event") != "trial.end" or key in self._seen_trials:
+                        if ev.get("event") != "trial.end" or ev.get("back"):
+                            continue                         # a try put back after a Stop ended nothing new
+                        # a trial run again ends once more in the same feed: its later ends are said too, each once
+                        k = ends[str(ev.get("trial"))] = ends.get(str(ev.get("trial")), 0) + 1
+                        key = (name, ev.get("trial") if k == 1 else f"{ev.get('trial')}#{k}")
+                        if key in self._seen_trials:
                             continue
                         with self._turn:                     # _save reads the set from the page's thread too
                             self._seen_trials.add(key)
@@ -989,7 +1077,7 @@ class Execution:
         return result
 
 
-    def _prepare(self, fresh: bool = True) -> bool:
+    def _prepare(self, fresh: bool = True, again: bool = False) -> bool:
         """The target ready for the parts: the tasks, and what the run needs
         there - for a Harbor recipe docker, here or on a host, and the Harbor it pins
         or, without a pin, the harbor
@@ -1000,9 +1088,10 @@ class Execution:
         there already, and stops before anything is sent when it is: a
         leftover of the same name would otherwise read as this run's parts,
         claimed or ended already.
-        A restored run's directory is its own."""
+        A restored run's directory is its own, and so is the directory of a
+        run taken up ``again``, which is checked and said as a fresh one is."""
         self.harbor = "harbor"
-        if fresh and not self.on_host and (self.plan.runner == "harbor" or self.plan.docker):
+        if (fresh or again) and not self.on_host and (self.plan.runner == "harbor" or self.plan.docker):
             # before a pin is built: a run here without docker would start, and every trial fail at its container
             why = (docker_here(self._sh) if self.plan.runner == "harbor"
                    else docker_here(self._sh, "this recipe runs its units in containers", container.DOCKER))
@@ -1010,7 +1099,7 @@ class Execution:
                 self._fail("docker", why)
                 return False
         pin = self.plan.harbor_pin if self.plan.runner == "harbor" else {}
-        if fresh and (self.on_host or pin):
+        if (fresh or again) and (self.on_host or pin):
             self.log(progress.line("plan", stages=",".join(
                 (["harbor"] if pin else []) + (["connect", *(["uv"] if pin or self.plan.runner != "harbor" else []),
                                                 *(["tasks"] if self.plan.tasks else []), *(["app"] if self.plan.runner == STANDARD else [])]

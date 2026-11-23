@@ -30,6 +30,31 @@ Foreign results open the same way: [Open existing results](getting-started.md#op
 | 3 | Conversation and tool calls | Which actions led there? |
 | 4 | Trace and artifacts | Which calls failed or ran slowly? What files were produced? |
 
+## Run tasks again
+
+On a job of the Nullius standard that has ended: tick the rows, or **Select the rows shown** under the outcome filter,
+then **Run selected again**. A task the job planned with no result (never run, or its run killed) is a row of its own,
+outcome **No result**, ticked the same way; it is run, not run again.
+
+A job [begun on a part of its plan](cli/run.md#plan-the-whole-begin-with-a-part) says how many of its planned tasks have run, in its head and beside
+the rates, which are over the tasks run. Each planned task not run yet is a row with no attempt, outcome **Not run**.
+**Run the rest** ticks every task with no result; **Run a set** ticks those a task set of its dataset names; either opens
+the same question. The runs list counts its solves over the trials run and says how many of the plan have run.
+
+| Step | Detail |
+| --- | --- |
+| Ask | Tasks with no result alone: "Run the N tasks not yet run, on HOST?" and the budget left. With a result among them: their names, a reason (optional), the budget left |
+| Spending cap | One for the whole job: each part has what the parts before it left. **Change** sets it for the next part, not while a part runs; a job with none gets one by **Set**. Nothing left: Run waits for a higher cap |
+| Where | Where the job ran: this machine, or the host it was sent to, in the job's own folder |
+| While it runs | Each task shows its earlier result, marked **running again**, until the new one lands |
+| After | The new result is the task's; the earlier tries stay as its tabs, the one asked for marked **run again by hand** with its reason, a task's first run in a later part **first run, in a later part**; **Run later** lists each later run, the tasks run for the first time and the tries that had no result |
+| No button | A job not started from this application, still running, merged from shards, or whose host left Settings: one line says which |
+| Refused, nothing started | A host that no longer holds the job; a provider whose key is not set here |
+
+A re-run on a host uses the job's own copy of the catalogue on purpose: the job remains one run under the definitions it recorded.
+
+The rules and the record: [`nullius standard rerun`](cli/rerun.md).
+
 ## Check the task
 
 - **Controls:** the `nop` and `oracle` jobs beside the agent's ([Core concepts](concepts.md#benchmark)).

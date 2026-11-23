@@ -1027,6 +1027,20 @@ def where_label(target: str) -> str:
     return "this machine" if target == "local" else hosts.parse(target).label
 
 
+def again(job: str, trials: List[str], *, reason: str = "", max_usd: Optional[float] = None, n: int = 1) -> dict:
+    """The part that runs the trials ``trials`` of the ended job ``job`` again, in that job, where its run ran
+    (``execution.Execution.again``): ``cli rerun`` on the job's folder under ``$NULLIUS_JOBS``, from the same
+    tree a run's command is, with the key it is handed (``--from-run``). ``n``: its number among the run's re-runs."""
+    words = [*(w for t in trials for w in ("--unit", t)), *(["--reason", reason] if reason else []),
+             *(["--max-usd", f"{max_usd:.6f}".rstrip("0").rstrip(".")] if max_usd else []), "--from-run"]
+    command = ('nullius standard rerun "${NULLIUS_JOBS:-jobs_standard}"/' + shlex.quote(job) + " "
+               + " ".join(shlex.quote(w) for w in words))
+    k = len(trials)
+    return {"id": f"again-{n}", "label": f"{k} {'task' if k == 1 else 'tasks'} of {job} again", "again": job,
+            "trials": list(trials), "script": "#!/usr/bin/env bash\n# Chosen tasks of an ended job, run again in that job.\n"
+                                              + _script(command)}
+
+
 def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: bool, stamp: str, backend: str = "local") -> dict:
     """The check an Agents or Capabilities page starts: every kit the agent or
     capability can take, as one command (``cli conform``), the jobs it will

@@ -20,6 +20,8 @@ nullius standard rerun JOB_DIR (--unit ID ... | --units FILE | --unfinished | --
 | `--max-usd USD` | The job's [spending cap](run.md#a-spending-cap) from now on, below |
 | `--from-run` | Started by Nullius: `OPENAI_API_KEY` and `OPENAI_BASE_URL` only, saved settings unread |
 
+From a job's page: [Run tasks again](../results.md#run-tasks-again), on the machine the job ran on.
+
 `--unfinished` takes only those three kinds.
 A trial with a score, or one that ended on any other error, the agent's own among them, runs again only when named with `--unit`.
 
@@ -52,7 +54,7 @@ A trial with a score, or one that ended on any other error, the agent's own amon
 
 ## A job begun on a part
 
-A run begun with [`--start-with`](run.md#plan-the-whole-begin-with-a-part) has the rest of its plan with no attempt. `--next N`, `--set NAME` or `--unfinished` runs more of it in the job, a part at a time or all at once.
+A run begun with [`--start-with`](run.md#plan-the-whole-begin-with-a-part) has the rest of its plan with no attempt. `--next N`, `--set NAME` or `--unfinished` runs more of it in the job, a part at a time or all at once; from the job's page, **Run a set** or **Run the rest**.
 
 | Rule | Detail |
 | --- | --- |

@@ -578,14 +578,20 @@ def job(job_id):
             return render_template("runs/preparing.html", job_id=job_id, ex=ex, csrf=shared._csrf_token(), own=own, deletable=_deletable(job_id, ex))
         abort(404)
     from . import judge
+    from . import execute
     board = _live_board_state(j)
+    again = ex.again_of(job_id) if ex is not None else None
+    j, running_again = _until_again(j, (again or {}).get("trials") or [])
+    waiting = waiting_of(j, (again or {}).get("trials") or [])
     analysis, versions = _analysis_of(j)
     return render_template("runs/job.html", job=j, live_board=board, view=_view_of(board, j, ex),
                            execution=ex, csrf=shared._csrf_token(), set_link=_set_link(j), set_saving=_set_saving(j),
                            judgement=judge.job_summary(j) if j.trials else None,
                            control=feasibility.summary_of(j), ended=shared.ended_for(job_id), own=own, deletable=_deletable(job_id, ex),
                            trial_rows=attempts.grouped(j), pass_k=attempts.for_job(j),
-                           filtered=_filtered_of(j, analysis, versions), marks=_marks_of(analysis, versions))
+                           filtered=_filtered_of(j, analysis, versions), marks=_marks_of(analysis, versions),
+                           again=execute.again_offer(j, ex), running_again=running_again, rerunning=again is not None,
+                           waiting=waiting, plan_sets=plan_sets(j, waiting), job_cap=execute.job_cap(j, ex))
 
 
 def _analysis_of(j):
@@ -627,6 +633,59 @@ def _filtered_of(j, analysis, versions):
     views = [failure_analysis.filtered(j, analysis, combo, versions)
              for n in range(1, len(offered) + 1) for combo in combinations(offered, n)]
     return {"view": f, "views": views}
+
+
+def waiting_of(j, running=()) -> list:
+    """The tasks a standard job planned that have no result (``rerun.unfinished``), each {trial, trials, unit, folder,
+    running, outcome}: one row per unit, with its planned attempts in ``trials`` and its first in ``trial``.
+    Never begun, or begun and ended with none (``folder``); ``running``, one of the trials
+    ``running`` names, those a re-run under way runs. ``outcome``: ``not_run`` for a task never begun of a job
+    begun on a part of its plan (``start_with``), ``no_result`` otherwise. Its feed is read only for a job with
+    fewer trials than it planned: [] for every other job."""
+    if not j.standard or len(j.trials) >= j.n_planned:
+        return []
+    from nullius.standard.runner import rerun
+    waiting = {}
+    for name, x in rerun.unfinished(j.dir).items():
+        row = waiting.setdefault(x["unit"], dict(x, trial=name, trials=[], running=False,
+                                               outcome="not_run" if j.start_with else "no_result"))
+        row["trials"].append(name)
+        row["running"] |= name in running
+        if x["folder"]:
+            row.update(folder=x["folder"], outcome="no_result")
+    return list(waiting.values())
+
+
+def plan_sets(j, waiting: list) -> list:
+    """The task sets of the job's benchmark and dataset that name planned tasks with no result: [{name, trials,
+    tasks}], ``name`` the set's label, ``trials`` those of ``waiting`` (:func:`waiting_of`) the set names and no
+    re-run is running. What the job page's "Run a set" offers; [] when no set names one."""
+    if not waiting:
+        return []
+    try:
+        with open(os.path.join(j.dir, "config.json"), encoding="utf-8") as f:
+            cfg = json.load(f)
+        bench = (cfg.get("standard") or {}).get("benchmark")
+        dataset = str(((cfg.get("datasets") or [{}])[0] or {}).get("name") or "").partition("/")[2]
+    except (OSError, ValueError, AttributeError):
+        return []
+    if not isinstance(bench, str) or not bench:
+        return []
+    try:
+        entries, _ = task_sets.entries(bench)
+    except task_sets.Refused:
+        return []
+    out = []
+    for e in entries:
+        if e.get("dataset") != dataset:
+            continue
+        last = task_sets.latest(e)
+        wanted = set(last["units"])
+        trials = [w["trial"] for w in waiting if w["unit"] in wanted and not w["running"]]
+        if trials:
+            out.append({"name": task_sets.label_of(e), "trials": trials,
+                        "tasks": len({w["unit"] for w in waiting if w["trial"] in trials})})
+    return out
 
 
 def _set_link(j) -> dict:
@@ -686,6 +745,26 @@ def job_task_set(job_id):
         return redirect(back)
     flash(f"Saved the task set {entry['label']}: {len(got['units'])} {'task' if len(got['units']) == 1 else 'tasks'}.", "ok")
     return redirect(url_for("benchmark_tasks", key=bench["key"], dataset=entry["dataset"], set=entry["name"]))
+
+
+def _until_again(j, names):
+    """The job as its page shows it while the trials ``names`` run again: a trial whose new try has not ended
+    has no result in its folder yet, and its last try kept in ``retried/`` stands in its place until it has.
+    (the job, the names of the trials shown by an earlier try)."""
+    have = {t.trial_name for t in j.trials}
+    earlier = []
+    for name in names:
+        if name in have:
+            continue
+        kept = os.path.join(j.dir, "retried")
+        tries = [int(k.rpartition(".try-")[2]) for k in (os.listdir(kept) if os.path.isdir(kept) else ())
+                 if k.startswith(name + ".try-") and k.rpartition(".try-")[2].isdigit()]
+        t = parse.parse_trial(j.job_id, os.path.join(kept, f"{name}.try-{max(tries)}")) if tries else None
+        if t is not None:
+            earlier.append(replace(t, trial_name=name))
+    if not earlier:
+        return j, set()
+    return replace(j, trials=sorted(j.trials + earlier, key=lambda t: t.trial_name)), {t.trial_name for t in earlier}
 
 
 def _runs_of(g, owner=None) -> list:
@@ -921,7 +1000,33 @@ def _live_board_state(j):
     # "running" here means "show the board and keep polling": the preparation
     # window and the starting state are on the board too, so it is every
     # state but finished — and unknown, an empty feed, which has nothing to show.
-    return {"running": snap["state"] in ("preparing", "starting", "running"), "initial": snap}
+    return {"running": snap["state"] in ("preparing", "starting", "running"), "initial": _with_part(j, snap)}
+
+
+def _with_part(j, snap: dict) -> dict:
+    """The board's snapshot, with ``part`` while a standard job's run goes on over a part of its plan: the trials
+    of that part, the units its config began with or those the latest later start names, or the trial IDs chosen
+    for that later start where this application started it. The board counts the planned trials outside it as not
+    run, not queued. The snapshot as it was otherwise."""
+    if not j.standard or snap.get("state") not in ("starting", "running"):
+        return snap
+    from nullius.standard.runner import rerun
+    try:
+        starts = [e.data for e in live.read_events(live.feed_path(j.dir)).events if e.event == "job.start"]
+        with open(os.path.join(j.dir, "config.json"), encoding="utf-8") as f:
+            began = ((json.load(f).get("standard") or {}).get("start_with") or {}).get("units")
+    except (OSError, ValueError, AttributeError):
+        return snap
+    units = starts[-1].get("tasks") if len(starts) > 1 else began
+    plan = rerun.planned(j.dir) if isinstance(units, list) else None
+    if not plan:
+        return snap
+    ex = execution.for_job(j.job_id) if len(starts) > 1 else None
+    chosen = ex.again_of(j.job_id) if ex is not None else None
+    if chosen is not None:                   # the attempts chosen, not every attempt of their tasks
+        return dict(snap, part=list(dict.fromkeys(chosen["trials"])))
+    wanted = set(units)
+    return dict(snap, part=[name for name, unit in plan if unit in wanted])
 
 
 @app.route("/job/<job_id>/live")
@@ -951,6 +1056,6 @@ def job_live(job_id):
         response.status_code = 422
         response.headers["Cache-Control"] = "no-store"
         return response
-    response = jsonify(snap)
+    response = jsonify(_with_part(j, snap))
     response.headers["Cache-Control"] = "no-store"
     return response

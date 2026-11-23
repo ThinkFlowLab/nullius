@@ -34,10 +34,11 @@
     <span class="control-verdict {{ control.state }}" id="control-verdict" data-state="{{ control.state }}"
       title="{{ control.control }} must be {{ control.expected }} on every task; this is a check on the tasks, not a score">{{ control.label }}</span>{% endif %}
     <div class="run-identity-card">
-      <div><span class="k">Trials</span><span class="v">{{ job.trials|length }}{% if job.n_planned and job.n_planned != job.trials|length %} of {{ job.n_planned }} planned{% endif %}</span></div>
-      {% if job.duration_min is not none %}<span class="run-identity-sep" aria-hidden="true"></span><div><span class="k">Duration</span><span class="v">{{ job.duration_min|runtime }}</span></div>{% endif %}
+      {% set of_planned = job.n_planned and job.n_planned != job.trials|length and not job.start_with %}<div><span class="k">Trials</span><span class="v">{{ job.trials|length }}{% if of_planned %} of {{ job.n_planned }} planned{% endif %}</span></div>
+      {% if job.duration_min is not none %}<span class="run-identity-sep" aria-hidden="true"></span><div><span class="k">Duration</span><span class="v">{{ job|run_min|runtime }}</span></div>{% endif %}
       {% if job.n_retries %}<span class="run-identity-sep" aria-hidden="true"></span><div><span class="k">Retried</span><span class="v warn" title="Trials Harbor restarted after an error">{{ job.n_retries }}</span></div>{% endif %}
     </div>
+    {% if job.start_with %}<span id="plan-run" title="Planned on the whole and begun on {% if job.start_with.by == 'count' %}its first {{ job.start_with.units }}{% else %}{{ job.start_with.name }}{% endif %}: the rates are over the tasks run">{{ job.n_tasks_run }} of {{ job.n_tasks }} planned tasks run</span>{% endif %}
   </div>{% endset %}
 {% set actions %}
     {% if execution and execution.plan.recipe %}<a class="btn sm ghost" href="{{ url_for('new_run', run=job.job_id) }}"
@@ -83,11 +84,15 @@
 </div>
 {% endif %}
 
-{% if job.budget and job.budget.stopped and job.budget.max_usd %}
-{# The run's own spending cap ended it (a Nullius standard run's --max-usd): nothing failed, so the notice is neutral. #}
+{%- set shard_stop = job.budget and job.budget.stopped and job.budget.shards and not job.reruns %}
+{% if (job_cap and (job_cap.closed or (shard_stop and not job_cap.changed))) or (not job_cap and job.budget and job.budget.stopped and job.budget.max_usd) %}
+{# The run's own spending cap ended it (a Nullius standard run's --max-usd), or some of its shards at their share:
+   nothing failed, so the notice is neutral. It names the job's one cap and all it spent, as the cap's line does; the
+   units cut off are the first run's alone #}
+{%- set spent = job_cap.spent_usd if job_cap else job.budget.spent_usd %}
 <div class="alert" id="cap-stopped">
-  <strong>{% if job.budget.shards %}{{ job.budget.shards_stopped }} of {{ job.budget.shards }} shards stopped at their share of the spending cap{% else %}Stopped at its spending cap{% endif %}</strong> of {{ job.budget.max_usd|cap }}{% if job.budget.spent_usd is not none %}, with {{ job.budget.spent_usd|cap }} spent{% endif %}:
-  {{ job.budget.cut_off|length }} cut off, {{ job.budget.not_run|length }} not run.
+  <strong>{% if shard_stop %}{{ job.budget.shards_stopped }} of {{ job.budget.shards }} shards stopped at their share of the spending cap{% else %}Stopped at its spending cap{% endif %}</strong> of {{ (job_cap or job.budget).max_usd|cap }}{% if spent is not none %}, with {{ spent|cap }} spent{% endif %}{% if job.reruns %}.{% else %}:
+  {{ job.budget.cut_off|length }} cut off, {{ job.budget.not_run|length }} not run.{% endif %}
 </div>
 {% endif %}
 
@@ -117,6 +122,21 @@
   {{ job.n_pending_trials }} pending. Every number here is partial; Live follows it as it goes.
 </div>
 {% endif %}
+{% endif %}
+{%- if rerunning and live_board and not live_board.running %}
+<script>
+// Poll while the rerun prepares. Refresh when the board runs or the execution ends.
+(() => {
+  const url = {{ url_for('job_live', job_id=job.job_id)|tojson }};
+  const run = {{ url_for('run_status', run_id=execution.id)|tojson }};
+  const tick = async () => { if (document.hidden) return; try {
+    const [r, s] = await Promise.all([nulliusFetch(url, {cache: 'no-store'}), nulliusFetch(run, {cache: 'no-store'})]);
+    const j = r.ok ? await r.json() : {}, ex = s.ok ? await s.json() : {};
+    if (['starting', 'running'].includes(j.state) || ['done', 'failed', 'stopped'].includes(ex.state)) {
+      const u = new URL(location.href); u.searchParams.delete('view'); location.assign(u); } } catch {} };
+  setInterval(tick, 2000);
+})();
+</script>
 {% endif %}
 {#-
     Board counts are whole-run and never change under a filter; the trial rows are rendered here, and job.js only filters,
@@ -170,6 +190,7 @@
     <div class="hk" aria-label="Health">
       <dl>
         <dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="No pass or fail in this benchmark: no rate">—</dd>
+        {% if job.start_with %}<dt>tasks run</dt><dd id="tasks-run"{% if job.n_tasks_run < job.n_tasks %} class="warn"{% endif %} data-tip="Begun on a part of its plan: the mean is over the tasks run so far">{{ job.n_tasks_run }} of {{ job.n_tasks }}</dd>{% endif %}
         <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors, setup failures and spending caps">{{ job.n_infra }}</dd>
       </dl>
     </div>
@@ -217,6 +238,7 @@
     <div class="hk" aria-label="Health">
       <dl>
         {% if not job.has_verdict or job.raw_solve_rate != job.adjusted_solve_rate %}<dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="Harbor's mean: resolved over every trial, infra included">{{ job.raw_solve_rate|pct }}</dd>{% endif %}
+        {% if job.start_with %}<dt>tasks run</dt><dd id="tasks-run"{% if job.n_tasks_run < job.n_tasks %} class="warn"{% endif %} data-tip="Begun on a part of its plan: the rates are over the tasks run so far">{{ job.n_tasks_run }} of {{ job.n_tasks }}</dd>{% endif %}
         {% if job.n_infra %}<dt>infra</dt><dd class="warn" data-tip="Trials that never got a fair attempt — rate limits, API errors, setup failures and spending caps">{{ job.n_infra }}</dd>{% endif %}
         {% if job.n_regressions %}<dt>broke tests</dt><dd class="bad" data-tip="Trials whose patch broke tests that passed before it">{{ job.n_regressions }}</dd>{% endif %}
       </dl>
@@ -333,15 +355,18 @@
     <div class="sp"><details class="pop"><summary aria-label="Token split: input, cached, output"><span class="tw"></span>in · cached · out</summary>
       <div class="popm" role="group" aria-label="Token split"><span>input</span><b>{{ '{:,}'.format(job.total_input_tokens) }}</b><span>cached (part of input)</span><b>{{ '{:,}'.format(job.total_cache_tokens) }}</b><span>output</span><b>{{ '{:,}'.format(job.total_output_tokens) }}</b></div></details></div>
     <div class="kv" data-tip="{{ 'A control never calls a model, so this is a real zero' if job.is_control else 'Only recorded by agents that report it' }}"><span class="k">Cost</span><span class="v">{{ job.total_cost_usd|usd(job.kind) }}</span></div>
-    {% if job.budget and job.budget.max_usd %}<div class="kv" id="run-cap" data-tip="Its relay refuses a call that does not fit under it{% if job.budget.unsettled_usd %}. {{ job.budget.unsettled_usd|usd }} stays booked for calls whose cost was never reported{% endif %}"><span class="k">Spending cap</span><span class="v">{{ job.budget.max_usd|cap }}</span></div>
+    {% if job_cap or (job.budget and job.budget.max_usd) %}<div class="kv" id="run-cap" data-tip="One cap for the whole run: each later part has what the parts before it left{% if job.budget.unsettled_usd %}. {{ job.budget.unsettled_usd|usd }} stays booked for calls whose cost was never reported{% endif %}"><span class="k">Spending cap</span><span class="v">{{ (job_cap or job.budget).max_usd|cap }}</span></div>
+    {% if job_cap %}<div class="sp cap-spent" id="cap-spent">{{ job_cap.spent_usd|cap }} spent{% if again and again.where %} · <button class="plain" id="cap-change" type="button" aria-haspopup="dialog">Change</button>{% elif rerunning %} · <span class="faint">change it when this part ends</span>{% endif %}</div>{% endif %}
     {% if job.budget.not_run %}<div class="sp"><details class="pop"><summary aria-label="The units not run"><span class="tw"></span>{{ job.budget.not_run|length }} not run</summary>
-      <div class="popm cap-units" role="group" aria-label="The units not run">{% for u in job.budget.not_run %}<span>{{ u }}</span>{% endfor %}</div></details></div>{% endif %}{% endif %}
+      <div class="popm cap-units" role="group" aria-label="The units not run">{% for u in job.budget.not_run %}<span>{{ u }}</span>{% endfor %}</div></details></div>{% endif %}
+    {% elif again and again.where and job.standard %}<div class="kv" id="run-cap"><span class="k">Spending cap</span><span class="v faint">none</span></div>
+    <div class="sp cap-spent" id="cap-spent"><button class="plain" id="cap-change" type="button" aria-haspopup="dialog">Set</button></div>{% endif %}
     {% if job.budget and job.budget.unit_max_usd %}<div class="kv" id="unit-cap" data-tip="For each {{ job.runner_items[0] if job.runner_items else 'trial' }}, its judge's calls apart: one that reaches it is cut off there and counts against the agent, and the run goes on"><span class="k">Cap per {{ job.runner_items[0] if job.runner_items else 'trial' }}</span><span class="v">{{ job.budget.unit_max_usd|cap }}</span></div>
     {% if job.budget.over_unit %}<div class="sp"><details class="pop"><summary aria-label="The units that reached it"><span class="tw"></span>{{ job.budget.over_unit|length }} reached it</summary>
       <div class="popm cap-units" role="group" aria-label="The units that reached it">{% for u in job.budget.over_unit %}<span>{{ u }}</span>{% endfor %}</div></details></div>{% endif %}{% endif %}
     {% if job.mean_score is not none %}<div class="kv" data-tip="{% if job.n_scored_parts %}The mean score over every one of the {{ job.n_scored_parts }} scored, whichever trial it is under{% else %}The mean of each item's graded score (an F1, partial credit){% endif %}{% if not job.scored_only %}; the rates count an item resolved at its benchmark's pass mark{% endif %}"><span class="k">Mean score</span><span class="v">{{ '%.2f'|format(job.mean_score) }}</span></div>{% endif %}
     {% for g in job.score_by_group %}<div class="kv by-group" data-tip="The mean score of the {{ g.n }} scored with {{ job.parts_by }} {{ g.group }}"><span class="k">{{ job.parts_by|capitalize }} {{ g.group }}</span><span class="v">{{ '%.2f'|format(g.mean) }} <small class="faint">{{ g.n }}</small></span></div>{% endfor %}
-    {% if job.duration_min %}<div class="kv" data-tip="Start to finish, the whole run"><span class="k">Duration</span><span class="v">{{ job.duration_min|runtime }}</span></div>{% endif %}
+    {% if job.duration_min %}<div class="kv" data-tip="{{ 'Start to finish of each of its runs, added' if job.reruns else 'Start to finish, the whole run' }}"><span class="k">Duration</span><span class="v">{{ job|run_min|runtime }}</span></div>{% endif %}
   </div>
 </section>
 </div>
@@ -349,10 +374,10 @@
 {# the trials: one filter row names every active filter, whichever mark set it #}
 <section class="rp-card trials" aria-label="Trials in this run">
   <div class="tbar" role="group" aria-label="Filter the trials">
-    <h2 id="trials-heading" tabindex="-1">Trials</h2><span class="cnt" id="trial-count">{{ job.trials|length }}</span>
+    <h2 id="trials-heading" tabindex="-1">Trials</h2><span class="cnt" id="trial-count">{{ job.trials|length + waiting|length }}</span>
     <div class="facet" data-k="o"><details><summary class="fsum"><span class="k">Outcome</span><span class="v">All</span><span class="car">▾</span></summary>
       <div class="fmenu">
-        {% for k in ORDER %}{% if oc[k] %}<a class="fx" data-o="{{ k }}" href="?outcome={{ k }}"><i class="sw oc-{{ k }}"></i><span>{{ LABELS[k] }}</span><b>{{ oc[k] }}</b></a>{% endif %}{% endfor %}
+        {% for k in ORDER %}{% if oc[k] %}<a class="fx" data-o="{{ k }}" href="?outcome={{ k }}"><i class="sw oc-{{ k }}"></i><span>{{ LABELS[k] }}</span><b>{{ oc[k] }}</b></a>{% endif %}{% endfor %}{% for o, label in (('not_run', 'Not run'), ('no_result', 'No result')) %}{% set n = waiting|selectattr('outcome', 'eq', o)|list|length %}{% if n %}<a class="fx" data-o="{{ o }}" href="?outcome={{ o }}"><i class="sw oc-{{ o }}"></i><span>{{ label }}</span><b>{{ n }}</b></a>{% endif %}{% endfor %}
       </div></details><button class="x plain" type="button" hidden aria-label="Remove the outcome filter">✕</button></div>
     {% if judgement and judgement.causes %}
     <div class="facet j" data-k="c"><details><summary class="fsum"><span class="k">Judge cause</span><span class="v">All</span><span class="car">▾</span></summary>
@@ -366,23 +391,41 @@
         {% for f, n in judgement.flags %}<a class="fx" data-f="{{ f }}" href="?flag={{ f }}"><span class="pip on key-n" data-n="{{ judgement.flag_ids.index(f) + 1 }}" aria-hidden="true"></span><span class="mono">{{ f }}</span><b>{{ n }}</b></a>{% endfor %}
       </div></details><button class="x plain" type="button" hidden aria-label="Remove the flag filter">✕</button></div>
     {% endif %}
-    <button class="fclear plain" id="clear-filters" type="button" hidden>Show all {{ job.trials|length }}</button>
+    <button class="fclear plain" id="clear-filters" type="button" hidden>Show all {{ job.trials|length + waiting|length }}</button>
+    {%- if again and again.where %}
+    <div class="pick" id="rerun-pick" role="group" aria-label="Run tasks again">
+      <button class="fclear plain" id="pick-shown" type="button">Select the rows shown</button>
+      <span class="pick-n" id="pick-count" aria-live="polite">0 chosen</span>
+      <button class="btn sm" id="rerun-open" type="button" aria-haspopup="dialog" disabled>Run selected again</button>
+      {%- set rest = waiting|rejectattr('running')|list %}
+      {%- if rest %}
+      {%- if plan_sets %}
+      <details class="pop plan-sets" id="plan-sets"><summary class="btn sm ghost" aria-haspopup="true">Run a set</summary>
+        <div class="popm" role="group" aria-label="Run the tasks of a set not yet run">{% for s in plan_sets %}<button class="plain" type="button" data-pick="{{ s.trials|join(' ') }}">{{ s.name }}<b>{{ s.tasks }}</b></button>{% endfor %}</div></details>
+      {%- endif %}
+      <button class="btn sm ghost" id="pick-rest" type="button" aria-haspopup="dialog" data-pick="{{ rest|map(attribute='trial')|join(' ') }}">Run the rest · {{ rest|map(attribute='unit')|unique|list|length }}</button>
+      {%- endif %}
+    </div>
+    {% elif again %}<span class="pick-why small muted" id="rerun-why">{{ again.why }}</span>{% endif %}
   </div>
   <p class="sr" id="trials-live" aria-live="polite"></p>
   {% set show_fa = marks.flags or marks.labels %}
   {% set show_cause = show_judge %}
   {% set show_flags = show_judge and judgement.judged %}
+  {#- the column of tries: whenever the job allowed retries, or a task was tried more than once (a re-run by hand) -#}
+  {%- set show_tries = job.retries or job.trials|selectattr('n_retries')|list -%}
+  {%- set picking = again and again.where %}
   {% set n_judge = (1 if show_cause else 0) + (1 if show_flags else 0) + (1 if show_ins else 0) %}
   <div class="tscroll" role="region" aria-label="Trials in this run" tabindex="0">
   <table class="tt"{% if filtered %} data-leave-out="{{ filtered.view.kinds|join(' ') }}"{% endif %}>
     <colgroup>
-      <col><col class="w-out">{% if show_fa %}<col class="w-fa">{% endif %}{% if job.retries %}<col class="w-rt">{% endif %}{% if show_cause %}<col class="w-cause">{% endif %}{% if show_flags %}<col class="w-flags">{% endif %}{% if show_ins %}<col class="w-ins">{% endif %}
+      <col><col class="w-out">{% if show_fa %}<col class="w-fa">{% endif %}{% if show_tries %}<col class="w-rt">{% endif %}{% if show_cause %}<col class="w-cause">{% endif %}{% if show_flags %}<col class="w-flags">{% endif %}{% if show_ins %}<col class="w-ins">{% endif %}
       {% if vocab.gained %}<col class="w-chk">{% endif %}{% if vocab.held %}<col class="w-chk">{% endif %}
       <col class="w-tok"><col class="w-tm"><col class="w-env"><col class="w-ag"><col class="w-ver"><col class="w-go">
     </colgroup>
     <thead>
       <tr class="grp">
-        <th colspan="{{ (3 if job.retries else 2) + (1 if show_fa else 0) }}"></th>
+        <th colspan="{{ (3 if show_tries else 2) + (1 if show_fa else 0) }}"></th>
         {% if n_judge %}<th colspan="{{ n_judge }}"><span class="gl"><span data-tip="A judge model's reading, experimental as on the board: the recorded outcomes stand.">Judge</span>{% if tq %}<span class="gx" id="task-quality" data-tip="Task instructions the judge has scored, once per dataset and task">instructions scored <b>{{ tq.judged }}/{{ tq.tasks }}</b></span>{% endif %}</span></th>{% endif %}
         {% if vocab.gained or vocab.held %}<th colspan="{{ (1 if vocab.gained else 0) + (1 if vocab.held else 0) }}"><span class="gl">Tests</span></th>{% endif %}
         <th></th>
@@ -393,7 +436,7 @@
         <th scope="col">Task</th>
         <th scope="col">Outcome</th>
         {% if show_fa %}<th scope="col"><span data-tip="Your own reading: the task's flag (flawed or ambiguous) on its first row, each attempt's failure label on its own row">User judge</span></th>{% endif %}
-        {% if job.retries %}<th scope="col" class="num">Retries</th>{% endif %}
+        {% if show_tries %}<th scope="col" class="num">Retries</th>{% endif %}
         {% if show_cause %}<th scope="col"><span data-tip="The judge's failure cause, drawn as on the board: straight when the recorded outcome allows it, jogged when it does not, ending in the judge's hollow ring. A resolved trial is not asked.">Cause<span class="nfh">{% if show_flags %} · flags{% endif %}</span></span></th>{% endif %}
         {% if show_flags %}<th scope="col" class="c-flags"><span data-tip="One slot per flag, numbered in the vocabulary's order: {% for f in judgement.flag_ids %}{{ loop.index }} {{ f }}{{ ' · ' if not loop.last }}{% endfor %}. Filled: raised on this trial.">Flags</span></th>{% endif %}
         {% if show_ins %}<th scope="col" class="num"><span data-tip="A judge model's score of the task's instruction text alone: about the task, not this trial">Instruction</span></th>{% endif %}
@@ -421,7 +464,7 @@
         <td><span class="group-pass"><span>{{ attempt_count(group, false) }}</span>
           <span class="sqs" aria-hidden="true">{% for a in group.trials %}<i class="sw oc-{{ a.outcome }}" title="Attempt {{ loop.index }}: {{ a.outcome_label }}"></i>{% endfor %}</span></span></td>
         {% if show_fa %}<td class="fa">{{ task_flag(t) }}</td>{% endif %}
-        {% if job.retries %}<td></td>{% endif %}
+        {% if show_tries %}<td></td>{% endif %}
         {% if show_cause %}<td></td>{% endif %}
         {% if show_flags %}<td></td>{% endif %}
         {% if show_ins %}<td class="num">{{ instruction(t) }}</td>{% endif %}
@@ -439,15 +482,16 @@
       {%- set jr = judgement.by_trial.get(t.trial_name) if judgement else none %}
       {%- set status = lanes.status.get(t.trial_name) if lanes else '' %}
       {%- set used = (t.n_input_tokens or 0) + (t.n_output_tokens or 0) %}
-      {%- set url = url_for('trial', job_id=job.job_id, trial_name=t.trial_name) %}
+      {%- set again_now = t.trial_name in running_again %}
+      {%- set url = none if again_now else url_for('trial', job_id=job.job_id, trial_name=t.trial_name) %}
       <tr data-outcome="{{ t.outcome }}" data-cause="{{ (jr.cause or '') if jr else '' }}" data-status="{{ status or '' }}" data-flags="{{ jr.flags|join(' ') if jr else '' }}"
           data-trial="{{ t.trial_name }}"{% if marks.flags.get(t.task_base, {}).counts %} data-task-flag="{{ marks.flags[t.task_base].kind }}"{% endif %} data-tokens="{{ used }}" data-total="{{ t.dur_total or 0 }}" data-i="{{ loop.index0 }}"
           {%- if group %} class="in-group" data-group="g-{{ group.trials[0].trial_name }}" hidden{% endif %}>
-        {%- if group %}
-        <td><a class="task attempt-link" href="{{ url }}" title="{{ t.task_name }}" aria-label="{{ task_labels[t.trial_name] }}, attempt {{ k }}">attempt {{ k }}</a></td>
-        {%- else %}
-        <td><a class="task" href="{{ url }}" title="{{ t.task_name }}">{{ task_labels[t.trial_name] }}</a></td>
-        {%- endif %}
+        {%- set name = 'attempt ' ~ k if group else task_labels[t.trial_name] %}
+        <td>{% if picking %}<input class="pick-row" type="checkbox" value="{{ t.trial_name }}" aria-label="Choose {{ task_labels[t.trial_name] }}{{ ', attempt ' ~ k if group }}">{% endif -%}
+          {%- if url %}<a class="task{{ ' attempt-link' if group }}" href="{{ url }}" title="{{ t.task_name }}"{% if group %} aria-label="{{ task_labels[t.trial_name] }}, attempt {{ k }}"{% endif %}>{{ name }}</a>
+          {%- else %}<span class="task{{ ' attempt-link' if group }}" title="{{ t.task_name }}">{{ name }}</span>{% endif %}
+          {%- if again_now %} <span class="badge again-now" title="Running again: its earlier result stands until the new one lands">running again</span>{% endif %}</td>
         <td><span class="oc oc-{{ t.outcome }}"><i></i>{{ t.outcome_label }}</span>
           {%- if t.score is not none %} <span class="badge trial-score" title="{% if t.n_parts %}The mean score of its {{ t.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it">{{ '%.2f'|format(t.score) }}</span>{% endif %}
           {%- if t.n_rate_limited_retries %} <span class="badge rate-limits" title="{{ t.n_rate_limited_retries }} rate-limited call{{ '' if t.n_rate_limited_retries == 1 else 's' }} retried by the agent's SDK (agent/gateway.log) — the run survived them, so the outcome does not show them">429 ×{{ t.n_rate_limited_retries }}</span>{% endif -%}
@@ -455,7 +499,7 @@
           {%- if t.exception_message %}<details class="exd"><summary><span class="tw"></span>{{ t.exception_type }}</summary><code>{{ t.exception_message }}</code></details>
           {%- else %}<span class="exn">{{ t.exception_type }}</span>{% endif %}{% endif %}</td>
         {% if show_fa %}<td class="fa">{% if not group %}{{ task_flag(t) }}{% endif %}{{ trial_label(t) }}</td>{% endif %}
-        {% if job.retries %}<td class="num run-retries">{% if t.n_retries %}{{ t.n_retries }}<span class="faint">/{{ job.retries }}</span>{% else %}<span class="faint">0/{{ job.retries }}</span>{% endif %}</td>{% endif %}
+        {% if show_tries %}<td class="num run-retries">{% if t.n_retries %}{{ t.n_retries }}{% if job.retries %}<span class="faint">/{{ job.retries }}</span>{% endif %}{% else %}<span class="faint">0{{ '/' ~ job.retries if job.retries }}</span>{% endif %}</td>{% endif %}
         {% if show_cause %}<td>
           {%- if t.outcome == 'resolved' %}<span class="rc" data-tip="A resolved trial is never asked a failure cause"><span class="na">not asked</span></span>
           {%- elif jr and jr.cause %}<span class="rc" data-tip="Recorded {{ t.outcome_label }}; the judge reads {{ jr.cause }}{% if status in GLYPH %} · {{ {'agree': 'Agree', 'disagree': 'Disagree', 'other': 'Cause outside the list', 'gated': 'Below threshold', 'suggestion': 'Suggested', 'not_comparable': 'Not comparable'}[status] }}{% endif %}"><svg class="kg" viewBox="0 0 22 14" aria-hidden="true">{{ (GLYPH.get(status) or GLYPH['agree'])|safe }}</svg><span class="ctag">{{ jr.cause }}</span></span>
@@ -475,17 +519,69 @@
         <td class="num phase">{{ t.dur_env|secs }}</td>
         <td class="num phase">{{ t.dur_agent|secs }}</td>
         <td class="num phase">{{ t.dur_verifier|secs }}</td>
-        <td class="go"><a href="{{ url }}" aria-label="Open {{ t.task_base }}" tabindex="-1">→</a></td>
+        <td class="go">{% if url %}<a href="{{ url }}" aria-label="Open {{ t.task_base }}" tabindex="-1">→</a>{% endif %}</td>
       </tr>
       {% endfor %}
-      <tr class="empty" id="no-trial-matches" hidden><td colspan="20">No trial matches <button class="fclear plain" type="button" data-clear>Show all {{ job.trials|length }}</button></td></tr>
+      {% for w in waiting %}{#- a task the job planned with no result: never begun, or begun and ended with none #}
+      <tr data-outcome="{{ w.outcome }}" data-cause="" data-status="" data-flags="" data-trial="{{ w.trial }}" data-tokens="0" data-total="0" data-i="{{ trial_rows|length + loop.index0 }}">
+        <td>{% if picking %}<input class="pick-row" type="checkbox" value="{{ w.trial }}" data-first{% if w.outcome == 'no_result' %}="none"{% endif %} data-trials="{{ w.trials|join(' ') }}" aria-label="Choose {{ w.unit }}">{% endif -%}
+          <span class="task" title="{{ w.unit }}">{{ w.unit }}</span>{% if w.running %} <span class="badge again-now">running</span>{% endif %}</td>
+        <td>{% if w.outcome == 'not_run' %}<span class="oc oc-not_run"><i></i>Not run</span>{% else %}<span class="oc oc-no_result"><i></i>No result</span> <span class="exn">{{ 'begun, ended with none' if w.folder else 'never run' }}</span>{% endif %}</td>
+        <td colspan="20"></td>
+      </tr>
+      {% endfor %}<tr class="empty" id="no-trial-matches" hidden><td colspan="20">No trial matches <button class="fclear plain" type="button" data-clear>Show all {{ job.trials|length + waiting|length }}</button></td></tr>
     </tbody>
   </table>
   </div>
 </section>
+{%- if picking %}
+{#- what Run selected again asks: the count, the names and a reason, the budget left; for tasks that never ran, one short
+    question and the budget left. The page fills the words and the names from the ticks #}
+<dialog class="rerun-ask" id="rerun-ask" aria-labelledby="rerun-ask-h" data-post="{{ url_for('job_rerun', job_id=job.job_id) }}" data-csrf="{{ csrf }}" data-where="{{ again.where }}">
+  <form method="dialog">
+    <h2 id="rerun-ask-h">Run <span data-n>0 tasks</span> again</h2>
+    <p class="small muted"{% if waiting %} data-first="On {{ again.where }}, in this job: a task with no result gets its first; any other result is replaced, its earlier tries kept."{% endif %}>On {{ again.where }}, in this job: each result replaces the task's, and the earlier tries stay.</p>
+    <ul class="rerun-names" data-names></ul>
+    <label data-reason>Reason <span class="faint">(optional)</span><input type="text" name="reason" maxlength="200" autocomplete="off"></label>
+    {%- if job_cap %}
+    <p class="small" id="rerun-budget">{% if job_cap.closed %}Budget for the whole run: {{ job_cap.max_usd|cap }}, {% if job_cap.left_usd > 0 %}{{ job_cap.spent_usd|cap }} spent; the last part stopped at it{% else %}all spent{% endif %}. Change it to run more.{% else %}Budget for the whole run: {{ job_cap.max_usd|cap }}, {{ job_cap.left_usd|cap }} left.{% endif %}</p>
+    {%- endif %}
+    <p class="small bad" data-error hidden></p>
+    <div class="rerun-acts"><button type="submit" value="cancel" class="btn ghost" formnovalidate>Cancel</button><button type="submit" value="run" class="btn" data-go{% if job_cap and job_cap.closed %} data-spent{% endif %}>Run 0 tasks again</button></div>
+  </form>
+</dialog>
+{#- the job's one spending cap, changed for its next part #}
+<dialog class="rerun-ask" id="cap-ask" aria-labelledby="cap-ask-h" data-post="{{ url_for('job_cap_change', job_id=job.job_id) }}" data-csrf="{{ csrf }}">
+  <form method="dialog">
+    <h2 id="cap-ask-h">Spending cap for the whole run</h2>
+    <p class="small muted">{% if job_cap %}{{ job_cap.spent_usd|cap }} spent so far. {% endif %}The new cap applies from the next part.</p>
+    <label>Cap, USD<input type="number" name="max_usd" min="0" step="any" inputmode="decimal" required{% if job_cap %} value="{{ job_cap.max_usd }}"{% endif %}></label>
+    <p class="small bad" data-error hidden></p>
+    <div class="rerun-acts"><button type="submit" value="cancel" class="btn ghost" formnovalidate>Cancel</button><button type="submit" value="save" class="btn">Save</button></div>
+  </form>
+</dialog>
+{% endif %}
 
 {# behind a click: what the run recorded about its install, and the page's one block of prose #}
 <div class="more">
+  {%- if job.reruns %}
+  <details id="reruns" open>
+    <summary><span class="tw"></span>Run later<span class="end"><span>{{ job.reruns|length }}</span></span></summary>
+    <dl class="gl reruns">
+      {% for r in job.reruns|reverse %}
+      <dt>{{ r.at[:16]|replace('T', ' ') }}{{ 'Z' if r.at.endswith('+00:00') }}{% if r.stopped %} <span class="faint">stopped</span>{% endif %}</dt>
+      <dd>{% if r.reason %}<p class="rerun-reason">{{ r.reason }}</p>{% endif %}
+        <ul class="rerun-rows">{% for x in r.replaced %}<li><span class="mono">{{ x.unit or x.trial }}</span>{% for k, v in x.was.items() %} <span class="faint">{{ k }}</span> {{ v }}{% endfor %}{% if x.trial in (r.no_result or []) %} <span class="faint">no result</span>{% endif %} → {% for k, v in x.now.items() %}<span class="faint">{{ k }}</span> {{ v }} {% endfor %}<span class="faint">try {{ x.try }}</span></li>{% endfor %}
+          {%- for x in r.begun or [] %}<li><span class="mono">{{ x.unit or x.trial }}</span> <span class="faint">first run</span> → {% for k, v in x.now.items() %}<span class="faint">{{ k }}</span> {{ v }} {% endfor %}</li>{% endfor %}
+          {%- set left = r.trials|reject('in', r.replaced|map(attribute='trial')|list + (r.begun or [])|map(attribute='trial')|list)|list %}{% if left %}<li class="faint">{{ left|length }} not replaced: {{ left|join(', ') }}</li>{% endif %}</ul>
+        {% set n = r.trials|n_tasks %}<span class="faint">{{ n }} task{{ '' if n == 1 else 's' }}{% if r.spent_usd is not none %} · {{ r.spent_usd|usd }} spent{% endif %}</span></dd>
+      {% endfor %}
+    </dl>
+    {%- if job_cap %}
+    <p class="small faint" id="reruns-cap">Spending cap for the whole run {{ job_cap.max_usd|cap }} · {{ job_cap.spent_usd|cap }} spent</p>
+    {%- endif %}
+  </details>
+  {% endif %}
   {% if job.harbor_command %}
   <details id="configuration">
     <summary title="The command this run ran"><span class="tw"></span>Configuration<span class="end"></span></summary>
