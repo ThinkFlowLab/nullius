@@ -402,8 +402,7 @@ def env_image(bench: dict, name: str, log_dir: Optional[str] = None) -> str:
     after. Two units asking at once wait for one build. Its build output is
     ``env-<name>.log`` in ``log_dir`` (the job's ``.work``). A secret is never
     given to a build: an image is shared, a secret is the run's. An
-    environment with its own ``base`` is built on that, pinned by digest,
-    and the standard's base image is not built for it."""
+    environment's own ``base`` replaces the base image."""
     base = bench["environments"][name].get("base") or base_image(os.path.join(log_dir, "image.log") if log_dir else None)
     tag = env_tag(bench, name, base)
     with _locks_lock:

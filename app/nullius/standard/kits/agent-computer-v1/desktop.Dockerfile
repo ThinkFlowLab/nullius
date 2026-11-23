@@ -1,10 +1,6 @@
-# The computer kit's desktop, on its own base, Debian slim (standard.json `base`; Nullius writes the FROM line):
-# a virtual X display at 1920 x 1080 on :0, the Matchbox window manager, a session bus for uid 1000,
-# Python 3 with Tk, and pyautogui and Pillow pinned by version and hash. Nothing else stays:
-# Xvfb's Mesa driver, LLVM and Z3 serve OpenGL only, which the display turns off (-extension GLX), and the
-# package tools, pip, Perl, docs, locales and caches serve nothing once the image is built.
-# Three users: `user` (uid 1000), as whom the agent's Python and its actions run, with no sudo;
-# `fixture`, as whom the kit's fixture runs, its log in a folder only it reads; `display`, the X server's.
+# The computer kit's desktop on Debian slim (`base` in standard.json): Xvfb at 1920 x 1080, Matchbox, a session bus,
+# Python 3 with Tk, pyautogui and Pillow. OpenGL is off, so Mesa, LLVM and Z3 go, with the package tools and pip.
+# Users: `user` (1000) runs the agent's actions, `fixture` (1001) the kit's fixture, `display` (1002) the X server.
 COPY desktop-requirements.txt /opt/desktop/requirements.txt
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
