@@ -507,6 +507,14 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 
 Follow [Add an agent manually](agents/add-manually.md).
 
+Agent `prepare` runs as root in own-image containers only. Requested public
+access ends and leftover processes stop before startup; failure refuses the unit.
+
+Root workspace conformance uses `--fixture-image` with a digest-pinned image
+running as root, with Python and git. The proof records its image and root user; it does
+not prove a benchmark instance or broaden benchmark restrictions. Capped
+conformance requires current prices for every model called.
+
 ### A capability
 
 Follow [Add a capability manually](capabilities/add-manually.md).

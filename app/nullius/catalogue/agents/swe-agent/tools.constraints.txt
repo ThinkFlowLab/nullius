@@ -1,0 +1,3 @@
+# Upstream edit_anthropic/install.sh dependencies, constrained without editing it.
+tree-sitter==0.21.3
+tree-sitter-languages==1.10.2

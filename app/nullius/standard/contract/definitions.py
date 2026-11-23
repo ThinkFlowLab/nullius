@@ -1485,6 +1485,36 @@ def _own_agents(d: dict) -> List[str]:
     return bad
 
 
+STEP = ("copy", "write", "run", "collect", "seconds", "network", "keep_processes")
+
+
+def step_problems(step, *, collect: bool) -> List[str]:
+    """Validate a preparation, solve or verification step in a unit container."""
+    if not isinstance(step, dict):
+        return ["a step: {copy?, write?, run, collect?, seconds?, network?, keep_processes?}"]
+    bad = [f"{k}: not a field ({', '.join(STEP)})" for k in step
+           if k not in STEP or (k in ("collect", "keep_processes") and not collect)]
+    run = step.get("run")
+    if not isinstance(run, list) or not run or not all(isinstance(w, str) and w for w in run):
+        bad.append("run: the command, a list of words")
+    copy = step.get("copy") or {}
+    if not isinstance(copy, dict) or not all(isinstance(d, str) and d.startswith("/") for d in copy.values()):
+        bad.append("copy: {path in the upstream: absolute path inside}")
+    write = step.get("write") or {}
+    if not isinstance(write, dict) or not all(isinstance(d, str) and d.startswith("/") and isinstance(t, str)
+                                              for d, t in write.items()):
+        bad.append("write: {absolute path inside: the file's text}")
+    if "collect" in step and not (isinstance(step["collect"], str) and step["collect"].startswith("/")):
+        bad.append("collect: an absolute path inside")
+    if "seconds" in step and (not isinstance(step["seconds"], (int, float)) or step["seconds"] <= 0):
+        bad.append("seconds: a positive number")
+    if "network" in step and not isinstance(step["network"], bool):
+        bad.append("network: true or false")
+    if "keep_processes" in step and not isinstance(step["keep_processes"], bool):
+        bad.append("keep_processes: true or false")
+    return bad
+
+
 def problems(d: dict, kind: str) -> List[str]:
     """What is wrong with definition ``d`` of ``kind``; empty when it may be offered."""
     kind = names.kind(kind)
@@ -1612,6 +1642,10 @@ def problems(d: dict, kind: str) -> List[str]:
     elif kind == "agent" and "driver" in (d.get("start") or {}):
         bad += _driver_agent(d)
     elif kind == "agent":
+        if "prepare" in d:
+            bad += ["prepare." + p for p in step_problems(d["prepare"], collect=False)]
+            if isinstance(d["prepare"], dict):
+                bad += _command("prepare.run", d["prepare"].get("run"), {"here", "install"})
         st = d.get("start") or {}
         if ("acp" in st) == ("command" in st):
             bad.append("start: acp or command, one of them")
