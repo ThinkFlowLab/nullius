@@ -41,6 +41,16 @@ class ConformTest(unittest.TestCase):
                             say=lambda s: None, env={"MODEL_API_URL": "http://127.0.0.1:9/v1"}, unsandboxed=True)
         return got, definitions.get(kind, key, self.root)
 
+    def test_benchmark_restriction_allows_kit_but_survives_proof(self):
+        d = definitions.get("capability", "fakemem", self.root)
+        definitions.save(d, lambda current: current.update(only_for=["intended-benchmark"]))
+        got, saved = self.check("capability", "fakemem", ["cap.memory/v1"])
+        self.assertTrue(got["cap.memory/v1"]["ok"])
+        self.assertEqual(saved["only_for"], ["intended-benchmark"])
+        kit = definitions.kit("cap.memory/v1")
+        self.assertTrue(match.fit(kit, saved))
+        self.assertEqual(match.fit(dict(kit, key="intended-benchmark"), saved), [])
+
     def test_a_kit_that_passes_names_its_job_and_its_record_does_not(self):
         with mock.patch.object(conform.run, "run", wraps=conform.run.run) as ran:
             got, d = self.check("capability", "fakemem", ["cap.memory/v1"])
@@ -228,6 +238,26 @@ class ConformTest(unittest.TestCase):
         self.assertEqual(status, 2)
         self.assertIn("refused:", said)
         save.assert_not_called()
+
+
+class CappedConformanceCLI(unittest.TestCase):
+    def test_prices_are_fetched_before_capped_proof(self):
+        events = []
+        with mock.patch.object(cli, '_other', return_value={}), \
+             mock.patch.object(cli.price_list, 'update', side_effect=lambda: events.append('prices')), \
+             mock.patch.object(conform, 'check', side_effect=lambda *a, **kw: events.append('proof') or {}):
+            status = cli.main(['conform', 'fake', '--model', 'm', '--max-usd-per-unit', '0.25'])
+        self.assertEqual(status, 0)
+        self.assertEqual(events, ['prices', 'proof'])
+
+    def test_price_failure_never_starts_uncapped_proof(self):
+        with mock.patch.object(cli, '_other', return_value={}), \
+             mock.patch.object(cli.price_list, 'update', side_effect=ValueError('offline')), \
+             mock.patch.object(conform, 'check') as ran, redirect_stdout(io.StringIO()) as output:
+            status = cli.main(['conform', 'fake', '--model', 'm', '--max-usd-per-unit', '0.25'])
+        self.assertEqual(status, 2)
+        self.assertIn('refused:', output.getvalue())
+        ran.assert_not_called()
 
 
 if __name__ == "__main__":

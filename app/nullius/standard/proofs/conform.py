@@ -156,7 +156,13 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
             continue
         say(f"{p}: {kit['summary']}")
         try:
-            job_dir = run.run(kit, other, model=model, provider=provider, jobs_root=jobs_root, concurrency=2,
+            # A benchmark-restricted catalogue agent must still be able to prove
+            # its ports. Permit this kit only in the run's copy; retain the
+            # original restriction in the saved definition and normal pairing.
+            proof_other = other
+            if other.get("only_for") and not other.get("benchmark"):
+                proof_other = dict(other, only_for=[*other["only_for"], kit["key"]])
+            job_dir = run.run(kit, proof_other, model=model, provider=provider, jobs_root=jobs_root, concurrency=2,
                               name=job_name(stamp or time.strftime(STAMP), kit["key"], definitions.job_word(other)),
                               say=lambda s: say("  " + s), env=env, proving=True, unsandboxed=unsandboxed,
                               backend=backend, options=options, repeat=repeat,

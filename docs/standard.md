@@ -518,7 +518,9 @@ For root-dependent workspace conformance, `conform --port agent.workspace/v1
 own-image fixture. Supply a root-default image with Python and git. The
 proof records the image digest and root user; default kits keep
 their existing permissions. Fixture conformance does not prove a benchmark
-instance.
+instance. Benchmark-restricted catalogue agents may run their kits; a proof
+does not broaden their benchmark restriction. Capped conformance requires
+a successful price refresh and a price for every model it calls.
 
 ### A capability
 

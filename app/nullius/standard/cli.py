@@ -505,6 +505,12 @@ def _retries(value: str) -> int:
 
 def cmd_conform(a):
     o = _other(a.other)
+    if a.max_usd_per_unit is not None:
+        try:
+            price_list.update()
+        except ValueError as e:
+            print("refused: capped conformance needs current model prices:", e)
+            return 2
     try:
         got = conform.check(o, model=a.model, provider=a.provider, which=a.port or None, jobs_root=a.jobs, say=print,
                             unsandboxed=a.unsandboxed, stamp=a.stamp, backend=a.backend, env=run_env(a.provider) if a.from_run else None,
