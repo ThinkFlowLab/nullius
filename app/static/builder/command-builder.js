@@ -93,7 +93,21 @@
     if (!out || !run || run.hasAttribute('data-held')) return '';
     return out.ready ? '<span class="nb-note nb-ok">Ready</span>' : '<span class="nb-note nb-error">Missing something: Run waits</span>';
   }
-  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList, prereqHead}; return; }
+  // An error the server ties to a field (recipe.py: `field`) is said under that field of the open step, the field marked
+  // invalid and described by it; each said earlier is taken away first. Returns the step's errors no field here says.
+  function fieldErrors(form, errors, esc) {
+    form.querySelectorAll('[data-field-error]').forEach(m => m.remove());
+    form.querySelectorAll('[aria-invalid][data-field]').forEach(f => { f.removeAttribute('aria-invalid'); f.removeAttribute('aria-describedby'); });
+    return errors.filter(e => {
+      const f = e.field && form.querySelector(`[data-field="${e.field}"]`);
+      if (!f) return true;
+      f.setAttribute('aria-invalid', 'true');
+      f.setAttribute('aria-describedby', 'nb-error-' + e.field);
+      f.closest('.nb-field').insertAdjacentHTML('beforeend', `<small id="nb-error-${e.field}" class="nb-error" data-field-error>${esc(e.message)}</small>`);
+      return false;
+    });
+  }
+  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList, prereqHead, fieldErrors}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
@@ -957,11 +971,11 @@
       const out=runnerOut||{errors:[],notes:[]};
       compiled={errors:out.errors||[],notes:out.notes||[]};
     }else{compiled=C.compile(rec);}
-    $('#nb-localerrors').textContent=compiled.errors.filter(e=>e.step===step&&!e.shown).map(e=>e.message).join(' ');
+    $('#nb-localerrors').textContent=fieldErrors($('#nb-form'),compiled.errors.filter(e=>e.step===step&&!e.shown),esc).map(e=>e.message).join(' ');
     const errors=$('#nb-errors');
     if(errors){
       errors.hidden=!compiled.errors.length;
-      errors.innerHTML=compiled.errors.map(e=>button(esc(e.message),`data-step="${e.step}" ${e.step===S.agent&&!C.isStandard(rec)?`data-config-group="${esc(e.group||'')}"`:""}`,'')).join('');
+      errors.innerHTML=compiled.errors.map(e=>button(esc(e.message),`data-step="${e.step}" ${e.field?`data-error-field="${esc(e.field)}" `:''}${e.step===S.agent&&!C.isStandard(rec)?`data-config-group="${esc(e.group||'')}"`:""}`,'')).join('');
     }
     $('#nb-next').disabled=step===REVIEW&&compiled.errors.length>0;
     if($('#nb-reviewnotes'))$('#nb-reviewnotes').innerHTML=compiled.notes.map(t=>`<p class="nb-note">${esc(t)}</p>`).join('');
@@ -1155,6 +1169,8 @@
     else if(b.id==='nb-refresh'){await refreshRegistry();return;}
     else return;
     render(d.step!==undefined||['nb-next','nb-back'].includes(b.id));
+    // Review's link to an error a field holds: to that field, not the step's heading
+    const f=d.errorField&&$(`#nb-form [data-field="${d.errorField}"]`);if(f){f.focus({preventScroll:true});f.scrollIntoView({block:'center'});}
   });
   // a benchmark chosen on the Benchmark step's grid, or an agent, a capability or the setup picked or let go on the
   // Agent step's; the page stays where it is and the focus on its card

@@ -100,6 +100,7 @@ class Proving(unittest.TestCase):
         self.assertTrue(recipe.proving("nope", stamp=STAMP)["errors"])
         got = recipe.proving("fakebench", stamp=STAMP, dataset="other", limit=0)
         self.assertEqual(len(got["errors"]), 2)
+        self.assertIn("Number of tasks: a whole number of at least 1, or empty for all.", got["errors"])   # the benchmark's noun
         self.assertTrue(recipe.proving("fakebench", stamp="today")["errors"])
 
 
