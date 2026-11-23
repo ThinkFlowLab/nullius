@@ -187,4 +187,6 @@ def submit_task(prompt: str, token: str, *, timeout: float = 600,
                 raise
     except WebSocketException as error:
         # Keep authentication headers and connection internals out of stderr.
-        raise RuntimeError("DigitalMate Gateway connection failed") from error
+        close = getattr(error, "rcvd", None) or getattr(error, "sent", None)
+        code = f" {close.code}" if close is not None else ""
+        raise RuntimeError(f"DigitalMate Gateway connection failed: {type(error).__name__}{code}") from error

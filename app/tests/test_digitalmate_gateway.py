@@ -208,6 +208,14 @@ class GatewayTests(unittest.TestCase):
                 gateway.submit_task(self.prompt, "local-test-token")
         self.assertNotIn("private header", str(error.exception))
 
+    def test_a_dropped_connection_names_its_close_code_only(self):
+        dropped = gateway.WebSocketException("private reason")
+        dropped.rcvd = MagicMock(code=1011, reason="private reason")
+        with patch.object(gateway, "connect", side_effect=dropped):
+            with self.assertRaisesRegex(RuntimeError, "connection failed: WebSocketException 1011$") as error:
+                gateway.submit_task(self.prompt, "local-test-token")
+        self.assertNotIn("private", str(error.exception))
+
     def test_malformed_matching_response_is_rejected(self):
         socket = MagicMock()
         socket.recv.return_value = json.dumps({"id": "nullius-1", "ok": True, "result": "not a result"})
