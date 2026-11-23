@@ -115,11 +115,11 @@
       "upstream": {
         "repository": "https://github.com/aitianshi/DigitalMate",
         "branch": "nullius/v0.1.13",
-        "tested": "e69d1923f6f980451a1a16d9a5b6cf1f18b1f755",
+        "tested": "5a2a3b9fb539978accc4e37fc5e6e81d824c58f7",
         "license": "Apache-2.0",
         "core": "Bundled WorkSwarm 0d6857507236d1299276caf0f6fe09e5baaa4c23 and agent-core 8f9f112698d5580b749158b21b1a89a54e16a8f9, verified and installed by the release installer",
         "fixes": [
-          "Hive project workspace binding: openJiuwen-ai/DigitalMate PR #699, cherry-picked onto v0.1.13",
+          "Hive project workspace binding: openJiuwen-ai/DigitalMate PR #699, cherry-picked onto v0.1.13 (its project note keeps v0.1.13's bash and deliver_file guidance)",
           "Operator stdio MCP servers for Bees: openJiuwen-ai/DigitalMate issue #2483, PR #2484"
         ]
       },

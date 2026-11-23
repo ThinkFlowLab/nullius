@@ -76,10 +76,10 @@ def product(install: Path, *, port: int = 18092, project: Path | None = None, mc
         env.setdefault("DIGITALMATE_SCHEDULE_SCAN_ENABLED", "0")
         # These values must not redirect this trial to a deployed service.
         for key in ("DIGITALMATE_WORKSWARM_WS", "DIGITALMATE_CONFIG_FILE", "DIGITALMATE_HIVE_CONFIG",
-                    "DIGITALMATE_HIVE_SESSION_MCP"):
+                    "DIGITALMATE_HIVE_HOME_MCP_SERVERS"):
             env.pop(key, None)
         if mcp_config is not None:
-            env["DIGITALMATE_HIVE_SESSION_MCP"] = str(mcp_config)
+            env["DIGITALMATE_HIVE_HOME_MCP_SERVERS"] = str(mcp_config)
         if project is not None:
             # The product's own operator command binds the folder; state must not exist yet.
             subprocess.run([sys.executable, "-m", "dm_hive_tools.workspace",
