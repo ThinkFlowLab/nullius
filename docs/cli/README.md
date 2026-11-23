@@ -18,6 +18,7 @@ From a source checkout, replace `nullius` with
 | [Prove a benchmark](prove.md) | `nullius standard prove` |
 | [Conform an agent or a capability](conform.md) | `nullius standard conform` |
 | [Fidelity](fidelity.md) | `nullius standard fidelity` |
+| [Replay a model call](replay.md) | `nullius standard replay` |
 | [Shard and merge](shard-and-merge.md) | `nullius standard run --shard`, `merge` |
 | [Storage](../settings/README.md#storage) | `nullius paths [--json]` |
 | [Model prices](../settings/model-prices.md) | `nullius prices [list\|update\|set\|remove]` |

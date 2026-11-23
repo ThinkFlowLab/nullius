@@ -30,7 +30,7 @@ from nullius.standard.calls import exchanges, relay
 from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe
 from nullius.standard.requirements import install
-from nullius.standard.runner import pace as pacing, run
+from nullius.standard.runner import pace as pacing, replay, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -266,6 +266,11 @@ class StoreFiles(unittest.TestCase):
                         self.assertEqual(line["reply"]["body"], body.decode())
                         self.assertEqual(exchanges.rebuild(store.dir, line), raw)
                         self.assertTrue(exchanges.check(store.dir, "u0001", n)["same"])
+                    (job / "config.json").write_text(json.dumps({"standard": {"provider": "custom"}}))
+                    src = replay.source(str(job), "task__u0001", 1)
+                    prep = replay.prepare(src, prices={"local-model": {"input": 1.0, "output": 2.0}}, env=env)
+                    self.assertEqual(prep.raw, raw)
+                    self.assertEqual(prep.sha256, line["sent_sha256"])
 
     def test_a_damaged_part_leaves_other_calls_rebuildable(self):
         for damage in ("truncated", "digest", "picture", "missing"):
@@ -734,6 +739,15 @@ class NoKey(WithUpstream):
         self.assertNotIn("key_cut", line)
         self.assertEqual(line["reply"]["body"], body.decode())
         self.assertEqual(exchanges.rebuild(self.store(r), line), raw)
+        (job / "config.json").write_text(json.dumps({"standard": {"provider": "custom"}}))
+        src = replay.source(str(job), "task__u0001", 1)
+        prep = replay.prepare(src, prices={"local-model": {"input": 1.0, "output": 2.0}}, env=env)
+        self.assertEqual(prep.sha256, line["sent_sha256"])
+        before = len(Upstream.seen)
+        doc = replay.send(prep, 1, 1.0, str(Path(self.tmp) / "replay"), env=env)
+        self.assertEqual([sent for _, _, sent in Upstream.seen[before:]], [raw])
+        self.assertTrue(doc["sent_as_prepared"])
+        self.assertEqual(doc["sends"]["answered"], 1)
 
     def test_the_relays_key_is_in_no_file_of_the_store(self):
         r = self.relay()
