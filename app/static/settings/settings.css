@@ -27,8 +27,8 @@
 
 .st-card { margin: 0; padding: 16px 20px 14px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .st-card legend { display: inline-flex; align-items: center; gap: 9px; padding: 0 6px; font-weight: 500; font-size: 15px; }
-.st-logo { width: 20px; height: 20px; flex: none; color: var(--text); }
-.st-icon { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; color: var(--text-dim); }
+.st-logo { width: var(--ic-lg); height: var(--ic-lg); flex: none; color: var(--text); }
+.st-icon { width: 20px; height: 20px; margin: 2px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; color: var(--text-dim); }
 .st-card-unset { border-style: dashed; background: color-mix(in srgb, var(--surface) 55%, var(--bg)); }
 /* a card's rows: a label, then what it holds - an endpoint, a key, a field */
 .st-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 16px; align-items: center; }
@@ -291,10 +291,8 @@
 .st-provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
 .st-provider-choice { display: flex; align-items: center; gap: 12px; padding: 18px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: 500 14px/1.5 var(--sans); text-align: left; cursor: pointer; }
 .st-provider-choice:hover { background: var(--nav-hover); border-color: var(--text-faint); }
-.st-provider-choice .st-logo { width: 28px; height: 28px; }
 /* A custom provider's logo: the first two letters of its name, on the workspace badge. */
-.ws-avatar.st-logo { width: 20px; height: 20px; font-size: .5rem; border-radius: 5px; color: var(--accent); letter-spacing: 0; }
-.st-provider-choice .ws-avatar.st-logo { width: 28px; height: 28px; font-size: .64rem; border-radius: 7px; }
+.ws-avatar.st-logo { width: var(--ic-lg); height: var(--ic-lg); font-size: .56rem; border-radius: 5px; color: var(--accent); letter-spacing: 0; }
 .st-provider-summary { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .st-provider-summary > div { flex: 1; min-width: 0; }
 .st-provider-summary h3 { overflow-wrap: anywhere; }

@@ -4,6 +4,8 @@
    must stay distinguishable even when they appear beside one another. */
 :root {
   --topbar-height: 56px;
+  --ic-sm: 16px;                                 /* an interface icon: inline with text, in a button, a row */
+  --ic-lg: 24px;                                 /* an interface icon standing as a tile; a logo in a card, a row or a tile */
   --tool-h: 2.1rem;                               /* a page's buttons and a table's controls: as tall as a small button with its icon */
   --h1-size: clamp(1.75rem, 2.5vw, 2.15rem);
   --head-gap: 1.5rem;                             /* under a page's head, on every page */
