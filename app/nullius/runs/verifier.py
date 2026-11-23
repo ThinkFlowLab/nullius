@@ -33,6 +33,8 @@ columns. A field the report cannot answer is ``None``, never a plausible zero.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
 import os
 from dataclasses import dataclass
@@ -130,9 +132,28 @@ def _blocks() -> dict:
     return _CACHE["table"]
 
 
+_HELD: contextvars.ContextVar = contextvars.ContextVar("report_blocks", default=None)
+
+
+@contextlib.contextmanager
+def held():
+    """The report blocks looked up once for what runs inside it (a job's
+    trials, a workspace's jobs), not once per trial; the next one sees a
+    catalogue changed since. Nested, the outermost table is kept."""
+    if _HELD.get() is not None:
+        yield
+        return
+    token = _HELD.set(_blocks())
+    try:
+        yield
+    finally:
+        _HELD.reset(token)
+
+
 def block_for(source: str | None):
     """``(benchmark key, report block)`` for *source*, or ``None``."""
-    return _blocks().get((source or "").strip().lower())
+    table = _HELD.get()
+    return (_blocks() if table is None else table).get((source or "").strip().lower())
 
 
 def _dig(doc, path: str):
