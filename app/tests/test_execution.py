@@ -888,6 +888,22 @@ class StandardOnHost(HostBase):
                 self.assertNotIn("discarded-token", str(self.calls))
                 self.assertNotIn("sk-not-a-setting", str(self.calls))
 
+    def test_preset_records_are_cleared_before_the_selected_record_is_exported(self):
+        from nullius.standard import cli
+        record = '{"endpoints": {"messages": "/messages"}}'
+        ambient = {providers.setting_of(p): "{}" for p in providers.PRESETS}
+        ambient["OPENROUTER"] = '{"endpoints": {"messages": "/host-messages"}}'
+        for label, value in (("absent", ""), ("selected", record)):
+            with self.subTest(label=label):
+                self.calls.clear(); self.polls = 0
+                self.plan.name, self.plan.recipe = f"std-inherited-{label}", {"provider": "openrouter"}
+                with patch.dict(os.environ, {"OPENROUTER": value}):
+                    ex = self.run_it()
+                self.assertEqual((ex.state, ex.exit_code), ("done", 0), ex.lines)
+                env = self.launched_environment(ambient)
+                self.assertEqual({k: env[k] for k in ambient if k in env}, {"OPENROUTER": record} if value else {})
+                self.assertEqual("openrouter" in providers.offered(["messages"], cli.run_env("openrouter", env)), bool(value))
+
     def test_what_it_does_is_said_in_stages_its_own_and_the_cli_s(self):
         """Getting the host ready is said stage by stage in the run's log, and
         the cli's own stages come through the part's log: the page folds them."""
