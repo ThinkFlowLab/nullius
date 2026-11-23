@@ -52,7 +52,7 @@
 .th-card .v{display:block;font-weight:500}
 .th-sep{width:1px;align-self:stretch;background:var(--border)}
 .th-mark{width:32px;height:32px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font:500 15px/1 var(--mono);flex:none;padding:6px}
-.th-mark:has(.agent-logo){background:color-mix(in srgb,var(--text) 8%,transparent);color:var(--text)}
+.th-mark:has(.agent-logo){padding:4px;background:color-mix(in srgb,var(--text) 8%,transparent);color:var(--text)}
 .th-model{display:block;font-size:.8rem;color:var(--text-dim);overflow-wrap:anywhere}
 /* The cells keep their own width: the strip sits beside the cards while all of them fit on one
    line, moves under the cards when they do not, and wraps its cells when the page itself is narrower.
