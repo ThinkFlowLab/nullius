@@ -1,7 +1,8 @@
 # SWE-agent
 
-Standard integration: **not yet offered**. Workspace conformance and a scored
-instance remain unproven. Harbor remains available.
+Workspace conformance: **2/2 on an explicit root fixture**. A scored
+SWE-bench instance remains unproven: the selected attempt ended at its
+spending cap before grading. Harbor remains available.
 
 - Upstream: v1.1.0, `0f3acafacabc0def8cc76b4e48acb4b6cf302cb9`, unchanged.
 - Route: upstream `RunSingle`, local deployment, preexisting repository.
