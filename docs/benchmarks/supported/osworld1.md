@@ -53,6 +53,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 ## Good to know
 
 - An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. A step's observation is the screenshot that loop hands its agent for the next decision, with no capture added; the files a step names are read once its actions and their pauses have run. Steps (100) and Pause (3.0 seconds) set that loop.
+- A task an agent's time (2 hours) or a run's cap of model calls cuts short is scored as the desktop then stands, as OSWorld scores a task at its step limit; so is one whose agent goes on a minute after the task ended. The trial says what ended the work.
 - Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.
 - Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.
 - At this version only the null control has run through Nullius. OSWorld's agents are the same code as in main (044bc33), where M3, PromptAgent and Qwen-CUA completed tasks.
@@ -82,7 +83,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 - The agent's python and upload calls do not mark OSWorld's desktop as used; each unit's desktop is reset once, before the agent's first call.
 - Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.
 - The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.
-- A task run by one of OSWorld's own agents and still running after 2 hours is stopped and gets no score. For an agent, the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes; past any of them the task gets no score.
+- A task run by one of OSWorld's own agents and still running after 2 hours is stopped and gets no score. For an agent, the task's setup may take 1 hour and the scoring 10 minutes; past either the task gets no score.
 - Its evaluator fixes, key repeat turned off in the VM and one retired task make its scores comparable only with this version's, not with the paper's or main (044bc33)'s.
 
 ## Cite
