@@ -66,7 +66,7 @@ class Inventory(unittest.TestCase):
 
     def test_generation_limit_validation_and_scope(self):
         for setup in ("original", "model"):
-            for length in ("default", "1", "4096"):
+            for length in ("upstream", "1", "4096"):
                 vals, bad = definitions.bench_options_of(BENCH, "longmemeval_s", {"gen_length": length}, setup)
                 self.assertEqual(bad, [])
                 self.assertEqual(vals["gen_length"], length)

@@ -41,7 +41,7 @@ Long-term chat memory: questions over timestamped chat histories.
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
 | `expansion_join` | **`separate`**, `split-separate`, `merge`, `split-merge`, `replace`, `split-replace` | How cached expansions join retrieval keys when expansion is enabled: separate keys, merged text or replacement text. Split modes separate sentences or phrases first. | `original`, `model` |
-| `gen_length` | e.g. `4096`, default `default` | Upstream generation limit; default keeps 800 tokens. Larger limits leave less room for history. | `original`, `model` |
+| `gen_length` | e.g. `4096`, default `upstream` | Upstream generation limit; upstream keeps the published default. Larger limits leave less room for history. | `original`, `model` |
 | `history_format` | **`json`**, `nl` | Whether conversation history is shown to the model as JSON or as lines of text labelled by speaker. | `original`, `model` |
 | `merge_key_expansion` | **`none`**, `merge`, `replace` | Whether retrieved conversations are shown in full, replaced by their user text, or combined with that text. | `original`, `model` |
 | `question_type` | **`all`**, `knowledge-update`, `temporal-reasoning`, `multi-session`, `single-session-user`, `single-session-assistant`, `single-session-preference` | Which memory ability the run measures: every question, or only the questions of one type. | `original`, `model`, `yours` |
