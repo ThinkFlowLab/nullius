@@ -16,6 +16,10 @@ catalogue. ``load`` reads the folders in name order, so the catalogue's
 order is the folders', and nothing depends on it. ``layout`` is the check on
 the tree itself - a folder named after its key - and ``validate`` runs it.
 
+An optional ``records`` lists what the benchmark's verifier leaves in a
+trial beside Nullius's own records, each a label and a path under the trial's
+``verifier/``: a trial's Artifacts tab lists and serves those that exist.
+
 An optional ``task_count`` gives the number of distinct tasks when datasets
 overlap, such as a full split beside difficulty subsets. It controls the
 benchmark headline only; every dataset keeps its own count.
@@ -98,6 +102,10 @@ class Benchmark:
     #: the file, the fields that say pass or fail, the words the pages use; empty
     #: when the reward is all there is
     report: dict = field(default_factory=dict)
+    #: records its verifier leaves in a trial, each a ``label`` and a ``path`` under
+    #: the trial's ``verifier/`` (a file, or a folder whose files are listed): the
+    #: trial's Artifacts tab lists those that exist (``nullius.runs.artifacts``)
+    records: list = field(default_factory=list)
     #: how to cite it: the BibTeX its official repository gives, else its paper's
     citation: str = ""
     citation_source: str = ""
@@ -175,6 +183,18 @@ class Dataset:
     #: how its tasks are scored
     verifier: str = ""
     notes: str = ""
+
+
+def valid_record(record) -> bool:
+    """A declared record's shape (``Benchmark.records``): a label, and a path
+    under ``verifier/`` with no empty, ``.`` or ``..`` part and no backslash."""
+    if not isinstance(record, dict) or not isinstance(record.get("label"), str) or not record["label"].strip():
+        return False
+    path = record.get("path")
+    if not isinstance(path, str) or "\\" in path or "\0" in path:
+        return False
+    parts = path.split("/")
+    return len(parts) > 1 and parts[0] == "verifier" and all(p not in ("", ".", "..") for p in parts[1:])
 
 
 def sort_key(title: str) -> str:
@@ -404,6 +424,8 @@ def validate(cat: Catalog) -> list:
             bad.append(f"{b.key}: published is {{agent: a Harbor agent's name, says: why it is the published one}}")
         if not b.category:
             bad.append(f"{b.key}: no category")
+        if not isinstance(b.records, list) or not all(valid_record(r) for r in b.records):
+            bad.append(f"{b.key}: records are each {{label, path under verifier/}}")
         for h in b.harness:
             if h not in dict(HARNESSES):
                 bad.append(f"{b.key}: harness {h!r} is not one of {[k for k, _ in HARNESSES]}")

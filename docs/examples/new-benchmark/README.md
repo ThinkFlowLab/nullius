@@ -40,6 +40,7 @@ folder replaces the entire bundled entry of the same key, and survives upgrades.
 | `limitations` | Nullius's own: where running it here differs, or what is not offered yet |
 | `datasets` | `key`, `title`, `tasks`, `official` (upstream link), `source` (a phrase), `registry` (`name@version`) or `hub` (`org/name`), `verifier` |
 | `report` | Optional: how the verifier's report is read, shaped by `app/nullius/runs/verifier.py` |
+| `records` | Optional: files the verifier leaves in a trial, each `{label, path}`, the path under `verifier/` (a file, or a folder whose files are listed); a trial's Artifacts tab lists those it holds that are text under a printable name, the first 200 text files encountered per folder sorted by name, and says when more exist, after Nullius's records under a heading of their own, a folder's file named by the label and its name |
 | `citation`, `citation_source` | BibTeX, and its source |
 
 Full rules: the docstring of `app/nullius/catalogue/catalog.py`.

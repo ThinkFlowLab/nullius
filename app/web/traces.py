@@ -172,7 +172,7 @@ def _parsed_trace(path, filt):
 def artifact_page(job_id, trial_name, key):
     job, trial = _trial_evidence(job_id, trial_name, tries=True)
     try:
-        record = artifacts.read(trial.dir, key, request.args.get("page", 1))
+        record = artifacts.read(trial.dir, key, request.args.get("page", 1), artifacts.declared(trial.source))
     except (LookupError, OSError):
         abort(404)
     response = app.make_response(render_template("traces/artifact.html", job=job, trial=trial,
@@ -187,11 +187,12 @@ def artifact_download(job_id, trial_name, key):
     and Copy puts on the clipboard. One past the reader's limit is cut there,
     as its page says, and saved under a name that says so."""
     _, trial = _trial_evidence(job_id, trial_name, tries=True)
+    declared = artifacts.declared(trial.source)
     try:
-        text, truncated = artifacts.whole(trial.dir, key)
+        text, truncated = artifacts.whole(trial.dir, key, declared)
     except (LookupError, OSError):
         abort(404)
-    name = os.path.basename(artifacts.FILES[key][1])
+    name = os.path.basename(artifacts.describe(key, declared)[1])
     if truncated:
         stem, ext = os.path.splitext(name)
         name = f"{stem}.partial{ext}"
@@ -276,7 +277,8 @@ def trial(job_id, trial_name):
     # filtered view by construction, so there is one definition of "which spans
     # are in this view" and it is still the query string.
     ch = charts.charts_for(tr.roots, cfilt) if tr and tr.visible else None
-    records = [r for r in artifacts.listing(t.dir) if r["exists"]]   # a record never written has no row
+    # a record never written has no row; the benchmark's own declared records after Nullius's
+    records = [r for r in artifacts.listing(t.dir, artifacts.declared(t.source)) if r["exists"]]
     for record in records:
         record["url"] = url_for("artifact_page", job_id=job_id, trial_name=trial_name,
                                 key=record["key"], workspace=request.args.get("workspace"))
