@@ -837,11 +837,18 @@ class StandardOnHost(HostBase):
         self.assertIn("NULLIUS_PRICES=", launch[-1])
         self.calls.clear(); self.polls = 0
         price_list.set_own("gpt-5-mini", price_list.row(1, 2))
+        price_list.update(fetch=lambda source: json.dumps({"model-a": {"input_cost_per_token": 2.5e-06, "output_cost_per_token": 1e-05}}).encode())
         self.plan.name = "std-priced"
         ex = self.run_it()
         self.assertEqual((ex.state, ex.exit_code), ("done", 0), ex.lines)
         sent = next(s for c, s in self.calls if c[0] == "ssh" and "cat > " in c[-1] and "/prices.json" in c[-1])
-        self.assertEqual(json.loads(sent)["own"], {"gpt-5-mini": {"input": 1.0, "output": 2.0}})
+        self.assertEqual(json.loads(sent)["own"], {"gpt-5-mini": {"input": 1.0, "output": 2.0}})     # the list and the user's rows, both
+        self.assertEqual(json.loads(sent)["models"], {"model-a": {"input": 2.5, "output": 10.0}})
+        with mock.patch.dict(os.environ, {"NULLIUS_PRICES": os.path.join(self.tmp, "on-host", "prices.json")}):   # read there as a list of before
+            os.makedirs(os.path.join(self.tmp, "on-host"))
+            with open(price_list.path(), "w") as f:
+                f.write(sent)
+            self.assertEqual(price_list.table(), {"model-a": {"input": 2.5, "output": 10.0}, "gpt-5-mini": {"input": 1.0, "output": 2.0}})
         launch = next(c for c, _ in self.calls if c[0] == "ssh" and "setsid nohup" in c[-1])
         self.assertIn('NULLIUS_PRICES="$HOME/.nullius/runs/std-priced/prices.json"', launch[-1])
 

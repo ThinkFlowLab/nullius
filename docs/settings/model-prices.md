@@ -11,7 +11,7 @@ its list is filled once.
 | --- | --- |
 | The list | LiteLLM's public `model_prices_and_context_window.json` |
 | Fetched | Only when **Update** or `nullius prices update` asks; a run reads the saved list and never the network |
-| Your prices | Win over the list. An update leaves them as they are |
+| Your prices | Win over the list. Kept in a file of their own that an update never opens. A row that cannot price is kept and named until it is set again |
 | One run | `--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]` on [`nullius standard run`](../cli/run.md) prices that run only, over both |
 | A call's cost | The provider's own figure when its reply carries one (OpenRouter's does); else the price of exactly that model name; else none, shown as — |
 | Exact names | `gpt-4.1-nano` is not priced as `gpt-4.1` |
@@ -36,4 +36,4 @@ Optional `--price` fields may be omitted or left empty. One-hour writes use
 A reply without write-duration usage uses `cache_write`. `nullius prices set` also accepts `--cache-write` and
 `--cache-write-1h`.
 
-`NULLIUS_PRICES` names another price list file.
+`NULLIUS_PRICES` names another price list file; your own prices sit beside it.
