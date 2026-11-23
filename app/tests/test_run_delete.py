@@ -71,6 +71,14 @@ class RunDelete(unittest.TestCase):
         self.assertEqual(len(store.job_dirs(self.a.dir, ["job-a"])), 2)
         self.assertEqual(store.job_dirs(self.b.dir, ["job-a"]), [])
 
+    def test_a_job_of_the_same_id_deleted_from_another_root_keeps_none(self):
+        twin = os.path.join(self.tmp, "twin"); _job_dir(twin, "job-a")
+        self.a.roots.append(twin); workspace.save(self.a); workspace.load_jobs(self.a, self.a.roots)
+        shutil.rmtree(os.path.join(twin, "job-a"))                                   # the older copy deleted by hand
+        self.assertEqual(execution.deletion(["r1"], self.home, self.root)["judgements"], 4)
+        execution.delete(["r1"], self.home, self.root)
+        self.assertEqual(store.job_dirs(self.a.dir, ["job-a"]), [])
+
     def test_a_run_still_going_is_refused(self):
         for state in execution.ALIVE:
             with self.subTest(state=state):

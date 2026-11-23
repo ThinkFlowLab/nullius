@@ -29,7 +29,8 @@ run's copy can bring a trial's files after the job's own), and its head
 carries the run's end, so the last copy is checked trial by trial once more.
 An ended job's head is noted in ``jobs/index.json`` beside the signature it was
 seen with: a head that moves while the signature holds rewrites that index, not
-the job's cache.
+the job's cache. A job folder gone from disk, or no longer found under the roots
+read, leaves the index with its cache, and the stored counts go.
 """
 from __future__ import annotations
 
@@ -249,16 +250,30 @@ def forget(ws: Workspace, roots, job_dirs) -> None:
     ws.job_roots = [r for r in ws.job_roots if r not in roots]
     save(ws)
     index = job_index(ws)
-    for d in job_dirs:
-        path = _cache_file(ws, d)
-        with _DECODED_LOCK:
-            _DECODED.pop(path, None)
-        try:
-            os.remove(path)
-        except OSError:
-            pass
-        index.pop(d, None)
+    # a root already gone from disk finds no job dirs: its entries go by where they were
+    for d in set(job_dirs) | {d for d in index if _under(d, roots)}:
+        _drop(ws, index, d)
     _write_index(ws, index)
+
+
+def _under(job_dir: str, roots) -> bool:
+    """*job_dir* is one of *roots* or one level in it, as ``parse.find_job_dirs`` finds them."""
+    roots = {os.path.normpath(r) for r in roots}
+    return os.path.normpath(job_dir) in roots or os.path.dirname(os.path.normpath(job_dir)) in roots
+
+
+def _drop(ws: Workspace, index: dict, job_dir: str, keep=()) -> None:
+    """*job_dir*'s entry in *index* and its parsed job, unless its cache file is one of *keep*."""
+    index.pop(job_dir, None)
+    path = _cache_file(ws, job_dir)
+    if path in keep:
+        return
+    with _DECODED_LOCK:
+        _DECODED.pop(path, None)
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def signature(job_dir: str) -> str:
@@ -562,8 +577,17 @@ def load_jobs(ws: Workspace, roots, runs: dict | None = None) -> list:
     # the rail's index read once and written once, not once per job
     index = job_index(ws)
     before = dict(index)
+    dirs = parse.find_job_dirs(roots)
     with verifier.held():
-        jobs = [load_job(ws, d, index, runs)[0] for d in parse.find_job_dirs(roots)]
+        jobs = [load_job(ws, d, index, runs)[0] for d in dirs]
+    # a job folder gone from disk, or no longer found under these roots, leaves the index
+    found = set(dirs)
+    gone = [d for d in index if d not in found and (_under(d, roots) or not os.path.isdir(d))]
+    if gone:
+        keep = {_cache_file(ws, d) for d in dirs}      # the same folder found by another path
+        for d in gone:
+            _drop(ws, index, d, keep)
+        store_counts(ws, None, None)
     if index != before:
         _write_index(ws, index)
     return parse.split_agents(jobs)
