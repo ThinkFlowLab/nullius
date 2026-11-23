@@ -519,11 +519,12 @@
         + (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : ''))
       + '<div class="nb-sectionhead std-wherehead"><h3>Isolation</h3></div>'
       + (sandboxes || vms
-        ? `<div class="nb-fixed std-isolation"><span>${vms ? `Each ${esc(noun)} in its own VM` : `The agent alone in each ${esc(noun)}'s VM`}</span>`
-          + `<small>${vms ? (provider ? (sandboxes ? `${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, inside the ${esc(noun)}'s Boat VM` : `${esc(provider.label)}: ${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}`) : '') : 'Answers and keys stay on this machine'}</small></div>`
-        : `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
-          + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
-            : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy) + '</div>')
+        ? (vms && !sandboxes ? `<div class="nb-fixed std-isolation"><span>As you, on the machine</span><small>A container that Nullius starts cannot start the ${esc(noun)}s' VMs</small></div>` : '')
+          + `<div class="nb-fixed std-isolation"><span>${vms ? `Each ${esc(noun)} in its own VM` : `The agent alone in each ${esc(noun)}'s VM`}</span>`
+          + `<small>${vms ? (provider ? (sandboxes ? `${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, inside the ${esc(noun)}'s Boat VM` : `${esc(provider.label)}: ${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, used by ${esc(b.label)} itself`) : '') : 'Answers and keys stay on this machine'}</small></div>`
+        : `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, on the machine, not sandboxed.', '')}`
+          + how('container', 'Container', web ? 'Sandboxed: Nullius starts a container for each unit, whose only ways out are its relay and a public web proxy.'
+            : 'Sandboxed: Nullius starts a container for each unit, whose only way out is its relay.', containerWhy) + '</div>')
       + (b ? benchOptions(rec, b, 'where') : '')
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
       + (dockerOnly.length && backend !== 'container' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - ${sandboxes ? 'in a Boat VM' : 'on local processes'} their units are recorded as not run.</p>` : '')
@@ -552,12 +553,14 @@
     if ((rec.backend || 'local') === 'container' && chosen.length && chosen.every(o => o.setup)) return '';
     const reqs = need.map(n => [n, (b.host || {})[n]]).filter(([, r]) => r);
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
+    const lacks = [];                     // a chosen machine known to lack one: said once, under the requirements
     return reqs.map(([name, req]) => {
       const lines = req.install || [];
       const machines = C.whereList(rec);
       const rows = machines.map(w => {
         const st = hostState[b.key + ':' + w + ':' + name] || (w === 'local' ? {missing: local[name] ? {[name]: local[name]} : {}} : null);
         const missing = st && st.missing && st.missing[name];
+        if (missing && missing.length) lacks.push(`${w === 'local' ? 'This machine' : C.machineLabel(w)} lacks ${req.label} (${missing.join(', ')})`);
         const state = !st ? 'Not checked' : st.error ? st.error : missing && missing.length ? 'Missing' : 'Ready';
         const attrs = `data-hostreq-name="${esc(name)}"`;
         return `<div class="std-hostreq-row">${machines.length > 1 || w !== 'local' ? `<strong>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</strong>` : ''}`
@@ -569,7 +572,7 @@
       }).join('');
       return `<div class="nb-sectionhead std-wherehead"><h3>${esc(req.label)}</h3></div><div class="std-hostreq">${rows}`
         + (lines.length ? `<details><summary>Install manually</summary><div class="std-code"><div class="std-code-head"><span></span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div></details>` : '') + '</div>';
-    }).join('');
+    }).join('') + (lacks.length ? `<p class="nb-note nb-error std-hostreq-lacks" role="status">${esc(lacks.join('; '))}: ${esc(b.label)} cannot run there. Run waits until it is there.</p>` : '');
   }
   async function hostReq(entry, what, name) {
     const rec = r(), b = C.standardBench(rec), key = b.key + ':' + entry + ':' + name;

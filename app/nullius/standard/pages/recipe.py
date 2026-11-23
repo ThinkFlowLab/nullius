@@ -560,7 +560,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             add("model", why)
     agents_local = [p["o"]["label"] for p in picks if side == "agent" and not p["control"] and not p.get("setup") and backend == "local"]
     if agents_local and recipe.get("unsandboxed") is not True:
-        add("where", f"{', '.join(agents_local)} would run as you, not sandboxed: tick Run it as me, or choose Docker.")
+        add("where", f"{', '.join(agents_local)} would run as you, not sandboxed: tick Run it as me"
+            + ("; a container cannot start its VMs." if definitions.boots_vms(b) else ", or choose Docker."))
     only_controls = bool(picks) and all(p["control"] for p in picks)
     needs_model = any(not p["control"] for p in picks)
     model_choice = recipe.get("model_choice", "any")

@@ -231,7 +231,8 @@
   },
   "host": {
     "docker": {
-      "summary": "Docker on the machine the driver runs on, usable without sudo, for the upstream's docker provider; /dev/kvm makes the VMs fast, and the upstream runs them without it, slowly.",
+      "label": "Docker for the tasks' VMs",
+      "summary": "Docker on the machine, usable without sudo: OSWorld starts each task's VM in it. /dev/kvm makes the VMs fast; without it they run slowly.",
       "check": [
         "docker"
       ]

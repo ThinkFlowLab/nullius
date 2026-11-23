@@ -287,9 +287,16 @@ class MachineDocker(unittest.TestCase):
                 setups = {n["name"]: n for n in out["host"]["needs"]}
                 rows = prerequisites.check_here([], setups, which=lambda p: None)
                 self.assertEqual([(x["name"], x["state"]) for x in rows], [("setup:docker", "missing")])
-                self.assertEqual(rows[0]["label"], "docker")
+                self.assertEqual(rows[0]["label"], "Docker for the tasks' VMs")
                 self.assertFalse(prerequisites.ready([{"rows": rows}]))
                 self.assertTrue(prerequisites.ready([{"rows": prerequisites.check_here([], setups, which=lambda p: "/usr/bin/" + p)}]))
+
+    def test_an_agents_run_is_asked_the_tick_alone_since_no_container_starts_the_vms(self):
+        out = recipe.compile(self.a_recipe(["codex"], model_choice="any", model="vendor/m", unsandboxed=False))
+        said = [e["message"] for e in out["errors"] if "not sandboxed" in e["message"]]
+        self.assertEqual(len(said), 1, out["errors"])
+        self.assertNotIn("choose Docker", said[0])
+        self.assertEqual(recipe.compile(self.a_recipe(["codex"], model_choice="any", model="vendor/m", unsandboxed=True))["errors"], [])
 
     def test_the_null_control_is_refused_as_it_starts_on_a_machine_without_docker(self):
         b = definitions.get("benchmark", "osworld1")
