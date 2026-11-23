@@ -439,9 +439,7 @@ def decision_models(env=None, *, fetch: bool = True, opener=None, clock=time.tim
         return models
     try:
         os.makedirs(os.path.dirname(file), exist_ok=True)
-        with open(file + ".tmp", "w", encoding="utf-8") as f:
-            json.dump({"at": clock(), "models": fresh}, f)
-        os.replace(file + ".tmp", file)
+        ondisk.write_whole(file, json.dumps({"at": clock(), "models": fresh}))
     except OSError:
         pass                    # an unwritable cache asks again next time
     return fresh

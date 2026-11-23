@@ -29,6 +29,19 @@ class Store(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
 
+    def test_a_recipe_is_written_owner_only_by_the_shared_writer(self):
+        with mock.patch.object(store.ondisk, "write_whole", wraps=store.ondisk.write_whole) as write:
+            item = store.save(recipe("Shared"))
+        (path, _), kw = write.call_args
+        self.assertEqual((path, kw), (os.path.join(store.root(), item["id"] + ".json"), {"mode": 0o600}))
+        old = os.umask(0)
+        try:
+            store.save(recipe("Shared", limit=2))
+        finally:
+            os.umask(old)
+        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
+        self.assertEqual(os.listdir(store.root()), [item["id"] + ".json"])
+
     def names(self):
         return sorted(x["name"] for x in store.listing())
 

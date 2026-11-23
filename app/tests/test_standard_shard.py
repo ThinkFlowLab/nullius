@@ -90,6 +90,23 @@ def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="g
     return d
 
 
+class JobFiles(unittest.TestCase):
+    """A job's config.json and result.json are read while a run goes on: a write that fails leaves the last whole one."""
+
+    def test_a_write_that_fails_leaves_the_file_as_it_was(self):
+        tmp = tempfile.mkdtemp(prefix="nullius-jobfiles-"); self.addCleanup(shutil.rmtree, tmp, True)
+        d = write_shard(tmp, "j", ["u-1"], 1, 1)
+        files = [os.path.join(d, n) for n in ("config.json", "result.json")]
+        before = [open(p).read() for p in files]
+        with self.assertRaises(TypeError):
+            job.write_result(d, "j", 0.0, 1.0, [], 1, budget={"cap": object()})
+        with self.assertRaises(TypeError):
+            job.write_config(d, job="j", bench=BENCH, other=AGENT, model="m", provider="openai", dataset="all", units=["u-1"],
+                             concurrency=1, granted=True, options={"bad": object()})
+        self.assertEqual([open(p).read() for p in files], before)
+        self.assertEqual(sorted(n for n in os.listdir(d) if not os.path.isdir(os.path.join(d, n))), ["config.json", "result.json"])
+
+
 class Merge(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="nullius-merge-"); self.addCleanup(shutil.rmtree, self.tmp, True)

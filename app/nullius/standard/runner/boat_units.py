@@ -28,7 +28,7 @@ import threading
 import uuid
 from typing import Callable, Dict, List, Optional
 
-from nullius import paths, secrets
+from nullius import ondisk, paths, secrets
 from nullius.standard.backends import boat
 from nullius.standard.contract import definitions
 from nullius.standard.requirements import hostreq
@@ -207,6 +207,4 @@ def _record(job_dir: str, size: str) -> None:
     with open(path) as f:
         cfg = json.load(f)
     cfg.setdefault("standard", {}).update(backend="boat", boat_size=size, boat_units="each unit whole in a Boat VM of its own")
-    with open(path + ".tmp", "w") as f:
-        json.dump(cfg, f, indent=2)
-    os.replace(path + ".tmp", path)
+    ondisk.write_whole(path, json.dumps(cfg, indent=2))

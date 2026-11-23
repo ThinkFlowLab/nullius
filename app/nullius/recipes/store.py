@@ -13,11 +13,10 @@ import json
 import os
 import re
 import secrets
-import tempfile
 import time
 from typing import Dict, Iterable, List, Optional
 
-from nullius import paths
+from nullius import ondisk, paths
 
 ID = re.compile(r"^[0-9a-f]{16}$")
 _HARNESS = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
@@ -55,21 +54,10 @@ def entry(recipe) -> Dict:
 
 
 def _write(item: Dict) -> None:
-    """Written whole under a temporary 0600 name beside it, then renamed over the old one."""
+    """Written whole, owner-only, beside the old one and renamed over it."""
     path = _path(item["id"])
     os.makedirs(root(), mode=0o700, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=root())
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(item, fh, indent=2, ensure_ascii=False)
-            fh.write("\n")
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    ondisk.write_whole(path, lambda fh: (json.dump(item, fh, indent=2, ensure_ascii=False), fh.write("\n")), mode=0o600)
 
 
 def listing() -> List[Dict]:
