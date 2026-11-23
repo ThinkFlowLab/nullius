@@ -2,14 +2,14 @@
 
 # DigitalMate
 
-DigitalMate's Personal Agent service with its owned WorkSwarm runtime.
+DigitalMate's Personal Agent service, run as Hive Home with its owned WorkSwarm runtimes.
 
 <table>
 <tbody>
 <tr><th>Key</th><td><code>digitalmate</code></td></tr>
 <tr><th>Driven over</th><td>a command</td></tr>
 <tr><th>From</th><td>repository</td></tr>
-<tr><th>Installed</th><td><code>github.com/<wbr>openJiuwen-ai/<wbr>DigitalMate</code> at <code>709f4d39d613</code>; <code>websockets==15.0.1</code></td></tr>
+<tr><th>Installed</th><td><code>github.com/<wbr>openJiuwen-ai/<wbr>DigitalMate</code> at <code>7dbfc6729963</code>; <code>websockets==15.0.1</code></td></tr>
 <tr><th>Licence</th><td>Apache-2.0</td></tr>
 <tr><th>Core</th><td>Bundled WorkSwarm 0d6857507236d1299276caf0f6fe09e5baaa4c23 and agent-core 8f9f112698d5580b749158b21b1a89a54e16a8f9, verified and installed by the release installer</td></tr>
 </tbody></table>
@@ -19,7 +19,7 @@ DigitalMate's Personal Agent service with its owned WorkSwarm runtime.
 <table>
 <thead><tr><th rowspan="2">Version</th><th rowspan="2">Upstream</th><th colspan="6" class="group">Ports</th><th colspan="3" class="group">Tools</th></tr><tr><th>One task</th><th>Workspace files</th><th>MCP tools</th><th>Conversation</th><th>Search</th><th>Computer use</th><th>decoys</th><th>chain</th><th>retry</th></tr></thead>
 <tbody>
-<tr><td><code>digitalmate</code></td><td><code>0.1.12</code></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td></tr>
+<tr><td><code>digitalmate</code></td><td><code>0.1.13</code></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td></tr>
 </tbody></table>
 
 ## Options
@@ -31,7 +31,7 @@ None declared.
 <table>
 <thead><tr><th rowspan="2"></th><th colspan="1" class="group"><a href="../../benchmarks/supported/gaia.md">GAIA</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/gsm8k.md">GSM8K</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/humaneval.md">HumanEval</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/open-telco.md">Open Telco</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/osworld1.md">OSWorld1</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/osworld2.md">OSWorld2</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/swe-bench-verified.md">SWE-bench Verified</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/tau3-bench.md">τ³-bench</a></th><th colspan="1" class="group"><a href="../../benchmarks/supported/terminal-bench.md">Terminal-Bench 2.0</a></th></tr><tr><th>One task, Workspace files, Search</th><th>One task</th><th>Workspace files</th><th>One task</th><th>Computer use</th><th>Computer use</th><th>Workspace files</th><th>MCP tools, Conversation</th><th>Workspace files</th></tr></thead>
 <tbody>
-<tr><td><code>digitalmate</code></td><td><abbr class="mark no" title="lacks `agent.workspace/v1`, `agent.search/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><abbr class="mark no" title="lacks `agent.workspace/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><abbr class="mark no" title="lacks `agent.computer/v1`">✗</abbr></td><td><abbr class="mark no" title="lacks `agent.computer/v1`">✗</abbr></td><td><abbr class="mark no" title="lacks `agent.workspace/v1`">✗</abbr></td><td><abbr class="mark no" title="lacks `agent.tools/v1`, `agent.conversation/v1`">✗</abbr></td><td><abbr class="mark no" title="lacks `agent.workspace/v1`">✗</abbr></td></tr>
+<tr><td><code>digitalmate</code></td><td><abbr class="mark no" title="lacks `agent.workspace/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><abbr class="mark no" title="lacks `agent.workspace/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><abbr class="mark no" title="lacks `agent.computer/v1`">✗</abbr></td><td><abbr class="mark no" title="lacks `agent.computer/v1`">✗</abbr></td><td><abbr class="mark no" title="lacks `agent.workspace/v1`">✗</abbr></td><td><abbr class="mark no" title="lacks `agent.tools/v1`, `agent.conversation/v1`">✗</abbr></td><td><abbr class="mark no" title="lacks `agent.workspace/v1`">✗</abbr></td></tr>
 </tbody></table>
 
 - ✗: the missing port, on hover.

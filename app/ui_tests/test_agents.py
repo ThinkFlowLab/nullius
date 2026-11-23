@@ -75,16 +75,16 @@ class Tabs(unittest.TestCase):
         self.assertNotIn('is a promise a benchmark relies on', html)
         self.assertNotIn("once, in the standard's home", html)
 
-    def test_digitalmate_is_in_the_normal_catalogue_with_its_proven_task_port(self):
+    def test_digitalmate_is_in_the_normal_catalogue_with_its_proven_ports(self):
         with patch.object(definitions, "load", _LOAD):
             listing = self.get("/agents").get_data(as_text=True)
             detail = self.get("/agents/digitalmate").get_data(as_text=True)
         self.assertIn('/agents/digitalmate', listing)
         self.assertIn('DigitalMate', detail)
-        self.assertIn('709f4d39d613c', detail)
+        self.assertIn('7dbfc6729963e', detail)
         agent = _GET("agent", "digitalmate")
-        self.assertEqual(agent["upstream"]["tag"], "v0.1.12")
-        self.assertEqual(agent["offers"], ["agent.task/v1"])
+        self.assertEqual(agent["upstream"]["tag"], "v0.1.13")
+        self.assertEqual(agent["offers"], ["agent.task/v1", "agent.search/v1"])
         proof = agent["proven"]["agent.task/v1"]
         self.assertEqual(proof["passed"], "3/3")
         self.assertEqual(proof["version"], agent["upstream"]["version"])
