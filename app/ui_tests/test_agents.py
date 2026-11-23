@@ -89,6 +89,14 @@ class Tabs(unittest.TestCase):
         self.assertEqual(proof["passed"], "3/3")
         self.assertEqual(proof["version"], agent["upstream"]["version"])
         self.assertEqual(proof["model"], "meta/muse-spark-1.3-contributor")
+        # The fixed version: the fork's v0.1.13 branch, every agent port but computer use, never the default.
+        fixed = _GET("agent", "digitalmate@0.1.13-fixes")
+        self.assertEqual(fixed["upstream"]["repository"], "https://github.com/aitianshi/DigitalMate")
+        self.assertEqual(fixed["upstream"]["branch"], "nullius/v0.1.13")
+        self.assertTrue(any("#2484" in fix for fix in fixed["upstream"]["fixes"]))
+        self.assertEqual(fixed["offers"], ["agent.task/v1", "agent.workspace/v1", "agent.tools/v1",
+                                           "agent.conversation/v1", "agent.search/v1"])
+        self.assertIn("/agents/digitalmate?v=0.1.13-fixes", detail)
 
     def test_bundled_agents_use_shared_marks(self):
         with patch.object(definitions, "load", _LOAD):

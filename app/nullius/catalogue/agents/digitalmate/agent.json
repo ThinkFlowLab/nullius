@@ -3,82 +3,6 @@
   "key": "digitalmate",
   "label": "DigitalMate",
   "summary": "DigitalMate's Personal Agent service, run as Hive Home with its owned WorkSwarm runtimes.",
-  "upstream": {
-    "repository": "https://github.com/openJiuwen-ai/DigitalMate",
-    "tested": "7dbfc6729963ea9173c50f30c38385a8980a4b11",
-    "license": "Apache-2.0",
-    "tag": "v0.1.13",
-    "core": "Bundled WorkSwarm 0d6857507236d1299276caf0f6fe09e5baaa4c23 and agent-core 8f9f112698d5580b749158b21b1a89a54e16a8f9, verified and installed by the release installer",
-    "version": "0.1.13"
-  },
-  "install": {
-    "python": "3.13",
-    "project": ".",
-    "pip": [
-      "websockets==15.0.1"
-    ],
-    "commands": [
-      [
-        "uv",
-        "venv",
-        "--quiet",
-        "--seed",
-        "--python",
-        "{install}/.venv/bin/python",
-        "{install}/runtime"
-      ],
-      [
-        "{install}/runtime/bin/python",
-        "{install}/src/harness/personal-agent/deploy/install_runtime.py",
-        "--wheel-dir",
-        "{install}/wheels"
-      ],
-      [
-        "{install}/runtime/bin/python",
-        "-m",
-        "pip",
-        "install",
-        "--quiet",
-        "{install}/src/temp/history-context-recovery",
-        "{install}/src",
-        "{install}/src/harness/personal-agent/services/agent_bridge"
-      ],
-      [
-        "{install}/runtime/bin/python",
-        "-m",
-        "pip",
-        "check"
-      ],
-      [
-        "uv",
-        "pip",
-        "install",
-        "--quiet",
-        "--python",
-        "{install}/.venv/bin/python",
-        "{install}/src/plugins",
-        "{install}/src/temp/history-context-recovery",
-        "{install}/wheels/openjiuwen-0.1.19-py3-none-any.whl",
-        "{install}/src/harness/personal-agent/services/agent_bridge[geo,agent]"
-      ],
-      [
-        "uv",
-        "pip",
-        "check",
-        "--python",
-        "{install}/.venv/bin/python"
-      ]
-    ]
-  },
-  "start": {
-    "command": [
-      "{install}/.venv/bin/python",
-      "{here}/run.py",
-      "--install",
-      "{install}",
-      "{prompt}"
-    ]
-  },
   "model": {
     "apis": [
       "chat"
@@ -90,26 +14,238 @@
       "MODEL_PROVIDER": "OpenAI"
     }
   },
-  "offers": [
-    "agent.task/v1",
-    "agent.search/v1"
-  ],
-  "proven": {
-    "agent.task/v1": {
-      "passed": "3/3",
-      "model": "meta/muse-spark-1.3-contributor",
-      "provider": "openrouter",
-      "version": "0.1.13",
-      "kit_version": 1,
-      "backend": "container"
+  "default": "0.1.13",
+  "versions": {
+    "0.1.13": {
+      "upstream": {
+        "repository": "https://github.com/openJiuwen-ai/DigitalMate",
+        "tested": "7dbfc6729963ea9173c50f30c38385a8980a4b11",
+        "license": "Apache-2.0",
+        "tag": "v0.1.13",
+        "core": "Bundled WorkSwarm 0d6857507236d1299276caf0f6fe09e5baaa4c23 and agent-core 8f9f112698d5580b749158b21b1a89a54e16a8f9, verified and installed by the release installer"
+      },
+      "install": {
+        "python": "3.13",
+        "project": ".",
+        "pip": [
+          "websockets==15.0.1"
+        ],
+        "commands": [
+          [
+            "uv",
+            "venv",
+            "--quiet",
+            "--seed",
+            "--python",
+            "{install}/.venv/bin/python",
+            "{install}/runtime"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "{install}/src/harness/personal-agent/deploy/install_runtime.py",
+            "--wheel-dir",
+            "{install}/wheels"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            "{install}/src/temp/history-context-recovery",
+            "{install}/src",
+            "{install}/src/harness/personal-agent/services/agent_bridge"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "-m",
+            "pip",
+            "check"
+          ],
+          [
+            "uv",
+            "pip",
+            "install",
+            "--quiet",
+            "--python",
+            "{install}/.venv/bin/python",
+            "{install}/src/plugins",
+            "{install}/src/temp/history-context-recovery",
+            "{install}/wheels/openjiuwen-0.1.19-py3-none-any.whl",
+            "{install}/src/harness/personal-agent/services/agent_bridge[geo,agent]"
+          ],
+          [
+            "uv",
+            "pip",
+            "check",
+            "--python",
+            "{install}/.venv/bin/python"
+          ]
+        ]
+      },
+      "start": {
+        "command": [
+          "{install}/.venv/bin/python",
+          "{here}/run.py",
+          "--install",
+          "{install}",
+          "{prompt}"
+        ]
+      },
+      "proven": {
+        "agent.task/v1": {
+          "passed": "3/3",
+          "model": "meta/muse-spark-1.3-contributor",
+          "provider": "openrouter",
+          "version": "0.1.13",
+          "kit_version": 1,
+          "backend": "container"
+        },
+        "agent.search/v1": {
+          "passed": "3/3",
+          "model": "meta/muse-spark-1.3-contributor",
+          "provider": "openrouter",
+          "version": "0.1.13",
+          "kit_version": 1,
+          "backend": "container"
+        }
+      }
     },
-    "agent.search/v1": {
-      "passed": "3/3",
-      "model": "meta/muse-spark-1.3-contributor",
-      "provider": "openrouter",
-      "version": "0.1.13",
-      "kit_version": 1,
-      "backend": "container"
+    "0.1.13-fixes": {
+      "upstream": {
+        "repository": "https://github.com/aitianshi/DigitalMate",
+        "branch": "nullius/v0.1.13",
+        "tested": "e69d1923f6f980451a1a16d9a5b6cf1f18b1f755",
+        "license": "Apache-2.0",
+        "core": "Bundled WorkSwarm 0d6857507236d1299276caf0f6fe09e5baaa4c23 and agent-core 8f9f112698d5580b749158b21b1a89a54e16a8f9, verified and installed by the release installer",
+        "fixes": [
+          "Hive project workspace binding: openJiuwen-ai/DigitalMate PR #699, cherry-picked onto v0.1.13",
+          "Operator stdio MCP servers for Bees: openJiuwen-ai/DigitalMate issue #2483, PR #2484"
+        ]
+      },
+      "install": {
+        "python": "3.13",
+        "project": ".",
+        "pip": [
+          "websockets==15.0.1"
+        ],
+        "commands": [
+          [
+            "uv",
+            "venv",
+            "--quiet",
+            "--seed",
+            "--python",
+            "{install}/.venv/bin/python",
+            "{install}/runtime"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "{install}/src/harness/personal-agent/deploy/install_runtime.py",
+            "--wheel-dir",
+            "{install}/wheels"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            "{install}/src/temp/history-context-recovery",
+            "{install}/src",
+            "{install}/src/harness/personal-agent/services/agent_bridge"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "-m",
+            "pip",
+            "check"
+          ],
+          [
+            "uv",
+            "pip",
+            "install",
+            "--quiet",
+            "--python",
+            "{install}/.venv/bin/python",
+            "{install}/src/plugins",
+            "{install}/src/temp/history-context-recovery",
+            "{install}/wheels/openjiuwen-0.1.19-py3-none-any.whl",
+            "{install}/src/harness/personal-agent/services/agent_bridge[geo,agent]"
+          ],
+          [
+            "uv",
+            "pip",
+            "check",
+            "--python",
+            "{install}/.venv/bin/python"
+          ]
+        ]
+      },
+      "start": {
+        "acp": [
+          "{install}/.venv/bin/python",
+          "{here}/acp.py",
+          "--install",
+          "{install}"
+        ]
+      },
+      "proven": {
+        "agent.task/v1": {
+          "passed": "3/3",
+          "model": "meta/muse-spark-1.3-contributor",
+          "provider": "openrouter",
+          "version": "0.1.13-fixes",
+          "kit_version": 1,
+          "backend": "container"
+        },
+        "agent.workspace/v1": {
+          "passed": "2/2",
+          "model": "meta/muse-spark-1.3-contributor",
+          "provider": "openrouter",
+          "version": "0.1.13-fixes",
+          "kit_version": 1,
+          "backend": "container"
+        },
+        "agent.tools/v1": {
+          "passed": "2/2",
+          "model": "meta/muse-spark-1.3-contributor",
+          "provider": "openrouter",
+          "version": "0.1.13-fixes",
+          "kit_version": 2,
+          "backend": "container",
+          "skills": {
+            "decoys": {
+              "passed": "1/1",
+              "ok": true
+            },
+            "chain": {
+              "passed": "1/1",
+              "ok": true
+            },
+            "retry": {
+              "passed": "1/1",
+              "ok": true
+            }
+          }
+        },
+        "agent.conversation/v1": {
+          "passed": "2/2",
+          "model": "meta/muse-spark-1.3-contributor",
+          "provider": "openrouter",
+          "version": "0.1.13-fixes",
+          "kit_version": 1,
+          "backend": "container"
+        },
+        "agent.search/v1": {
+          "passed": "3/3",
+          "model": "meta/muse-spark-1.3-contributor",
+          "provider": "openrouter",
+          "version": "0.1.13-fixes",
+          "kit_version": 1,
+          "backend": "container"
+        }
+      }
     }
   }
 }
