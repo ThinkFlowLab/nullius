@@ -132,10 +132,10 @@
       },
       "leak": {
         "units": 9,
-        "looked_for": 2,
-        "short": 7,
+        "looked_for": 1,
+        "short": 8,
         "passed": "9/9",
-        "note": "7 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
+        "note": "8 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
       },
       "nop": {
         "passed": "0/9",
