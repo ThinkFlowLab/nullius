@@ -264,6 +264,17 @@
         "model"
       ]
     },
+    "gen_length": {
+      "label": "Reader output tokens",
+      "summary": "Upstream generation limit; default keeps 800 tokens. Larger limits leave less room for history.",
+      "pattern": "(?:default|[1-9][0-9]*)",
+      "example": "4096",
+      "default": "default",
+      "setups": [
+        "original",
+        "model"
+      ]
+    },
     "separate_notes": {
       "label": "Separate notes",
       "summary": "Write a separate note for each retrieved session or turn before reasoning. Original memory only.",
