@@ -203,11 +203,10 @@
     <div class="hero none" id="adjusted-rate" data-tip="No trial in this run carries a verdict — nothing was scored">—</div>
     {% endif %}
     {% if filtered %}{% set fv = filtered.view %}
-    <div class="filtered" id="filtered-score" role="group" aria-label="Leave out flagged tasks">
-      <span class="lead">Leave out</span>
+    <form method="get" class="filtered" id="filtered-score" aria-label="Exclude flagged tasks">
+      {% for key, value in request.args.items() if key not in ('flawed', 'ambiguous') %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
       {% for k in ('flawed', 'ambiguous') %}{% if fv.flagged[k] %}
-      <a class="chip{{ ' active' if k in fv.kinds }}" id="filter-{{ k }}" data-kind="{{ k }}" role="button" href="{{ filtered.links[k] }}" aria-pressed="{{ 'true' if k in fv.kinds else 'false' }}"
-         data-tip="Tasks a person flagged {{ k }}">{{ fv.flagged[k] }} {{ k }}</a>
+      <label class="filter-choice"><input type="checkbox" id="filter-{{ k }}" name="{{ k }}" value="1" data-kind="{{ k }}"{{ ' checked' if k in fv.kinds }}> Exclude {{ fv.flagged[k] }} {{ k }} task{{ '' if fv.flagged[k] == 1 else 's' }}</label>
       {% endif %}{% endfor %}
       {% if fv.other_version %}<span class="small faint" id="filter-other-version" data-tip="Flags set on another version of their task; they do not count">{{ fv.other_version }} on another version</span>{% endif %}
       <span class="sr" id="filtered-live" aria-live="polite"></span>
@@ -215,7 +214,8 @@
       {% for v in filtered.views %}
       <p class="filtered-rate"{% if v.kinds == fv.kinds %} id="filtered-rate"{% else %} hidden{% endif %} data-kinds="{{ v.kinds|join(',') }}" data-tip="The adjusted rate without the tasks left out">Filtered score <b>{{ v.filtered_score|pct }}</b> <span class="faint">{{ v.solved }}/{{ v.ran }}</span></p>
       {% endfor %}
-    </div>
+      <noscript><button type="submit" class="btn sm">Apply</button></noscript>
+    </form>
     {% endif %}
     <div class="hk" aria-label="Health">
       <dl>

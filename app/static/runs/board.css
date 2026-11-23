@@ -374,8 +374,8 @@
 @media (prefers-reduced-motion: reduce) { .rp *, .rp *::before, .rp *::after { transition: none !important; } }
 /* the Filtered score under the adjusted rate: a switch per kind of flag, and the rate without those tasks */
 .rp .filtered { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; margin: 1rem 18px 0; }
-.rp .filtered .lead { flex-basis: 100%; color: var(--text-faint); font-size: .75rem; }
-.rp .filtered .chip::before { display: none; }
+.rp .filtered .filter-choice { display: flex; align-items: center; gap: .5rem; flex-basis: 100%; font-size: .8rem; cursor: pointer; }
+.rp .filtered input[type=checkbox] { margin: 0; flex: none; accent-color: var(--accent); }
 .rp .filtered p { margin: .5rem 0 0; flex-basis: 100%; color: var(--text-dim); font-size: 1rem; }
 .rp .filtered p b { color: var(--text); font-weight: 600; font-size: 1.4rem; margin-left: .2rem; }
 

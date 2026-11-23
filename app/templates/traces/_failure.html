@@ -27,27 +27,24 @@
   <section class="fa-part" id="fa-flag">
     <h3>{% if fp.attempt %}Task flag · all {{ fp.attempt[1] }} attempts{% else %}Task flag{% endif %}</h3>
     <p class="small faint" id="fa-flag-scope">One flag per task in this run{% if fp.attempt %}: it shows on every attempt{% endif %}.</p>
-    {% if fp.flag %}{% set fl = fp.flag %}
-    <p><b id="fa-flag-value">{{ fl.kind|capitalize }}</b> · {{ fl.category|replace('_', ' ') }}{% if fl.status == 'pending' %} <span class="chip-pending">pending</span>{% endif %}</p>
-    {% if fl.evidence %}<p class="small">{{ fl.evidence }}</p>{% endif %}
-    <p class="small faint">{{ fl.by }} · {{ fl.at[:10] }}{% if fl.accepted_by and fl.accepted_by != fl.by %} · accepted by {{ fl.accepted_by }}{% endif %}</p>
+    {% set fl = fp.flag %}
     {% if fp.can_write %}
-    <form method="post" action="{{ act }}" class="fa-inline"><input type="hidden" name="csrf" value="{{ csrf }}">
-      {% if fl.status == 'pending' %}<button class="btn sm" type="submit" name="action" value="accept">Accept</button>{% endif %}
-      <button class="btn sm ghost" type="submit" name="action" value="remove_flag">Remove</button>
-    </form>
-    {% endif %}
-    {% elif fp.can_write %}
     <form method="post" action="{{ act }}" class="fa-form"><input type="hidden" name="csrf" value="{{ csrf }}">
       <div class="fa-choices" role="radiogroup" aria-label="Kind">
-        {% for k in fp.kinds %}<label class="chip"><input type="radio" name="kind" value="{{ k }}" required> {{ k|capitalize }}</label>{% endfor %}
+        {% for k in fp.kinds %}<label class="chip{{ ' active' if fl and fl.kind == k }}"><input type="radio" name="kind" value="{{ k }}" required{{ ' checked' if fl and fl.kind == k }}> {{ k|capitalize }}</label>{% endfor %}
       </div>
-      <input type="text" name="category" list="fa-categories" required placeholder="Category" aria-label="Category">
+      <input type="text" name="category" list="fa-categories" required placeholder="Category" aria-label="Category" value="{{ fl.category if fl else '' }}">
       <datalist id="fa-categories">{% for c in fp.categories %}<option value="{{ c }}">{% endfor %}</datalist>
-      <input type="text" name="evidence" maxlength="300" placeholder="Evidence" aria-label="Evidence">
-      <button class="btn sm" type="submit" name="action" value="flag">Flag</button>
+      <input type="text" name="evidence" maxlength="300" placeholder="Evidence" aria-label="Evidence" value="{{ fl.evidence if fl else '' }}">
+      <button class="btn sm" type="submit" name="action" value="flag">Save</button>
+      {% if fl and fl.status == 'pending' %}<button class="btn sm ghost" type="submit" name="action" value="accept" formnovalidate>Accept</button>{% endif %}
+      {% if fl %}<button class="btn sm ghost" type="submit" name="action" value="remove_flag" formnovalidate>Remove</button>{% endif %}
     </form>
+    {% elif fl %}
+    <p>{{ fl.category|replace('_', ' ') }}</p>
+    {% if fl.evidence %}<p class="small">{{ fl.evidence }}</p>{% endif %}
     {% else %}<p class="small faint">Not flagged</p>{% endif %}
+    {% if fl %}<p class="small faint"><b id="fa-flag-value">{{ fl.kind|capitalize }}</b> · {{ fl.by }} · {{ fl.at[:10] }}{% if fl.status == 'pending' %} <span class="chip-pending">pending</span>{% endif %}{% if fl.accepted_by and fl.accepted_by != fl.by %} · accepted by {{ fl.accepted_by }}{% endif %}</p>{% endif %}
     {% if fp.model_flags %}<p class="small faint" id="fa-model-flags">{% if fp.attempt %}On this attempt: {% endif %}{% for m in fp.model_flags %}{{ ' · ' if not loop.first }}{{ m.name }}: <b>{{ fp.flag_names.get(m.flag, m.flag) }}</b>{% if m.flag_p is not none %} <span title="The probability the judge gave this answer">{{ '%.0f'|format(m.flag_p * 100) }}%</span>{% endif %}{% endfor %}</p>{% endif %}
   </section>
 </div>

@@ -155,30 +155,21 @@
   apply();
 })();
 
-// The Filtered score's switches: every combination is on the page already, so a click shows the one it names and
-// updates the URL, without a reload. Without this script, or with a modifier key, each switch is a link.
+// Each checkbox independently excludes one flag kind. The GET form works without JavaScript.
 (() => {
   const box = document.getElementById('filtered-score'); if (!box) return;
-  const chips = [...box.querySelectorAll('a.chip[data-kind]')], rates = [...box.querySelectorAll('.filtered-rate')];
+  const choices = [...box.querySelectorAll('input[data-kind]')], rates = [...box.querySelectorAll('.filtered-rate')];
   const said = document.getElementById('filtered-live');
   const show = () => {
-    const on = chips.filter(c => c.getAttribute('aria-pressed') === 'true').map(c => c.dataset.kind);
+    const on = choices.filter(c => c.checked).map(c => c.dataset.kind);
     let shown = null;
     rates.forEach(p => { const hit = p.dataset.kinds === on.join(','); p.hidden = !hit; if (hit) { p.id = 'filtered-rate'; shown = p; } else p.removeAttribute('id'); });
     const url = new URL(location.href);
-    chips.forEach(c => { if (on.includes(c.dataset.kind)) url.searchParams.set(c.dataset.kind, '1'); else url.searchParams.delete(c.dataset.kind); });
-    // each switch's own link: this view with that switch turned the other way
-    chips.forEach(c => {
-      const u = new URL(url); if (on.includes(c.dataset.kind)) u.searchParams.delete(c.dataset.kind); else u.searchParams.set(c.dataset.kind, '1');
-      u.hash = 'filtered-score'; c.href = u;
-    });
+    choices.forEach(c => { if (c.checked) url.searchParams.set(c.dataset.kind, '1'); else url.searchParams.delete(c.dataset.kind); });
     const table = document.querySelector('.tt[data-leave-out]'); if (table) table.dataset.leaveOut = on.join(' ');
     url.hash = ''; history.replaceState(null, '', url);
     if (said) said.textContent = shown ? shown.textContent.replace(/\s+/g, ' ').trim() : 'Filtered score off';
   };
-  const toggle = c => { const now = c.getAttribute('aria-pressed') !== 'true'; c.setAttribute('aria-pressed', String(now)); c.classList.toggle('active', now); show(); };
-  chips.forEach(c => {
-    c.addEventListener('click', e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); toggle(c); });
-    c.addEventListener('keydown', e => { if (e.key === ' ') { e.preventDefault(); toggle(c); } });
-  });
+  choices.forEach(c => c.addEventListener('change', show));
+  box.addEventListener('submit', e => { e.preventDefault(); show(); });
 })();

@@ -50,6 +50,8 @@ class FilteredScore(unittest.TestCase):
         fa.update(str(d), lambda x: x.set_flag("t1", "flawed", "x", by="bot", source="import:feasibility"))
         e = plain_job(tmp / "jobs", "run-e", {"t1__1": ("t1", 1)})                         # a file that cannot be read
         (e / fa.FILE).write_text("{not json")
+        f = plain_job(tmp / "jobs", "run-f", {"t1__1": ("t1", 1)})
+        fa.update(str(f), lambda x: x.set_flag("t1", "ambiguous", "two readings", by="ann"))
         a = fa.Analysis()
         a.set_flag("t2", "flawed", "unreachable", by="ann")
         a.set_flag("t3", "ambiguous", "two_readings", by="ann")
@@ -85,6 +87,8 @@ class FilteredScore(unittest.TestCase):
         html = self.page("/job/run-a")
         self.assertIn('id="filter-flawed"', html)
         self.assertIn('id="filter-ambiguous"', html)
+        self.assertIn('Exclude 1 flawed task', html)
+        self.assertIn('Exclude 1 ambiguous task', html)
         self.assertIsNone(self.filtered_rate(html))
         self.assertIn('id="adjusted-rate">40%', html)
 
@@ -93,26 +97,29 @@ class FilteredScore(unittest.TestCase):
         rates = re.findall(r'<p class="filtered-rate"( id="filtered-rate"| hidden) data-kinds="([^"]*)"[^>]*>Filtered score <b>([^<]*)</b>', html)
         self.assertEqual(rates, [(' id="filtered-rate"', "flawed", "50%"), (" hidden", "ambiguous", "50%"),
                                  (" hidden", "flawed,ambiguous", "67%")])
-        self.assertIn('data-kind="flawed" role="button" href=', html)
+        self.assertIn('data-kind="flawed" checked', html)
 
     def test_a_switch_the_page_does_not_offer_is_off(self):
-        html = self.page("/job/run-c?flawed=1&ambiguous=1")          # run-c has flawed flags only
-        self.assertNotIn('id="filter-ambiguous"', html)
-        self.assertRegex(html, r'id="filtered-rate" data-kinds="flawed"')
+        for run, present, absent in (("run-c", "flawed", "ambiguous"), ("run-f", "ambiguous", "flawed")):
+            with self.subTest(run=run):
+                html = self.page(f"/job/{run}?flawed=1&ambiguous=1")
+                self.assertNotIn(f'id="filter-{absent}"', html)
+                self.assertIn(f'id="filter-{present}"', html)
+                self.assertIn(f'id="filtered-rate" data-kinds="{present}"', html)
 
     def test_each_switch_sets_its_tasks_aside(self):
         flawed = self.page("/job/run-a?flawed=1")
         self.assertEqual(self.filtered_rate(flawed), "50%")
         self.assertIn('id="adjusted-rate">40%', flawed)
-        self.assertIn('href="/job/run-a?flawed=1&amp;ambiguous=1#filtered-score"', flawed)   # the other switch keeps this one on
-        self.assertIn('href="/job/run-a#filtered-score"', flawed)                             # this switch turns itself off
+        self.assertIn('data-kind="flawed" checked', flawed)
+        self.assertIn('data-kind="ambiguous">', flawed)
         self.assertEqual(self.filtered_rate(self.page("/job/run-a?flawed=1&ambiguous=1")), "67%")
         self.assertIsNone(self.filtered_rate(self.page("/job/run-a?flawed=0")))
 
     def test_the_switches_keep_the_pages_other_query_values(self):
         html = self.page("/job/run-a?outcome=failed&flawed=1")
-        self.assertIn('href="/job/run-a?outcome=failed&amp;flawed=1&amp;ambiguous=1#filtered-score"', html)
-        self.assertIn('href="/job/run-a?outcome=failed#filtered-score"', html)
+        self.assertIn('<input type="hidden" name="outcome" value="failed">', html)
+        self.assertNotIn('<input type="hidden" name="flawed"', html)
 
     def test_with_every_task_left_out_there_is_no_rate(self):
         self.assertEqual(self.filtered_rate(self.page("/job/run-c?flawed=1")), "\u2014")
@@ -194,6 +201,11 @@ class FailureTab(unittest.TestCase):
         flag = fa.load(str(self.job)).flags["t1"]
         self.assertEqual((flag.kind, flag.status, flag.by), ("flawed", "accepted", "Ann"))
         self.assertIn('id="fa-flag-value">Flawed</b>', self.page("/trial/run-t/t1__1"))
+        self.post("t1__1", action="flag", kind="ambiguous", category="two readings", evidence="updated evidence")
+        html = self.page("/trial/run-t/t1__1")
+        self.assertIn('value="ambiguous" required checked', html)
+        self.assertIn('value="two readings"', html)
+        self.assertIn('value="updated evidence"', html)
         self.post("t1__1", action="remove_flag")
         self.assertEqual(fa.load(str(self.job)).flags, {})
 
