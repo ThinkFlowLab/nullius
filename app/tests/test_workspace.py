@@ -287,6 +287,33 @@ class Cache(unittest.TestCase):
         self.assertEqual(workspace.clear_cache(self.ws), 2)
         self.assertEqual(self.ws.n_cached, 0)
 
+    def test_a_load_looks_the_catalogue_up_once_not_once_per_trial(self):
+        from nullius.catalogue import catalog
+        _job_dir(self.root, "job-b", n=20)
+        with patch.object(catalog, "signature", wraps=catalog.signature) as sig:
+            jobs = workspace.load_jobs(self.ws, [self.root])
+        self.assertEqual(sum(len(j.trials) for j in jobs), 22)
+        self.assertEqual(sig.call_count, 1)
+
+    def test_a_catalogue_changed_between_two_loads_is_seen(self):
+        from types import SimpleNamespace
+        from nullius.catalogue import catalog
+        from nullius.runs import verifier
+        def cat(report):
+            return SimpleNamespace(benchmarks=[SimpleNamespace(key="b", report=report)])
+        first, second = {"sources": ["x"], "file": "one.json"}, {"sources": ["x"], "file": "two.json"}
+        with patch.dict(verifier._CACHE, clear=True), \
+                patch.object(catalog, "signature", side_effect=[(1,), (1,), (2,)]), \
+                patch.object(catalog, "load", side_effect=[cat(first), cat(second)]):
+            with verifier.held():
+                self.assertEqual(verifier.block_for("x"), ("b", first))
+                with verifier.held():
+                    self.assertEqual(verifier.block_for("X "), ("b", first))
+            with verifier.held():
+                self.assertEqual(verifier.block_for("x"), ("b", first))
+            with verifier.held():
+                self.assertEqual(verifier.block_for("x"), ("b", second))
+
     def test_an_unchanged_job_is_decoded_once_per_process(self):
         from unittest import mock
         first, _ = workspace.load_job(self.ws, self.job_dir)

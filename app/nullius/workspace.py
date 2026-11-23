@@ -39,7 +39,7 @@ import threading
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 
-from nullius.runs import parse
+from nullius.runs import parse, verifier
 from nullius import ondisk, paths
 
 ADJECTIVES = """brisk quiet tidy sturdy curious gentle nimble patient plucky sunny wry keen
@@ -489,7 +489,8 @@ def load_jobs(ws: Workspace, roots, runs: dict | None = None) -> list:
     # the rail's index read once and written once, not once per job
     index = job_index(ws)
     before = dict(index)
-    jobs = [load_job(ws, d, index, runs)[0] for d in parse.find_job_dirs(roots)]
+    with verifier.held():
+        jobs = [load_job(ws, d, index, runs)[0] for d in parse.find_job_dirs(roots)]
     if index != before:
         _write_index(ws, index)
     return parse.split_agents(jobs)

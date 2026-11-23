@@ -942,12 +942,13 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
         dataset_path=redact(dataset_path),
     )
 
-    for name in sorted(os.listdir(job_dir)) if trials else ():
-        sub = os.path.join(job_dir, name)
-        if os.path.isdir(sub) and os.path.isfile(os.path.join(sub, "result.json")):
-            t = (reuse(sub) if reuse else None) or parse_trial(job.job_id, sub)
-            if t:
-                job.trials.append(t)
+    with verifier.held():
+        for name in sorted(os.listdir(job_dir)) if trials else ():
+            sub = os.path.join(job_dir, name)
+            if os.path.isdir(sub) and os.path.isfile(os.path.join(sub, "result.json")):
+                t = (reuse(sub) if reuse else None) or parse_trial(job.job_id, sub)
+                if t:
+                    job.trials.append(t)
     if not job.agent_name:
         # a config written with defaults left out names no agent for Harbor's default one; the trials do
         job.agent_name = next((t.agent_info_name for t in job.trials if t.agent_info_name), "")
