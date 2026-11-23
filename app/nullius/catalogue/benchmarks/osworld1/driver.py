@@ -9,6 +9,8 @@ cache and its results stay with the trial.
 
 units    - every task of the dataset (one of the upstream's
            evaluation_examples/test_*.json), as domain__id, in the file's order
+describe - each task's instruction (its title the first words) and its domain,
+           from the task's file alone
 setup    - the task's instruction, for the null control. For an agent
            (participant "agent", which the definition's driver.participant
            asks Nullius to send): runner.py started in the trial's
@@ -158,6 +160,19 @@ def units(dataset=None, setup=None):
     with open(os.environ["NULLIUS_DATASET"], encoding="utf-8") as f:
         meta = json.load(f)
     return {"units": [f"{d}__{e}" for d, ids in meta.items() for e in ids]}
+
+
+def describe(dataset=None, **_):
+    """Each task of the dataset from its file alone: the instruction as its text (its title the first words),
+    its domain as a category."""
+    out = {}
+    for unit in units()["units"]:
+        domain, _eid, example = _task(unit)
+        text = str(example.get("instruction") or "")
+        line = " ".join(text.split())
+        title = line if len(line) <= 100 else line[:100].rsplit(" ", 1)[0] + " ..."
+        out[unit] = {"title": title, "text": text, "categories": {"domain": domain}}
+    return {"units": out}
 
 
 def setup(unit, dir, participant=None, **_):
@@ -845,7 +860,8 @@ def score(unit, dir, transcript=None, answer=None, setup=None, **_):
     return _scored(where, "nop.py, DesktopEnv.evaluate")
 
 
-HANDLERS = {"units": units, "setup": setup, "task_given": task_given, "answer": answer, "score": score, "end": end}
+HANDLERS = {"units": units, "describe": describe, "setup": setup, "task_given": task_given, "answer": answer,
+            "score": score, "end": end}
 
 
 def main():

@@ -289,6 +289,43 @@ class CommandLine(Scratch):
         self.assertNotIn(KEY, out.stdout)
 
 
+# ── task-sets.md ────────────────────────────────────────────────────────────
+
+class TaskSetCommands(Scratch):
+    def test_help_and_refusals_of_the_task_set_commands(self):
+        """The units command has help with its examples and exit codes; a
+        refusal is one line on stderr with nothing on stdout, 2 for a usage
+        error or a refusal, 3 for what is not found, and writes nothing."""
+        cat = os.path.join(self.tmp, "catalogue")
+        env = {"NULLIUS_CATALOGUE": cat, "NULLIUS_HOME": os.path.join(self.tmp, "profile")}
+        for sub in (("units",),):
+            with self.subTest(help=sub):
+                out = self.sh("standard.cli", *sub, "--help", env=env)
+                self.assertEqual(out.returncode, 0, out.stderr)
+                for line in ("usage:", "examples:", "exit codes:"):
+                    self.assertIn(line, out.stdout)
+                self.assertEqual(out.stderr, "")
+        cases = [
+            (["units", "humaneval"], 2, "usage:"),
+            (["units", "humaneval", "--dataset", "nope"], 3, "no dataset 'nope'"),
+            (["units", "no-such-bench", "--dataset", "x"], 3, "no benchmark"),
+            (["units", "humaneval", "--dataset", "humaneval", "--category", "kind"], 2, "FIELD=VALUE"),
+        ]
+        for args, code, said in cases:
+            with self.subTest(args=args):
+                out = self.sh("standard.cli", *args, env=env)
+                self.assertEqual(out.returncode, code, out.stderr)
+                self.assertIn(said, out.stderr)
+                self.assertEqual(out.stdout, "")
+        # a listing that needs a program this machine lacks is refused before it fetches anything
+        out = self.sh("standard.cli", "units", "humaneval", "--dataset", "humaneval",
+                      env=dict(env, PATH=os.path.join(self.tmp, "no-programs")))
+        self.assertEqual((out.returncode, out.stdout), (2, ""))
+        self.assertEqual(out.stderr, "refused: cannot prepare humaneval's dataset humaneval for its listing: "
+                                     "git is not on this machine\n")
+        self.assertFalse(os.path.exists(cat))
+
+
 # ── import.md ───────────────────────────────────────────────────────────────
 
 class ImportContract(Scratch):

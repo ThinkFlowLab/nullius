@@ -148,6 +148,15 @@ def units(dataset, setup=None):
     return {"units": [q for q in index() if kind == "all" or TYPES[q] == kind]}
 
 
+def describe(dataset, **_):
+    out = {}
+    for unit in units(dataset)["units"]:
+        q = entry(unit)
+        text = q["question"]
+        out[unit] = {"title": text, "text": text, "categories": {"question_type": str(q["question_type"])}}
+    return {"units": out}
+
+
 def setup(unit, dir):
     q = entry(unit)
     dates = q.get("haystack_dates") or [""] * len(q["haystack_session_ids"])
@@ -373,7 +382,7 @@ def score_setup(unit, dir, judge):
                                    ("expansion_join", "separate"), ("gen_length", "upstream"))}}}
 
 
-HANDLERS = {"units": units, "setup": setup, "produce": produce, "score": score, "oracle": oracle, "answer": answer}
+HANDLERS = {"describe": describe, "units": units, "setup": setup, "produce": produce, "score": score, "oracle": oracle, "answer": answer}
 for line in sys.stdin:
     try:
         req = json.loads(line)

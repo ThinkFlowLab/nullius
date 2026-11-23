@@ -107,6 +107,21 @@ class Driver:
         self.p.stdout.close()
 
 
+class Listing(unittest.TestCase):
+    def test_describe_gives_question_text_and_excludes_category_five(self):
+        with tempfile.TemporaryDirectory() as root:
+            driver = Driver(root, {})
+            try:
+                ids = driver.ask(op="units", dataset="locomo10")["units"]
+                got = driver.ask(op="describe", dataset="locomo10")
+            finally:
+                driver.close()
+        self.assertEqual(got, {"units": {"conv-1:0": {"title": "What did A say?", "text": "What did A say?",
+                                                     "categories": {"category": "4"}}}})
+        self.assertEqual(list(got["units"]), ids)
+        self.assertIs(BENCH["driver"].get("describe"), True)
+
+
 class Retrieval(unittest.TestCase):
     def run_unit(self, **options):
         with tempfile.TemporaryDirectory() as root:

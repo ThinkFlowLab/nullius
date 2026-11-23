@@ -12,6 +12,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N] [--bench-option NAME=VALUE ...] [--job nop|oracle=JOB_DIR ...]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
     PYTHONPATH=app python3 -m nullius.standard.cli merge JOB_DIR... -o OUT [--force]
+    PYTHONPATH=app python3 -m nullius.standard.cli units BENCHMARK --dataset D [--search TEXT] [--category FIELD=VALUE ...] [--json]
     PYTHONPATH=app python3 -m nullius.standard.cli fidelity AGENT --model M [--provider P] [--option NAME=VALUE ...] [--passes N] --unsandboxed
 
 An agent runs commands as you on the local backend, which is not a sandbox:
@@ -43,7 +44,8 @@ shard of the dataset's units (``standard/runner/shard.py``: by the unit id's has
 ``--limit``), the job recording its shard and its launch (``--launch``); ``--units FILE``
 runs only the units a file lists (``run.units_file``: one id a line), read on
 the machine the command runs on, ``--from-run`` or not; ``merge``
-puts a launch's shard jobs together into one job (``standard/runner/merge.py``). ``--option``
+puts a launch's shard jobs together into one job (``standard/runner/merge.py``). ``units`` lists a
+dataset's tasks, searched and counted by category (``standard/runner/units.py``). ``--option``
 sets one of the agent's or capability's options (``options`` in its definition);
 the rest keep the vendor's defaults, and the job's config records them all.
 ``--served-by [MODEL=]SLUG[,SLUG...]`` lets only those serving providers answer
@@ -85,6 +87,7 @@ from nullius.standard.backends import boat
 from nullius.standard.contract import definitions, match, ports, proofs
 from nullius.standard.proofs import conform, fidelity, pins, prove
 from nullius.standard.runner import job, merge, run, shard
+from nullius.standard.runner import units as unit_list
 
 ENV_FILE = paths.settings_file()
 
@@ -734,6 +737,66 @@ def cmd_merge(a):
     return 0
 
 
+def _refused(e: Exception) -> int:
+    print(f"refused: {e}", file=sys.stderr)
+    return 3 if isinstance(e, unit_list.NotFound) else 2
+
+
+def _find_bench(key):
+    """A benchmark of the catalogue, or a conformance kit, by its key; None when there is none."""
+    return definitions.get("benchmark", key) or next((k for k in definitions.kits() if k["key"] == key), None)
+
+
+UNITS_EPILOG = """\
+examples:
+  nullius standard units humaneval --dataset humaneval
+  nullius standard units osworld1 --dataset test_nogdrive --search "tab" --category domain=chrome --category domain=vlc
+  nullius standard units longmemeval --dataset longmemeval_oracle --bench-option question_type=multi-session --json
+
+exit codes:
+  0  listed, a match of no task included
+  1  unexpected error (a traceback: report it)
+  2  usage, or refused: an option or a category not known, a program the listing needs not on this machine,
+     a driver that could not list the dataset
+  3  not found: no such benchmark or dataset
+
+A first listing fetches what it needs first (the upstream, the dataset, the driver's environment unless the
+benchmark names a light listing command), said in one line on stderr; later listings read the cache.
+"""
+
+
+def cmd_units(a):
+    try:
+        b = _find_bench(a.benchmark)
+        if b is None:
+            raise unit_list.NotFound(f"no benchmark {a.benchmark!r}")
+        try:
+            given = options(a.bench_option, "--bench-option")
+        except SystemExit as e:
+            raise unit_list.Refused(str(e))
+        chosen = unit_list.categories_of(a.category)
+        before = unit_list.state(b, a.dataset, given)
+        if before["state"] == "refused":
+            raise unit_list.Refused(before["reason"])
+        if before["fetch"]:
+            print(f"first listing of {a.dataset}: fetching " + ", then ".join(f["text"] for f in before["fetch"]),
+                  file=sys.stderr, flush=True)
+        found = unit_list.find(b, a.dataset, given, search=a.search or "", categories=chosen, size=None)
+    except unit_list.Refused as e:
+        return _refused(e)
+    if a.json:
+        print(json.dumps(found, indent=2, ensure_ascii=False))
+        return 0
+    words = b["units"]
+    print(f"{found['total']} of {found['of']} {words['nouns']} of {a.dataset}"
+          + ("" if found["described"] else " (its driver gives ids alone: a search reads the ids)"))
+    for field, values in found["categories"].items():
+        print(f"{field}: " + ", ".join(f"{v['value']} {v['count']}" for v in values))
+    for t in found["tasks"]:
+        print(f"  {t['id']}" + (f"  {t['title']}" if t["title"] else ""))
+    return 0
+
+
 def cmd_fidelity(a):
     o = definitions.get("agent", a.other)
     if not o:
@@ -899,6 +962,17 @@ def main(argv=None):
     g.add_argument("jobs", nargs="+", metavar="JOB_DIR")
     g.add_argument("-o", "--out", required=True, help="the merged job's directory (its name is the job's)")
     g.add_argument("--force", action="store_true", help="merge shards of different launches, versions, models or agents")
+    un = sub.add_parser("units", help="a dataset's tasks: their ids, titles and categories, searched and counted",
+                        epilog=UNITS_EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
+    un.add_argument("benchmark", metavar="BENCH")
+    un.add_argument("--dataset", required=True, help="the dataset whose tasks are listed")
+    un.add_argument("--bench-option", action="append", metavar="NAME=VALUE",
+                    help="a benchmark option the driver lists under (repeatable); the others at their defaults")
+    un.add_argument("--search", metavar="TEXT", help="the tasks whose id, title or text hold each word, whatever the case")
+    un.add_argument("--category", action="append", metavar="FIELD=VALUE",
+                    help="the tasks of this category's value (repeatable: values of one field widen, fields narrow)")
+    un.add_argument("--json", action="store_true",
+                    help="one JSON document: total, of, described, tasks and each category's values with their counts")
     tr = sub.add_parser("traces", help="give past standard trials a trace, from the files they kept")
     tr.add_argument("root", metavar="DIR", help="a job, or a folder of jobs")
     tr.add_argument("--dry-run", action="store_true", help="say what it would write, and write nothing")
@@ -915,7 +989,8 @@ def main(argv=None):
     if not getattr(a, "from_run", False):
         settings.load(ENV_FILE)
     return {"list": cmd_list, "check": cmd_check, "fit": cmd_fit, "pins": cmd_pins, "new": cmd_new, "conform": cmd_conform, "run": cmd_run,
-            "fidelity": cmd_fidelity, "prove": cmd_prove, "merge": cmd_merge, "traces": cmd_traces}[a.cmd](a)
+            "fidelity": cmd_fidelity, "prove": cmd_prove, "merge": cmd_merge, "traces": cmd_traces,
+            "units": cmd_units}[a.cmd](a)
 
 
 if __name__ == "__main__":

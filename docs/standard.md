@@ -426,6 +426,7 @@ local proof records; saved runs and credentials remain.
 | Op | Sent | Replies |
 | --- | --- | --- |
 | `units` | `dataset`, `setup` | Every unit id |
+| `describe` | `dataset`, with `driver.describe` | `{units: {ID: {title, text, categories: {FIELD: VALUE}}}}`, read from the dataset's files alone: what [`nullius standard units`](cli/task-sets.md#listing-a-datasets-tasks) and the pages search and count |
 | `setup` | `unit`, `dir`; `attempt` with `limits.attempts`; `participant` (`agent`, `capability` or `control`) with `driver.participant` | `{prompt}`, any `mcp` servers, `environment`, an own image's `image`, `prepare`, `internet` and `verify`, and `agent_seconds`, the unit's own agent timeout (up to 6 hours, instead of `limits.turn_seconds`) |
 | `turn` | The transcript so far; `simulator: {model, base_url, key}` when there is one; `judge` for an upstream that grades as the conversation ends; `attempt` with `limits.attempts` | The next message, `{done: true}`, or `restart` |
 | `produce` | A capability benchmark's recall, `base_url` and `key` | The reading, through the relay |
@@ -450,6 +451,8 @@ An `answer` or `score` error that begins `EnvironmentSetupError: `, `VerifierErr
 | `limits.call_seconds` | How long the relay waits for one model call's reply (default 900). A benchmark whose agent waits longer for a call sets it above that agent's own wait, so the agent's client, not the relay, ends a long call |
 | `driver.participant` | `true`: `setup` is also sent `participant`, the kind of what runs the unit, for a driver that starts something only an agent uses |
 | `driver.unit_end` | `true`: the driver is sent `end` (`unit`, `dir`) once each unit an agent ran has ended, scored or not, so that what its setup started for the agent ends with the unit. A control's or a setup's unit gets none |
+| `driver.describe` | `true`: the driver answers `describe`. Without it a listing gives ids alone |
+| `driver.list_command` | A second start of the driver's code for a listing alone (`units`, and `describe` with `driver.describe`): Python's standard library and the dataset's files, `{here}` its one slot. The listing then prepares the upstream and the dataset and never the driver's environment; a run still checks its ids with `driver.command` |
 | `driver.task_given` | `true`: the driver is sent `task_given` before each agent is given its task, and the task waits for its answer: [the computer port](ports/agent-computer-v1.md#the-window-before-the-task) closes its window before the task there. A control's or a setup's unit gets none |
 | `limits.attempts` | How the upstream tells attempts apart; the driver is then sent `attempt` with `setup`, `turn` and `answer` |
 | `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |

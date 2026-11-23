@@ -94,6 +94,15 @@ def units(dataset, setup=None):
     return {"units": out}
 
 
+def describe(dataset, **_):
+    out = {}
+    for unit in units(dataset)["units"]:
+        q = question(unit)[1]
+        text = q["question"]
+        out[unit] = {"title": text, "text": text, "categories": {"category": str(q["category"])}}
+    return {"units": out}
+
+
 # What goes into the memory for each session: the run's ``rag_mode`` option, LoCoMo's --rag-mode - dialog
 # (the conversation), or the authors' own released extractions, observation (facts per speaker) and
 # summary (one per session). How a fact or a summary is put as a turn is ours: a fact is its speaker's
@@ -259,7 +268,7 @@ def oracle(unit, dir):
     return {"answer": gold(q)}
 
 
-HANDLERS = {"units": units, "setup": setup, "produce": produce, "score": score, "oracle": oracle, "answer": answer}
+HANDLERS = {"describe": describe, "units": units, "setup": setup, "produce": produce, "score": score, "oracle": oracle, "answer": answer}
 for line in sys.stdin:
     try:
         req = json.loads(line)
