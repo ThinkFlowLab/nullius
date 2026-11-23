@@ -13,12 +13,16 @@ import unittest
 from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from nullius.standard import definitions, hostreq, install, match, recipe, run
+from nullius import ondisk
+from nullius.standard.contract import definitions, match
+from nullius.standard.pages import recipe
+from nullius.standard.requirements import hostreq, install
+from nullius.standard.runner import run
 
 # A paper's benchmark in miniature: two conversations, each answered by the upstream's own code (``answer``) in one
 # call to the model it is asked as, and scored by whether the reply came back.
 DRIVER = '''import json, os, sys, urllib.request
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 def units(dataset, setup=None):
     return {"units": ["c1", "c2"] if setup else ["c1:0", "c1:1", "c2:0"]}
 def answer(unit, dir, setup, model, base_url, key):
@@ -227,13 +231,13 @@ class SetupRun(unittest.TestCase):
 
     def test_a_docker_setup_still_requires_a_working_daemon(self):
         o, _ = definitions.setup(self.b, "original")
-        with patch("nullius.standard.container.unusable", return_value="daemon unavailable"):
+        with patch("nullius.standard.backends.container.unusable", return_value="daemon unavailable"):
             with self.assertRaisesRegex(run.Refused, "daemon unavailable"):
                 run.Run(self.b, o, model="paper-1", provider="custom", jobs_root=self.tmp, env=self.env, backend="container")
 
     def test_docker_setup_runs_driver_and_linux_dependencies_with_scoped_credentials(self):
         from tests import docker_tier
-        from nullius.standard import container
+        from nullius.standard.backends import container
         why = docker_tier.why_not()
         if why:
             self.skipTest(why)
@@ -250,7 +254,7 @@ class SetupRun(unittest.TestCase):
         data = os.path.join(here, "data.txt")
         with open(data, "w") as f:
             f.write("fixture data")
-        self.b["datasets"][0].update(path="data.txt", sha256=install.sha256_of(data), environment="data")
+        self.b["datasets"][0].update(path="data.txt", sha256=ondisk.sha256_of(data), environment="data")
         credential = os.path.join(self.tmp, "tool.lic")
         with open(credential, "w") as f:
             f.write("fixture licence")
@@ -419,7 +423,7 @@ class Attempts(unittest.TestCase):
         return r
 
     def test_pass_hat_k_as_tau_bench_counts_it(self):
-        from nullius.standard import job
+        from nullius.standard.runner import job
         rs = [self.trial("a", 1.0), self.trial("a", 1.0), self.trial("b", 1.0), self.trial("b", 0.0)]
         self.assertEqual(job.pass_hat(rs), {"units": 2, "attempts": 2, "1": 0.75, "2": 0.5, "at": {"1": 0.75, "2": 1.0}})
         self.assertIsNone(job.pass_hat(rs[:1] + rs[2:3]))                         # one attempt each: no pass^k

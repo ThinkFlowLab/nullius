@@ -57,7 +57,7 @@ from email.parser import Parser
 from typing import Callable, Dict, List, Optional
 from urllib import error, request
 
-from nullius import gitrefs
+from nullius import gitrefs, ondisk
 
 PACKAGE = "harbor"
 PYPI = "https://pypi.org/pypi"
@@ -444,10 +444,7 @@ def ensure(pin: dict, pins: str, run: Optional[Callable] = None, fetch: Optional
 
 def _write(directory: str, name: str, data: dict) -> None:
     os.makedirs(directory, exist_ok=True)
-    tmp = os.path.join(directory, name + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=1)
-    os.replace(tmp, os.path.join(directory, name))
+    ondisk.write_whole(os.path.join(directory, name), json.dumps(data, indent=1))
 
 
 

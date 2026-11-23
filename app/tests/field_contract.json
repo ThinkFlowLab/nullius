@@ -56,6 +56,32 @@
    "held_term"
   ]
  },
+ "breakdown": {
+  "Breakdown": [
+   "attributed_ns",
+   "idle_ns",
+   "llm_ns",
+   "measured_span_count",
+   "reasoning_ns",
+   "segments",
+   "span_count",
+   "tokens",
+   "tool_ns",
+   "unaccounted_ns",
+   "wall_ns"
+  ],
+  "Totals": [
+   "idle_ns",
+   "llm_ns",
+   "measured_span_count",
+   "reasoning_ns",
+   "segments",
+   "span_count",
+   "tool_ns",
+   "unaccounted_ns",
+   "wall_ns"
+  ]
+ },
  "catalog": {
   "Benchmark": [
    "blocker",
@@ -445,47 +471,7 @@
    "vocab"
   ]
  },
- "trace": {
-  "Breakdown": [
-   "attributed_ns",
-   "idle_ns",
-   "llm_ns",
-   "measured_span_count",
-   "reasoning_ns",
-   "segments",
-   "span_count",
-   "tokens",
-   "tool_ns",
-   "unaccounted_ns",
-   "wall_ns"
-  ],
-  "Extent": [
-   "end_ns",
-   "span_ns",
-   "start_ns"
-  ],
-  "Facet": [
-   "count",
-   "hidden",
-   "kind",
-   "name"
-  ],
-  "Filter": [
-   "active",
-   "names",
-   "query",
-   "span_ids",
-   "zoom"
-  ],
-  "Row": [
-   "depth",
-   "has_children",
-   "is_instant",
-   "left_pct",
-   "offset_ns",
-   "span",
-   "width_pct"
-  ],
+ "spans": {
   "Span": [
    "attributes",
    "children",
@@ -502,21 +488,21 @@
    "start_ns",
    "timing_quality",
    "tokens"
+  ]
+ },
+ "trace": {
+  "Facet": [
+   "count",
+   "hidden",
+   "kind",
+   "name"
   ],
-  "Tick": [
-   "ns",
-   "pct"
-  ],
-  "Totals": [
-   "idle_ns",
-   "llm_ns",
-   "measured_span_count",
-   "reasoning_ns",
-   "segments",
-   "span_count",
-   "tool_ns",
-   "unaccounted_ns",
-   "wall_ns"
+  "Filter": [
+   "active",
+   "names",
+   "query",
+   "span_ids",
+   "zoom"
   ],
   "Trace": [
    "axis",
@@ -584,6 +570,26 @@
    "token_series",
    "tools",
    "total_reasoning_tokens"
+  ]
+ },
+ "waterfall": {
+  "Extent": [
+   "end_ns",
+   "span_ns",
+   "start_ns"
+  ],
+  "Row": [
+   "depth",
+   "has_children",
+   "is_instant",
+   "left_pct",
+   "offset_ns",
+   "span",
+   "width_pct"
+  ],
+  "Tick": [
+   "ns",
+   "pct"
   ]
  },
  "workspace": {

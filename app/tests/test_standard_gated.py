@@ -8,19 +8,22 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from nullius.standard import definitions, install, relay, run
+from nullius.standard.calls import relay
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import install
+from nullius.standard.runner import run
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 CONTROLS = {"nop": {"source": "nullius", "from": "Nothing runs; the answer is empty."}}
 WORDS = "the gated task's own sentence"
-FAILING = '''from nullius.standard.jsonl import serve
+FAILING = '''from nullius.standard.protocols.jsonl import serve
 def score(unit, dir, transcript, answer, **_):
     raise RuntimeError("the LLM grader's endpoint answered 500, and the task was scored without it")
 serve({"units": lambda dataset: {"units": ["a"]}, "setup": lambda unit, dir: {"prompt": "hi"}, "score": score})
 '''
 
 
-ANSWERING = '''from nullius.standard.jsonl import serve
+ANSWERING = '''from nullius.standard.protocols.jsonl import serve
 def answer(unit, dir, setup, model, base_url, key, **_):
     raise RuntimeError("the upstream's grader said: status 500: " + %r)
 serve({"units": lambda dataset, setup=None: {"units": ["a"]}, "setup": lambda unit, dir: {"prompt": "hi"},

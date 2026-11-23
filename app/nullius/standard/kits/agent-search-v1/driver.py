@@ -18,8 +18,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit, quote
 from urllib.request import urlopen
 
-from nullius.standard.container import CHECK_IMAGE
-from nullius.standard.jsonl import serve
+from nullius.standard.backends.container import CHECK_IMAGE
+from nullius.standard.protocols.jsonl import serve
 
 UNITS = ('find-source', 'disambiguate', 'follow-reference')
 FIXTURES = {}

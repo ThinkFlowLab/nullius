@@ -14,7 +14,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nullius.standard import definitions, run
+from nullius.standard.contract import definitions
+from nullius.standard.runner import run
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2")
@@ -539,7 +540,7 @@ class Turn(unittest.TestCase):
 
 class Snapshot(unittest.TestCase):
     def test_a_hosts_snapshot_carries_the_startup_file(self):
-        from nullius.standard import payload
+        from nullius.standard.runner import payload
         tmp = Path(tempfile.mkdtemp(prefix="nullius-osworld2-"))
         self.addCleanup(shutil.rmtree, tmp, True)
         with mock.patch.dict(os.environ, {"NULLIUS_HOME": str(tmp / "profile"), "NULLIUS_CATALOGUE": str(tmp / "catalogue")}):

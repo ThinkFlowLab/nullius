@@ -13,7 +13,8 @@ import sys
 import tempfile
 import unittest
 
-from nullius.standard import definitions, jsonl
+from nullius.standard.contract import definitions
+from nullius.standard.protocols import jsonl
 
 KIT = os.path.join(definitions.KITS, "agent-tools-v1")
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -240,7 +241,7 @@ class Driver(unittest.TestCase):
         """The agent starts it in its container: this machine's interpreter, mounted over the image's, would not run."""
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, True)
-        from nullius.standard import container
+        from nullius.standard.backends import container
         env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": APP, "PYTHONDONTWRITEBYTECODE": "1",
                container.CHECK_IMAGE: "nullius/base:test"}
         d = jsonl.Proc([sys.executable, os.path.join(KIT, "driver.py")], KIT, env, os.path.join(tmp, "driver.log")).start()
@@ -281,7 +282,8 @@ class KitVersions(unittest.TestCase):
         self.assertIsNone(definitions.older_kit("agent.tools/v1", None))
 
     def test_cli_names_an_older_proof_and_still_counts_it(self):
-        from nullius.standard import cli, match
+        from nullius.standard import cli
+        from nullius.standard.contract import match
         d = {"_kind": "agent", "label": "Bot", "key": "bot", "offers": ["agent.task/v1", "agent.tools/v1"],
              "proven": {"agent.task/v1": {"passed": "3/3"}, "agent.tools/v1": {"passed": "2/2"}}}
         self.assertEqual(cli.older(d), ["agent.tools/v1 proven on kit v1; kit v2 is current"])

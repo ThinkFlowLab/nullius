@@ -38,7 +38,8 @@ with `PYTHONPATH="$PWD/app"` from the checkout root:
 "$NULLIUS_PY" - <<'PY'
 from nullius import paths, settings
 settings.load(paths.settings_file())
-from nullius.standard import definitions, howto
+from nullius.standard.contract import definitions
+from nullius.standard.pages import howto
 print("schema:", definitions.__file__)
 print("examples:", howto.__file__)
 print("catalogue:", paths.catalogue_dir())
@@ -132,7 +133,7 @@ See `docs/standard.md`, "Native capabilities and composition".
 `cli new agent KEY` (lower case letters, digits, dashes) writes
 `agents/KEY/agent.json` under the active user catalogue and prints its path.
 Fill it in, starting from
-the shape `app/nullius/standard/howto.py` shows (`AGENT_JSON`,
+the shape `app/nullius/standard/pages/howto.py` shows (`AGENT_JSON`,
 `AGENT_OPTIONS`) and the catalogue's agents (their shape, never their
 contents):
 

@@ -10,7 +10,8 @@ import time
 import unittest
 from types import SimpleNamespace
 
-from nullius.standard import job, run, definitions
+from nullius.standard.contract import definitions
+from nullius.standard.runner import job, run
 from nullius.traces import charts, trajectory
 from nullius.judge import state
 from nullius.runs import parse
@@ -86,7 +87,9 @@ class Regressions(unittest.TestCase):
             root = Path(tmp)
             (root / 'memory.py').write_text("import os,sys,time\nopen('pid','w').write(str(os.getpid()))\nfor line in sys.stdin: time.sleep(60)\n")
             script = f"""
-from nullius.standard import definitions,run,cli
+from nullius.standard import cli
+from nullius.standard.contract import definitions
+from nullius.standard.runner import run
 cli._exit_on_term()
 b=definitions.get('benchmark','fakememo',{ROOT!r})
 o=definitions.get('capability','fakemem',{ROOT!r})

@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 import subprocess
 
-from nullius.standard import container
+from nullius.standard.backends import container
 
 VAR = "NULLIUS_TEST_DOCKER"
 

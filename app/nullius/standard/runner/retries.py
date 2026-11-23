@@ -21,7 +21,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from nullius.standard import ledger, pace, relay
+from nullius.standard.calls import ledger, relay
+from nullius.standard.runner import pace
 
 RETRIES = 0
 MAX_RETRIES = 9

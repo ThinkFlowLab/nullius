@@ -1,5 +1,5 @@
 """Kit for agent.task/v1: the answer is the agent's final message."""
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 
 WORDS = {"t1": "lantern", "t2": "quartz", "t3": "meadow"}
 

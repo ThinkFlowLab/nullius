@@ -8,7 +8,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from nullius.catalogue import catalog, sources  # noqa: E402
-from nullius.standard import definitions  # noqa: E402
+from nullius.standard.contract import definitions  # noqa: E402
 
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 

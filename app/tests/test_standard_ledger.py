@@ -11,7 +11,7 @@ import tempfile
 import threading
 import unittest
 
-from nullius.standard import ledger
+from nullius.standard.calls import ledger
 
 ROW = {"input": 1.0, "output": 10.0}
 
@@ -246,7 +246,7 @@ class LedgerTest(unittest.TestCase):
         books and settles; none of it is lost between them."""
         led = ledger.Ledger.create(self.path, 100.0)
         app = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        code = ("import sys\nfrom nullius.standard import ledger\nled = ledger.Ledger(sys.argv[1])\n"
+        code = ("import sys\nfrom nullius.standard.calls import ledger\nled = ledger.Ledger(sys.argv[1])\n"
                 "for _ in range(40):\n    b, _ = led.reserve(0.5)\n    led.settle(b, 0.01)\n")
         procs = [subprocess.Popen([sys.executable, "-c", code, self.path], env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": app})
                  for _ in range(4)]

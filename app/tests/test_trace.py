@@ -15,11 +15,12 @@ import json
 import unittest
 
 from nullius.traces import trace
+from nullius.traces.spans import GROUP_KIND, GROUP_SLACK_NS, mark_groups, MAX_DEPTH, NS_PER_MS
+from nullius.traces.waterfall import Extent, flatten, MAX_ROWS, Tick, ticks_for
 
 from . import FIXTURES
+from .tracedata import DEGRADED, RICH, doc, raw, span
 
-RICH = str(FIXTURES / "trace_rich.json")
-DEGRADED = str(FIXTURES / "trace_degraded.json")
 BAD = str(FIXTURES / "trace_bad.json")
 
 # Ids from the real capture. `block:...:0` is a synthetic log-derived id and is
@@ -32,37 +33,6 @@ TOOL_BLOCKED = "80ab6e382cf0adc7"
 TOOL_WRITE = "b8485ddca72125ef"
 LLM_2 = "bc000785dbfa7ad7"
 OUTPUT = "block:28bda920-a4fa-4918-9e96-4036d44013fe:0"
-
-
-def raw(path=RICH):
-    with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
-
-
-def span(sid, start=1_000, end=2_000, **fields):
-    """A minimal span. Only what the format requires, so tests add what they mean."""
-    out = {
-        "span_id": sid,
-        "trace_id": "t",
-        "name": sid,
-        "kind": "tool",
-        "start_ns": start,
-        "timing_quality": "measured",
-        "source": "otel",
-        "attributes": {},
-        "children": [],
-    }
-    if end is not None:
-        out["end_ns"] = end
-        out["duration_ns"] = end - start
-    out.update(fields)
-    return out
-
-
-def doc(*spans, **top):
-    out = {"schema_version": "harbor-trace-v1", "spans": list(spans)}
-    out.update(top)
-    return out
 
 
 def by_id(tr, span_id):
@@ -153,7 +123,7 @@ class TotalsAreVerbatim(unittest.TestCase):
         # here sums to 46.1ms against a true 23.3ms, because the `claude_code.tool`
         # wrapper contains both of the spans it is being added to.
         tr = trace.load(RICH)
-        toolish = [r.span for r in tr.rows if r.span.kind in ("tool", trace.GROUP_KIND)]
+        toolish = [r.span for r in tr.rows if r.span.kind in ("tool", GROUP_KIND)]
         self.assertEqual(sum(s.duration_ns for s in toolish), 46_146_687)
         # Re-kinding the wrapper `group` takes the duplicate out of that sum, and
         # what is left still is not the reported figure — a consumer that adds up
@@ -184,7 +154,7 @@ class ExtentIsNeverDegenerate(unittest.TestCase):
             self.assertTrue(0.0 <= row.width_pct <= 100.0)
 
     def test_ticks_survive_a_degenerate_extent(self):
-        self.assertEqual(trace.ticks_for(trace.Extent()), [trace.Tick(pct=0.0, ns=0)])
+        self.assertEqual(ticks_for(Extent()), [Tick(pct=0.0, ns=0)])
 
 
 class Layout(unittest.TestCase):
@@ -212,7 +182,7 @@ class Layout(unittest.TestCase):
 
     def test_collapsing_a_span_drops_its_subtree(self):
         tr = trace.load(RICH)
-        rows, _ = trace.flatten(tr.roots, collapsed={TOOL_PARENT})
+        rows, _ = flatten(tr.roots, collapsed={TOOL_PARENT})
         ids = [r.span.span_id for r in rows]
         self.assertIn(TOOL_PARENT, ids)
         self.assertNotIn(TOOL_BLOCKED, ids)
@@ -232,14 +202,14 @@ class Layout(unittest.TestCase):
         a = span("a")
         a["children"] = [a]
         rows = trace.parse(doc(a)).rows
-        self.assertLessEqual(len(rows), trace.MAX_DEPTH + 1)
+        self.assertLessEqual(len(rows), MAX_DEPTH + 1)
 
     def test_pathologically_deep_nesting_bottoms_out(self):
         node = span("leaf")
-        for i in range(trace.MAX_DEPTH + 50):
+        for i in range(MAX_DEPTH + 50):
             node = span(f"n{i}", children=[node])
         tr = trace.parse(doc(node))
-        self.assertEqual(max(r.depth for r in tr.rows), trace.MAX_DEPTH)
+        self.assertEqual(max(r.depth for r in tr.rows), MAX_DEPTH)
 
 
 class SpansWithoutAnEnd(unittest.TestCase):
@@ -294,7 +264,7 @@ class Labels(unittest.TestCase):
 
 # Milliseconds, because the slack a group is allowed is measured in them. A
 # hand-built tree in bare integers would be inside it whatever it contained.
-MS = trace.NS_PER_MS
+MS = NS_PER_MS
 
 
 def wrapper(self_ns=0, label="Bash", inner_kind="tool"):
@@ -342,13 +312,13 @@ class Groups(unittest.TestCase):
 
     def test_a_wrapper_with_time_of_its_own_is_still_a_tool(self):
         # It is doing something, whatever it is named.
-        tr = trace.parse(doc(wrapper(self_ns=trace.GROUP_SLACK_NS + 1)))
+        tr = trace.parse(doc(wrapper(self_ns=GROUP_SLACK_NS + 1)))
         self.assertEqual(by_id(tr, "outer").span.kind, "tool")
 
     def test_the_producers_own_rounding_does_not_decide_it(self):
         # Harbor stamps the wrapper to the millisecond and its children to the
         # nanosecond, so a shortfall of a millisecond or so is the clock, not work.
-        tr = trace.parse(doc(wrapper(self_ns=trace.GROUP_SLACK_NS)))
+        tr = trace.parse(doc(wrapper(self_ns=GROUP_SLACK_NS)))
         self.assertEqual(by_id(tr, "outer").span.kind, "group")
 
     def test_a_single_child_of_the_same_extent_is_the_same_bar_twice(self):
@@ -448,7 +418,7 @@ class Groups(unittest.TestCase):
 
     def test_a_document_with_nothing_to_normalise_is_passed_through(self):
         spans = [span("a")]
-        self.assertIs(trace.mark_groups(spans), spans)
+        self.assertIs(mark_groups(spans), spans)
 
 
 class DegradedTrace(unittest.TestCase):
@@ -578,14 +548,14 @@ class LargeTraces(unittest.TestCase):
     def test_row_count_is_bounded_and_the_remainder_is_counted(self):
         # An exporter with an unpruned `other` bucket emitted 1037 spans for a
         # trivial task. Every row carries a detail pane, so the page is capped.
-        spans = [span(f"s{i}", start=i, end=i + 1) for i in range(trace.MAX_ROWS + 250)]
+        spans = [span(f"s{i}", start=i, end=i + 1) for i in range(MAX_ROWS + 250)]
         tr = trace.parse(doc(*spans))
-        self.assertEqual(len(tr.rows), trace.MAX_ROWS)
+        self.assertEqual(len(tr.rows), MAX_ROWS)
         self.assertEqual(tr.truncated, 250)
 
     def test_truncation_counts_unrendered_descendants(self):
         deep = span("parent", children=[span("kid1"), span("kid2")])
-        spans = [span(f"s{i}", start=i, end=i + 1) for i in range(trace.MAX_ROWS)] + [deep]
+        spans = [span(f"s{i}", start=i, end=i + 1) for i in range(MAX_ROWS)] + [deep]
         tr = trace.parse(doc(*spans))
         self.assertEqual(tr.truncated, 3)
 

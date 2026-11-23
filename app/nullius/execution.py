@@ -30,7 +30,7 @@ thread of its own and writes what it does to a log the page follows:
   it does not.
 
 A plan for the Nullius standard (``runner`` ``standard``,
-``standard/recipe.py``) runs this repository's own ``cli`` from
+``standard/pages/recipe.py``) runs this repository's own ``cli`` from
 ``$NULLIUS_STANDARD``: this repository here; from an installed wheel or on
 a host, a content-addressed copy of the backend and effective catalogue.
 Only code, definitions and their declared resources travel, never user
@@ -40,7 +40,7 @@ folder is. There it needs ``python3`` and ``git``, gets ``uv`` when missing
 (an agent's pip install builds with it), and docker when the plan says so
 (``docker``: a recipe on the container backend) - checked, like a Harbor run's,
 before anything is sent. A run split over several machines is one plan per
-machine, each one shard (``standard/shard.py``).
+machine, each one shard (``standard/runner/shard.py``).
 
 The target reads an explicit catalogue: the user's catalogue for a local
 run; on a host, a writable copy of the snapshot in the run's ``catalogue/``.
@@ -118,11 +118,12 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
-from nullius import hosts, paths, prices as price_list, progress, providers, redact, secrets, settings, workspace
+from nullius import hosts, ondisk, paths, prices as price_list, progress, providers, redact, secrets, settings, workspace
 from nullius.judge import store as judgements
 from nullius.runs import parse
 from nullius.harbor import source as harbor_source
-from nullius.standard import container, payload as standard_payload
+from nullius.standard.backends import container
+from nullius.standard.runner import payload as standard_payload
 
 REMOTE_HOME = "~/.nullius"                    # on a host: tasks/, runs/, app/, harbor/ (a pinned Harbor's wheels)
 # The names the launcher gives a run's key and its endpoint (_launch), read
@@ -139,7 +140,7 @@ LAUNCH_GRACE = 5.0                            # seconds a restart waits for a pa
 UV_INSTALL = "curl -LsSf https://astral.sh/uv/install.sh | sh"
 RECORD = "run.json"
 LOCK = ".lock"                                # in the runs root, held by the one process that follows its runs
-STANDARD = "standard"                         # the Nullius standard's runner key (standard/recipe.py HARNESS)
+STANDARD = "standard"                         # the Nullius standard's runner key (standard/pages/recipe.py HARNESS)
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # this repository: app/ is in it
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 _ID = re.compile(r"[^A-Za-z0-9_.-]")
@@ -249,7 +250,7 @@ class Plan:
     jobs: List[dict] = field(default_factory=list)   # the job directories the script writes: [{"name", "agent", "dataset"}], a shard's also its "launch"
     parts: List[dict] = field(default_factory=list)  # the run, one agent at a time: [{"id", "label", "script"}]; empty: the whole script at once
     recipe: dict = field(default_factory=dict)       # the builder's recipe the script was compiled from, so the run can be opened again as one
-    runner: str = "harbor"                    # or "standard" (standard/recipe.py): the Nullius standard's own cli
+    runner: str = "harbor"                    # or "standard" (standard/pages/recipe.py): the Nullius standard's own cli
     harbor_pin: dict = field(default_factory=dict)   # the Harbor the recipe pins (harbor/source.py pin_of); {}: the harbor on PATH
     docker: bool = False                      # a runner that needs docker on its target though it is not Harbor (the standard's container backend)
     keyless: bool = False                     # nothing in it calls a model (the standard's controls): handed no key and no endpoint at all
@@ -342,7 +343,7 @@ def _licence_names() -> List[str]:
     own; a data provider's token (``provider``) is none, so a shell's reaches
     a Harbor run. A standard driver or agent never inherits it (``run.KEEP``)."""
     try:
-        from nullius.standard import definitions
+        from nullius.standard.contract import definitions
         return sorted({s["name"] for b in definitions.load("benchmark", every=True)[0] for s in definitions.secrets_of(b)
                        if not s.get("provider")})
     except Exception:
@@ -388,7 +389,7 @@ class Execution:
         # the agent keys Settings holds (CURSOR_API_KEY, ...): a Harbor run's agent may need its own vendor's; the standard's never gets one
         self._agent_keys = dict(agent_keys) if agent_keys is not None else (settings.agent_key_values(env) if plan.runner == "harbor" else {})
         if plan.runner == "standard" and (plan.recipe or {}).get("backend") == "boat":
-            from nullius.standard import boat      # the Boat key, to the standard run that starts VMs with it, and to no other command
+            from nullius.standard.backends import boat      # the Boat key, to the standard run that starts VMs with it, and to no other command
             if boat.key(env):
                 self._agent_keys[boat.NAME] = boat.key(env)
         # the benchmark's licences a standard run on a host is sent: read from its store at each launch, unless given
@@ -481,10 +482,7 @@ class Execution:
                     "launched": self.launched, "seen_trials": [list(k) for k in sorted(self._seen_trials, key=str)]}
             try:
                 os.makedirs(self.dir, exist_ok=True)
-                tmp = os.path.join(self.dir, RECORD + ".tmp")
-                with open(tmp, "w", encoding="utf-8") as fh:
-                    json.dump(data, fh, indent=1)
-                os.replace(tmp, os.path.join(self.dir, RECORD))
+                ondisk.write_whole(os.path.join(self.dir, RECORD), json.dumps(data, indent=1))
             except OSError:
                 pass
 

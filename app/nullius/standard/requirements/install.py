@@ -32,7 +32,6 @@ against its sha256 before a run reads it.
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import hashlib
 import json
 import os
@@ -41,9 +40,9 @@ import shutil
 import subprocess
 from typing import Callable, Dict, List, Optional
 
-from nullius.standard import definitions
+from nullius.standard.contract import definitions
 
-from nullius import paths
+from nullius import ondisk, paths
 
 HOME = os.environ.get("STANDARD_DIR") or os.path.join(paths.data_dir(), "standard")
 MARK = ".installed"
@@ -100,12 +99,8 @@ def _run(cmd: List[str], cwd: str, log: str, env: Optional[dict] = None, shown: 
 @contextlib.contextmanager
 def _locked(where: str):
     os.makedirs(os.path.dirname(where), exist_ok=True)
-    with open(where + ".lock", "w") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+    with ondisk.locked(where + ".lock"):
+        yield
 
 
 def _digest(obj) -> str:
@@ -374,14 +369,6 @@ def _upstream(u: dict, where: str) -> str:
     return where
 
 
-def sha256_of(path: str) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def dataset(bench: dict, ds: dict, up: Optional[str], progress: Optional[Callable] = None) -> Optional[str]:
     """The dataset's file, checked by its sha256: in the upstream when there
     is one, else beside the definition. None for a dataset with no file (its
@@ -394,7 +381,7 @@ def dataset(bench: dict, ds: dict, up: Optional[str], progress: Optional[Callabl
     path = os.path.join(up or bench["_here"], ds["path"])
     if not os.path.isfile(path):
         raise InstallFailed(f"dataset {ds['id']}: {ds['path']} is not in {'the upstream' if up else 'the definition folder'}")
-    got = sha256_of(path)
+    got = ondisk.sha256_of(path)
     if got != ds["sha256"]:
         raise InstallFailed(f"dataset {ds['id']}: sha256 {got[:12]}..., the definition says {ds['sha256'][:12]}...")
     return path
@@ -446,7 +433,7 @@ def _fetch(url: str, sha256: str, where: str, what: str, progress: Optional[Call
                 progress(done, total, final=True)
     except OSError as e:
         raise InstallFailed(f"{what} {url}: {e}")
-    got = sha256_of(part)
+    got = ondisk.sha256_of(part)
     if got != sha256:
         os.remove(part)
         raise InstallFailed(f"{what} {url}: sha256 {got[:12]}..., the definition says {sha256[:12]}...")

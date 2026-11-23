@@ -12,7 +12,10 @@ import unittest
 from unittest.mock import patch
 
 from nullius import hosts, prerequisites
-from nullius.standard import definitions, hostreq, recipe, run
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.requirements import hostreq
+from nullius.standard.runner import run
 
 TAU = definitions.get("benchmark", "tau3-bench")
 
@@ -152,7 +155,7 @@ class Host(unittest.TestCase):
 class Relay(unittest.TestCase):
     def test_an_embeddings_reply_is_recorded_by_its_usage_never_its_vectors(self):
         import json
-        from nullius.standard import relay
+        from nullius.standard.calls import relay
         body = json.dumps({"object": "list", "data": [{"embedding": [0.1, 0.2]}] * 3, "usage": {"prompt_tokens": 1000, "total_tokens": 1000}}).encode()
         got = relay.read_reply("/embeddings", body, False)
         self.assertEqual((got["embeddings"], got["usage"]["input"]), (3, 1000))

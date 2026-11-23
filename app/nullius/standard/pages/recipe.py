@@ -41,8 +41,13 @@ from typing import Callable, Dict, List, Optional
 
 from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
-from nullius.standard import boat, hostreq, definitions, ledger, match, ports, prove, relay, run
-from nullius.standard.retries import MAX_RETRIES
+from nullius.standard.backends import boat
+from nullius.standard.calls import ledger, relay
+from nullius.standard.contract import definitions, match, ports
+from nullius.standard.proofs import prove
+from nullius.standard.requirements import hostreq
+from nullius.standard.runner import run
+from nullius.standard.runner.retries import MAX_RETRIES
 
 CHOOSE_PROVIDER = "Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider."
 HARNESS = "standard"
@@ -263,7 +268,7 @@ def entries(kind: str, benches: Optional[List[dict]] = None, every: bool = False
     """The agents (or capabilities) as the Agents page and the builder's Agent step list them, each with its ports
     and its fits (``match.fit``) on ``benches`` (default: every benchmark of its family, default versions), and
     the definitions with problems. ``own``: and the benchmarks' own agents (``definitions.benchmark_agents``)."""
-    from nullius.standard import conform
+    from nullius.standard.proofs import conform
     others, bad = definitions.load(kind, every=every)
     loaded = definitions.load("benchmark")[0]
     benches = [b for b in loaded if b["family"] == kind] if benches is None else benches
@@ -399,7 +404,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     key, and there the programs that reach a VM (a host's are its prerequisites);
     ``boat_size_problem``, why the account cannot start a VM of the size.
 
-    ``max_usd``: the run's spending cap (``standard.ledger``), one amount for
+    ``max_usd``: the run's spending cap (``calls.ledger``), one amount for
     the whole run: its jobs that call a model - each dataset with each
     participant, on each machine - take equal shares (``--max-usd``), so
     none spends another's and the amount typed is the most the run spends.
@@ -594,7 +599,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         repeat = 1
     if lb and repeat < lb.get("repeat", 1):
         add("limits", f"Like the leaderboard runs each {(b.get('units') or {}).get('noun', 'unit')} at least {lb['repeat']} times.")
-    # each attempt run again up to N times when it ends in a failure a further try may mend (standard.retries)
+    # each attempt run again up to N times when it ends in a failure a further try may mend (runner.retries)
     retries = 0 if recipe.get("retries") in (None, "") else _int(recipe.get("retries"), 0, MAX_RETRIES)
     if retries is None:
         add("limits", f"Retries per attempt: a whole number from 0 to {MAX_RETRIES}.")
@@ -978,7 +983,7 @@ def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: 
     """The check an Agents or Capabilities page starts: every kit the agent or
     capability can take, as one command (``cli conform``), the jobs it will
     write named ahead (``conform.job_name``). {errors, script, jobs, label}."""
-    from nullius.standard import conform
+    from nullius.standard.proofs import conform
     o = definitions.get(kind, key) if kind in ("agent", "capability") else None
     errors = []
     if o is None:

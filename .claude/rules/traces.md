@@ -1,7 +1,7 @@
 ## Traces, as this application renders them
 
-The reader itself — folding, grouping, normalisation — is
-`app/nullius/traces/trace.py`.
+The reader itself is `app/nullius/traces/trace.py`, with `spans.py` (the span tree,
+grouping), `fold.py`, `breakdown.py` (time accounting) and `waterfall.py` (layout).
 
 Four things about a rendered trace are load-bearing:
 

@@ -11,7 +11,11 @@ import shutil
 import tempfile
 import unittest
 
-from nullius.standard import cli, conform, definitions, install, match, recipe
+from nullius.standard import cli
+from nullius.standard.contract import definitions, match
+from nullius.standard.pages import recipe
+from nullius.standard.proofs import conform
+from nullius.standard.requirements import install
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard")
 TOOLS = "agent.tools/v1"

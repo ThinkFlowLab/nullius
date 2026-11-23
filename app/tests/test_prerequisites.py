@@ -7,7 +7,10 @@ import unittest
 from unittest import mock
 
 from nullius import hosts, prerequisites
-from nullius.standard import container, definitions, recipe, run
+from nullius.standard.backends import container
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.runner import run
 
 SETUP = {"sandbox": {"summary": "a sandbox", "check": ["srt", "bwrap"], "install": ["sudo apt-get install -y bubblewrap"]}}
 

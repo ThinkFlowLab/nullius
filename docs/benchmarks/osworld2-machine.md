@@ -49,7 +49,8 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
     ```bash title="The driver's environment (ENV), OSWorld-V2's clone (UP) and the benchmark's folder (HERE)"
     eval "$(PYTHONPATH=app python3 -c '
     import shlex
-    from nullius.standard import definitions, install
+    from nullius.standard.contract import definitions
+    from nullius.standard.requirements import install
     b = definitions.get("benchmark", "osworld2")
     print("ENV=" + shlex.quote(install.driver_dir(b)))
     print("UP=" + shlex.quote(install.upstream_dir(b)))
@@ -87,7 +88,8 @@ All 108 tasks of release `osworld-v2.1` run on the docker provider, but 103 and 
 
     ```bash title="Clone and install"
     PYTHONPATH=app python3 -c '
-    from nullius.standard import definitions, install
+    from nullius.standard.contract import definitions
+    from nullius.standard.requirements import install
     b = definitions.get("benchmark", "osworld2")
     print(install.driver_packages(b))
     '

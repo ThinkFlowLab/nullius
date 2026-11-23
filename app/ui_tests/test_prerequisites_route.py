@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from nullius import execution, prerequisites, providers
-from nullius.standard import hostreq
+from nullius.standard.requirements import hostreq
 from .test_routes import web
 
 STOPPED = "docker is installed but not usable by this user: Cannot connect to the Docker daemon"

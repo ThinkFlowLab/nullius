@@ -1,5 +1,5 @@
-"""The session's stdio MCP server ``computer`` for the kit: the computer port's pipe (``computer_pipe.py``, two
-folders up), run from the kit's folder, where a benchmark's server command names its files.
+"""The session's stdio MCP server ``computer`` for the kit: the computer port's pipe (``protocols/computer_pipe.py``,
+two folders up), run from the kit's folder, where a benchmark's server command names its files.
 
     pipe.py SOCKET
 """
@@ -7,7 +7,7 @@ import os
 import runpy
 import sys
 
-PIPE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "computer_pipe.py")
+PIPE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "protocols", "computer_pipe.py")
 
 if __name__ == "__main__":
     sys.argv[0] = PIPE

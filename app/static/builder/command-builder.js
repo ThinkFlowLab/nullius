@@ -426,7 +426,7 @@
   // an option's key read as words: reasoning_effort -> Reasoning effort
   const words = k => { const t = String(k).replace(/[_-]+/g, ' ').trim(); return t.charAt(0).toUpperCase() + t.slice(1); };
   // A control's proof on a dataset: ✓ with what passed (when, in its title), ✕ with the value the last try
-  // reached against its bound, or not run. Its source (nullius/standard/definitions.py, SOURCES) is in its title.
+  // reached against its bound, or not run. Its source (nullius/standard/contract/definitions.py, SOURCES) is in its title.
   const SOURCE_SAYS = {official: 'from the authors', adapter: 'from Harbor\'s adapter', nullius: 'made by Nullius'};
   const bound = e => { const [k, v] = Object.entries(e || {})[0] || ['at_least', 1]; return [k === 'at_most' ? '>' : '<', v]; };
   // short: a proof that met a bound short of the full mark (prove.short_of) - its tick is not green, its bound on hover
@@ -449,7 +449,7 @@
   const bootsVms = b => Object.values((b || {}).options || {}).some(o => o.step === 'where' && Object.values(o.needs || {}).some(n => n && n.vm));
   const vmMemory = (rec, b) => Math.max(0, ...Object.entries((b || {}).options || {}).filter(([, o]) => o.step === 'where')
     .map(([n, o]) => (((o.needs || {})[(rec.bench_options || {})[n] ?? o.default] || {}).vm || {}).memory_gb || 0));
-  // Boat's sizes as the account offers them (nullius/standard/boat.py, SIZES), each with why it cannot be chosen:
+  // Boat's sizes as the account offers them (nullius/standard/backends/boat.py, SIZES), each with why it cannot be chosen:
   // the account cannot start one, or it is too small to boot the unit's own VM (boat.fits).
   const boatSizes = (rec, b) => { const mem = vmMemory(rec, b);
     return ((schema.standardHere || {}).boatSizes || []).map(z => z.why ? {...z, note: 'Not on this account', why: 'Not on this account: ' + z.why}
@@ -464,7 +464,7 @@
     const backend = rec.backend || 'local';
     const selected = C.standardOthers(rec).filter(o => C.chosenOf(rec).includes(o.key));
     const dockerWhy = list.includes('local') && here.docker ? 'Not on this machine: ' + here.docker : '';
-    // Review's rule (nullius/standard/recipe.py): a setup's image installs what has an install; nothing else reaches its container
+    // Review's rule (nullius/standard/pages/recipe.py): a setup's image installs what has an install; nothing else reaches its container
     const cannot = selected.some(o => o.setup) ? optionNeeds(rec).host.filter(n => (b.host || {})[n] && !b.host[n].install.length) : [];
     const containerWhy = dockerWhy || (cannot.length ? cannot.join(', ') + ' cannot be provided in a container: choose local processes.' : '');
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);

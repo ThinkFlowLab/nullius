@@ -23,7 +23,7 @@ import tempfile
 import time
 import unittest
 
-from nullius.standard import jsonl
+from nullius.standard.protocols import jsonl
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENTRY = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld1")
@@ -203,7 +203,7 @@ class AgentSide(unittest.TestCase):
         self.assertEqual(setup["prompt"], TASK["instruction"] + "\n\nIf you need a password for sudo, the password of "
                                                                 "the computer is 'password'.")
         self.assertEqual([(m["name"], m["server"]) for m in setup["mcp"]], [("computer", "computer")])
-        self.assertTrue(setup["mcp"][0]["args"][0].endswith(os.path.join("nullius", "standard", "computer_pipe.py")))
+        self.assertTrue(setup["mcp"][0]["args"][0].endswith(os.path.join("nullius", "standard", "protocols", "computer_pipe.py")))
         s = self.session(setup)
         self.assertEqual(base64.b64decode(s.call("screenshot")["content"][0]["data"])[:4], b"\x89PNG")
         self.assertEqual(value(s.call("click", x=10, y=20))["steps_left"], 4)

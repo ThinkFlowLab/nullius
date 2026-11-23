@@ -20,7 +20,7 @@ import types
 import unittest
 from unittest import mock
 
-from nullius.standard import computer_port
+from nullius.standard.protocols import computer_port
 
 ENTRY = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nullius", "catalogue", "benchmarks",
                      "osworld1")
@@ -231,6 +231,16 @@ class StartAndReap(unittest.TestCase):
                              env=dict(os.environ, TMPDIR=folder, NULLIUS_UPSTREAM=self.tmp))
         self.assertEqual(got.stdout.strip(), "/tmp/nullius-osworld1-vm-start.lck", got.stderr[-2000:])
 
+    def test_the_runners_import_path_holds_the_nullius_package_and_not_its_inside(self):
+        env = self.d._runner_env()
+        up, package = env["PYTHONPATH"].split(os.pathsep)
+        self.assertEqual(up, self.tmp)
+        code = "import secrets\nfrom nullius.standard.protocols import computer_port\nprint(secrets.__file__)\n"   # as runner.py
+        got = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60, cwd=self.tmp,
+                             stdin=subprocess.DEVNULL, env={"PATH": os.environ["PATH"], "PYTHONPATH": env["PYTHONPATH"]})
+        self.assertEqual(got.returncode, 0, got.stderr[-2000:])
+        self.assertNotIn(os.path.join(package, ""), got.stdout)               # the standard library's, not nullius/secrets.py
+
     def test_an_already_reaped_runner_gets_no_signal(self):
         p = child("pass")
         p.wait()
@@ -344,7 +354,7 @@ class Bounds(unittest.TestCase):
         self.addCleanup(lambda: [self.d._reap_runner(w, seconds=0) for w in list(self.d.RUNNERS)])
 
     def test_the_step_option_reaches_the_runner_with_the_port_default(self):
-        from nullius.standard import definitions
+        from nullius.standard.contract import definitions
         self.stand_in_runner()
         open(self.go, "w").close()
         ws = os.path.join(self.tmp, "job", "trial", "workspace")
@@ -625,11 +635,11 @@ class Snapshot(unittest.TestCase):
 
     def test_the_entrys_copy_holds_the_runner_and_the_package_the_ports_code(self):
         from pathlib import Path
-        from nullius.standard import payload
+        from nullius.standard.runner import payload
         files = set(payload._entry(Path(ENTRY)))
         self.assertTrue({"driver.py", "agents.json", "nop.py", "runner.py"} <= files, sorted(files))
         package = set(payload._python(payload.PACKAGE))
-        self.assertTrue({"standard/computer_port.py", "standard/computer_pipe.py"} <= package)
+        self.assertTrue({"standard/protocols/computer_port.py", "standard/protocols/computer_pipe.py"} <= package)
 
 
 class FakeEnv:

@@ -21,7 +21,9 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from nullius.runs import classify
-from nullius.standard import job, jsonl, ledger, relay
+from nullius.standard.calls import ledger, relay
+from nullius.standard.protocols import jsonl
+from nullius.standard.runner import job
 
 CHAT = {"choices": [{"message": {"role": "assistant", "content": "hello"}}],
         "usage": {"prompt_tokens": 10, "completion_tokens": 2, "prompt_tokens_details": {"cached_tokens": 4}}}
@@ -674,7 +676,7 @@ class ServeTest(unittest.TestCase):
         with open(os.path.join(d, "key"), "w") as f:
             f.write(key + "\n")
         env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": self.app}
-        return subprocess.Popen([sys.executable, "-m", "nullius.standard.relay", "serve", "--listen", "127.0.0.1:0",
+        return subprocess.Popen([sys.executable, "-m", "nullius.standard.calls.relay", "serve", "--listen", "127.0.0.1:0",
                                  "--base", f"http://127.0.0.1:{self.up.server_address[1]}/v1", "--record", d,
                                  "--key-file", os.path.join(d, "key"), "--model", "the-recipes", *extra],
                                 env=env, stdout=subprocess.PIPE, text=True)
@@ -717,7 +719,7 @@ class ServeTest(unittest.TestCase):
 
     def test_serve_without_its_key_file_refuses(self):
         import subprocess
-        p = subprocess.Popen([sys.executable, "-m", "nullius.standard.relay", "serve", "--base", "http://127.0.0.1:9/v1",
+        p = subprocess.Popen([sys.executable, "-m", "nullius.standard.calls.relay", "serve", "--base", "http://127.0.0.1:9/v1",
                               "--record", tempfile.mkdtemp(), "--key-file", "/nonexistent/key"],
                              env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": self.app}, stdout=subprocess.PIPE, text=True)
         self.assertIn("cannot read --key-file", p.stdout.readline())
@@ -1028,7 +1030,7 @@ class PassThroughTest(unittest.TestCase):
                 self.assertNotIn("SECRETSECRET", f.read())
 
     def test_a_run_refuses_such_a_key_before_it_starts(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         for key in ("sk-abc\r", " sk-abc", "\ufeffsk-abc", "sk-ab\u200bc"):
             with self.assertRaises(run.Refused):
                 run.provider_endpoint("openai", {"OPENAI_API_KEY": key})
@@ -1038,7 +1040,7 @@ class PassThroughTest(unittest.TestCase):
 ECHO = r"""
 import sys
 sys.path.insert(0, sys.argv[1])
-from nullius.standard import jsonl
+from nullius.standard.protocols import jsonl
 jsonl.serve({"echo": lambda **kw: {"got": kw}, "boom": lambda **kw: 1 / 0})
 """
 

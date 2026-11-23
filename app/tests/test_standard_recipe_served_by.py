@@ -12,7 +12,8 @@ import unittest
 import urllib.error
 
 from nullius import providers
-from nullius.standard import definitions, recipe
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 NOP = {"nop": {"source": "nullius", "from": "nothing said"}}

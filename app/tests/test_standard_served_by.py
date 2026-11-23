@@ -27,7 +27,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 from nullius import progress
-from nullius.standard import cli, container, definitions, install, job, merge, relay, run
+from nullius.standard import cli
+from nullius.standard.backends import container
+from nullius.standard.calls import relay
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import install
+from nullius.standard.runner import job, merge, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -375,7 +380,7 @@ class TheSidecar(WithUpstream):
         for given in (["m=bad slug"], ["m=prov-a,prov-a"], ["m="], ["m=prov-a", "m=prov-b"], ["prov-a"]):
             with self.subTest(given=given):
                 # a process of its own, bounded: a relay that took the pin would serve until stopped
-                got = subprocess.run([sys.executable, "-m", "nullius.standard.relay", "serve", "--listen", "127.0.0.1:0",
+                got = subprocess.run([sys.executable, "-m", "nullius.standard.calls.relay", "serve", "--listen", "127.0.0.1:0",
                                       "--base", self.base, "--record", os.path.join(self.tmp, "rec"), "--key-file", key,
                                       *[w for g in given for w in ("--served-by", g)]],
                                      cwd=APP, env=dict(os.environ, PYTHONPATH=APP), capture_output=True, text=True, timeout=20)
@@ -386,7 +391,7 @@ class TheSidecar(WithUpstream):
         key = os.path.join(self.tmp, "key")
         with open(key, "w") as f:
             f.write("or-test")
-        p = subprocess.Popen([sys.executable, "-m", "nullius.standard.relay", "serve", "--listen", "127.0.0.1:0", "--base", self.base,
+        p = subprocess.Popen([sys.executable, "-m", "nullius.standard.calls.relay", "serve", "--listen", "127.0.0.1:0", "--base", self.base,
                               "--record", os.path.join(self.tmp, "rec"), "--key-file", key, "--model", "m-run",
                               "--served-by", "m-run=prov-a,prov-b/fp8", "--routing"],
                              cwd=APP, env=dict(os.environ, PYTHONPATH=APP), stdout=subprocess.PIPE, text=True)

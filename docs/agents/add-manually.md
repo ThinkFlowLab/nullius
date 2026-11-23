@@ -18,7 +18,7 @@ import json
 import shutil
 from pathlib import Path
 from nullius import paths, settings
-from nullius.standard import definitions
+from nullius.standard.contract import definitions
 
 settings.load(paths.settings_file())
 source = Path(definitions.entry_dir("agent", "goose"))

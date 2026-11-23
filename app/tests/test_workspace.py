@@ -13,6 +13,7 @@ import shutil
 import tempfile
 import threading
 import time
+import tracemalloc
 import unittest
 from dataclasses import replace
 from unittest.mock import patch
@@ -262,7 +263,20 @@ class Cache(unittest.TestCase):
         self.assertEqual([from_cache for _, from_cache in results], [False, False])
         job, from_cache = workspace.load_job(self.ws, self.job_dir)
         self.assertTrue(from_cache); self.assertEqual(job, results[0][0])
-        self.assertEqual([n for n in os.listdir(self.ws.jobs_dir) if n.endswith(".tmp")], [])
+        self.assertEqual([n for n in os.listdir(self.ws.jobs_dir) if n.endswith(".part")], [])
+
+    def test_the_cache_is_written_a_piece_at_a_time(self):
+        job, rows = parse.parse_job(self.job_dir), {"rows": ["x" * 100] * 20000}       # about 2 MB as JSON
+        path = os.path.join(self.ws.jobs_dir, "large.json")
+        with patch.object(workspace, "job_to_dict", lambda job: rows):
+            tracemalloc.start()
+            try:
+                workspace._write_cache(self.ws, path, "sig", "head", job)
+                peak = tracemalloc.get_traced_memory()[1]
+            finally:
+                tracemalloc.stop()
+        self.assertGreater(os.path.getsize(path), 2_000_000)
+        self.assertLess(peak, os.path.getsize(path) / 2)                              # never the whole text in memory
 
     def test_load_jobs_matches_load_all(self):
         _job_dir(self.root, "job-b", n=1)

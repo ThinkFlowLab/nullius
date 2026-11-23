@@ -23,7 +23,8 @@ import time
 import unittest
 from unittest import mock
 
-from nullius.standard import container, definitions
+from nullius.standard.backends import container
+from nullius.standard.contract import definitions
 from tests import docker_tier
 
 KIT = os.path.join(definitions.KITS, "agent-computer-v1")
@@ -673,7 +674,7 @@ class DockerDesktop(unittest.TestCase):
         self.assertEqual(sudo["output"].strip(), "None")
 
     def test_a_failed_prepare_action_says_its_exit_code_and_cause_without_pyautoguis_warnings(self):
-        from nullius.standard import computer_port as cp
+        from nullius.standard.protocols import computer_port as cp
         bridge = cp.Bridge(self.d, 3, 0, desktop.SCREEN, "/tmp/agent", window=True)
         bridge._begin(None)
         self.addCleanup(bridge.finish)

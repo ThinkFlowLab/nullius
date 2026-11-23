@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from nullius.standard import run
+from nullius.standard.runner import run
 
 
 def imports(path: str, *names: str) -> dict:
@@ -28,7 +28,7 @@ class DriverPath(unittest.TestCase):
         path = run.driver_path()
         self.assertEqual(os.listdir(path), ["nullius"])
         self.assertEqual(os.path.realpath(os.path.join(path, "nullius")), os.path.realpath(os.path.join(run.APP, "nullius")))
-        self.assertEqual(imports(path, "nullius.standard.jsonl", "web"), {"nullius.standard.jsonl": True, "web": False})
+        self.assertEqual(imports(path, "nullius.standard.protocols.jsonl", "web"), {"nullius.standard.protocols.jsonl": True, "web": False})
 
     def test_from_a_wheel_the_driver_does_not_see_the_tools_site_packages(self):
         with tempfile.TemporaryDirectory() as site:
@@ -42,8 +42,8 @@ class DriverPath(unittest.TestCase):
                 run.APP = app
             self.assertNotEqual(path, site)
             self.assertEqual(os.listdir(path), ["nullius"])
-            self.assertEqual(imports(path, "nullius.standard.jsonl", "nullius_tool_only_dep"),
-                             {"nullius.standard.jsonl": True, "nullius_tool_only_dep": False})
+            self.assertEqual(imports(path, "nullius.standard.protocols.jsonl", "nullius_tool_only_dep"),
+                             {"nullius.standard.protocols.jsonl": True, "nullius_tool_only_dep": False})
 
     def test_it_is_made_once_and_kept(self):
         self.assertEqual(run.driver_path(), run.driver_path())

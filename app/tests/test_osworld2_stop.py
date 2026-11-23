@@ -22,7 +22,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
-from nullius.standard import relay
+from nullius.standard.calls import relay
 
 HERE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     "nullius", "catalogue", "benchmarks", "osworld2")

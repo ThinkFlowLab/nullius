@@ -36,8 +36,8 @@ import os
 import shutil
 from typing import Dict, List, Optional
 
-from nullius.standard import job
-from nullius.standard.names import backend as backend_name
+from nullius.standard.runner import job
+from nullius.standard.contract.names import backend as backend_name
 
 
 # What every shard of one launch shares, as (what a refusal calls it, where it is in config.json).

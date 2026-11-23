@@ -52,7 +52,7 @@ from contextlib import contextmanager
 from typing import Callable, Dict, Iterable, List, Optional, Sequence
 
 from nullius import paths, secrets
-from nullius.standard import install
+from nullius.standard.requirements import install
 
 API = "https://boat.dev/api/v1"
 STORE, NAME = "sandbox-provider-boat", "BOAT_API_KEY"

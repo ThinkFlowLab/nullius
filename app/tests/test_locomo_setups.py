@@ -11,7 +11,8 @@ import os
 import re
 import unittest
 
-from nullius.standard import definitions, install
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import install
 
 BENCH = definitions.get("benchmark", "locomo")
 

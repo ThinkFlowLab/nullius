@@ -41,9 +41,9 @@ import tempfile
 import threading
 import time
 
-from nullius.standard import computer_port as port
-from nullius.standard import container
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols import computer_port as port
+from nullius.standard.backends import container
+from nullius.standard.protocols.jsonl import serve
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 

@@ -641,7 +641,7 @@ class Driver(unittest.TestCase):
     def test_a_hosts_snapshot_carries_the_module_and_the_override(self):
         from pathlib import Path
 
-        from nullius.standard import payload
+        from nullius.standard.runner import payload
         tmp = Path(tempfile.mkdtemp(prefix="nullius-osworld2-"))
         self.addCleanup(shutil.rmtree, tmp, True)
         with mock.patch.dict(os.environ, {"NULLIUS_HOME": str(tmp / "profile"), "NULLIUS_CATALOGUE": str(tmp / "catalogue")}):

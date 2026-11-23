@@ -11,7 +11,10 @@ import unittest
 from unittest.mock import patch
 
 from nullius.runs import classify, parse
-from nullius.standard import definitions, install, job, relay, retries, run
+from nullius.standard.calls import relay
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import install
+from nullius.standard.runner import job, retries, run
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 WORDS = "the gated task's own sentence"
@@ -21,7 +24,7 @@ EMPTY = "HTTP 400: messages: at least one message is required"
 AGENT_OK = {"status": 200}
 OVERFLOW = {"status": 400, "error": OPENROUTER}
 SIDE_EMPTY = {"status": 400, "error": EMPTY, "side": True}
-ANSWERING = '''from nullius.standard.jsonl import serve
+ANSWERING = '''from nullius.standard.protocols.jsonl import serve
 def answer(unit, dir, setup, model, base_url, key, **_):
     raise RuntimeError("the upstream's runner ended on its simulated user's error")
 serve({"units": lambda dataset, setup=None: {"units": ["a"]}, "setup": lambda unit, dir: {"prompt": "hi"},
@@ -30,7 +33,7 @@ serve({"units": lambda dataset, setup=None: {"units": ["a"]}, "setup": lambda un
 STOPPED = ANSWERING.replace('raise RuntimeError("the upstream\'s runner ended on its simulated user\'s error")',
                             'return {"answer": "DONE"}').replace('{"reward": 0.0, "detail": {}}',
                                                                 '{"reward": 0.5, "detail": {}, "stopped": "context window"}')
-UNREAD = '''from nullius.standard.jsonl import serve
+UNREAD = '''from nullius.standard.protocols.jsonl import serve
 class VerifierError(RuntimeError):
     pass
 def score(unit, dir, **_):

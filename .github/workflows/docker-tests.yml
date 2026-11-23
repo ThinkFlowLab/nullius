@@ -31,7 +31,7 @@ jobs:
       - name: base image
         # The standard's one base image, and the fixture own image's FROM.
         run: |
-          PYTHONPATH=app python3 -c "from nullius.standard import container; print(container.base_image())"
+          PYTHONPATH=app python3 -c "from nullius.standard.backends import container; print(container.base_image())"
           docker pull --quiet ubuntu:24.04
       - name: backend suite with the docker tier
         run: python3 app/tests/parallel.py --docker

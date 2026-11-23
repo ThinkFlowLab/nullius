@@ -376,7 +376,7 @@ class Snapshot(unittest.TestCase):
     def test_a_hosts_snapshot_carries_the_packer(self):
         from pathlib import Path
 
-        from nullius.standard import payload
+        from nullius.standard.runner import payload
         self.assertIn("api_logs.py", payload._entry(Path(HERE)))
 
 

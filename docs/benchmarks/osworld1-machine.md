@@ -33,7 +33,8 @@ By default the command line runs 4 tasks at once: four VMs, 16 cores and 16 GB o
     ```bash
     eval "$(PYTHONPATH=app python3 -c '
     import shlex
-    from nullius.standard import definitions, install
+    from nullius.standard.contract import definitions
+    from nullius.standard.requirements import install
     b = definitions.get("benchmark", "osworld1")
     print("ENV=" + shlex.quote(install.driver_dir(b)))
     print("UP=" + shlex.quote(install.upstream_dir(b)))
@@ -45,7 +46,8 @@ By default the command line runs 4 tasks at once: four VMs, 16 cores and 16 GB o
 
     ```bash
     PYTHONPATH=app python3 -c '
-    from nullius.standard import definitions, install
+    from nullius.standard.contract import definitions
+    from nullius.standard.requirements import install
     b = definitions.get("benchmark", "osworld1")
     print(install.driver_packages(b))
     '

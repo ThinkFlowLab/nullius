@@ -29,8 +29,9 @@ import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from nullius.standard import ledger
-from nullius.traces import otel, trace
+from nullius.standard.calls import ledger
+from nullius.traces import otel
+from nullius.traces.breakdown import breakdown
 
 
 def iso(t: Optional[float]) -> Optional[str]:
@@ -357,11 +358,11 @@ def trace_from_run(trajectory: dict, calls: List[dict], other: dict, produce: tu
             end = max(ends(turn["children"]))
             turn.update(end_ns=end, duration_ns=end - turn["start_ns"])
     session["children"] = sorted(session["children"] + turns, key=lambda s: s["start_ns"])
-    return {"schema_version": otel.SCHEMA, "producer": "app/nullius/standard/job.py", "trial_name": trajectory.get("session_id") or "",
+    return {"schema_version": otel.SCHEMA, "producer": "app/nullius/standard/runner/job.py", "trial_name": trajectory.get("session_id") or "",
             "session_id": trajectory.get("session_id") or "", "agent": trajectory.get("agent") or {},
             "clock": {"source": "this machine's clock, as the relay and the ACP client saw each call",
                       "note": "wall_ns is the agent's window; a tool call's time is what the agent reported"},
-            "spans": [session], "totals": trace.breakdown([session], finish - begin).as_totals()}
+            "spans": [session], "totals": breakdown([session], finish - begin).as_totals()}
 
 
 def _jsonl(path: str) -> List[dict]:

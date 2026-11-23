@@ -26,7 +26,11 @@ import unittest
 from unittest import mock
 from pathlib import Path
 
-from nullius.standard import container, definitions, install, jsonl, run
+from nullius.standard.backends import container
+from nullius.standard.contract import definitions
+from nullius.standard.protocols import jsonl
+from nullius.standard.requirements import install
+from nullius.standard.runner import run
 from tests import docker_tier
 
 BENCH = {

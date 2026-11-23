@@ -35,7 +35,7 @@
       "command": [
         "{install}/.venv/bin/python"
       ],
-      "summary": "The unit's desktop for an agent: the computer port's pipe (the nullius package's standard/computer_pipe.py, whose path setup gives as the first argument) joined to the socket where the unit's runner serves the port's MCP server, its second argument."
+      "summary": "The unit's desktop for an agent: the computer port's pipe (the nullius package's standard/protocols/computer_pipe.py, whose path setup gives as the first argument) joined to the socket where the unit's runner serves the port's MCP server, its second argument."
     }
   },
   "limits": {

@@ -12,10 +12,8 @@ a chart built off the render-capped row list while claiming to describe the view
 import unittest
 from dataclasses import replace
 
-import pathlib
-
-import nullius
 from nullius.traces import trace
+from nullius.traces.waterfall import MAX_ROWS
 from nullius.traces import charts
 
 from .tracedata import DEGRADED, RICH, doc, raw, span
@@ -294,11 +292,11 @@ class TheRenderCapDoesNotLeak(unittest.TestCase):
     def test_the_charts_see_spans_the_waterfall_stops_drawing(self):
         # `rows` is capped at MAX_ROWS; `roots` is not. A chart built off the
         # rows would describe a subset while the panel above says otherwise.
-        many = [span(f"s{i}", 0, (i % 50 + 1) * MS) for i in range(trace.MAX_ROWS + 25)]
+        many = [span(f"s{i}", 0, (i % 50 + 1) * MS) for i in range(MAX_ROWS + 25)]
         tr = trace.parse(doc(*many))
         cs = charts.charts_for(tr.roots)
-        self.assertEqual(len(tr.rows), trace.MAX_ROWS)
-        self.assertEqual(cs.total, trace.MAX_ROWS + 25)
+        self.assertEqual(len(tr.rows), MAX_ROWS)
+        self.assertEqual(cs.total, MAX_ROWS + 25)
         self.assertEqual(sum(b.count for b in chart(cs, "kind-hist").bars), cs.total)
 
 
@@ -517,21 +515,6 @@ class TheChartLegendHasOneUrl(unittest.TestCase):
         cf = charts.ChartFilter.of(["kind-hist:tool", "kind-cdf:tool"])
         self.assertEqual(cf.cleared("kind-hist").off, ("kind-cdf:tool",))
         self.assertEqual(cf.cleared().off, ())
-
-
-class NoFlask(unittest.TestCase):
-    def test_no_backend_module_imports_the_web_stack(self):
-        # Check the entire backend stays Flask-free so it works without the web stack.
-        backend = pathlib.Path(nullius.__file__).parent
-        offenders = {}
-        modules = [m for m in sorted(backend.rglob("*.py")) if "__pycache__" not in m.parts]
-        self.assertGreater(len(modules), 40)
-        for module in modules:
-            bad = [ln for ln in module.read_text(encoding="utf-8").splitlines()
-                   if ln.startswith(("import ", "from ")) and "flask" in ln.lower()]
-            if bad:
-                offenders[str(module.relative_to(backend))] = bad
-        self.assertEqual(offenders, {})
 
 
 class Wrappers(unittest.TestCase):

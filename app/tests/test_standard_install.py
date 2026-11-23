@@ -10,7 +10,8 @@ import threading
 import unittest
 from unittest import mock
 
-from nullius.standard import install
+from nullius import ondisk
+from nullius.standard.requirements import install
 
 
 class UpstreamTest(unittest.TestCase):
@@ -49,7 +50,7 @@ class UpstreamTest(unittest.TestCase):
 
     def test_a_dataset_is_checked_by_its_digest(self):
         up = install.upstream(self.bench, os.path.join(self.tmp, "home"))
-        right = install.sha256_of(os.path.join(up, "data", "items.json"))
+        right = ondisk.sha256_of(os.path.join(up, "data", "items.json"))
         self.assertTrue(install.dataset(self.bench, {"id": "d", "path": "data/items.json", "sha256": right}, up))
         with self.assertRaisesRegex(install.InstallFailed, "sha256"):
             install.dataset(self.bench, {"id": "d", "path": "data/items.json", "sha256": "0" * 64}, up)

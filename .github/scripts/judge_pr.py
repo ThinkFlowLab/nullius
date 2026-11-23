@@ -319,7 +319,7 @@ PRIORITY_PATHS = [   # the first match decides; deepest first
     ("low", ()),
 ]
 MAJOR_FLOOR = ("app/nullius/standard/", "app/nullius/execution.py", "app/nullius/hosts.py", "app/nullius/secrets.py",
-               "app/nullius/runs/classify.py", "app/nullius/runs/parse.py", "app/nullius/standard/relay.py")
+               "app/nullius/runs/classify.py", "app/nullius/runs/parse.py", "app/nullius/standard/calls/relay.py")
 
 
 def split_diff(diff: str) -> list:

@@ -11,7 +11,8 @@ from nullius import importers as harnesses, providers
 from nullius.judge import client as judge_client
 from nullius.runs import classify
 from nullius import workspace
-from nullius.standard import ledger, ports, definitions
+from nullius.standard.calls import ledger
+from nullius.standard.contract import ports, definitions
 
 from .core import app
 from . import shared

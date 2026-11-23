@@ -994,7 +994,7 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
 def _own_agent_key(bench: str, upstream: str) -> str:
     """The key of the benchmark's own agent the upstream names ``upstream`` (its ``agents.json``,
     ``start.driver.agent``); empty for a benchmark without, or a name none has."""
-    from nullius.standard import definitions          # the catalogue, read only for a job from before
+    from nullius.standard.contract import definitions          # the catalogue, read only for a job from before
     folder = definitions.entry_dir("benchmark", bench) if re.fullmatch(r"[a-z][a-z0-9-]{0,39}", bench) else None
     path = os.path.join(folder, definitions.AGENTS_FILE) if folder else ""
     return _own_keys(path, os.path.getmtime(path)).get(upstream, "") if path and os.path.isfile(path) else ""

@@ -15,6 +15,7 @@ import time
 import unittest
 from contextlib import ExitStack
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from nullius import execution, hosts, workspace
@@ -163,6 +164,21 @@ class RunRoutes(unittest.TestCase):
         self.assertEqual(self.post({"name": "x", "script": "true"}, headers={"Origin": "http://localhost"}).status_code, 403)          # no token
         self.assertEqual(self.post({"name": "x", "script": "true"}, environ_base={"REMOTE_ADDR": "10.0.0.7"}).status_code, 403)       # not loopback
         self.assertFalse((self.tmp / "runs" / "x").exists())
+
+    def test_a_name_still_running_or_used_before_is_refused_and_nothing_starts(self):
+        """``execute.begin``, which every route that starts a run asks first."""
+        body = {"name": "twice", "script": "true", "where": "local"}
+        going = SimpleNamespace(plan=SimpleNamespace(name="twice"), state="running")
+        with patch.dict(execution.EXECUTIONS, {"going": going}):
+            r = self.post(body)
+        self.assertEqual((r.status_code, r.json["error"]), (409, "twice is running already"))
+        (self.tmp / "runs" / "twice").mkdir(parents=True)
+        r = self.post(body)
+        self.assertEqual((r.status_code, r.json["error"]), (409, execution.name_taken("twice")))
+        plans = [execution.Plan(name="fresh", script="true"), execution.Plan(name="twice", script="true")]
+        self.assertEqual(web.execute.begin(plans), ([], execution.name_taken("twice"), 409))
+        self.assertEqual((dict(execution.EXECUTIONS), self.adopted), ({}, []))                   # nothing started, the free name included
+        self.assertFalse((self.tmp / "runs" / "fresh").exists())
 
     def test_the_run_opens_runs_by_launch_and_its_job_page_before_harbor_writes_the_job(self):
         r = self.post({"name": "tau3-x3", "script": "true", "where": "local", "jobs": [{"name": "tau3-x3", "agent": "oracle", "dataset": "tau3-x3"}]})
@@ -1025,7 +1041,7 @@ class LaunchesPage(unittest.TestCase):
         self.assertEqual(web.runs._undeletable([self.ex]), "")
 
     def test_runs_and_checks_are_counted_alike_on_both_pages(self):
-        from nullius.standard import merge
+        from nullius.standard.runner import merge
         from tests.test_standard_shard import write_shard
         key = self.sharded()
         s1 = next(e for e in execution.EXECUTIONS.values() if e.plan.name == "s1")

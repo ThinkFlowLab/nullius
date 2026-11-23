@@ -16,9 +16,10 @@ import hashlib
 import json
 import os
 import re
-import tempfile
 import threading
 from typing import Optional
+
+from nullius import ondisk
 
 from . import client, questions as Q
 
@@ -132,14 +133,7 @@ def save(ws_dir: str, job_id: str, trial_name: str, record: dict, lane: str = "d
         if "hygiene" in earlier or "hygiene" in record:
             merged["hygiene"] = {**(earlier.get("hygiene") or {}), **(record.get("hygiene") or {})}
         data[version] = merged
-        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=os.path.basename(path) + ".", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(data, fh, indent=1)
-            os.replace(tmp, path)
-        except BaseException:
-            os.unlink(tmp)
-            raise
+        ondisk.write_whole(path, json.dumps(data, indent=1), mode=0o600)
     return merged
 
 

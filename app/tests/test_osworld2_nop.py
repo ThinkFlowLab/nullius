@@ -15,7 +15,8 @@ import types
 import unittest
 from unittest import mock
 
-from nullius.standard import definitions, run
+from nullius.standard.contract import definitions
+from nullius.standard.runner import run
 
 HERE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     "nullius", "catalogue", "benchmarks", "osworld2")

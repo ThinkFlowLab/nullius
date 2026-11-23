@@ -14,7 +14,12 @@ import unittest
 from unittest import mock
 
 from nullius.runs import artifacts, parse
-from nullius.standard import boat, computer_pipe, definitions, install, recipe, run
+from nullius.standard.backends import boat
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.protocols import computer_pipe
+from nullius.standard.requirements import install
+from nullius.standard.runner import run
 
 FIX = Path(__file__).parent / "fixtures/standard"
 

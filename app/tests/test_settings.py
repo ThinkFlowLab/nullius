@@ -30,8 +30,8 @@ class Table(unittest.TestCase):
         read -= {"LOCALAPPDATA"}                                          # Windows's user directory, not a Nullius setting
         read -= {"OPENAI_BASE_URL"}                                       # what a run's launcher hands it (execution.URL_NAMES), read by the run: standard cli --from-run
         read -= {"NULLIUS_LICENCE_DIR"}                                   # the same: where a host's run writes a licence file (execution, standard cli)
-        read -= {"NULLIUS_FORWARD_TO"}                                    # a licence server's forwarder's, in its own container (standard/forward.py)
-        read -= {"NULLIUS_MCP_AT"}                                        # the MCP bridge's, in the agent's container (standard/mcp_bridge.py)
+        read -= {"NULLIUS_FORWARD_TO"}                                    # a licence server's forwarder's, in its own container (standard/backends/forward.py)
+        read -= {"NULLIUS_MCP_AT"}                                        # the MCP bridge's, in the agent's container (standard/backends/mcp_bridge.py)
         read -= {"DOCKER_CONFIG"}                                         # docker's own: where it keeps a login (sandbox.py reads the username)
         read -= {"DOCKER_HOST", "DOCKER_CONTEXT"}                         # docker's own: when set, container.py leaves the current context to them
         read -= {"XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}          # the user's session: where systemd-run finds its manager (constraints.session)

@@ -18,7 +18,11 @@ import unittest
 from unittest import mock
 
 from nullius import constraints, prerequisites, settings
-from nullius.standard import container, definitions, install, recipe, run
+from nullius.standard.backends import container
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.requirements import install
+from nullius.standard.runner import run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 ALL = {"cpus": 2, "memory_mb": 512, "processes": 100, "concurrency": 3, "cpu_set": "0-1", "gpu_ids": [0]}
@@ -299,6 +303,7 @@ class Probe(unittest.TestCase):
         [t.start() for t in each]; [t.join() for t in each]
         self.assertEqual((failed, len(constraints.load(env))), ([], 24))
         self.assertEqual([n for n in os.listdir(os.path.dirname(constraints.store_path(env))) if n.endswith(".part")], [])
+        self.assertEqual(os.stat(constraints.store_path(env)).st_mode & 0o777, 0o600)
         constraints.save("local", {"enforced": ["cpus"]}, env); constraints.save("bench", {"enforced": []}, env)
         self.assertEqual(constraints.load(env)["local"]["enforced"], ["cpus"])
         self.assertEqual(sorted(constraints.load(env))[:2], ["bench", "local"])
@@ -316,7 +321,7 @@ class Containers(unittest.TestCase):
         self.addCleanup(container.cap, {})
 
     def test_every_container_a_run_starts_takes_the_machine_s_caps(self):
-        from nullius.standard import setup_container
+        from nullius.standard.backends import setup_container
         container.cap({"cpus": 1.5, "memory_mb": 512, "concurrency": 2, "gpu_ids": [0]})
         flags = ["--cpus", "1.5", "--memory", "512m", "--memory-swap", "512m"]
         tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, tmp, True)

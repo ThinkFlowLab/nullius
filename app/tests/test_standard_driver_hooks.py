@@ -14,7 +14,12 @@ import unittest
 
 from unittest import mock
 
-from nullius.standard import definitions, install, jsonl, prove, recipe, run
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.proofs import prove
+from nullius.standard.protocols import jsonl
+from nullius.standard.requirements import install
+from nullius.standard.runner import run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 BENCH = {
@@ -27,7 +32,7 @@ BENCH = {
 }
 # A driver that records what setup was told, in the unit's trial folder.
 DRIVER = '''import json, os
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 def setup(unit, dir, **told):
     with open(os.path.join(os.path.dirname(dir), "told.json"), "w") as f:
         json.dump(told, f)
@@ -466,7 +471,7 @@ class ThroughARun(unittest.TestCase):
 
 # A driver that is told when the agent is given its task: it marks the trial, and records each score's answer.
 GIVEN_DRIVER = '''import json, os, time
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 def setup(unit, dir, **told):
     with open(os.path.join(os.path.dirname(dir), "told.json"), "w") as f:
         json.dump(told, f)

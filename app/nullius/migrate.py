@@ -14,7 +14,7 @@ from pathlib import Path
 import stat
 import sys
 
-from nullius import paths, settings
+from nullius import ondisk, paths, settings
 
 SKIP = {".git", "__pycache__", ".pytest_cache", ".venv"}
 PATH_SETTINGS = {"RUNS_DIR", "WORKSPACES_DIR", "HARBOR_PINS", "STANDARD_DIR", "STANDARD_DATA_DIR",
@@ -206,7 +206,6 @@ def prepare(checkout: Path, licence_source: Path | None = None):
 
 def apply(pending):
     """Write the prepared copy using private files. Original data is untouched."""
-    import tempfile
     for dest, inventory in pending.catalogue_entries.items():
         if _inventory(dest) != inventory:
             raise ValueError(f"Destination changed since preview: {dest}")
@@ -227,15 +226,7 @@ def apply(pending):
         mkdir(directory)
     for dest, data, mode, _ in pending.files:
         mkdir(dest.parent)
-        fd, temporary = tempfile.mkstemp(prefix=".migrate-", dir=dest.parent)
-        try:
-            os.fchmod(fd, mode)
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(data)
-            os.replace(temporary, dest)
-        finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
+        ondisk.write_whole(dest, data, mode=mode)
 
 
 def provider_records(values: dict) -> dict:

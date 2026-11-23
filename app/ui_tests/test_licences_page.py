@@ -19,8 +19,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from nullius import secrets
-from nullius.standard import definitions
-from nullius.standard import recipe as standard_recipe
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe as standard_recipe
 from .test_agents import fixture_load
 from .test_routes import web
 

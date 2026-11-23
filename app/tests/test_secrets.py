@@ -45,7 +45,7 @@ class Store(unittest.TestCase):
             secrets.store_of("bench-a", "HF_TOKEN", "elsewhere")
 
     def test_a_run_reads_a_data_providers_token_from_its_provider_alone(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         bench = {"key": "bench-a", "environments": {"e": {"needs_secrets": [
             {"name": "HF_TOKEN", "to": "driver", "provider": "huggingface"}, {"name": "LICENSE_KEY", "to": "driver"}]}}}
         secrets.set("bench-a", "HF_TOKEN", "stale-synthetic")
@@ -57,7 +57,8 @@ class Store(unittest.TestCase):
         self.assertEqual(held.get("HF_TOKEN"), {"kind": "value", "value": "shared-synthetic"})
 
     def test_a_headless_run_takes_a_data_providers_token_from_its_environment_first(self):
-        from nullius.standard import cli, run
+        from nullius.standard import cli
+        from nullius.standard.runner import run
         bench = {"key": "bench-a", "environments": {"e": {"needs_secrets": [
             {"name": "HF_TOKEN", "to": "driver", "provider": "huggingface"}, {"name": "LICENSE_KEY", "to": "driver"}]}}}
         env = {"HF_TOKEN": "env-synthetic", "LICENSE_KEY": "env-licence-synthetic"}
@@ -75,7 +76,8 @@ class Store(unittest.TestCase):
         self.assertEqual(cli.licences(bench, env=handed)[0].get("HF_TOKEN"), {"kind": "value", "value": "handed-synthetic"})
 
     def test_a_benchmark_that_declares_no_provider_takes_nothing_from_the_environment(self):
-        from nullius.standard import cli, run
+        from nullius.standard import cli
+        from nullius.standard.runner import run
         bench = {"key": "bench-a", "environments": {"e": {"needs_secrets": [{"name": "HF_TOKEN", "to": "driver"}]}}}
         held = cli.licences(bench, env={"HF_TOKEN": "env-synthetic"})[0]
         self.assertEqual(held.environ, {})
@@ -148,7 +150,7 @@ class Store(unittest.TestCase):
         self.assertTrue(secrets.delete("b", "A"))
         self.assertFalse(secrets.delete("b", "A"))
         self.assertEqual(secrets.status("b"), {})
-        self.assertEqual([n for n in os.listdir(os.path.join(self.tmp, "secrets", "b")) if n.startswith(".tmp")], [])
+        self.assertEqual([n for n in os.listdir(os.path.join(self.tmp, "secrets", "b")) if n.endswith(".part")], [])
 
     def test_unpack_decodes_a_host_payload_and_preserves_binary_bytes(self):
         payload = {"A": base64.b64encode(KEY.encode()).decode(), "F": base64.b64encode(FILE).decode()}
@@ -189,7 +191,7 @@ class LicenceFolderTest(unittest.TestCase):
                                                                        "path": "/opt/x/lic"}]}}}
 
     def test_written_0600_in_a_0700_folder(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         with tempfile.TemporaryDirectory() as d:
             spill = os.path.join(d, "spill")
             got = run.Licences.handed(self.bench(), {"LIC": b"secret"}, spill)
@@ -198,7 +200,7 @@ class LicenceFolderTest(unittest.TestCase):
             self.assertEqual(oct(os.stat(p).st_mode & 0o777), "0o600")
 
     def test_a_folder_open_to_others_or_a_link_is_refused(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         with tempfile.TemporaryDirectory() as d:
             wide = os.path.join(d, "wide")
             os.mkdir(wide, 0o777)
@@ -214,7 +216,7 @@ class LicenceFolderTest(unittest.TestCase):
             self.assertEqual(os.listdir(target), [])
 
     def test_a_link_planted_as_the_file_is_not_followed(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         with tempfile.TemporaryDirectory() as d:
             spill = os.path.join(d, "spill")
             os.mkdir(spill, 0o700)

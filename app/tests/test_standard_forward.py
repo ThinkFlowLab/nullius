@@ -14,7 +14,7 @@ import time
 import unittest
 from unittest import mock
 
-from nullius.standard import forward
+from nullius.standard.backends import forward
 
 
 def _greeter(greeting: bytes, host: str = "127.0.0.1") -> int:

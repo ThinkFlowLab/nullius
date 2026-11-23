@@ -13,7 +13,7 @@ from nullius import migrate, onboarding, paths, providers, settings
 from nullius.judge import client
 from nullius.recipes.launch import payload
 from nullius.catalogue import catalog
-from nullius.standard import run
+from nullius.standard.runner import run
 
 KEYS = {"OPENROUTER_API_KEY": "sk-or-fixture-0001", "OPENAI_API_KEY": "sk-oa-fixture-0002",
         "ANTHROPIC_API_KEY": "sk-ant-fixture-0003", "MODEL_GW_API_KEY": "sk-gw-fixture-0004"}

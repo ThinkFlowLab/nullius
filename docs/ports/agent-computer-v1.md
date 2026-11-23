@@ -81,7 +81,7 @@ A step's `files` are read once its actions have run and their pauses have passed
 
 ## For a benchmark's runner
 
-The shared code is `app/nullius/standard/computer_port.py`, and `computer_pipe.py` beside it.
+The shared code is `app/nullius/standard/protocols/computer_port.py`, and `computer_pipe.py` beside it.
 
 | Piece | What the runner gives or does |
 | --- | --- |

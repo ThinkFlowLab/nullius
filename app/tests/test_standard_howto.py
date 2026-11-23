@@ -13,7 +13,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from nullius.standard import cli, definitions, howto
+from nullius.standard import cli
+from nullius.standard.contract import definitions
+from nullius.standard.pages import howto
 
 
 class Steps(unittest.TestCase):

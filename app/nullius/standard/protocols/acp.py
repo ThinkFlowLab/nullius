@@ -34,7 +34,7 @@ import json
 import os
 import queue
 from concurrent.futures import CancelledError
-from nullius.standard.cancellation import reply
+from nullius.standard.protocols.cancellation import reply
 import signal
 import subprocess
 import threading

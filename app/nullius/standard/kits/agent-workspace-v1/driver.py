@@ -4,8 +4,8 @@ import stat
 import subprocess
 import sys
 
-from nullius.standard.container import check_argv
-from nullius.standard.jsonl import serve
+from nullius.standard.backends.container import check_argv
+from nullius.standard.protocols.jsonl import serve
 
 CALC = "def add(a, b):\n    return a - b\n"
 TEST = "from calc import add\nassert add(2, 3) == 5, add(2, 3)\nprint('OK')\n"

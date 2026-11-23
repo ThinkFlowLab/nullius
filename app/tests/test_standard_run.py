@@ -18,12 +18,17 @@ from unittest import mock
 
 from nullius import progress
 from nullius.runs import classify, live, parse
-from nullius.standard import acp, container, definitions, install, jsonl, ledger, pace as pacing, relay, run
+from nullius.standard.backends import container
+from nullius.standard.calls import ledger, relay
+from nullius.standard.contract import definitions
+from nullius.standard.protocols import acp, jsonl
+from nullius.standard.requirements import install
+from nullius.standard.runner import pace as pacing, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 # A conversation whose user a model plays: it opens, speaks once more, then is done.
 CHAT_DRIVER = '''import json, sys, urllib.request
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 ROUTES = []
 def ask(sim, text):
     ROUTES.append(sim["model"])
@@ -42,7 +47,7 @@ serve({"units": lambda dataset: {"units": ["a", "b"]}, "setup": lambda unit, dir
 '''
 
 SLOW_CHAT_DRIVER = '''import time
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 def turn(unit, dir, transcript):
     time.sleep(0.6)                          # each reply quick, the user slow: the conversation never ends by itself
     return {"message": "more"}
@@ -50,7 +55,7 @@ serve({"units": lambda dataset: {"units": ["a"]}, "setup": lambda unit, dir: {"p
        "score": lambda unit, dir, transcript, answer: {"reward": 1.0, "passed": True, "detail": {}}})
 '''
 
-CALLING_CHAT_DRIVER = '''from nullius.standard.jsonl import serve
+CALLING_CHAT_DRIVER = '''from nullius.standard.protocols.jsonl import serve
 def turn(unit, dir, transcript):
     if sum(1 for t in transcript if t["role"] == "user") >= 4:
         return {"done": True}
@@ -60,7 +65,7 @@ serve({"units": lambda dataset: {"units": ["a", "b"]}, "setup": lambda unit, dir
 '''
 
 JUDGED_DRIVER = '''import json, urllib.request
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 def score(unit, dir, transcript, answer, judge=None):
     req = urllib.request.Request(judge["base_url"] + "/chat/completions", headers={"Content-Type": "application/json"},
                                  data=json.dumps({"model": judge["model"], "messages": [{"role": "user", "content": answer or "x"}]}).encode())
@@ -70,7 +75,7 @@ serve({"units": lambda dataset: {"units": ["a"]}, "setup": lambda unit, dir: {"p
 '''
 
 CWD_DRIVER = '''import os
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 def setup(unit, dir):
     os.makedirs("data", exist_ok=True)
     open(os.path.join("data", ".cache"), "w").write("x")
@@ -79,7 +84,7 @@ serve({"units": lambda dataset: {"units": ["a"]}, "setup": setup,
        "score": lambda unit, dir, transcript, answer: {"reward": 1.0, "passed": True, "detail": {}}})
 '''
 
-CALLING_DRIVER = '''from nullius.standard.jsonl import serve
+CALLING_DRIVER = '''from nullius.standard.protocols.jsonl import serve
 serve({"units": lambda dataset: {"units": [f"m{i}" for i in range(8)]}, "setup": lambda unit, dir: {"prompt": "model hi"},
        "score": lambda unit, dir, transcript, answer: {"reward": 1.0, "passed": True, "detail": {}}})
 '''
@@ -89,11 +94,11 @@ serve({"units": lambda dataset: {"units": [f"m{i}" for i in range(8)]}, "setup":
 UNEVEN_DRIVER = CALLING_DRIVER.replace('{"prompt": "model hi"}', '{"prompt": "model " + ("x" * 3000 if unit == "m5" else "hi")}')
 # the same, m5's agent taking its refused call in its stride and ending its turn; each score leaves a mark in the workspace
 SWALLOWING_DRIVER = (UNEVEN_DRIVER.replace('"model " + ("x" * 3000', '("swallow " if unit == "m5" else "model ") + ("x" * 3000')
-                     .replace("from nullius.standard.jsonl import serve", "import os\nfrom nullius.standard.jsonl import serve")
+                     .replace("from nullius.standard.protocols.jsonl import serve", "import os\nfrom nullius.standard.protocols.jsonl import serve")
                      .replace('"score": lambda unit, dir, transcript, answer: {',
                               '"score": lambda unit, dir, transcript, answer: open(os.path.join(dir, "scored"), "w").close() or {'))
 # one unit whose agent takes a refused call in its stride and ends its turn, and whose answer fails
-GAVE_UP_DRIVER = '''from nullius.standard.jsonl import serve
+GAVE_UP_DRIVER = '''from nullius.standard.protocols.jsonl import serve
 serve({"units": lambda dataset: {"units": ["s"]}, "setup": lambda unit, dir: {"prompt": "swallow hi"},
        "score": lambda unit, dir, transcript, answer: {"reward": 0.0, "passed": False, "detail": {}}})
 '''
@@ -1034,7 +1039,7 @@ class RunTest(unittest.TestCase):
     def test_selected_auxiliary_files_are_downloaded_and_given_only_to_the_driver(self):
         import hashlib
         from unittest import mock
-        from nullius.standard import install
+        from nullius.standard.requirements import install
         b = definitions.get("benchmark", "fakebench", ROOT)
         b["files"] = {"keys": {"url": "https://example.org/keys.json", "sha256": hashlib.sha256(b"{}").hexdigest()}}
         b["options"] = {
@@ -1256,7 +1261,7 @@ class RunTest(unittest.TestCase):
 
     def test_the_container_backend_needs_no_yes_but_a_usable_engine(self):
         from unittest import mock
-        from nullius.standard import container
+        from nullius.standard.backends import container
         b = definitions.get("benchmark", "fakebench", ROOT)
         a = definitions.get("agent", "fake", ROOT)
         env = {"MODEL_API_URL": "http://127.0.0.1:9/v1"}
@@ -1324,7 +1329,8 @@ class RunTest(unittest.TestCase):
 
     def test_on_the_docker_backend_the_agent_is_installed_in_the_base_image_whatever_this_machine(self):
         from unittest import mock
-        from nullius.standard import container, install
+        from nullius.standard.backends import container
+        from nullius.standard.requirements import install
         b = definitions.get("benchmark", "fakebench", ROOT)
         a = definitions.get("agent", "fake", ROOT)
         env = {"MODEL_API_URL": "http://127.0.0.1:9/v1"}
@@ -1345,7 +1351,7 @@ class RunTest(unittest.TestCase):
 
     def test_a_model_door_that_fails_to_open_still_writes_the_jobs_result(self):
         from unittest import mock
-        from nullius.standard import container
+        from nullius.standard.backends import container
         b = definitions.get("benchmark", "fakebench", ROOT)
         a = definitions.get("agent", "fake", ROOT)
         env = {"MODEL_API_URL": "http://127.0.0.1:9/v1"}

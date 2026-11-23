@@ -143,7 +143,7 @@ class RunsByLaunch(unittest.TestCase):
                     self.assertIn(says, block)
 
     def test_finished_kits_do_not_inherit_the_shared_process_state(self):
-        from nullius.standard import job
+        from nullius.standard.runner import job
         with tempfile.TemporaryDirectory() as root:
             plan = execution.Plan(name="kits", script="conform", runner="standard",
                                   jobs=[{"name": "kit-conversation"}, {"name": "kit-tools"}, {"name": "kit-computer"}])

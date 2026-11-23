@@ -16,7 +16,9 @@ import unittest
 import urllib.request
 from unittest import mock
 
-from nullius.standard import container, definitions, egress, run
+from nullius.standard.backends import container, egress
+from nullius.standard.contract import definitions
+from nullius.standard.runner import run
 from tests import docker_tier
 
 TB = os.path.join(definitions.CATALOGUE, "benchmarks", "terminal-bench")

@@ -9,7 +9,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from nullius.standard import container, setup_container, jsonl
+from nullius.standard.backends import container, setup_container
+from nullius.standard.protocols import jsonl
 from tests import docker_tier
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -147,14 +148,14 @@ class DriverContainer(unittest.TestCase):
             env = {'PATH': os.environ.get('PATH', ''), 'PYTHONPATH': APP, 'NULLIUS_HOME': root + '/profile'}
 
             def launch(*credentials):
-                return subprocess.run([sys.executable, '-m', 'nullius.standard.setup_container', root + '/setup.json',
+                return subprocess.run([sys.executable, '-m', 'nullius.standard.backends.setup_container', root + '/setup.json',
                                        root + '/cache', 'run', *credentials], env=env, capture_output=True, text=True,
                                       timeout=60).stdout
             self.assertEqual(launch(root + '/credentials'), 'fixture-only')
             self.assertEqual(launch(), 'unset')
 
     def test_the_container_starts_the_driver_with_the_command_a_host_run_starts(self):
-        from nullius.standard import install
+        from nullius.standard.requirements import install
         with tempfile.TemporaryDirectory() as root:
             bench = {'key': 'fixture', '_here': root, 'driver': {'command': [sys.executable, '{here}/show.py']}}
             with open(root + '/show.py', 'w') as f:
@@ -162,7 +163,7 @@ class DriverContainer(unittest.TestCase):
             with open(root + '/setup.json', 'w') as f:
                 json.dump({'bench': bench, 'upstream': None, 'needs': []}, f)
             env = {'PATH': os.environ.get('PATH', ''), 'PYTHONPATH': APP, 'NULLIUS_HOME': root + '/profile'}
-            said = subprocess.run([sys.executable, '-m', 'nullius.standard.setup_container', root + '/setup.json',
+            said = subprocess.run([sys.executable, '-m', 'nullius.standard.backends.setup_container', root + '/setup.json',
                                    root + '/cache', 'run'], env=env, capture_output=True, text=True, timeout=60).stdout
             command, extra = install.driver_argv(bench, root + '/cache')
             self.assertEqual((said, extra), (' '.join(command[1:]), {}))
@@ -206,7 +207,7 @@ class SetupDriverFiles(unittest.TestCase):
     """A benchmark's downloaded files reach its Docker setup driver as they reach a local one."""
 
     def test_the_files_are_in_the_drivers_environment_and_mounted(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, tmp, True)
         got = {}
 

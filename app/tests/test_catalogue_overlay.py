@@ -11,7 +11,8 @@ from unittest.mock import patch
 
 from nullius import paths
 from nullius.catalogue import catalog, harbor_entry, storage
-from nullius.standard import definitions, install
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import install
 from .test_harbor_entry import form
 from .test_standard_definitions import AGENT, BENCH, CAPABILITY
 from .test_standard_versions import VERSIONED
@@ -245,6 +246,18 @@ class Overlay(unittest.TestCase):
         self.assertEqual(loaded["_here"], str(path.parent))
         self.assertEqual((path.parent / "template.toml").read_text(), "template contents")
         self.assertEqual(self.tree(self.bundle), before)
+
+    def test_a_proof_that_ends_after_use_bundled_does_not_bring_the_users_entry_back(self):
+        folder = self.definition(self.bundle, "agent", AGENT)
+        (folder / "agent.py").write_text("the agent")
+        definitions.save(definitions.get("agent", "bot"), lambda cur: cur.update(summary="proven once"))
+        running = definitions.get("agent", "bot")                              # a second proof starts, on the user's copy
+        self.assertEqual(running["_here"], str(self.user / "agents" / "bot"))
+        storage.use_bundled("agents", "bot", str(self.bundle))
+        with self.assertRaises(FileNotFoundError):
+            definitions.save(running, lambda cur: cur.update(summary="proven twice"))
+        self.assertFalse((self.user / "agents" / "bot").exists())              # not a folder holding the definition alone
+        self.assertEqual(definitions.get("agent", "bot")["_here"], str(folder))
 
     def test_flat_definition_save_and_explicit_fixture_save(self):
         self.definition(self.bundle, "capability", CAPABILITY)

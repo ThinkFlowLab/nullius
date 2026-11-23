@@ -30,6 +30,7 @@ from unittest.mock import patch
 from nullius import workspace
 from nullius.catalogue import catalog, harbor_entry
 from nullius.traces import trace as trace_mod
+from nullius.traces.spans import all_spans
 
 try:                    # a repository's refs listed by `git ls-remote`
     from nullius import gitrefs
@@ -124,7 +125,7 @@ class EveryRoute(unittest.TestCase):
             if not trial.has_trace:
                 continue
             loaded = trace_mod.load(trial.trace_path)
-            for span in trace_mod.all_spans(loaded.roots):
+            for span in all_spans(loaded.roots):
                 if span.span_id:
                     return span.span_id
         return ""
@@ -165,10 +166,10 @@ class EveryRoute(unittest.TestCase):
                     local["key"] = catalog.load().listed_benchmarks[0].key
                 # an agent's or a capability's page is the standard's definition of that key
                 if raw in ("/agents/<key>", "/capabilities/<key>", "/features/<key>"):
-                    from nullius.standard import definitions
+                    from nullius.standard.contract import definitions
                     local["key"] = definitions.load("agent" if raw.startswith("/agents") else "capability")[0][0]["key"]
                 if raw == "/kits/<key>":
-                    from nullius.standard import definitions
+                    from nullius.standard.contract import definitions
                     local["key"] = definitions.kits()[0]["key"]
                 # its edit form is for a Harbor entry on the hub or in the registry
                 if raw == "/benchmarks/<key>/edit":

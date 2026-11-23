@@ -14,7 +14,6 @@ from nullius.judge import store
 from .core import app
 from . import shared
 from . import runs as runs_web
-from . import settings as settings_web
 
 
 def _not_a_run(real) -> str:
@@ -242,7 +241,7 @@ def workspace_root_delete(name):
     ended (``_root``), as its launch's Delete does - its roots in every
     workspace, parsed runs and judgements go with it."""
     ws, root = _named_root(name)
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403)
     info = _root(root, runs_web._held_launches(), {})
     if info["why"]:

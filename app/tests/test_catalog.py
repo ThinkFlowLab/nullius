@@ -11,7 +11,7 @@ import shutil
 import unittest
 
 from nullius.catalogue import catalog
-from nullius.standard import definitions as standard_definitions
+from nullius.standard.contract import definitions as standard_definitions
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 UUID = re.compile(rb"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)

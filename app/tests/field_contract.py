@@ -40,7 +40,8 @@ MANIFEST = os.path.join(HERE, "field_contract.json")
 PACKAGE_OF = {
     "parse": "nullius.runs", "classify": "nullius.runs", "artifacts": "nullius.runs",
     "attempts": "nullius.runs",
-    "trace": "nullius.traces", "trajectory": "nullius.traces", "charts": "nullius.traces",
+    "trace": "nullius.traces", "spans": "nullius.traces", "breakdown": "nullius.traces", "waterfall": "nullius.traces",
+    "trajectory": "nullius.traces", "charts": "nullius.traces",
     "conversation": "nullius.traces", "behavior": "nullius.traces",
     "comparison": "nullius.compare",
     "catalog": "nullius.catalogue", "benchmarks": "nullius.runs",

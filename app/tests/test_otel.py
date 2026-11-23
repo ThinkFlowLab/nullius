@@ -13,7 +13,8 @@ import os
 import tempfile
 import unittest
 
-from nullius.traces import otel, trace
+from nullius.traces import otel
+from nullius.traces.spans import raw_spans_of
 
 
 
@@ -36,7 +37,7 @@ class LangfuseAttributes(unittest.TestCase):
             self.span("d", "a", "verify", {"langfuse.observation.type": "evaluator"}),
             self.span("e", "a", "setup", {"langfuse.observation.type": "span"}),
         ])
-        kinds = {raw["name"]: raw["kind"] for raw in trace.raw_spans_of(doc["spans"])}
+        kinds = {raw["name"]: raw["kind"] for raw in raw_spans_of(doc["spans"])}
         self.assertEqual(kinds, {"agent": "session", "llm-call-1": "llm_request", "Bash": "tool",
                                  "verify": "evaluator", "setup": "span"})
 
@@ -152,7 +153,7 @@ class Values(unittest.TestCase):
                      "startTimeUnixNano": "1", "endTimeUnixNano": "2", "attributes": []},
             "resource": {}, "scope": {"name": "", "version": ""}}
         doc = otel.build("t", [rec("a", "b", "a"), rec("b", "a", "b"), rec("c", "", "c")])
-        names = sorted(r["name"] for r in trace.raw_spans_of(doc["spans"]))
+        names = sorted(r["name"] for r in raw_spans_of(doc["spans"]))
         self.assertEqual(names, ["a", "b", "c"])
         self.assertEqual(doc["totals"]["span_count"], 3)
         self.assertTrue(any("parent cycle" in note for note in doc["import"]["notes"]))

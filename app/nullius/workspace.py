@@ -40,7 +40,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 
 from nullius.runs import parse
-from nullius import paths
+from nullius import ondisk, paths
 
 ADJECTIVES = """brisk quiet tidy sturdy curious gentle nimble patient plucky sunny wry keen
 mellow bold calm clever crisp eager fuzzy glossy humble jolly lucky merry neat proud quirky
@@ -113,28 +113,10 @@ def _path(home_dir: str, name: str) -> str:
     return os.path.join(home_dir, name, "workspace.json")
 
 
-def _write_atomically(path: str, dump) -> None:
-    """Write *path* whole or not at all: *dump* fills a temp file beside it,
-    which is then renamed over the target.
-
-    The temp name is this writer's own - process and thread - because two
-    requests writing the same file at once are ordinary here: the job page and
-    its /live poll both re-parse a job whose files keep changing. Whichever rename lands
-    last wins, and both wrote a complete file."""
-    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
-    try:
-        with open(tmp, "w", encoding="utf-8") as fh:
-            dump(fh)
-        os.replace(tmp, path)
-    finally:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-
-
 def save(ws: Workspace) -> None:
     os.makedirs(ws.dir, exist_ok=True)
     data = {k: v for k, v in asdict(ws).items() if k != "dir"}
-    _write_atomically(os.path.join(ws.dir, "workspace.json"), lambda fh: json.dump(data, fh, ensure_ascii=False, indent=1))
+    ondisk.write_whole(os.path.join(ws.dir, "workspace.json"), lambda fh: json.dump(data, fh, ensure_ascii=False, indent=1))
 
 
 def load(home_dir: str, name: str) -> Workspace | None:
@@ -418,7 +400,7 @@ def _note_in_index(ws: Workspace, job_dir: str, job: parse.Job, index: dict | No
 
 def _write_index(ws: Workspace, index: dict) -> None:
     os.makedirs(ws.jobs_dir, exist_ok=True)
-    _write_atomically(_index_path(ws), lambda fh: json.dump(index, fh, ensure_ascii=False, indent=1))
+    ondisk.write_whole(_index_path(ws), lambda fh: json.dump(index, fh, ensure_ascii=False, indent=1))
 
 
 # Jobs already decoded in this process, by cache file: (signature, Job, trial
@@ -444,8 +426,8 @@ def _read_cache(path: str, job_dir: str) -> tuple | None:
 
 def _write_cache(ws: Workspace, path: str, sig: str, head: str, job: parse.Job) -> None:
     os.makedirs(ws.jobs_dir, exist_ok=True)
-    _write_atomically(path, lambda fh: json.dump({"signature": sig, "head": head, "dir": job.dir, "cached": _now(),
-                                                  "job": job_to_dict(job)}, fh, default=_encode, ensure_ascii=False))
+    ondisk.write_whole(path, lambda fh: json.dump({"signature": sig, "head": head, "dir": job.dir, "cached": _now(),
+                                                   "job": job_to_dict(job)}, fh, default=_encode, ensure_ascii=False))
 
 
 def load_job(ws: Workspace, job_dir: str, index: dict | None = None, runs: dict | None = None) -> tuple:
