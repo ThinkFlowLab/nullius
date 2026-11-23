@@ -564,9 +564,12 @@
 {% include 'traces/_conversation.html' %}
 </section>
 <section class="trial-tab" id="trial-artifacts" role="tabpanel" aria-labelledby="tab-artifacts">
-  {% if artifacts %}
+  {% if artifacts or pictures %}
   <div class="panel">
     <table class="grid"><thead><tr><th>Record</th><th class="num">Size</th><th></th></tr></thead><tbody>
+    {#- the pictures sent to the model, each kept once in the record of its calls, read on the Conversation tab #}
+    {% if pictures %}<tr class="artifact-pictures"><td>Pictures sent to the model <span class="muted">· {{ pictures.count }}</span></td><td class="num mono muted">{{ '%.2f'|format(pictures.bytes / 1024) }} KB</td>
+      <td><span class="artifact-actions"><a class="btn ghost sm" href="{{ url_for('trial', job_id=job.job_id, trial_name=trial.trial_name, tab='conversation', workspace=request.args.get('workspace')) }}" data-open-tab="conversation">Conversation</a></span></td></tr>{% endif %}
     {% for artifact in artifacts %}
       <tr><td>{{ artifact.label }}</td><td class="num mono muted">{{ '%.2f'|format(artifact.size / 1024) }} KB</td>
         <td><span class="artifact-actions"><a class="btn ghost sm" href="{{ artifact.url }}">Read</a><a class="btn ghost sm" href="{{ artifact.download }}" download>Download</a></span></td></tr>
