@@ -17,6 +17,11 @@ the launcher has fetched a dataset or built an image, so a board shows the
 preparation window instead of nothing (its ``stage`` names what is being
 prepared; ``job.start`` keeps meaning "trials are about to be scheduled").
 Payloads are read leniently — a missing counter is *absent*, never zero.
+``trial.progress`` carries the counters of :data:`COUNTERS` and an
+``activity`` line; the standard's runner also sends a running unit's
+:data:`PROGRESS`: its step limit beside its ``step``, its agent's model calls
+answered and the run's cap on them. A trial's snapshot holds these three only
+once its feed reported one, so a feed without them folds as it always did.
 
 Four rules are load-bearing, and each has a test:
 
@@ -74,6 +79,7 @@ OUTCOMES = ("resolved", "unresolved", "scored", "agent_error", "infra_error",
             "cancelled", "timeout", "budget")
 ERROR_OUTCOMES = {"agent_error", "infra_error", "timeout", "budget"}
 COUNTERS = ("step", "n_input_tokens", "n_cache_tokens", "n_output_tokens", "cost_usd")
+PROGRESS = ("step_limit", "calls", "calls_limit")
 TOKEN_FIELDS = ("n_input_tokens", "n_cache_tokens", "n_output_tokens")
 
 RATE_WINDOW_SEC = 30.0
@@ -201,6 +207,9 @@ class TrialState:
     timeout_sec: float | None = None
     phases_done: list[str] = field(default_factory=list)
     step: int | None = None
+    step_limit: int | None = None
+    calls: int | None = None
+    calls_limit: int | None = None
     n_input_tokens: int | None = None
     n_cache_tokens: int | None = None
     n_output_tokens: int | None = None
@@ -247,7 +256,9 @@ class TrialState:
             "phase": self.phase, "since": _iso(self.since) if self.since else None,
             "elapsed_sec": elapsed, "timeout_sec": self.timeout_sec,
             "phases_done": list(self.phases_done),
-            "step": self.step, "n_input_tokens": self.n_input_tokens,
+            "step": self.step,
+            **({k: getattr(self, k) for k in PROGRESS} if any(getattr(self, k) is not None for k in PROGRESS) else {}),
+            "n_input_tokens": self.n_input_tokens,
             "n_cache_tokens": self.n_cache_tokens, "n_output_tokens": self.n_output_tokens,
             "cost_usd": self.cost_usd, "activity": self.activity, "last_line": self.last_line,
             "outcome": self.outcome, "reward": self.reward, "durations": dict(self.durations),
@@ -605,7 +616,7 @@ def fold(events: list[Event], now: datetime | None = None, notices: list[str] | 
                 # but it was paid for, and the board's cost goes on counting it
                 if t.cost_usd is not None:
                     t.cost_before = (t.cost_before or 0.0) + t.cost_usd
-                for key in COUNTERS:
+                for key in (*COUNTERS, *PROGRESS):
                     setattr(t, key, None)
                 t._series = []
             if t.phase and t.phase not in t.phases_done and t.phase != d["phase"]:
@@ -619,6 +630,9 @@ def fold(events: list[Event], now: datetime | None = None, notices: list[str] | 
             for key in COUNTERS:
                 if key in d and d[key] is not None:
                     setattr(t, key, _num(d[key], int if key != "cost_usd" else float))
+            for key in PROGRESS:
+                if d.get(key) is not None:
+                    setattr(t, key, _num(d[key], int))
             if d.get("activity") is not None:
                 t.activity = d["activity"]
             reported = {k: _num(d[k], int) for k in TOKEN_FIELDS if d.get(k) is not None}
