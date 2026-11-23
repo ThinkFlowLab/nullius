@@ -194,7 +194,7 @@ class Store(unittest.TestCase):
         store.save(self.ws.dir, "job-1", "task__abc/def", rec)
         path = Path(self.ws.dir) / "judgements" / "job-1" / (store.key("task__abc/def") + ".json")
         self.assertTrue(path.exists()); self.assertFalse((self.tmp / "jobs").exists())                   # under the workspace, never the job tree
-        self.assertEqual(path.stat().st_mode & 0o777, 0o600)                                              # its owner's alone
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(store.load(self.ws.dir, "job-1", "task__abc/def")["answers"], {"task_completed": {"noul": 0.9}})
         later = dict(rec, asked_at="2026-09-17T10:00:00Z", answers={"transcript_quality": {"score": 2.0, "legend": ["a", "b", "c"], "probabilities": {}, "confidence": 0.9}})
         store.save(self.ws.dir, "job-1", "task__abc/def", later)

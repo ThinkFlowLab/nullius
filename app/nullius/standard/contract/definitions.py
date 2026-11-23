@@ -987,8 +987,7 @@ def _environments(envs, here: Optional[str]) -> List[str]:
 
 
 def _network(value) -> List[str]:
-    """An environment's ``network``: public web access for its agents, with the HTTPS URL a run
-    asks before its first unit (``requirements.network_requirements``)."""
+    """An environment's ``network``, which ``requirements.network_requirements`` asks before a run's first unit."""
     if not isinstance(value, dict) or set(value) != {"access", "probe"}:
         return ["network: {access: public, probe: an HTTPS URL}"]
     try:

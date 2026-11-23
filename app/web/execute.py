@@ -191,9 +191,8 @@ def docker_problem():
 
 
 def begin(plans: list) -> tuple:
-    """Start ``plans``, every one checked before any starts: (the runs, "", 200),
-    or ([], why not, the status a JSON caller answers with) and nothing started.
-    Every route that starts a run comes through here."""
+    """Start ``plans``, each checked before any starts: (the runs, "", 200), or
+    ([], why not, its status) and nothing started."""
     for plan in plans:
         problem = plan.check()
         if problem:

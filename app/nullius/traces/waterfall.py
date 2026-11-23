@@ -1,9 +1,6 @@
 """A trace laid out as a waterfall: one global axis, one row per span.
 
-``Extent`` is the window the axis covers, derived from the spans themselves.
-``place`` puts a bar on it, ``flatten`` gives the rows depth first, ``ticks_for``
-labels the axis. A bar is positioned against the whole trace, never against its
-parent: ``trace`` says why.
+A bar is placed against the whole trace, never its parent: ``trace`` says why.
 """
 
 from __future__ import annotations

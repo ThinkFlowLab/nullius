@@ -13,15 +13,7 @@ the call (``calls.relay``), scores the unit with the driver, and writes a job in
 Harbor's shape (``runner.job``) that the rest of the application reads unchanged.
 ``docs/standard.md`` is the design.
 
-One folder per purpose: ``contract`` (what a definition may say, which pairs fit),
-``requirements`` (what a run needs of the machine), ``protocols`` (ACP, JSON
-lines, the computer port's server), ``calls`` (the relay and the spending cap),
-``backends`` (a container or a Boat VM for each unit, and the doors through a
-container), ``runner`` (a run, on one machine or several), ``proofs`` (kits,
-fidelity, a benchmark's controls) and ``pages`` (the builder's recipe, the How
-to add steps). ``cli`` is the shell command over all of them; ``kits/`` holds the
-conformance kits, each a benchmark.
-
-A new module goes in the folder of its purpose, not beside ``cli``, and no
-folder imports one that imports it (``tests/test_layering.py``).
+One folder per purpose, its ``__init__`` saying which. A new module goes in a
+folder, not beside ``cli``, and no folder imports one that imports it
+(``tests/test_layering.py``).
 """

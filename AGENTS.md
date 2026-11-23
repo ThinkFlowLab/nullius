@@ -47,7 +47,7 @@ and its resources.
   `feasibility`, `launches`, `verifier` - a verifier's report read by its
   benchmark's report block - `attempts`, a task's attempts in one job with
   their pass count and pass@k, and the `cli`), `traces/` (`trace`, the reader, with its span tree `spans`,
-  its `fold`, its time accounting `breakdown` and its layout `waterfall`; `trajectory`,
+  `fold`, time accounting `breakdown` and layout `waterfall`; `trajectory`,
   `conversation`, `charts`, `behavior`, `otel`), `compare/` (`comparison` and its `cli`),
   `catalogue/` (`catalog`, which loads one folder per benchmark
   under `catalogue/benchmarks/`, named by its key: its `benchmark.json` with its
@@ -60,10 +60,9 @@ and its resources.
   `harbor/` (`source`: the Harbor a recipe pins - built, kept, scanned for its agents;
   `feed`: the live feed any Harbor writes, from its own trial hooks),
   `importers/` (`atif` ATIF, `otel` OpenTelemetry, and the `cli`), `judge/` (`questions`, `state`, `client`, `store`, `batch`, `reconcile`, `lanes`),
-  `standard/` (the Nullius standard, `docs/standard.md`, one folder per purpose, a new module in the folder of its purpose
-  and the folders importing one way, which `test_layering.StandardFolders` checks:
+  `standard/` (the Nullius standard, `docs/standard.md`, one folder per purpose, importing one way: `test_layering.StandardFolders`;
   `contract/`: `ports`, `names` (capability vocabulary and legacy aliases), `definitions` (with an agent's or capability's versions), `match`;
-  `requirements/`, what a run needs of the machine: `install`, `hostreq` (what a benchmark's options need of the machine its driver runs on: the check and the install), `network_requirements` (an environment's declared public web access: the connectivity check before any unit);
+  `requirements/`: `install`, `hostreq` (what a benchmark's options need of the machine its driver runs on: the check and the install), `network_requirements` (an environment's declared public web access: the connectivity check before any unit);
   `protocols/`: `jsonl`, `acp`, `cancellation` (interruptible protocol waits), `computer_port` and `computer_pipe` (the computer port's MCP server, served by a desktop benchmark's runner over the benchmark's own loop, and the session's stdio pipe to it);
   `calls/`: `relay`, `ledger` (a run's spending cap);
   `backends/`: `container` (the container backend), `boat` (the boat backend: each unit's agent in a boat.dev VM), `setup_container` (an Original setup's driver and its Linux dependencies in Docker), `forward` (a licence server's one door from it, or a benchmark's MCP server's), `web_services` (HTTP fixtures a driver's setup declares, each behind a unit-local Docker door), `mcp_machine` and `mcp_bridge` (a benchmark's MCP server run on the machine, in its driver's environment, and the agent's bridge to it), `egress` (an own image's check's proxy to public addresses);

@@ -332,7 +332,7 @@ class Tabs(unittest.TestCase):
                              headers={"Origin": "http://localhost"})
         self.addCleanup(r.close)
         self.assertEqual(r.status_code, 302)
-        (plan,) = self.started                                                            # started once
+        (plan,) = self.started
         self.assertEqual((plan.runner, plan.host, plan.key_var), ("standard", None, "OPENAI_API_KEY"))
         self.assertIn("conform fake --model gpt-5-mini --provider openai --stamp ", plan.script)
         self.assertNotIn("sk-test", plan.script)
@@ -342,7 +342,7 @@ class Tabs(unittest.TestCase):
             r = self.client.post("/agents/fake/check", data={"csrf": self.csrf(), "provider": "openai", "model": "gpt-5-mini", "unsandboxed": "yes"},
                                  headers={"Origin": "http://localhost"})
         self.addCleanup(r.close)
-        self.assertEqual((r.status_code, r.headers["Location"], len(self.started)), (302, "/agents/fake", 1))   # back to its page, nothing started
+        self.assertEqual((r.status_code, r.headers["Location"], len(self.started)), (302, "/agents/fake", 1))
         with self.client.session_transaction() as s:
             self.assertTrue(any(kind == "error" and said.endswith(" is running already") for kind, said in s["_flashes"]), s["_flashes"])
 
@@ -710,7 +710,7 @@ class StandardPieces(unittest.TestCase):
         with patch.dict(execution.EXECUTIONS, {"going": going}):
             r = self.client.post("/benchmarks/gsm8k/prove", data={"csrf": csrf, "dataset": "test", "limit": "2"}, headers={"Origin": "http://localhost"})
         self.addCleanup(r.close)
-        self.assertEqual((r.status_code, r.headers["Location"], len(self.started)), (302, "/benchmarks/gsm8k#standard", 1))   # back to its page, nothing started
+        self.assertEqual((r.status_code, r.headers["Location"], len(self.started)), (302, "/benchmarks/gsm8k#standard", 1))
         with self.client.session_transaction() as s:
             self.assertTrue(any(kind == "error" and said.endswith(" is running already") for kind, said in s["_flashes"]), s["_flashes"])
 

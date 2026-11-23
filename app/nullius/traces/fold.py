@@ -1,12 +1,6 @@
 """A measured LLM call given the log spans for the reply it produced.
 
-The producer writes one call twice when it has no request id to join on: once as
-the exporter measured it, once from the agent's own log. ``fold_llm_requests``
-moves the log's request spans under the call they belong to. It moves rows and no
-numbers.
-
-It runs before namespace grouping (``spans.mark_groups``), and the order is
-load-bearing: ``trace`` says why.
+It moves rows and no numbers, and runs before grouping: ``trace`` says why.
 """
 
 from __future__ import annotations

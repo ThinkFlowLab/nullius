@@ -40,9 +40,7 @@ request's tokens and the block's text, where re-kinding leaves two rows and
 charges one of them nothing. Folding first leaves ``is_group`` only the wrappers
 fold could not match to a call, which is the case it is still needed for.
 
-This module is the reader's front: ``Trace``, ``Filter``, ``parse``, ``load`` and the
-saved view. The span tree is ``spans``, the fold ``fold``, the accounting
-``breakdown``, the layout ``waterfall``.
+The span tree is ``spans``, the fold ``fold``, the accounting ``breakdown``, the layout ``waterfall``.
 
 Everything is redacted at load, so templates hold display text only. Stdlib only, no Flask.
 """

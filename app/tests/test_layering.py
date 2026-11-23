@@ -1,6 +1,5 @@
-"""Where code sits. The backend imports no Flask: it is exercisable from a bare shell or a
-notebook (AGENTS.md, Core Architecture). The standard's modules sit in one folder per purpose,
-and its folders import one way."""
+"""Where code sits: the backend imports no Flask; the standard's modules sit in one folder per
+purpose, and its folders import one way."""
 import ast
 import pathlib
 import unittest
@@ -24,8 +23,6 @@ class NoFlask(unittest.TestCase):
 
 
 class StandardFolders(unittest.TestCase):
-    """``nullius/standard/`` is one folder per purpose; its ``__init__`` says what each is for."""
-
     def setUp(self):
         self.root = pathlib.Path(nullius.__file__).parent / "standard"
         self.folders = sorted(d.name for d in self.root.iterdir() if (d / "__init__.py").is_file())
@@ -52,8 +49,8 @@ class StandardFolders(unittest.TestCase):
         return {p[2] for p in parts if p[:2] == ["nullius", "standard"] and len(p) > 2 and p[2] in self.folders}
 
     def test_the_folders_import_one_way(self):
-        """No folder imports one that imports it, at a module's top or inside a function, directly or
-        through others: each has what it uses below it, and a reader can take them in that order."""
+        """No folder imports one that imports it: at a module's top or inside a function, directly or
+        through others."""
         lines = {}                                                  # (a folder, the folder it imports) -> where
         for folder in self.folders:
             for path in sorted((self.root / folder).glob("*.py")):
@@ -61,9 +58,11 @@ class StandardFolders(unittest.TestCase):
                     for other in self.named(node, folder) - {folder}:
                         lines.setdefault((folder, other), []).append(f"{folder}/{path.name}:{node.lineno}")
         self.assertGreater(len(lines), 10)
-        left = set(self.folders)                                    # a folder that imports none of those left, or that
-        while True:                                                 # none of them imports, is taken away, again and
-            free = {f for f in left if not any(a == f and b in left for a, b in lines)     # again: what stays is a circle
+        # taken away, again and again: a folder that imports none of those left, or that none of them imports.
+        # What stays is a circle.
+        left = set(self.folders)
+        while True:
+            free = {f for f in left if not any(a == f and b in left for a, b in lines)
                     or not any(b == f and a in left for a, b in lines)}
             if not free:
                 break

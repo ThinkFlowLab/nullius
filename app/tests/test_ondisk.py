@@ -1,5 +1,4 @@
-"""A file written whole, a lock, a digest (``nullius.ondisk``): what every
-module that keeps a file relies on."""
+"""``nullius.ondisk``: a file written whole, a lock, a digest."""
 import hashlib
 import os
 import shutil
@@ -37,15 +36,15 @@ class Whole(unittest.TestCase):
         old = os.umask(0o027)
         self.addCleanup(os.umask, old)
         ondisk.write_whole(self.path, "x")
-        self.assertEqual(self.mode(), 0o640)                       # 0666 less the umask, as open() gives
+        self.assertEqual(self.mode(), 0o640)                       # 0666 less the umask
         ondisk.write_whole(self.path, "x", mode=0o600)
         self.assertEqual(self.mode(), 0o600)
         ondisk.write_whole(self.path, "x", mode=0o644)
-        self.assertEqual(self.mode(), 0o644)                       # the mode asked for, whatever the umask
+        self.assertEqual(self.mode(), 0o644)
 
     def test_a_mode_the_umask_leaves_whole_is_the_files_from_its_creation(self):
         with mock.patch.object(os, "fchmod", side_effect=PermissionError("no chmod here")):
-            ondisk.write_whole(self.path, "x", mode=0o600)         # as mkstemp gives it: asked for when made, never set after
+            ondisk.write_whole(self.path, "x", mode=0o600)
         self.assertEqual(self.mode(), 0o600)
 
     def test_a_mode_that_is_refused_leaves_no_file_and_no_open_descriptor(self):
@@ -57,7 +56,7 @@ class Whole(unittest.TestCase):
             raise PermissionError("no chmod here")
         with mock.patch.object(os, "fchmod", refuse):
             with self.assertRaises(PermissionError):
-                ondisk.write_whole(self.path, "x", mode=0o644)     # the umask took a bit off: it has to be set
+                ondisk.write_whole(self.path, "x", mode=0o644)     # the umask took a bit off
         self.assertEqual(self.left(), [])
         with self.assertRaises(OSError):
             os.fstat(held[0])
@@ -91,7 +90,7 @@ class Whole(unittest.TestCase):
             with self.assertRaises(OSError):
                 ondisk.write_whole(self.path, "lost")
         with self.assertRaises(TypeError):
-            ondisk.write_whole(self.path, 42)                      # neither text nor bytes
+            ondisk.write_whole(self.path, 42)
         with open(self.path) as f:
             self.assertEqual(f.read(), "kept")
         self.assertEqual(self.left(), ["file.json"])
@@ -131,7 +130,7 @@ class Lock(unittest.TestCase):
         t.start()
         with ondisk.locked(path):
             inside.set()
-            t.join(0.3)                                            # it waits while the lock is held
+            t.join(0.3)
             self.assertTrue(t.is_alive())
             order.append("first")
         t.join(5)

@@ -1,12 +1,6 @@
 """Where a trace's time went: the producer's totals, and the same accounting done here.
 
-``Totals`` is run-level time exactly as the producer reported it: displayed
-verbatim, never recomputed from the tree. ``breakdown`` is the one arithmetic of
-our own, every instant charged to exactly one category (``partition``). A view
-that leaves spans out needs it, because hiding a span has to move its time
-somewhere and the producer cannot be asked again; so do the producers that write
-a trace's totals in the first place. ``Breakdown`` is its result, labelled as
-derived wherever it is shown, and it never overwrites what the file said.
+``Totals`` is shown verbatim; ``Breakdown`` is derived, and never overwrites it.
 """
 
 from __future__ import annotations

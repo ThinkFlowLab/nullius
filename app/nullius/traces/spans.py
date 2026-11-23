@@ -1,16 +1,4 @@
-"""The span tree of an agent trace: the model, the walks over it, what a span is called.
-
-``Span`` is one event as the pages read it, built from a raw span by ``_span`` and
-redacted on the way. There are two walks, ``all_spans`` over parsed spans and
-``raw_spans_of`` over the document's own dicts, and each guards against a parent
-cycle rather than hanging.
-
-A span that is a *namespace* for its children rather than an event of its own is
-re-kinded ``group`` (``mark_groups``). ``is_group`` says what qualifies and, more
-importantly, the near misses that deliberately do not.
-
-Stdlib only, and no Flask.
-"""
+"""The span tree of an agent trace: the model, the walks over it, what a span is called."""
 
 from __future__ import annotations
 

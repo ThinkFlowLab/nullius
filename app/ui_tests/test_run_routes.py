@@ -166,9 +166,7 @@ class RunRoutes(unittest.TestCase):
         self.assertFalse((self.tmp / "runs" / "x").exists())
 
     def test_a_name_still_running_or_used_before_is_refused_and_nothing_starts(self):
-        """What every route that starts a run asks first (``execute.begin``): no run of
-        that name still going, no run folder of that name. Of several plans none
-        starts unless every one may."""
+        """``execute.begin``, which every route that starts a run asks first."""
         body = {"name": "twice", "script": "true", "where": "local"}
         going = SimpleNamespace(plan=SimpleNamespace(name="twice"), state="running")
         with patch.dict(execution.EXECUTIONS, {"going": going}):
