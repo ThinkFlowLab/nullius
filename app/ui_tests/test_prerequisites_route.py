@@ -59,6 +59,14 @@ class PrerequisitesRoute(unittest.TestCase):
             j = self.post("/new-run/prerequisites", {"recipe": rec}).get_json()
         self.assertEqual((j["ready"], j["machines"][0]["rows"]), (True, []))
 
+    def test_a_recipe_with_errors_asks_no_machine_and_repeats_none_of_them(self):
+        """The recipe's own errors are listed once on Review, by the page; Prerequisites asks no machine and says none."""
+        rec = {"version": 1, "harness": "standard", "name": "s", "title": "s", "benchmark": "gsm8k", "datasets": ["platinum"],
+               "others": ["original"], "provider": "openai", "model": "gpt-5-mini", "limit": -3, "where": "local"}
+        with patch.object(prerequisites, "check_here", lambda *a, **k: self.fail("machine asked")):
+            j = self.post("/new-run/prerequisites", {"recipe": rec}).get_json()
+        self.assertEqual((j["machines"], j["ready"], j["errors"]), ([], False, []))
+
     def test_stella_memory_reaches_review_and_the_local_machine_check(self):
         rec = {"version": 1, "harness": "standard", "name": "stella", "title": "Stella", "benchmark": "longmemeval",
                "datasets": ["longmemeval_s"], "others": ["original"], "provider": "openai", "model": "gpt-4o",

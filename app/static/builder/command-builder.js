@@ -87,7 +87,13 @@
     return saved.length ? saved.map(s => `<div class="nb-savedrow"><span><strong>${esc(s.name)}</strong><small>${esc(s.recipe.harness)} · ${esc(new Date(s.saved).toLocaleDateString())}${state(s.recipe)}</small></span>`
       + `<div>${button('Load', `data-load="${esc(s.id)}"`)} ${button('Delete', del(s.id))}</div></div>`).join('') : '<p class="nb-note">No saved recipes.</p>';
   }
-  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList}; return; }
+  // The Prerequisites head: a status only beside a Run the machines alone hold; a held or absent Run says why itself.
+  function prereqHead(out, busy, run) {
+    if (busy) return '<span class="nb-note">checking…</span>';
+    if (!out || !run || run.hasAttribute('data-held')) return '';
+    return out.ready ? '<span class="nb-note nb-ok">Ready</span>' : '<span class="nb-note nb-error">Missing something: Run waits</span>';
+  }
+  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList, prereqHead}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
@@ -1020,10 +1026,10 @@
     if(blocked)return `<div class="nb-runbox" id="nb-runbox"><div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run" disabled data-held title="'+esc(blocked)+'"','nb-button nb-primary')}</div><p class="nb-note nb-error">${esc(blocked)} ${button('Model step','data-step="'+S.model+'"','nb-inlinebutton')} · ${button('Settings','data-href="/settings#'+C.needsOf(C.choiceOf(rec))+'"','nb-inlinebutton')}</p></div>`;
     if(C.isStandard(rec)){
       const out=runnerOut||{errors:[{message:'Compiling the recipe…'}]}, noun=C.isStandard(rec)?unitsOf(rec).noun:'item';
-      return `<div class="nb-runbox" id="nb-runbox">${(out.errors||[]).length?out.errors.map(e=>`<p class="nb-note">${esc(e.message)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"','nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(out.confirm?`<p class="nb-note nb-nolimit">No ${esc(noun)} limit: ${esc(out.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
+      return `<div class="nb-runbox" id="nb-runbox">${(out.errors||[]).length?(runnerOut?[]:out.errors).map(e=>`<p class="nb-note">${esc(e.message)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"','nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(out.confirm?`<p class="nb-note nb-nolimit">No ${esc(noun)} limit: ${esc(out.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
     }
-    const plan=C.runnable(rec);
-    return `<div class="nb-runbox" id="nb-runbox">${plan.errors.length?plan.errors.map(e=>`<p class="nb-note">${esc(e)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"'+(C.validate(rec).errors.length?' disabled data-held':''),'nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(plan.confirm?`<p class="nb-note nb-nolimit">No task limit: ${esc(plan.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
+    const plan=C.runnable(rec), listed=C.compile(rec).errors.map(e=>e.message);   // the red box's, not said twice
+    return `<div class="nb-runbox" id="nb-runbox">${plan.errors.length?plan.errors.filter(e=>!listed.includes(e)).map(e=>`<p class="nb-note">${esc(e)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"'+(C.validate(rec).errors.length?' disabled data-held':''),'nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(plan.confirm?`<p class="nb-note nb-nolimit">No task limit: ${esc(plan.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
   };
   // Prerequisites: what the recipe needs of each machine it runs on, asked when Review opens and on Check again
   // (/new-run/prerequisites, nullius/prerequisites.py). Run waits until every row is ready; the run asks again as it starts.
@@ -1044,7 +1050,7 @@
     const el=$('#nb-prereq'); if(!el)return;
     const out=prereq.out, mark={ok:'✓',missing:'✕',install:'↓'};
     const rows=m=>m.rows.map(x=>`<li class="nb-prereq-${x.state}"><span class="nb-prereq-mark" aria-hidden="true">${mark[x.state]}</span><span><strong>${esc(x.label)}</strong>${x.detail?` <small>${esc(x.detail)}</small>`:''}${x.state==='missing'&&x.install.length?`<code class="nb-prereq-fix">${x.install.map(esc).join('<br>')}</code>`:''}</span></li>`).join('');
-    const head=prereq.busy?'<span class="nb-note">checking…</span>':out&&out.ready?'<span class="nb-note nb-ok">Ready</span>':out?'<span class="nb-note nb-error">Missing something: Run waits</span>':'';
+    const head=prereqHead(out,prereq.busy,$('#nb-run'));
     el.innerHTML=`<div class="nb-prereq-head"><h3>Prerequisites</h3>${head}${button('Check again','id="nb-prereq-again"'+(prereq.busy?' disabled':''),'nb-inlinebutton')}</div>`
       +(out?(out.errors||[]).map(e=>`<p class="nb-note nb-error">${esc(e)}</p>`).join('')+(out.notes||[]).map(n=>`<p class="nb-notice">${esc(n)}</p>`).join('')
         +out.machines.map(m=>`<div class="nb-prereq-machine">${out.machines.length>1?`<small>${esc(m.label)}</small>`:''}<ul>${rows(m)}</ul></div>`).join(''):'');

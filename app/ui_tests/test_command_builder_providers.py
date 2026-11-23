@@ -77,6 +77,30 @@ class ProviderAndModel(CompilerCase):
         self.assertEqual([e for e in errs('r.provider="openrouter";r.urlEnv="API_URL"') if 'provider/model' in e], [])
 
 
+class ReviewSaysEachThingOnce(CompilerCase):
+    """Review lists a recipe's errors once, in its red box, and Prerequisites says Ready or Missing only beside a Run
+    that the machines alone hold: a Run held for a key or absent for errors says why itself."""
+
+    def test_the_prerequisites_head_speaks_only_beside_a_run_the_machines_hold(self):
+        out = self.js('const {prereqHead}=require(' + json.dumps(str(APP / 'static/builder/command-builder.js')) + ');'
+                      'const run=held=>({hasAttribute:a=>a==="data-held"&&held}),ok={ready:true,machines:[{rows:[]}]},no={ready:false,machines:[{rows:[]}]};'
+                      'process.stdout.write(JSON.stringify([prereqHead(ok,false,run(false)),prereqHead(no,false,run(false)),prereqHead(ok,false,run(true)),'
+                      'prereqHead(no,false,run(true)),prereqHead({ready:false,machines:[],errors:[]},false,null),prereqHead(null,true,run(false)),prereqHead(null,false,run(false))]));')
+        self.assertIn('>Ready<', out[0])                                   # a key and a valid recipe: as before
+        self.assertIn('Missing something: Run waits', out[1])
+        self.assertEqual(out[2:5], ['', '', ''])                           # held for a key; no Run, the recipe has errors
+        self.assertIn('checking', out[5])
+        self.assertEqual(out[6], '')
+
+    def test_a_pinned_harbor_recipe_with_errors_leaves_them_to_the_red_box(self):
+        """The Run box drops what C.compile lists (the red box): a pinned Harbor recipe's errors are all of those."""
+        out = self.js('const r=C.create("harbor");' + PIN + 'r.agents=[];r.tasks="-2";'
+                      'const listed=C.compile(r).errors.map(e=>e.message),plan=C.runnable(r).errors;'
+                      'process.stdout.write(JSON.stringify([listed.length,plan.length,plan.filter(e=>!listed.includes(e))]));')
+        self.assertTrue(out[0] and out[1], out)
+        self.assertEqual(out[2], [])
+
+
 class ProviderFromSettings(CompilerCase):
     """The provider follows the keys set in Settings: a new recipe starts on
     the first one set (OpenRouter, OpenAI, then a local endpoint, which its
