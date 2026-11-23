@@ -96,6 +96,26 @@ class Website(unittest.TestCase):
             self.assertEqual(html, '<h1>Page</h1><figure class="diagram"><svg class="dg">'
                                    '<title id="flow-title">Flow</title></svg></figure><p>after</p>')
 
+    def test_the_nav_lists_every_page_and_only_pages_that_exist(self):
+        # The build is strict: an omitted page or a missing target aborts it on the host.
+        import re
+        nav = (SITE / 'mkdocs.yml').read_text().split('\nnav:\n', 1)[1]
+        listed = re.findall(r'^\s*-\s+(?:[^\n]*?:\s+)?([\w./-]+\.md)\s*$', nav, re.MULTILINE)
+        docs = SITE.parents[1] / 'docs'
+        config = module('hooks').on_config({'docs_dir': str(docs), 'nav': listed})
+
+        def pages(item):
+            if isinstance(item, dict):
+                return [p for v in item.values() for p in pages(v)]
+            if isinstance(item, list):
+                return [p for v in item for p in pages(v)]
+            return [item]
+
+        listed = set(pages(config['nav']))
+        authored = {p.relative_to(docs).as_posix() for p in docs.rglob('*.md')}
+        self.assertEqual(sorted(authored - listed), [], 'pages missing from the nav in app/site/mkdocs.yml')
+        self.assertEqual(sorted(listed - authored), [], 'nav entries without a page under docs/')
+
     def test_a_folder_of_generated_pages_is_a_section_under_its_readme(self):
         hook = module('hooks').on_config
         with tempfile.TemporaryDirectory() as directory:
