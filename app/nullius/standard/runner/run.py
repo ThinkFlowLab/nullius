@@ -1763,7 +1763,9 @@ class Run:
         if not self.base:
             return
         try:
-            listed = {m["id"] for m in providers.list_models(self.provider, getattr(self, "provider_env", os.environ))}
+            listed = {m["id"] for m in providers.list_models(
+                self.provider, getattr(self, "provider_env", os.environ),
+                include_embeddings=bool(getattr(self, "embed_model", None)))}
         except ValueError:
             return
         unknown = [m for m in self.models_called() if m not in listed and m.rpartition(":")[0] not in listed]
