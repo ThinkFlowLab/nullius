@@ -54,16 +54,15 @@ Real terminal tasks in a container: build, configure, debug.
 
 - The agent must work in the image's working directory, /app.
 - A local run is not a leaderboard entry: that needs Harbor's submission flow.
-- qemu-alpine-ssh and qemu-startup cannot run their checks when Debian package downloads return 404; their scripts then write zero without running the tests.
+- qemu-alpine-ssh and qemu-startup can report zero without running tests when Debian package downloads return 404.
 - The tests of torch-pipeline-parallelism and torch-tensor-parallelism download about 3 GB of PyTorch, which can outlast their time limit on a slow connection.
 - mailman's tests fail now and then even with the reference solution.
 - fix-git's image no longer builds as published, so it is pulled even when the image option builds.
 - The build-pmars reference solution pins dpkg-dev 1.22.21, which Debian's repositories did not serve during validation; it exited 100 before verification.
-- build-cython-ext can fail even with the reference solution: its nested pyknotid test_constructed_space_curve test fails.
-- The protein-assembly reference solution can stop with DNA Chisel NoSolutionError while enforcing translation constraints.
-- The caffe-cifar-10 reference solution can exceed its 1,200-second limit while downloading Ubuntu packages.
-- The mcmc-sampling-stan reference solution omits CMake, which its RcppParallel dependency requires; RStan installation then fails.
-- The rstan-to-pystan reference solution can exceed its 1,800-second limit while installing Ubuntu dependencies.
+- build-cython-ext can fail a pyknotid test even with its reference solution.
+- The protein-assembly reference solution can raise DNA Chisel NoSolutionError.
+- Dependency downloads can time out in caffe-cifar-10 (1,200 seconds) and rstan-to-pystan (1,800 seconds).
+- mcmc-sampling-stan omits CMake, required by its RcppParallel dependency.
 
 ## Nullius limitations
 
