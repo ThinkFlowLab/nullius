@@ -27,6 +27,9 @@ Refresh (``clear_cache``) reads every job again. A job a run of this
 application writes is checked trial by trial while that run goes on (a host
 run's copy can bring a trial's files after the job's own), and its head
 carries the run's end, so the last copy is checked trial by trial once more.
+An ended job's head is noted in ``jobs/index.json`` beside the signature it was
+seen with: a head that moves while the signature holds rewrites that index, not
+the job's cache.
 """
 from __future__ import annotations
 
@@ -346,8 +349,20 @@ def _decode(d):
     return d
 
 
+_JOB_FIELDS = tuple(f.name for f in fields(parse.Job))
+_TRIAL_FIELDS = tuple(f.name for f in fields(parse.Trial))
+
+
 def job_to_dict(job: parse.Job) -> dict:
-    return asdict(job)
+    """*job* as plain values, its containers shared, not copied: read it, never change it.
+    No field holds a dataclass, so ``asdict``'s deep copy of every trial is not needed."""
+    out = {n: getattr(job, n) for n in _JOB_FIELDS}
+    out["trials"] = [_trial_to_dict(t) for t in job.trials]
+    return out
+
+
+def _trial_to_dict(trial: parse.Trial) -> dict:
+    return {n: getattr(trial, n) for n in _TRIAL_FIELDS}
 
 
 def job_from_dict(data: dict) -> parse.Job:
@@ -377,7 +392,8 @@ def _index_path(ws: Workspace) -> str:
 
 
 def job_index(ws: Workspace) -> dict:
-    """job dir → {job_id, n_trials}: what the rail lists without parsing."""
+    """job dir → {job_id, n_trials, dataset, agent}: what the rail lists without parsing;
+    an ended job's also its signature and head (_note_in_index)."""
     try:
         with open(_index_path(ws), encoding="utf-8") as fh:
             data = json.load(fh)
@@ -386,14 +402,24 @@ def job_index(ws: Workspace) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def _note_in_index(ws: Workspace, job_dir: str, job: parse.Job, index: dict | None = None) -> bool:
-    """The job's entry in the rail's index. With ``index`` (load_jobs, which
+def _noted_head(ws: Workspace, job_dir: str, sig, index: dict | None) -> str | None:
+    """The head the index noted for *job_dir* while its signature was *sig*."""
+    entry = (job_index(ws) if index is None else index).get(job_dir)
+    return entry.get("head") if sig and isinstance(entry, dict) and entry.get("signature") == sig else None
+
+
+def _note_in_index(ws: Workspace, job_dir: str, job: parse.Job, index: dict | None = None,
+                   sig: str = "", head: str = "") -> bool:
+    """The job's entry in the rail's index, and an ended job's head with the
+    signature it was seen with. With ``index`` (load_jobs, which
     reads the file once and writes it once) the dict is changed in place and
     True returned when it changed; alone, the file is read and written here."""
     own = index is None
     index = job_index(ws) if own else index
     entry = {"job_id": job.job_id, "n_trials": len(job.trials), "dataset": job.dataset,
              "agent": job.agent_label or job.agent_name}
+    if sig and head and _ended(job):
+        entry.update(signature=sig, head=head)
     if index.get(job_dir) == entry:
         return False
     index[job_dir] = entry
@@ -465,8 +491,17 @@ def _read_cache(path: str, job_dir: str) -> tuple | None:
 
 def _write_cache(ws: Workspace, path: str, sig: str, head: str, job: parse.Job) -> None:
     os.makedirs(ws.jobs_dir, exist_ok=True)
-    ondisk.write_whole(path, lambda fh: json.dump({"signature": sig, "head": head, "dir": job.dir, "cached": _now(),
-                                                   "job": job_to_dict(job)}, fh, default=_encode, ensure_ascii=False))
+    body = {n: getattr(job, n) for n in _JOB_FIELDS if n != "trials"}
+    dumps = lambda obj: json.dumps(obj, default=_encode, ensure_ascii=False)     # the C encoder; json.dump's is Python
+
+    def write(fh):
+        # one trial's text in memory at a time: each dict's closing brace cut and written last
+        fh.write(dumps({"signature": sig, "head": head, "dir": job.dir, "cached": _now()})[:-1])
+        fh.write(', "job": ' + dumps(body)[:-1] + ', "trials": [')
+        for i, t in enumerate(job.trials):
+            fh.write(("," if i else "") + dumps(_trial_to_dict(t)))
+        fh.write("]}}")
+    ondisk.write_whole(path, write)
 
 
 def load_job(ws: Workspace, job_dir: str, index: dict | None = None, runs: dict | None = None) -> tuple:
@@ -482,29 +517,28 @@ def load_job(ws: Workspace, job_dir: str, index: dict | None = None, runs: dict 
     with _DECODED_LOCK:
         known = _DECODED.get(path)
     if short and known is not None and known[1].dir == job_dir and known[3] == head and _ended(known[1]):
-        _note_in_index(ws, job_dir, known[1], index)
+        _note_in_index(ws, job_dir, known[1], index, known[0], head)
         return known[1], True
     cached = _read_cache(path, job_dir) if known is None else None
-    if short and cached is not None and cached[1] == head and _ended(cached[2]):
+    if (short and cached is not None and _ended(cached[2])
+            and head in (cached[1], _noted_head(ws, job_dir, cached[0], index))):
         with _DECODED_LOCK:
             _DECODED[path] = (cached[0], cached[2], {}, head)
-        _note_in_index(ws, job_dir, cached[2], index)
+        _note_in_index(ws, job_dir, cached[2], index, cached[0], head)
         return cached[2], True
     sig, trial_sigs = _signatures(job_dir)
     if sig:
         if known is not None and known[0] == sig and known[1].dir == job_dir:
             with _DECODED_LOCK:
                 _DECODED[path] = (sig, known[1], known[2], head)
-            _note_in_index(ws, job_dir, known[1], index)
+            _note_in_index(ws, job_dir, known[1], index, sig, head)
             return known[1], True
         if known is not None:
             cached = _read_cache(path, job_dir)
         if cached is not None and cached[0] == sig:
-            if cached[1] != head and _ended(cached[2]):
-                _write_cache(ws, path, sig, head, cached[2])      # read by its head from the next process on
             with _DECODED_LOCK:
                 _DECODED[path] = (sig, cached[2], trial_sigs, head)
-            _note_in_index(ws, job_dir, cached[2], index)
+            _note_in_index(ws, job_dir, cached[2], index, sig, head)     # read by its head from the next process on
             return cached[2], True
     reuse = None
     if known is not None and known[1].dir == job_dir:
@@ -517,7 +551,7 @@ def load_job(ws: Workspace, job_dir: str, index: dict | None = None, runs: dict 
         _write_cache(ws, path, sig, head, job)
         with _DECODED_LOCK:
             _DECODED[path] = (sig, job, trial_sigs, head)
-        _note_in_index(ws, job_dir, job, index)
+        _note_in_index(ws, job_dir, job, index, sig, head)
     return job, False
 
 
