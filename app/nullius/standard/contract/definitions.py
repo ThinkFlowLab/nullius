@@ -1602,6 +1602,11 @@ def problems(d: dict, kind: str) -> List[str]:
     elif kind == "agent" and "driver" in (d.get("start") or {}):
         bad += _driver_agent(d)
     elif kind == "agent":
+        if "prepare" in d:
+            from . import container
+            bad += ["prepare." + p for p in container.step_problems(d["prepare"], collect=False)]
+            if isinstance(d["prepare"], dict):
+                bad += _command("prepare.run", d["prepare"].get("run"), {"here", "install"})
         st = d.get("start") or {}
         if ("acp" in st) == ("command" in st):
             bad.append("start: acp or command, one of them")

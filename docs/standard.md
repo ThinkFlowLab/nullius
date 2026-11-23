@@ -506,6 +506,20 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 
 Follow [Add an agent manually](agents/add-manually.md).
 
+An agent may declare `prepare` for an own-image container: `run` (argv,
+`{here}` and `{install}`), optional `copy`, `write`, `seconds` and `network`.
+It runs as root before agent startup. Public access, when requested, ends
+and remaining processes stop before the agent starts. Failure refuses the
+unit. Evidence is in `agent/prepare.txt` and `agent/egress.log`; benchmark
+preparation remains separate. Other environments refuse agent preparation.
+
+For root-dependent workspace conformance, `conform --port agent.workspace/v1
+--backend docker --fixture-image IMAGE@sha256:DIGEST` selects an explicit
+own-image fixture. Supply a root-default image with Python and git. The
+proof records the image digest and root user; default kits keep
+their existing permissions. Fixture conformance does not prove a benchmark
+instance.
+
 ### A capability
 
 Follow [Add a capability manually](capabilities/add-manually.md).

@@ -39,7 +39,7 @@ class SupportedPages(unittest.TestCase):
         for port in ("agent.task/v1", "agent.workspace/v1", "agent.tools/v1", "agent.conversation/v1"):
             self.assertIn(f"`{port}`", agents)
         pages = catalogue_docs.render_pages("agents")
-        self.assertEqual(sorted(pages), ["codex.md", "goose.md", "jiuwenswarm.md", "mini-swe-agent.md", "opencode.md", "terminus-2.md"])
+        self.assertEqual(sorted(pages), ["codex.md", "goose.md", "jiuwenswarm.md", "mini-swe-agent.md", "opencode.md", "swe-agent.md", "terminus-2.md"])
         named("codex@0.16.0", pages["codex.md"])
         for text in (agents, *pages.values()):
             self.assertNotIn("2026-", text, "no proof dates on a page")

@@ -508,7 +508,8 @@ def cmd_conform(a):
     try:
         got = conform.check(o, model=a.model, provider=a.provider, which=a.port or None, jobs_root=a.jobs, say=print,
                             unsandboxed=a.unsandboxed, stamp=a.stamp, backend=a.backend, env=run_env(a.provider) if a.from_run else None,
-                            options=options(a.option), repeat=a.repeat)
+                            options=options(a.option), repeat=a.repeat, fixture_image=a.fixture_image,
+                            max_usd_per_unit=a.max_usd_per_unit, max_calls=a.max_calls)
     except run.Refused as e:
         print("refused:", e)
         return 2
@@ -805,6 +806,9 @@ def main(argv=None):
         if name == "fidelity":
             p.add_argument("--passes", type=int, default=2, help="runs of each way (default 2: the second shows the noise)")
         elif name == "conform":
+            p.add_argument("--fixture-image", help="digest-pinned root image for the workspace kit")
+            p.add_argument("--max-usd-per-unit", type=float, help="spending cap per kit check")
+            p.add_argument("--max-calls", type=int, help="model call cap per kit check")
             p.add_argument("--port", type=definitions.names.port, action="append", help="only this port's kit (repeatable)")
             p.add_argument("--stamp", help="the time stamp the kit jobs are named with (default: now)")
             p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",

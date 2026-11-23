@@ -79,7 +79,7 @@ and its resources.
   GitLab: made once on the run's machine with its token, its tasks' lock, the stack's command line), `proxy` (a
   tinyproxy of a unit's own for the tasks that ask for a proxy) and, in `startup/`,
   `sitecustomize`: its VMs' disk write limit in every process its driver starts), `catalogue/agents/<key>/`
-  (the reference `agent`; JiuwenSwarm's `agent` and mini-swe-agent's `run`, the wrappers that start them) and `catalogue/capabilities/<key>/` (the keyword-memory `capability`); `workspace` (and
+  (the reference `agent`; JiuwenSwarm's `agent`, mini-swe-agent's `run` and SWE-agent's `run`, the wrappers that start them) and `catalogue/capabilities/<key>/` (the keyword-memory `capability`); `workspace` (and
   `workspace_cli`, its shell command),
   `cli` and `__main__` (the unified `nullius` and `python -m nullius` commands),
   `paths` (user config, data and cache locations), `ondisk` (a file written whole then renamed into place, a lock, a digest), `prices` (the user's model price list: fetched on request and before a capped run; what a cost is estimated from), `migrate` (explicit copying of legacy checkout storage), `settings`, `hosts`, `constraints` (what Nullius may use on each machine: one table, the container and systemd scope probes, the warnings), `execution`, `progress` (what a run is doing, one line per stage), `prerequisites` (what a recipe needs of each machine it runs on, asked before Run and again as it starts), `onboarding` (the Getting started checklist: what this machine
