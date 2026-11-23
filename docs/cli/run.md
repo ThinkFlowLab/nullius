@@ -45,7 +45,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--simulator-model` | Instead of the official simulated user |
 | `--name` | The job's name |
 | `--jobs` | Where jobs are written (default `jobs_standard/` relative to the current directory) |
-| `--from-run` | Started by Nullius: `OPENAI_API_KEY` and `OPENAI_BASE_URL` only, saved settings unread |
+| `--from-run` | Started by Nullius: `OPENAI_API_KEY`, `OPENAI_BASE_URL` and the provider's record only, saved settings unread |
 | `--shard I/N`, `--launch` | One shard of a launch: [Shard and merge](shard-and-merge.md) |
 
 | Rule | Detail |

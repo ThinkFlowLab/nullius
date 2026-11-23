@@ -55,8 +55,9 @@ A run says each stage before its first unit, and each unit's end, as one
 
 Keys come from the process environment, then the saved user settings. Nothing is printed of them. With ``--from-run`` (a run
 the builder or a page started, ``standard/pages/recipe.py``) saved settings are not
-read: the key is the one the run was handed, ``OPENAI_API_KEY``, and the
-endpoint ``OPENAI_BASE_URL`` when it names one (``run_env``). The licences a
+read: the key is the one the run was handed, ``OPENAI_API_KEY``, the
+endpoint ``OPENAI_BASE_URL`` when it names one, and the provider's record
+when the launcher exported one (``run_env``). The licences a
 benchmark's environments declare are never in either: the run reads them from
 the benchmark's store (``nullius.secrets``) on this machine, or, on a host, from
 the one line its launcher handed it (``licences``). A data provider's token the
@@ -110,12 +111,16 @@ def run_env(provider: str, env=os.environ) -> dict:
     and its endpoint as ``OPENAI_BASE_URL`` (empty for OpenAI's own), so they
     are named here as the provider's own settings and nothing else is - but
     the Boat key, handed the same way to a run on Boat: on a host, the only
-    way it has one."""
+    way it has one; and the preset provider's record (``OPENROUTER``), which
+    the launcher exports as the builder read it: the protocols it serves."""
     out = {k: v for k, v in env.items() if k in run.KEEP or k == boat.NAME}
     if env.get("OPENAI_API_KEY"):
         out[providers.key_setting(provider)] = env["OPENAI_API_KEY"]
     if provider == "custom" and env.get("OPENAI_BASE_URL"):
         out["MODEL_API_URL"] = env["OPENAI_BASE_URL"]
+    record = providers.setting_of(provider) if provider in providers.PRESETS else ""
+    if record and env.get(record):
+        out[record] = env[record]
     return out
 
 

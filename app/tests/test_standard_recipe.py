@@ -15,6 +15,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from nullius import providers
 from nullius.standard import cli
 from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe
@@ -457,6 +458,12 @@ class FromRun(unittest.TestCase):
         self.assertEqual(cli.run_env("openrouter", env), {"OPENROUTER_API_KEY": "sk-handed", "PATH": "/bin"})
         self.assertEqual(cli.run_env("custom", env), {"MODEL_API_KEY": "sk-handed", "MODEL_API_URL": "http://127.0.0.1:9/v1", "PATH": "/bin"})
         self.assertEqual(cli.run_env("openai", env), {"OPENAI_API_KEY": "sk-handed", "PATH": "/bin"})
+        record = '{"endpoints": {"messages": "/messages"}}'
+        env = {"OPENAI_API_KEY": "sk-handed", "PATH": "/bin", "OPENROUTER": record, "OPENAI": '{"endpoints": {}}'}
+        self.assertEqual(cli.run_env("openrouter", env), {"OPENROUTER_API_KEY": "sk-handed", "PATH": "/bin", "OPENROUTER": record})
+        self.assertEqual(cli.run_env("anthropic", env), {"ANTHROPIC_API_KEY": "sk-handed", "PATH": "/bin"})
+        self.assertIn("openrouter", providers.offered(["messages"], cli.run_env("openrouter", env)))
+        self.assertNotIn("openrouter", providers.offered(["messages"], cli.run_env("openrouter", dict(env, OPENROUTER=""))))
 
     def test_the_boat_key_handed_to_a_run_on_boat_is_kept(self):
         # on a host, the key handed over stdin is the run's only one: no store there holds it

@@ -116,7 +116,7 @@ import threading
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from nullius import hosts, ondisk, paths, prices as price_list, progress, providers, redact, secrets, settings, workspace
 from nullius.judge import store as judgements
@@ -360,6 +360,19 @@ def _clean_env() -> Dict[str, str]:
     return {k: v for k, v in os.environ.items() if k not in gone}
 
 
+def provider_record(plan: Plan, env=os.environ) -> Tuple[str, str]:
+    """(setting, value): the record of a standard run's preset provider (``OPENROUTER``) as this machine
+    holds it, which the launcher exports so the run - reading no saved settings, ``--from-run`` - serves
+    the protocols it names. A record holds a name, a base and endpoints, never a key
+    (``providers.record_problem``); one that does not validate, or none, gives ("", "")."""
+    provider = (plan.recipe or {}).get("provider")
+    if plan.runner != STANDARD or plan.keyless or provider not in providers.PRESETS:
+        return "", ""
+    name = providers.setting_of(provider)
+    value = env.get(name, "") if name else ""
+    return (name, json.dumps(json.loads(value))) if value and not providers.record_problem(name, value) else ("", "")
+
+
 class Execution:
     """One run of one plan, in its own thread. ``state`` is one of preparing,
     running, paused, stopping, done, failed, stopped; ``log`` is what
@@ -386,6 +399,7 @@ class Execution:
         self._url = url if url is not None else (providers.base_of(plan.url_var, env) if plan.url_var else plan.base_url)
         if plan.keyless:                          # a run that calls no model is given nothing it could leak
             self._key, self._url = "", ""
+        self._record = provider_record(plan, env)
         # the agent keys Settings holds (CURSOR_API_KEY, ...): a Harbor run's agent may need its own vendor's; the standard's never gets one
         self._agent_keys = dict(agent_keys) if agent_keys is not None else (settings.agent_key_values(env) if plan.runner == "harbor" else {})
         if plan.runner == "standard" and (plan.recipe or {}).get("backend") == "boat":
@@ -1497,6 +1511,8 @@ class Execution:
                            + ([("NULLIUS_PYTHON", sys.executable)] if self.plan.runner == STANDARD and not self.on_host else [])
                            + ([("NULLIUS_LICENCE_DIR", self._licence_dir())] if self._licence_dir() else [])
                            + ([("API_MODEL_NAME", self.plan.model)] if self.plan.model else [])
+                           # the provider's record, as the builder read it here: the run reads no saved settings (--from-run)
+                           + ([self._record] if self._record[0] else [])
                            # this machine's Hugging Face endpoint: a host's run reads no saved settings (--from-run)
                            + ([("HF_ENDPOINT", settings.hf_endpoint())] if self.on_host and settings.hf_endpoint() else []))
         base = script[:-3]
