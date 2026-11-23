@@ -9,7 +9,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from nullius.runs import classify, feasibility, parse
 from nullius.standard.contract import definitions, match
@@ -102,6 +102,22 @@ class ControlRun(unittest.TestCase):
         return run.run(b, definitions.control(b, which), model="", provider="openai", jobs_root=os.path.join(self.tmp, "jobs"),
                        env={}, say=lambda s: None, **kw)
 
+    def test_oracle_timeout_and_nonzero_exit_keep_distinct_causes_and_output(self):
+        r = run.Run.__new__(run.Run)
+        r.other, r.timeouts = {"key": "oracle"}, {}
+        driver = Mock()
+        driver.request.return_value = {"solve": {"run": ["bash", "/solution/solve.sh"]}}
+        ws = os.path.join(self.tmp, "trial", "workspace")
+        for timed_out, code, kind in ((True, None, "AgentTimeoutError"), (False, 100, "NonZeroAgentExitCodeError")):
+            with self.subTest(timed_out=timed_out), patch.object(r, "driver", return_value=driver), \
+                    patch.object(r, "in_box", return_value={"exit": code, "timed_out": timed_out, "output": "apt output\n"}):
+                with self.assertRaises(run._Ended) as e:
+                    r.control_answer("a", ws, box=object())
+                self.assertEqual(e.exception.kind, kind)
+                self.assertEqual(e.exception.retryable, not timed_out)
+                with open(os.path.join(self.tmp, "trial", "agent", "solve.txt")) as f:
+                    self.assertEqual(f.read(), "apt output\n")
+
     def test_the_oracle_writes_the_workspace_and_the_scorer_passes_it_with_no_key(self):
         j = parse.parse_job(self.go("agent-workspace-v1", "oracle"))
         self.assertEqual([t.outcome for t in j.trials], [classify.RESOLVED, classify.RESOLVED])
@@ -184,6 +200,9 @@ serve({"units": lambda dataset: {"units": ["a"]}, "setup": setup, "score": score
 
 class Box:
     image = ""
+
+    def egress_said(self):
+        return ""
 
     def give_back(self, paths):
         pass
@@ -269,6 +288,26 @@ class ScoreLimit(unittest.TestCase):
         self.assertIsNone(got.get("exception_info"))
         self.assertEqual(checked, [{"run": "true"}])
         self.assertEqual(self.verify_phase()["timeout_sec"], 10 + run.TURN_SECONDS)
+
+    def test_a_timed_out_container_check_cannot_prove_a_null_control(self):
+        open(os.path.join(self.b["_here"], "checked"), "w").close()
+        with patch.object(run.Run, "unit_environment", lambda r, setup: ("task", {"image": "own"})), \
+                patch.object(run.Run, "not_run", lambda r, e, d: None), \
+                patch.object(run.Run, "unit_relay", lambda r, *a, **k: None), \
+                patch.object(run.Run, "own_box", lambda r, *a: Box()), \
+                patch.object(run.Run, "box_changes", lambda r, box: ""), \
+                patch.object(run.Run, "release_image", lambda r, image: None), \
+                patch.object(run.Run, "in_box", return_value={"exit": None, "timed_out": True, "output": "Downloading torch"}):
+            got = self.trial({"score_seconds": 10})
+        self.assertEqual(got["exception_info"]["exception_type"], "VerifierError")
+        self.assertIsNone(got.get("verifier_result"))
+        jobs = os.path.join(self.tmp, "jobs")
+        job_dir = os.path.join(jobs, os.listdir(jobs)[0])
+        result = prove.control_check(self.b, self.b["datasets"][0], "nop", limit=None,
+                                     jobs_root=jobs, stamp="test", provider="openai", model="", judge_model=None,
+                                     env={}, concurrency=1, say=lambda s: None, job_dir=job_dir, ids=["a"])
+        self.assertFalse(result["ok"])
+        self.assertTrue(any("1 unit(s) ended in an error" in p for p in result["problems"]))
 
 
 class Prove(unittest.TestCase):

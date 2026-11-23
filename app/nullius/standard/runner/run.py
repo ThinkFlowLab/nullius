@@ -1981,8 +1981,8 @@ class Run:
             os.makedirs(os.path.join(os.path.dirname(ws), "agent"), exist_ok=True)
             with open(os.path.join(os.path.dirname(ws), "agent", "solve.txt"), "w") as f:
                 f.write(done["output"])
-            if done["exit"] != 0:
-                raise _Ended("NonZeroAgentExitCodeError", "the benchmark's oracle: its solution "
+            if done["timed_out"] or done["exit"] != 0:
+                raise _Ended("AgentTimeoutError" if done["timed_out"] else "NonZeroAgentExitCodeError", "the benchmark's oracle: its solution "
                              + ("did not end in time" if done["timed_out"] else f"ended with exit {done['exit']}"),
                              retryable=not done["timed_out"])
         return str(reply.get("answer") or "")
@@ -2227,6 +2227,9 @@ class Run:
         with open(os.path.join(out, "test-stdout.txt"), "w") as f:
             f.write(done["output"])
         collected = box.copy_out(step["collect"], out) if step.get("collect") else False
+        if done["timed_out"]:
+            raise _Ended("VerifierError", "the benchmark's check did not end in time: "
+                         + done["output"].strip()[-300:], retryable=False)
         return {"exit": done["exit"], "timed_out": done["timed_out"], "output": done["output"][-4000:],
                 "dir": out, "collected": collected}
 
