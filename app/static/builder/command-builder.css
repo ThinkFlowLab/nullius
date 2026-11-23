@@ -278,6 +278,7 @@
 #nullius-builder .std-boat-sizes .nb-tile-note { font-size: 13px; line-height: 1.4; }
 /* the Benchmark and Agent steps' grids: the card toolkit's (catalogue.css), fitted to the form */
 #nullius-builder .nb-step { border-radius: 0; margin: 0; }   /* catalogue.css has a .nb-step of its own */
+#nullius-builder .st-search-clear:focus-visible { outline-offset: 1px; }   /* style.css's ring, inside the search box's own */
 #nullius-builder :is(#nb-bench-grid, #nb-agent-grid) { margin-bottom: 20px; }
 #nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .bench-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 12px; grid-auto-rows: 1fr; }
 #nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .bench-card { padding: 16px; gap: 10px; }
