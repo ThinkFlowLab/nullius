@@ -210,6 +210,7 @@
 #nullius-builder [data-std-dataset] .nb-tile-foot { display: grid; grid-template-columns: max-content max-content; align-items: start; gap: 8px; }
 #nullius-builder [data-std-dataset] .nb-tile-foot > span:first-child:not([class]) { grid-column: 1 / -1; margin: 0 0 2px; }
 #nullius-builder [data-std-dataset] .std-ctl { justify-self: start; flex-wrap: nowrap; white-space: nowrap; }
+#nullius-builder .std-ctls { display: grid; justify-items: start; gap: 5px; min-width: 0; }
 
 /* A card group shares one row height, including cards with compatibility notes. */
 #nullius-builder .nb-pick-grid { grid-auto-rows: 1fr; }
