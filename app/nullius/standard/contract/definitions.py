@@ -1597,6 +1597,19 @@ def problems(d: dict, kind: str) -> List[str]:
                     bad.append(f"{w}.sha256: the file's digest")
                 if not isinstance(x.get("units"), int) or x["units"] < 1:
                     bad.append(f"{w}.units: how many units it holds")
+            # a list cut from another of the benchmark's lists, which holds every unit it holds: the pages draw it as
+            # that dataset's own task set. One level: the list it names is cut from none
+            by_id = {x.get("id"): x for x in ds if isinstance(x, dict)}
+            for i, x in enumerate(ds):
+                if not isinstance(x, dict) or "subset_of" not in x:
+                    continue
+                whole = by_id.get(x["subset_of"]) if isinstance(x["subset_of"], str) else None
+                if whole is None or whole is x:
+                    bad.append(f"datasets[{i}].subset_of: the id of another of its datasets, the list this one is cut from")
+                elif "subset_of" in whole:
+                    bad.append(f"datasets[{i}].subset_of: {x['subset_of']} is cut from another list; name one cut from none")
+                elif isinstance(x.get("units"), int) and isinstance(whole.get("units"), int) and x["units"] > whole["units"]:
+                    bad.append(f"datasets[{i}].subset_of: it holds more units than {x['subset_of']}")
         u = d.get("units") or {}
         if not (isinstance(u.get("noun"), str) and isinstance(u.get("nouns"), str)):
             bad.append("units: {noun, nouns}")

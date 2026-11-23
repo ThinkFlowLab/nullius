@@ -191,6 +191,8 @@ def _bench_page(b: dict) -> dict:
                      for n, r in hostreq.all_of(b).items()},
             "datasets": [{"id": d["id"], "label": d.get("label") or d["id"], "summary": d.get("summary", ""), "units": d.get("units"),
                           "environment": d.get("environment") or "",
+                          # the list it is cut from, when the benchmark declares one: drawn as that dataset's own task set
+                          "subset_of": d.get("subset_of") or "",
                           "controls": [dict(c, **{k: status[d["id"]][c["key"]][k] for k in ("proven", "short", "failed")})
                                        for c in controls],
                           "proofs": {k: status[d["id"]][k]["proven"] for k in ("units", "leak")},

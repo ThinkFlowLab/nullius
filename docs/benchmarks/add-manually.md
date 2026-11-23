@@ -20,6 +20,7 @@ A standard benchmark from a scaffold, its driver calling the upstream's own code
     | `datasets[].path` | The file's path in that upstream |
     | `datasets[].sha256` | `sha256sum /path/to/dataset.jsonl` of that exact file |
     | `datasets[].units` | How many units |
+    | `datasets[].subset_of` | Optional: the id of the list this one is cut from, when every unit of it is in that list at each version; the pages then draw it as that dataset's own task set |
     | `needs` | The ports really needed |
     | `score.says` | What a passing score means |
 
