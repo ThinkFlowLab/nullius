@@ -8,9 +8,12 @@ and redact on the way in.
 from __future__ import annotations
 
 import functools
+import json
 import os
 import re
 import shlex
+import stat
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
@@ -28,7 +31,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "17"
+SCHEMA = "18"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness, so a limit the run survived leaves nothing in result.json —
@@ -70,6 +73,54 @@ def _retries_of(res: dict) -> int:
     std = res.get("standard") if isinstance(res.get("standard"), dict) else {}
     n = std.get("retries")
     return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
+
+
+# What ended an agent's work on a standard trial (`Trial.ended_by`), by its name
+ENDED_LABELS = {"agent": "Agent", "done": "Done", "fail": "Fail", "steps": "Step limit", "time": "Time limit",
+                "calls": "Call cap", "end": "Task end"}
+SCORE_BYTES = 1024 * 1024
+
+
+def _read_score(trial_dir: str):
+    """Read at most SCORE_BYTES from a regular score file without following links inside the trial."""
+    try:
+        with ExitStack() as opened:
+            flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+            trial = os.open(trial_dir, flags)
+            opened.callback(os.close, trial)
+            folder = os.open("verifier", flags, dir_fd=trial)
+            opened.callback(os.close, folder)
+            fd = os.open("score.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=folder)
+            opened.callback(os.close, fd)
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_size > SCORE_BYTES:
+                return None
+            raw = os.read(fd, SCORE_BYTES + 1)
+        return json.loads(raw) if 0 < len(raw) <= SCORE_BYTES else None
+    except (OSError, ValueError):
+        return None
+
+
+def _ended_by(res: dict, trial_dir: str) -> str:
+    """What ended the agent's work on a standard trial: the run's cut when its record has one (``standard.cut``:
+    ``time``, the agent's time; ``calls``, the run's cap on its model calls); else the benchmark's own end as its
+    score's detail says it (``detail.ended``: ``done``, ``fail``, ``steps``; ``turn``, the agent ended its turn
+    first: ``agent``); ``end`` for a turn cut after the benchmark's end with no detail to name it. "" when the trial
+    says none of these."""
+    std = res.get("standard") if isinstance(res.get("standard"), dict) else None
+    if std is None:
+        return ""
+    cut = std.get("cut")
+    if cut in ("time", "calls"):
+        return cut
+    said = _read_score(trial_dir)
+    detail = said.get("detail") if isinstance(said, dict) else None
+    ended = detail.get("ended") if isinstance(detail, dict) else None
+    if ended in ("done", "fail", "steps"):
+        return ended
+    if cut == "end":
+        return "end"
+    return "agent" if ended == "turn" else ""
 
 
 def count_rate_limits(path: str) -> int | None:
@@ -197,6 +248,13 @@ class Trial:
     started_at: datetime | None = None
     finished_at: datetime | None = None
     phases: dict = field(default_factory=dict)
+    # What ended the agent's work on a standard trial (`_ended_by`): `agent`,
+    # `done`, `fail`, `steps`, `time`, `calls` or `end`; "" when it says none.
+    ended_by: str = ""
+
+    @property
+    def ended_label(self) -> str:
+        return ENDED_LABELS.get(self.ended_by, self.ended_by)
 
     @property
     def dur_phases(self) -> float:
@@ -700,6 +758,7 @@ def parse_trial(job_id: str, trial_dir: str) -> Trial | None:
         started_at=_iso(res.get("started_at")),
         finished_at=_iso(res.get("finished_at")),
         phases=phases,
+        ended_by=_ended_by(res, trial_dir),
     )
 
 

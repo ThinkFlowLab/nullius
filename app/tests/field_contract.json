@@ -429,6 +429,8 @@
    "dur_phases",
    "dur_total",
    "dur_verifier",
+   "ended_by",
+   "ended_label",
    "env_type",
    "exception_message",
    "exception_type",

@@ -135,6 +135,10 @@ FAMILIES = ("agent", "capability")
 _MODEL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$")
 APIS = ("chat", "responses", "messages")
 SCORES = ("pass", "score")
+# What may cut an agent's work on a unit short and still leave it scored, for a benchmark that says so
+# (``limits.scored_cuts``): the agent's time, the run's cap on its model calls, and the benchmark's own loop
+# having ended while the agent went on
+CUTS = ("time", "calls", "end")
 # A benchmark's controls, by the words Harbor calls them (``runs.parse.CONTROL_AGENTS``),
 # and who wrote each: the benchmark's authors, a harness adapter's author, or Nullius.
 CONTROLS = ("nop", "oracle")
@@ -1606,6 +1610,10 @@ def problems(d: dict, kind: str) -> List[str]:
                     v = lim.get(f)
                     if v is not None and (isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 100000):
                         bad.append(f"limits.{f}: a whole number from 1")
+                cuts = lim.get("scored_cuts")
+                if cuts is not None and (not isinstance(cuts, list) or not cuts or len(set(map(str, cuts))) != len(cuts)
+                                         or any(c not in CUTS for c in cuts)):
+                    bad.append(f"limits.scored_cuts: the cuts after which an agent's unit is still scored, each once, of {CUTS}")
                 a = lim.get("attempts")
                 if a is not None and (not isinstance(a, str) or not a.strip()):
                     bad.append("limits.attempts: how the upstream tells one attempt of a unit from another (its seed per trial), "
