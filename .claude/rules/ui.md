@@ -48,6 +48,8 @@ also supports `--only KEY` for a focused benchmark check.
   `app/static/disclosures.js`; navigation groups use the same animation. Respect
   reduced motion and keyboard activation. Filter menus and popovers are separate.
 - **One icon, one meaning.** A new kind of thing gets its own icon, never a
-  neighbour's.
+  neighbour's. Icons are symbols of `app/templates/_icons.svg`, drawn on its
+  24 grid without their own stroke or fill, and used with
+  `<use href="#i-name">`. A page draws no icon of its own.
 
 - Catalogue Add actions share one dialog with the entry type preselected from the page. Keep generated prompts short and refer to import skills instead of duplicating their instructions.

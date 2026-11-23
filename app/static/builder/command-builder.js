@@ -378,10 +378,9 @@
   // Harbor's own mark where Harbor fetches the tasks; a plain icon where no one's mark belongs. Square tiles, so
   // a mark is never read as a second radio button.
   const HARBOR_MARK = '<svg class="nb-radio-mark" aria-hidden="true"><use href="/static/brand/marks.svg#harbor"/></svg>';
-  const iconTile = d => `<span class="nb-radio-mark nb-radio-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="${d}"/></svg></span>`;
+  const iconTile = name => `<span class="nb-radio-mark nb-radio-icon" aria-hidden="true"><svg><use href="#i-${name}"/></svg></span>`;
   const SOURCE_MARK = { hub: HARBOR_MARK, registry: HARBOR_MARK,
-    local: iconTile('M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'),
-    generate: iconTile('M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M15 9h.01M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5') };
+    local: iconTile('folder'), generate: iconTile('wand') };
   const SOURCE_HINT = { hub: 'Harbor fetches the tasks when the run starts.', registry: 'Harbor fetches the tasks when the run starts.',
     local: 'Task folders already on disk. A run on a host is sent them.', generate: "Built first with the benchmark's own generator, into a folder you name." };
   const segmented = (name, label, segments) => `<div class="nb-seg" role="radiogroup" aria-label="${esc(label)}" data-seg="${name}"><span class="nb-seg-thumb" aria-hidden="true"></span>${segments}</div>`;
@@ -626,7 +625,7 @@
     + (t.meta || t.foot ? `<span class="nb-tile-foot">${t.meta ? `<span>${esc(t.meta)}</span>` : ''}${t.foot || ''}</span>` : '') + '</button>';
   // a machine to run on: this one or a host, its connection state filled in by Test connection
   const icon = name => `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>`;
-  const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: icon(v === 'local' ? 'machine' : 'network'), title: t, tip: sub,
+  const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: v === 'local' ? icon('machine') : icon('network'), title: t, tip: sub,
     foot: v !== 'local' ? `<span class="nb-state nb-hoststate" data-host-state="${esc(v)}"></span>` : ''});
   // The grids drawn by the server and run by the card toolkit (tables.js): the Benchmark step's (/new-run/benchmarks,
   // one choice) and the standard's Agent step's for its benchmark (/new-run/agents, from the Agents page's entries).
