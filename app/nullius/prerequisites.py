@@ -14,7 +14,7 @@ A need is one of:
 - ``docker``: the same, for Harbor, which runs the docker program;
 - ``uv``: on a host it is installed when missing, here it must be there (a
   pinned Harbor runs through ``uvx``, a runner's install builds with it);
-- ``harbor``: a recipe from before the pin runs the ``harbor`` on PATH;
+- ``harbor``: a recipe without a pin runs the ``harbor`` on PATH;
 - ``python3``, ``git``: the standard's cli, on a host;
 - a benchmark's machine setup (``host`` in its definition): its programs,
   optional GPU memory minimum, and the commands that install them;
@@ -67,8 +67,7 @@ def check_here(needs: List[str], setups: Optional[Dict[str, dict]] = None, *, st
     """The rows for this machine. ``setups``: a benchmark's machine setups by
     name, each ``{summary, check: [programs], install: [commands]}``, with an
     optional ``gpu_memory_mb`` minimum. ``standard``: the recipe is the
-    standard's, whose containers Nullius starts. ``which``, ``docker`` and
-    ``remap`` are looked up at call time, so a test can stand in for them."""
+    standard's, whose containers Nullius starts."""
     which = which or shutil.which
     docker = docker or docker_here
     remap = remap or container.userns_remap
@@ -83,7 +82,7 @@ def check_here(needs: List[str], setups: Optional[Dict[str, dict]] = None, *, st
         elif n == "uv":
             rows.append(row(n, "ok") if which("uvx") else row(n, "missing", "uv is not on this machine's PATH", ["curl -LsSf https://astral.sh/uv/install.sh | sh"]))
         elif n == "harbor":
-            rows.append(row(n, "ok") if which("harbor") else row(n, "missing", "a recipe from before the pin runs the harbor on PATH: pin a Harbor on the Harbor step"))
+            rows.append(row(n, "ok") if which("harbor") else row(n, "missing", "a recipe without a pin runs the harbor on PATH: pin a Harbor on the Harbor step"))
         else:
             rows.append(row(n, "ok") if which(n) else row(n, "missing", f"{n} is not on this machine's PATH"))
     lacking = hostreq.problems({"host": setups or {}}, list(setups or {}), which, constraints.of(constraints.LOCAL, strict=False).get("gpu_ids"))
@@ -118,7 +117,7 @@ def check_host(host: hosts.Host, needs: List[str], setups: Optional[Dict[str, di
             rows.append(row(n, "ok") if got["uv"] else row(n, "install", "installed on the host when the run starts"))
         elif n == "harbor":
             rows.append(row(n, "ok", got.get("harbor_version") or "") if got["harbor"]
-                        else row(n, "missing", "a recipe from before the pin runs the harbor on the host's PATH: pin a Harbor on the Harbor step"))
+                        else row(n, "missing", "a recipe without a pin runs the harbor on the host's PATH: pin a Harbor on the Harbor step"))
         else:
             rows.append(row(n, "missing", f"{n} is not on the host's PATH") if n in gone else row(n, "ok"))
     for name, s in (setups or {}).items():

@@ -7,8 +7,7 @@ secret-bearing file, naming the safe alternative in the refusal.
 
 Writing to those files stays allowed — the hazard is reading one *out*, not
 putting one in. So does anything that reports presence without content
-(`test -f`, `ls`, `wc -l`, `grep -c/-q/-l`), which is how the repo already
-says to check a key exists: by length, never by value.
+(`test -f`, `ls`, `wc -l`, `grep -c/-q/-l`).
 """
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ import re
 import shlex
 import sys
 
-# Files that hold live credentials. `.env` at any depth (the gitignore rule),
+# Files that hold live credentials. `.env` at any depth,
 # a `_secrets.json` sidecar, and the checkout's secret/ directory.
 SECRET_PATH = re.compile(
     r"""(?<![\w.-])(
@@ -29,8 +28,7 @@ SECRET_PATH = re.compile(
 )
 
 # Verbs that put file content on stdout. `grep` and `sed` are handled
-# separately: both have forms that report or edit without printing, and those
-# are the ones worth keeping.
+# separately: both have forms that report or edit without printing.
 DUMP_VERBS = frozenset("""
     cat tac head tail less more bat nl od xxd strings base64 hexdump
     awk cut paste rev sort uniq tr column jq yq diff vimcat view
@@ -142,9 +140,7 @@ def should_block(command: str) -> str | None:
 
     tokens = _tokenize(command)
     if tokens is None:
-        # Unlexable (unbalanced quotes). Fall back to the blunt text scan
-        # rather than waving it through: a command this guard cannot read is
-        # exactly the one not to trust with a credential file.
+        # Unlexable (unbalanced quotes). Fall back to the blunt text scan.
         if SECRET_PATH.search(command) and DUMP.search(command):
             return ADVICE
         return None

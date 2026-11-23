@@ -16,9 +16,7 @@ FILES = {
     "reward-details": ("Reward breakdown (rewardkit)", "verifier/reward-details.json"),
     # Harbor's record of what it copied out of the container after the run —
     # one entry per requested path with its status (`ok`, `failed`, `empty`,
-    # `skipped` — Harbor's `ArtifactManifestEntry`). The last of the nine
-    # files a trial writes to reach a page: the others were already
-    # here, or are read at parse.
+    # `skipped` — Harbor's `ArtifactManifestEntry`).
     "manifest": ("Artifact manifest", "artifacts/manifest.json"),
     "computer-calls": ("Computer tool calls", "verifier/computer-calls.jsonl"),
     "computer-events": ("Desktop events", "verifier/computer-events.jsonl"),

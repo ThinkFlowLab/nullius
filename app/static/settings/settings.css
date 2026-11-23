@@ -1,5 +1,4 @@
-/* Settings: a section per thing a run needs, an index beside them, and what a run can use today above.
-   Colours are the app's tokens (style.css). */
+/* Settings: a section per thing a run needs, an index beside them, and what a run can use today above. */
 .st-page { width: 100%; max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
 .st-page .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .st-page > .page-head { margin-bottom: calc(var(--head-gap) - 22px); }   /* the column's gap is part of the head's */

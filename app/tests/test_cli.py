@@ -6,9 +6,7 @@ shows: the help text, the exit code, what lands on stdout against stderr, and
 what the command left behind on disk. The paths that need a fake — a socket
 that must never open — call `main()` in-process with the fake patched in.
 
-Fixtures: `fixtures/harbor-jobs` is a small hand-made Harbor job. The errored
-trial (an exception carrying a credential-shaped string) is synthetic, built
-in a temp directory by the test that reads it.
+Fixtures: `fixtures/harbor-jobs` is a small hand-made Harbor job.
 
 Nothing here opens a socket, reads a dotenv file, or writes outside the temp
 directory a test hands the command.
@@ -213,7 +211,7 @@ class Runs(Scratch):
         self.assertIsNone(doc["adjusted_solve_rate"])
 
 
-# ------------------------------------------------------- the coverage gaps
+# -------------------------------------------------------
 # The trial view, the comparison and the workspace list. Same table, same rules:
 # help with the exit codes, --json on stdout alone, 3 for what is not
 # there, no credential on either stream, and nothing written by a read.

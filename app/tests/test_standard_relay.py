@@ -1082,7 +1082,7 @@ class Failure(unittest.TestCase):
         self.assertEqual(named(429, "HTTP 429: You exceeded your current quota", error_code="insufficient_quota"), "ApiUsageLimitError")
         self.assertEqual(named(429, "HTTP 429: You exceeded your current quota, please check your plan"), "RateLimitError")
         self.assertEqual(named(402, "HTTP 402: Insufficient credits"), "ApiUsageLimitError")
-        self.assertEqual(named(402, "HTTP 402: no price for the model", refused="price"), "ApiError")   # the relay's own, as before
+        self.assertEqual(named(402, "HTTP 402: no price for the model", refused="price"), "ApiError")
         for said in ("HTTP 400: xyz is not a valid model ID", "HTTP 400: Invalid model: foo", "HTTP 400: Model Not Exist",
                      "HTTP 404: models/x is not found for API version v1beta"):
             with self.subTest(said=said):

@@ -5,7 +5,7 @@ A file holds ``id``, ``name`` (the title the builder shows), ``recipe`` (the
 recipe as the builder saves it) and ``saved`` (UTC, ISO 8601). The id is
 random, so two names can never share a file; names are unique instead. A save
 names the recipe it updates by id (a rename keeps the file), or else updates
-the recipe of the same name. Standard library only.
+the recipe of the same name.
 """
 from __future__ import annotations
 
@@ -115,7 +115,7 @@ def delete(recipe_id: str) -> bool:
 
 def import_(items: Iterable, lenient: bool = False) -> Dict[str, list]:
     """Add each recipe whose name is not saved yet; never replace one. An item is a
-    recipe, or ``{"recipe": ...}`` as the builder's earlier browser list held them.
+    recipe, or ``{"recipe": ...}``.
     Strict: one bad item refuses them all, before anything is written. Lenient: the
     good ones are added and each bad one is returned with its reason. A skipped one is
     returned with its index and name."""

@@ -2,19 +2,13 @@
 
 The outcome says *whether* the agent solved the task; these numbers say *how*
 it worked — how long before it committed to an edit, whether it re-read what
-it had already seen, whether it re-ran commands that had already failed. Two
-resolved trials can hide very different amounts of wasted work, and the waste
-is what token cost scales with.
-
-Everything here is a pure function of data the app already loads; nothing
-reaches back into the job directory.
+it had already seen, whether it re-ran commands that had already failed.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Public in trajectory.py so this module need not reach into an underscore.
 from nullius.traces.trajectory import PATCH_PATHS as _PATCH_PATHS
 from nullius.traces.trajectory import parse_ts as _parse_ts
 
@@ -27,8 +21,7 @@ class Behavior:
     time_to_first_edit: float | None = None
     # read/search calls whose exact target had already been fetched before.
     n_redundant_reads: int = 0
-    # calls repeating a (name, target) pair that had already failed — retrying
-    # the same thing and hoping is the signature of a flailing run.
+    # calls repeating a (name, target) pair that had already failed.
     n_repeated_failed_calls: int = 0
     # completed edit→execute alternations: how many times an edit was actually
     # followed by running something (tests, the repro, anything).
@@ -41,7 +34,6 @@ class Behavior:
 
 
 def analyze(traj) -> Behavior:
-    """Compute a Behavior from a loaded Trajectory."""
     b = Behavior()
 
     seen_fetches: set = set()

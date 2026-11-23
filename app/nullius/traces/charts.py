@@ -1,26 +1,19 @@
 """Distribution charts over a trace's spans: histograms and CDFs.
 
-A sibling to the waterfall, answering a different question. The waterfall and the
-breakdown strips are *timeline* views — when things happened, and how the wall
-clock splits. This module describes the *population* of calls: how long a typical
+This module describes the *population* of calls: how long a typical
 tool call runs, whether the LLM calls are bimodal, whether a handful of spans
 hold most of the time.
 
 **Summed span duration is not wall clock, and nothing here may imply it is.**
 Spans nest and overlap — a tool call sits inside the LLM call that asked for it,
 and background subagents run alongside the main thread — so adding durations up
-overshoots the run, sometimes by a lot. That is exactly why the strips next to
-these charts never sum spans: ``Totals`` is the producer's, displayed verbatim,
-and ``Breakdown`` *partitions* the timeline instead (see :func:`trace.partition`).
+overshoots the run, sometimes by a lot.
 So the weighted axis here is a share of *summed span time*, never a share of the
 run, :class:`Charts` carries no ``wall_ns``, and no percentage is ever taken
-against one. A chart that looked like the breakdown strip and disagreed with it
-would be the worst outcome available.
+against one.
 
 :func:`charts_of` takes a population of samples rather than a span tree, so
-the same four charts can describe several traces at once. Pooling
-would not weaken the rule above; it strengthens it. Within one trace a sum at
-least overshoots a real clock. Across traces there is no single clock to
+the same four charts can describe several traces at once. Across traces there is no single clock to
 overshoot: two trials never shared one, so their summed span time measures
 nothing at all. Which is why the only totals here count spans.
 
@@ -41,10 +34,7 @@ Geometry is computed here, in SVG user units against :data:`BOX`, for the same
 reason :func:`trace.place` computes the waterfall's: the arithmetic runs on
 nanosecond magnitudes that overflow a JS double, and staying in Python int/float
 keeps it exact. Values that need formatting leave as integer nanoseconds and get
-``|nsdur`` in the template — this module emits numbers, not presentation. The
-page stretches the plot to its column, so the template draws lines from these
-units and places bars and labels by the percentages :class:`Box` gives: text and
-rounded bar ends then keep their size at any width.
+``|nsdur`` in the template — this module emits numbers, not presentation.
 
 Each chart leads with the one number it is for (:class:`Headline`), computed from
 the same samples it draws: never a figure the plot could not show.
@@ -60,9 +50,7 @@ page renders from the URL, so the view can be linked and cannot drift from what
 it claims to show.
 
 Rescaling on a toggle is deliberate, and the opposite of the waterfall's rule
-that its axis never moves under a filter. There the axis is a shared timeline,
-and moving it would make a filter look like it had changed the timings it was
-only asked to leave out. Here each chart's axis is derived from its own
+that its axis never moves under a filter. Here each chart's axis is derived from its own
 population, and tool calls squeezed into the corner of an axis defined by LLM
 calls that are no longer drawn show nothing at all. The cost is real, though: a
 rescaled chart stops sharing its duration axis with the other three, so it says
@@ -142,8 +130,7 @@ _MAX_XTICKS = 6
 # is their children's. A subagent stays, as a call the agent made and waited for.
 _WRAPPERS = ("session", "group", "user_message")
 
-# Left as a gap between neighbouring bars, in user units. Enough to read the bins
-# apart, small enough that a 20-bin chart still reads as a distribution.
+# Left as a gap between neighbouring bars, in user units.
 _BAR_GAP = 1.0
 
 # The most durations one line turns at. Past it a line keeps every n-th, which a plot
@@ -158,9 +145,7 @@ _SHARE_TOPS = (0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100)
 class ChartFilter:
     """Which kinds each chart is not drawing, keyed ``"<chart key>:<kind>"``.
 
-    Per chart, not per trace, and that is the whole distinction from
-    :class:`trace.Filter`: that one prunes spans and everything downstream
-    follows it, this one only decides what a single chart draws. Nothing here
+    Nothing here
     ever reaches ``save-trace``, and hiding a kind in one chart leaves the other
     alone — they answer different questions, and a shared toggle would redraw a
     chart the reader never touched.
@@ -400,8 +385,7 @@ class Charts:
 
 # The four charts, in grid order: the two time-weighted ones fill the first row,
 # the two per-kind ones the second. One definition of the order, the titles and
-# the axis wording — in particular "summed span time", which is the phrase that
-# keeps these from reading as an accounting of the run.
+# the axis wording.
 _SPECS = (
     ("time-hist", "Where the time is", "share of summed span time per duration bin"),
     ("time-cdf", "Time concentration", "share of summed span time in spans no longer than x"),
@@ -418,8 +402,7 @@ def log_edges(lo_ns: int, hi_ns: int, target: int = _TARGET_BINS) -> tuple:
     every sample rather than clipping the extremes.
 
     Never degenerate. A trace whose spans all took the same time still gets a
-    decade of width — the same stance :func:`trace.extent_of` takes when every
-    span is an instant, and for the same reason: a zero-width range makes every
+    decade of width — a zero-width range makes every
     position NaN.
     """
     lo = max(int(lo_ns), 1)
@@ -542,7 +525,7 @@ def _scaled_yticks(top_pct: float, box: Box = BOX) -> tuple:
 
 
 def _count_yticks(top: int, box: Box = BOX) -> tuple:
-    """0 and the tallest bin. Integers only — half a span is not a thing."""
+    """0 and the tallest bin. Integers only."""
     if top <= 1:
         return (Tick(at=_y(0.0, box), text="0"), Tick(at=_y(1.0, box), text=str(max(top, 1))))
     mid = top // 2
@@ -561,8 +544,7 @@ def histogram(samples: list, edges: tuple, weight: str = "count",
     (summed nanoseconds). ``split`` stacks one segment per kind within each bin.
 
     Heights are shares of ``ceiling``, by default the tallest bin, so an empty bin
-    is a visible gap rather than a bar of some minimum height — the distinction
-    between "nothing here" and "a little here" is most of what a histogram is for.
+    is a visible gap rather than a bar of some minimum height.
     """
     n = max(len(edges) - 1, 0)
     if not n or not samples:
@@ -725,8 +707,7 @@ def cdf_by_kind(samples: list, edges: tuple, box: Box = BOX) -> tuple:
 
     Normalising within the kind is what makes the lines comparable: every one
     reaches 100%, so their horizontal separation is the difference in how long
-    that kind's calls run, not in how many of them there were. The counts are on
-    the legend, because that information has to survive somewhere.
+    that kind's calls run, not in how many of them there were.
     """
     grouped: dict = {}
     for sample in samples:
@@ -759,8 +740,7 @@ def _facets(samples: tuple, off: frozenset) -> tuple:
 def _edges_for(samples: tuple, fallback: tuple) -> tuple:
     """Bins for a subset of the samples — the point of the legend toggle.
 
-    A chart drawing only tool calls wants the axis those calls need, not the one
-    the LLM calls defined before they were switched off. With nothing left to
+    With nothing left to
     bin it falls back to the whole range, so the empty plot still has an axis
     rather than a degenerate one.
     """
@@ -810,15 +790,11 @@ def charts_of(samples: tuple, total: int, excluded: int,
               filt: "ChartFilter | None" = None) -> Charts:
     """The same four charts over an already-extracted population.
 
-    Split out from :func:`charts_for` so that several traces could be pooled
-    without merging their span *trees*. :func:`trace.all_spans` deduplicates by
+    :func:`trace.all_spans` deduplicates by
     span id to guard against a parent cycle — right within one document, and
     quietly wrong across several, where two traces reusing an id would lose the
     duplicates without saying so. Extract each trace's samples on its own, then
     concatenate them here; ids never meet.
-
-    Everything downstream of this point only ever sees durations and kinds, which
-    is the honest reading of what these charts describe.
 
     ``filt`` is the legend rather than a filter on the trace: it says which kinds
     the per-kind charts draw, and those charts rescale to what is left.
@@ -844,9 +820,7 @@ def charts_of(samples: tuple, total: int, excluded: int,
     fullest = max(time_columns, key=lambda c: c.ns, default=None)
     half_ns = _half_time(samples)
 
-    # Each per-kind chart carries its own legend state and its own bins. The two
-    # ask different questions, so switching a kind off in one must leave the
-    # other exactly as it was.
+    # Each per-kind chart carries its own legend state and its own bins.
     hist_off, cdf_off = filt.hidden("kind-hist"), filt.hidden("kind-cdf")
     hist_kinds, cdf_kinds = _visible(samples, hist_off), _visible(samples, cdf_off)
     hist_edges, cdf_edges = _edges_for(hist_kinds, edges), _edges_for(cdf_kinds, edges)
@@ -872,9 +846,7 @@ def charts_of(samples: tuple, total: int, excluded: int,
             head=Headline(ns=half_ns, unit="or shorter holds half the span time"),
             marker=Marker(at=_x(half_ns, edges), ns=half_ns, word="half"),
         ),
-        # Ticks and gridlines come from the *drawn* samples, not the whole set —
-        # an axis left at the unfiltered range is the bug the toggle exists to
-        # avoid. With nothing drawn there are no value labels either: a "0/1"
+        # Ticks and gridlines come from the *drawn* samples, not the whole set. With nothing drawn there are no value labels either: a "0/1"
         # count axis over an empty plot claims a measurement nobody made.
         "kind-hist": Chart(
             form="histogram", bars=kind_bars, xticks=_xticks(hist_edges),

@@ -339,7 +339,7 @@ class Unit:
                             time.sleep(PAUSE)
                             continue
                         if self.desktop.act(action, PYTHON_SECONDS)["reply"] is None:
-                            break                    # not ended in time: the call is answered with an error
+                            break
                         time.sleep(PAUSE)
                 finally:
                     close = getattr(actions, "close", None)

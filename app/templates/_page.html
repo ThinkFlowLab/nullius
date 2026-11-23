@@ -2,8 +2,7 @@
     (_tables.html) and the card toolkit (_cards.html) sit under. #}
 
 {# A page's head: its `title`, the one h1, flush left; under it at most one line, `sub` (counts, an id, a badge or
-   pills, never a sentence); right of the title's line, `actions`, the page's buttons, each as tall as a table's
-   controls (--tool-h) and centred on that line, under `sub` on a narrow screen. `sub`, `actions` and `mark` are
+   pills, never a sentence); right of the title's line, `actions`, the page's buttons. `sub`, `actions` and `mark` are
    markup, as a `{% set %}` block writes it; `mark` goes before the title (a benchmark's or an agent's logo).
    `mono` sets the title as code (a task name); `id` names the h1. #}
 {% macro page_head(title, sub='', actions='', mark='', mono=false, id='') %}

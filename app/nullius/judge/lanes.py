@@ -17,8 +17,7 @@ that outcome's trials:
 
 Every status and every count is reconcile's (``reconcile.row_of``); this
 module only groups. The tally under the lanes is reconcile's counts in its
-own words, grouped by the line each is drawn with. Layout is the page's
-business: nothing here is a pixel.
+own words, grouped by the line each is drawn with.
 """
 from __future__ import annotations
 

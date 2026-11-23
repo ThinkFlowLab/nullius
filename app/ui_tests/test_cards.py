@@ -136,7 +136,7 @@ class Macros(unittest.TestCase):
                       '<div class="bench-card-blocker" title="needs agent.tools/v1">Lacks tools</div>', html)
         self.assertNotIn('<a ', html)
 
-    def test_a_single_choice_is_marked_on_its_card(self):   # and a radio in its table: test_builder_benchmarks
+    def test_a_single_choice_is_marked_on_its_card(self):
         cols = [dict(key='title', label='Name', card='title')]
         items = [{'title': 'Alpha', 'pick': {'value': 'a', 'one': True}}, {'title': 'Beta', 'pick': {'value': 'b', 'on': True, 'one': True}}]
         self.assertIn('<button type="button" class="card-link" data-pick="b" data-pick-one aria-pressed="true">Beta</button>', self.render(cols, items))

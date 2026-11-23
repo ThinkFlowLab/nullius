@@ -82,7 +82,7 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('<span class="mono">API_TOKEN</span> (this page reads <a class="mono" href="#MODEL_API_KEY">MODEL_API_KEY</a>)', notice[:notice.index("</div>")])
         for value in ("sk-other-tool", "sk-fake-", "ts-fake-"):
             self.assertNotIn(value, html)                                               # never a value
-        self.assertEqual(self.client.post("/settings/load", data={"csrf": self.token()}, headers={"Origin": "http://localhost"}).status_code, 404)   # the route is gone
+        self.assertEqual(self.client.post("/settings/load", data={"csrf": self.token()}, headers={"Origin": "http://localhost"}).status_code, 404)
 
     def test_the_unread_notice_says_which_keys_a_run_still_inherits(self):
         Path(self.env_file).write_text("API_KEY_TYPESAFE=ts-old-name-0123\nSOMETHING_ELSE=1\n")
@@ -97,8 +97,7 @@ class SettingsPage(unittest.TestCase):
 
     def test_host_and_port_are_not_on_the_page_and_a_leftover_line_names_the_start_up_option(self):
         """The running server cannot move itself: APP_HOST and APP_PORT are
-        read at start, so they have no row, and a PORT line left from when
-        the page wrote one is named with what Nullius reads instead - not a
+        read at start, so they have no row, and a leftover PORT line is named with what Nullius reads instead - not a
         link to a row that does not exist."""
         Path(self.env_file).write_text("PORT=6000\nHOST=0.0.0.0\n")
         settings.load(self.env_file)
@@ -692,11 +691,7 @@ class SettingsPage(unittest.TestCase):
             self.assertIn(field, html)
 
     def test_the_add_host_dialog_is_whole_without_an_ssh_config(self):
-        """No `~/.ssh/config` — the ordinary Windows case, and any fresh
-        machine — left `dialog-panels` unopened while its closing tag
-        stayed: the browser closed an ancestor instead, taking the
-        dialog's footer out of the dialog, and the script died on a null
-        `[data-cancel]` so the button did nothing. The dialog is
+        """No `~/.ssh/config` must leave the dialog's tags balanced. The dialog is
         whole either way; only the tabs and the config panel depend on
         the config."""
         with patch.object(hosts, "scan_ssh_config", return_value=[]):
@@ -716,7 +711,7 @@ class SettingsPage(unittest.TestCase):
         self.assertEqual(with_config.count('<div class="dialog-panels">'), 1)
         self.assertIn('data-panel="config"', with_config); self.assertIn('data-cancel', with_config)
         self.assertEqual(with_config.count('</div>'), with_config.count('<div '))
-        # in the page below the heading, as the providers' Add is; its fields belong to a form of their own,
+        # in the page below the heading; its fields belong to a form of their own,
         # outside the settings form, so autosave never reads them (a password above all)
         page = self.page()
         head = re.search(r'<h2 id="hosts-h">Hosts</h2>.*?</div>', page, re.S).group(0)
@@ -972,8 +967,7 @@ class SettingsPage(unittest.TestCase):
     def test_memory_entered_in_gb_is_kept_in_whole_mb_beside_its_slider(self):
         """1.5 GB as the page sends it (1536 MB) on a host with a capacity: saved
         as is, and drawn again as MB for the page to show in the unit chosen. The
-        number box carries the key, never the slider before it, which once took
-        the unit and left a GB value to be read as MB."""
+        number box carries the key, never the slider before it."""
         self.stack.enter_context(patch.object(constraints, "store_path", lambda env=None: str(self.tmp / "capacity.json")))
         constraints.save("host3", {"capacity": {"cpus": 3, "memory_mb": 31789, "gpus": []}, "engine": {"kind": "podman", "version": "5.8.9"},
                                    "enforced": ["cpus", "memory_mb", "processes"]})
@@ -1283,7 +1277,7 @@ class SettingsPage(unittest.TestCase):
 
 class StartUp(unittest.TestCase):
     """app.py's command line: the address and port come from APP_HOST and
-    APP_PORT (app/.env is loaded before it is read), the flags win, and a
+    APP_PORT, the flags win, and a
     port that is not one stops the start with one line, not a traceback."""
 
     def args(self, argv=(), **env):

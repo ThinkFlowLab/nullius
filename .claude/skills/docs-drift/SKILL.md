@@ -6,7 +6,7 @@ description: Check that the documentation still describes the application — ru
 # Docs drift
 
 Two halves. The **mechanical** half is `scripts/check_docs.py` beside this
-file, run by hand (no test and no CI step runs it). In the order `checks()`
+file, run by hand. In the order `checks()`
 runs them:
 
 - relative hrefs in `docs/**/*.html`, and links in every tracked `.md`;
@@ -21,8 +21,7 @@ A path is only checked when its first segment is a top-level entry of the
 repository, so a path under a wrong top-level directory passes silently.
 
 The **semantic** half is this skill: a paragraph that still names a real file
-but describes a shape the code no longer has. No script sees that; this is the
-procedure to look, in a fixed order, at the places it hides.
+but describes a shape the code no longer has.
 
 Arguments: an optional git ref (`/docs-drift main`, `/docs-drift HEAD~5`).
 Without one, the scope is everything since the branch left `main`
@@ -33,8 +32,7 @@ or name the merge commit and diff its first parent.
 
 1. **Run the check first.** `python3 .claude/skills/docs-drift/scripts/check_docs.py`,
    on a bare `python3`.
-   Fix every finding before reading anything — a stale path is a fact, not a
-   judgement, and the reading below assumes the paths are right. Remove
+   Fix every finding before reading anything. Remove
    obsolete references unless the user explicitly asks to keep them. An
    intentionally absent path, such as a gitignored local configuration,
    goes in the script's `KNOWN_ABSENT` dict with its reason; something shaped like a path that is not one of this
@@ -44,15 +42,14 @@ or name the merge commit and diff its first parent.
 2. **Scope what changed.** `git diff --name-only <ref>...HEAD` (and
    `git status --short` for the uncommitted). Map each changed path to the
    documents that describe it with the table below, and read *those* fully,
-   not the whole set — the whole set is what the gate covers. The modules each
-   package holds are listed in the AGENTS map; the gate keeps that list right.
+   not the whole set.
 
    | changed under | read these, asking "does this paragraph still describe the code?" |
    | --- | --- |
    | `pyproject.toml`, `app/nullius/cli.py`, `app/nullius/__main__.py`, `app/nullius/paths.py`, `app/nullius/migrate.py` | README Quickstart; `docs/getting-started.md` installation and migration; `docs/cli/README.md`; `docs/settings/README.md` storage and precedence; AGENTS installation and dependency rules; preserve source commands as well as installed commands |
    | `app/nullius/catalogue/storage.py`, `app/nullius/standard/definitions.py`, `app/nullius/standard/payload.py` | `docs/standard.md`, `docs/builder.md`, `docs/how-it-works.md`; all import skills and manual-add guides: user overlays versus bundled contributions, whole-folder selection, and runtime snapshots sent to hosts; generated Supported pages use explicit bundled roots |
-   | `app/nullius/runs/` | README "How to read a result"; `.claude/rules/running.md` "Interpreting results" and its runs-list paragraph (for `launches.py`); `docs/field-guide.md`, what each field it names means (`app/tests/test_field_guide.py` checks only that the names exist, the counts add up and the outcomes are the classifier's); `docs/how-it-works.md` "What you get back, page by page"; `docs/cli/` when a CLI changed |
-   | `app/nullius/traces/` | `.claude/rules/traces.md` — the load-bearing rules and the filter, zoom and save rules are stated there, so a reader that changed shape drifts the rule, not only the README; README "How to read a result" |
+   | `app/nullius/runs/` | README "How to read a result"; `.claude/rules/running.md` "Interpreting results" and its runs-list paragraph (for `launches.py`); `docs/field-guide.md`, what each field it names means; `docs/how-it-works.md` "What you get back, page by page"; `docs/cli/` when a CLI changed |
+   | `app/nullius/traces/` | `.claude/rules/traces.md`; README "How to read a result" |
    | `app/nullius/importers/` | README "Supported harnesses" (the table and the notes under it) and "Local by design"; `.claude/rules/running.md`, the import paragraph; `docs/cli/import.md`; the AGENTS map's `importers/` entry — the gate checks the registry's labels, you check the sentences |
    | `app/nullius/compare/` | `.claude/rules/running.md`, the comparison paragraph; `docs/cli/read-jobs.md`; `docs/field-guide.md`; `docs/how-it-works.md`, the `/compare` row |
    | `app/nullius/catalogue/`, `app/nullius/recipes/`, `app/nullius/harbor/` | README "Ways to run" and its sections from "Bring anything" to "Read it"; `docs/builder.md` "Recipe stages" and "Agents and Capabilities tabs"; `.claude/rules/running.md`, what the repository runs and installs; for `harbor/`, the `source.py` docstring and `docs/builder.md` "Which Harbor"; for `catalogue/`, `.claude/skills/import-benchmark/SKILL.md` (a Harbor entry, the listing rule) too; for `providers.py`, the provider rows of `docs/builder.md` "Which providers" |
@@ -80,8 +77,7 @@ or name the merge commit and diff its first parent.
    the user explicitly asks to keep it. A link in code that now leads nowhere is a bug, not
    drift: record it, in the report or as an issue.
 
-3. **Then the surfaces everyone forgets**, whatever the scope — each a
-   two-minute read for the top-level shape, not the detail the table covers:
+3. **Then the surfaces everyone forgets**, whatever the scope:
    - README.md "Quickstart" and "Documentation";
    - AGENTS.md "What This Repo Is", "Core Architecture" and "More Detail";
    - `.claude/rules/running.md` — its commands still run as written
@@ -111,5 +107,4 @@ or name the merge commit and diff its first parent.
 
 Not a rewrite pass: leave prose that is still true alone, even when it could
 be shorter. Not the place to add a document — if a change has no home in the
-table, the missing row is the finding. Not where validations, captures or
-rendered reports go: tests are the proof.
+table, the missing row is the finding.

@@ -1,6 +1,6 @@
 # Investigating runs: what to ask and where to look
 
-The script gives counts. This file is about turning counts into causes. Work from the outside in:
+Work from the outside in:
 did the infrastructure work, then did the harness work, then what did the agent do, then what is
 simply hard for the model.
 
@@ -20,8 +20,6 @@ simply hard for the model.
 | Harness | Harbor, the benchmark adapter, containers, timeouts, step caps, the verifier | import errors, build failures, timeouts at a round number of seconds, trials stopped at a cap |
 | Agent scaffold | prompt, tools, loop and context handling around the model | extra or wasted calls, tool errors, early endings, prompt size, cache behaviour |
 | Model | what the model itself can or cannot do on the task | failures that remain when two scaffolds with the same model both fail the same task |
-
-A finding that names its layer tells the reader who has to act.
 
 ## 2. Failure signatures
 

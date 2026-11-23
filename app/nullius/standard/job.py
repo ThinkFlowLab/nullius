@@ -423,8 +423,7 @@ def backfill_trace(trial_dir: str, write: bool = False) -> str:
 def _named(name: str) -> str:
     """A serving provider's name as its slug reads: lowercased, its words joined by dashes (``DeepInfra`` reads
     ``deepinfra``) and nothing else folded: ``Prov/A`` is not ``prov-a``, and a provider whose name differs from its
-    slug otherwise (``Google`` serving ``google-vertex``) reads as another. A run fetches no list of
-    providers, and this is all a name is matched by."""
+    slug otherwise (``Google`` serving ``google-vertex``) reads as another."""
     return re.sub(r"\s+", "-", name.strip().lower())
 
 
@@ -627,7 +626,7 @@ FEED_PHASES = (("env_setup", "environment_setup"), ("agent_setup", "agent_setup"
 
 def feed_durations(res: dict) -> Optional[dict]:
     """The phases a trial recorded, in the live feed's words and in seconds, read from its result so
-    the board and the trial's page say the same (Harbor's writer sends its four the same way). A
+    the board and the trial's page say the same. A
     phase it has none of is left out; None when it recorded none."""
     out = {}
     for phase, key in FEED_PHASES:

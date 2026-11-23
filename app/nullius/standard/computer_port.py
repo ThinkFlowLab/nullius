@@ -20,12 +20,9 @@ back, neither a step; an acting call is refused until the task is given.
   step), and serves the reading calls that come before it, in the thread of the loop: one desktop operation at a time,
   in the order the calls arrived. An acting call is held until the loop has run its actions and their pause, then
   answered; a ``step`` with an ``end`` then hands the loop its DONE or FAIL, in the same step. Once the steps are used
-  up, every call but ``info`` is refused. The turn's end (``end_turn``) ends the
-  wait for the agent's next call and the actions of a step not yet run; a ``done`` or ``fail`` already taken still
-  reaches the loop, and each later ``predict`` gives the loop no action.
+  up, every call but ``info`` is refused.
 - ``Server``: the MCP server over a Unix socket: JSON-RPC 2.0, one message a line; every connection of the unit's
-  session accepted, the task's state kept in the bridge, outside them; each connection's answers written by a thread
-  of its own, at most OUT_BYTES waiting, so that a client that stops reading holds up nothing else; one line per tool
+  session accepted, the task's state kept in the bridge, outside them; one line per tool
   call in the call log (the tool, its start and end, whether it failed; no argument and no result).
 - ``Held``: whole files kept by their sha256 for a run, when the runner is given a folder for them.
 - What a runner needs around them: the ready file (``ready``), the lifeline (``lifeline``, which also carries the
@@ -321,8 +318,7 @@ class Call:
 
 def checked(call, screen, folder) -> None:
     """The call checked against its tool's schema, in full and before it is queued; for an acting call, the actions
-    it stands for (Python lines run with pyautogui and time imported, or WAIT, DONE, FAIL). Refused when it does not
-    hold: the call is then answered at once, takes no step and never reaches the desktop. An upload's path and the
+    it stands for (Python lines run with pyautogui and time imported, or WAIT, DONE, FAIL). Invalid calls are rejected before queuing and consume no step. An upload's path and the
     files of a step or a prepare are also checked to be inside ``folder``, the agent's."""
     schema = next(s for n, _, s in tools(tuple(screen)) if n == call.tool)
     a = call.clean = _valid(call.args, schema, call.tool, "arguments")
@@ -423,7 +419,7 @@ class Bridge:
                 and posixpath.normpath(folder) == folder):
             raise ValueError("the agent's folder is an absolute path in its plain form")
         self.folder = folder
-        self.window, self.prepared = bool(window), prepared   # the window before the task
+        self.window, self.prepared = bool(window), prepared
         self.preparing = False
         self.seen, self.unseen = None, "no step has ended"   # the observation, or why there is none
         self.password = desktop.password()
@@ -547,7 +543,7 @@ class Bridge:
         return {"files": self._files(call.files or [])}
 
     def close_window(self):
-        """Close the window before the task, refuse waiting preparation and wait for active preparation to end."""
+        """Close the window, refuse waiting preparation and wait for active preparation to end."""
         with self.change:
             self.window = False
             refused = [c for c in self.calls if c.tool in WINDOW]

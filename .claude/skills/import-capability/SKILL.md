@@ -16,15 +16,12 @@ description: >-
 
 # Import a capability
 
-An assistant without skills reads this file directly and follows it as
-written; "the question tool" is whatever multiple-choice prompt it has, else
+"The question tool" is whatever multiple-choice prompt it has, else
 a plain question that waits for the answer.
 
-The user wants one thing: their memory (or other capability) offered in Nullius
-against every benchmark of its kind. `cli` below is `nullius standard`;
+`cli` below is `nullius standard`;
 `python -m nullius standard` also works with a Python that has Nullius
-installed. The source form remains `PYTHONPATH=app python3 -m nullius.standard.cli`
-from the checkout root. Jobs go to `jobs_standard/` relative to the working
+installed. From the checkout root: `PYTHONPATH=app python3 -m nullius.standard.cli`. Jobs go to `jobs_standard/` relative to the working
 directory, or `--jobs PATH`; keep them outside package resources. Read
 `docs/standard.md` ("A capability", "Versions") when available in a checkout,
 otherwise the installed schema and examples below. An installation needs no
@@ -32,17 +29,9 @@ otherwise the installed schema and examples below. An installation needs no
 
 ## Locate the runtime and writable catalogue
 
-Use `nullius paths --json` in the application's profile/environment.
-`NULLIUS_HOME` selects `config/`, `data/` and `cache/` under a profile directory;
-otherwise platform user paths apply. `NULLIUS_CATALOGUE` overrides the user
-catalogue (Linux default: `~/.local/share/nullius/catalogue/`). Keep personal
-configuration, secrets and mutable data outside installed package resources.
+Run `nullius paths --json` in the app’s profile. Use `NULLIUS_HOME` for a separate profile and `NULLIUS_CATALOGUE` to override the catalogue. Keep personal state outside the package.
 
-Use the interpreter behind `nullius` for Python API calls. A `uv tool` install
-does not make Nullius importable by the shell's `python3`. For POSIX, check
-`command -v nullius`, set `NULLIUS_PY="$(uv tool dir)/nullius/bin/python"`, and
-verify `"$NULLIUS_PY" -c 'import sys, nullius; print(sys.executable); print(nullius.__file__)'`.
-For another installation, inspect its launcher or virtual environment. For
+Use the launcher’s Python for APIs. On POSIX with `uv tool`, set `NULLIUS_PY="$(uv tool dir)/nullius/bin/python"` and verify `"$NULLIUS_PY" -c 'import nullius; print(nullius.__file__)'`. For other installs, inspect the launcher. For
 source inspection, use `NULLIUS_PY=python3` with `PYTHONPATH="$PWD/app"` on the
 command below from the checkout root:
 
@@ -57,8 +46,7 @@ print("catalogue:", paths.catalogue_dir())
 PY
 ```
 
-Read source references to `app/nullius/` at those resolved module paths
-when installed. Path APIs return strings; use `os.path.join` or `Path(value)`.
+For an installation, resolve `app/nullius/` references to installed modules.
 In the same settings-loaded interpreter, `definitions.entry_dir("capability", key)`
 locates the selected entry. Before editing it, use
 `definitions.writable_dir("capability", key)` to copy the entire bundled folder
@@ -88,10 +76,8 @@ below. CLI mutations protect bundled resources in source checkouts too.
   why, and what it changes about what is measured; ask with the question
   tool and write nothing of it before the yes. Without a way to ask (a
   subagent), report it as an open question and leave it unwritten.
-- **A kind with no port yet** (only `cap.memory/v1` exists today; see
-  `app/nullius/standard/ports.py`) is a generic change: a new port with a
-  kit, worded for every capability of its kind. Ask before adding it; this is a
-  source contribution, not a user catalogue edit to installed core code.
+- **A kind with no port yet** (see `app/nullius/standard/ports.py`) is a generic change: a new port with a
+  kit, worded for every capability of its kind. Ask before adding it; this is a source contribution.
 
 ## 1. Read the input (minutes, no install)
 
@@ -201,7 +187,7 @@ See `docs/standard.md`, "Native capabilities and composition".
    python app/tests/parallel.py app/ui_tests`), and
    `python3 .claude/skills/docs-drift/scripts/check_docs.py`. Use an isolated
    profile with an empty user catalogue so personal overrides cannot mask the
-   contributed files. These repository gates do not apply to personal entries.
+   contributed files.
 
 ## 4. Open it
 
@@ -216,8 +202,7 @@ recalled for each question. From source, use `uv run --no-project
 
 `cli new version KEY VERSION`, check the pins it was given, then `cli
 conform KEY@VERSION --model <cheap model>`. Set `default` to make it the one
-a bare key names - ask first. The commands write the user copy, preserving
-companion files when the original entry was bundled.
+a bare key names - ask first.
 
 ## 6. Report - decision first
 
@@ -239,5 +224,4 @@ anything upstream are asked about once it works, never by default.
 
 Write the entry's summary as one short sentence, ideally under 100 characters.
 Name what it is and its distinguishing purpose. Keep installation requirements,
-protocol mechanics and limitations in their dedicated fields or documentation;
-do not rely on the card's line clamp to shorten a paragraph.
+protocol mechanics and limitations in their dedicated fields or documentation.

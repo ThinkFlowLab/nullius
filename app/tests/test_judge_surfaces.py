@@ -22,7 +22,7 @@ ASKS_FOR_A_FIGURE = re.compile(r"\b(how many|how long|how often|count|number of|
 class Groups(unittest.TestCase):
     def test_the_groups_their_states_and_their_escape_options(self):
         self.assertEqual(questions.group_ids("feasibility"), ["control_failure_cause"])
-        self.assertNotIn("behaviour", questions.GROUPS)                                # the trial page's "How it worked" went with its questions
+        self.assertNotIn("behaviour", questions.GROUPS)
         self.assertEqual(questions.group_ids("task"), ["instruction_quality"])
         self.assertEqual(questions.state_of("control_failure_cause"), "control"); self.assertEqual(questions.state_of("instruction_quality"), "task")
         for q in ("control_failure_cause",):
@@ -59,10 +59,9 @@ class States(unittest.TestCase):
     def test_the_kinds_are_registered_and_reach_build(self):
         for kind in ("control", "task"):
             self.assertIn(kind, state.BUILDERS)
-        self.assertNotIn("behaviour", state.BUILDERS)                     # no page asks the behaviour group any more
+        self.assertNotIn("behaviour", state.BUILDERS)
         with self.assertRaises(ValueError):
             state.register("task", state.task_state)
-
 
     def test_the_task_state_is_the_instruction_alone(self):
         text, truncated = state.build("task", self.traj)

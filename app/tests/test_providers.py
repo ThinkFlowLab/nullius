@@ -1,6 +1,5 @@
 """The providers a run can start on, and the runners the builder offers:
-Harbor and the Nullius standard. A recipe of a runner no longer offered (a
-benchmark's own scripts, now its Original setup) is refused by one sentence,
+Harbor and the Nullius standard. A recipe of a runner no longer offered is refused by one sentence,
 the same in the page and the routes."""
 import os
 import sys

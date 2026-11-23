@@ -1,7 +1,6 @@
 """How fast a run starts its units when the provider says it is going too fast.
 
-The relay passes a 429 to the caller unchanged and never answers for the
-provider; a unit whose last model call was refused that way ends as
+A unit whose last model call got a 429 ends as
 ``RateLimitError``. Starting the next unit at once only sends it into the same
 limit, so after such an end no new unit starts for a while: a pause that
 doubles while units keep ending rate-limited (``FIRST`` seconds, a provider's

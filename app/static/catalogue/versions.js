@@ -1,5 +1,5 @@
-/* Version links still load the server's complete definition. Preserve the
-   reader's position only for this explicit navigation, not unrelated visits. */
+/* Preserve the reader's position only when a version link is followed,
+   not on unrelated visits. */
 (() => {
   const nav = document.querySelector('.std-versions');
   if (!nav) return;

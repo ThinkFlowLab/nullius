@@ -136,7 +136,7 @@ class Separation(unittest.TestCase):
     def test_tool_and_subagent_are_separated_by_lightness(self):
         # The binding pair. Dichromacy collapses orange and green toward the
         # same hue, so hue alone cannot carry them and equal lightness makes
-        # them identical — which is exactly how an earlier tuning failed.
+        # them identical.
         for scope, tokens in scopes().items():
             gap = abs(palette.lightness(palette.to_rgb(tokens["span-tool"]))
                       - palette.lightness(palette.to_rgb(tokens["span-subagent"])))
@@ -180,8 +180,7 @@ class NoHardcodedColours(unittest.TestCase):
     """Every waterfall rule goes through a token, so both themes stay in sync.
 
     Bounded to the waterfall's own sections rather than "everything after this
-    marker": a colour further down the file is somebody else's rule, and
-    failing their edit for our reason wastes their time.
+    marker": unrelated rules can follow the marker.
     """
 
     SECTIONS = ("agent trace waterfall", "breakdown + coverage strips",

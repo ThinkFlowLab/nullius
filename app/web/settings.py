@@ -110,7 +110,7 @@ def _engine(found: dict, whole: bool = False) -> str:
 
 def _capacity(cap: dict) -> str:
     """A machine's capacity in a few words: CPUs, memory, its GPUs and their
-    memory, rounded to whole GB (MB below one); Info has the exact values."""
+    memory, rounded to whole GB (MB below one)."""
     if not cap:
         return "Not tested"
     gb = lambda mb: f"{round(mb / 1024)} GB" if mb >= 1024 else f"{mb} MB"
@@ -127,7 +127,7 @@ def _machine(entry: str, label: str, host=None, found=None) -> dict:
     sd = (found or {}).get("systemd")
     return {"entry": entry, "label": label, "host": host, "found": found or {}, "engine_less": constraints.engine_less(found),
             "scope_ok": constraints.scope_ok(found),
-            # a scope's: what it held, or why there is none; the test probes with samples
+            # a scope's: what it held, or why there is none
             "scope": sd and {"why": sd.get("why", ""), "enforced": [label_of(k) for k in sd.get("enforced") or []],
                              "refused": [(label_of(k), constraints.explain(k, constraints.samples(cap.get("local") or cap).get(k, ""), why, scope=True)
                                           + ("; applied instead: the process can widen it" if getattr(constraints.BY_KEY.get(k), "machine", "") else ""))

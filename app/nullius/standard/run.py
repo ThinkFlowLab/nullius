@@ -10,7 +10,7 @@ capability process of its own, a home of its own, and a relay of its own.
 A relay per unit, not one for the run: a shared relay is one more thing whose
 failure stops every unit, and a network hop for a unit sandboxed elsewhere.
 One per unit costs a few megabytes and loses only a shared rate limit - each
-unit backs off on its own, as it always did. Its record sits in the trial's
+unit backs off on its own. Its record sits in the trial's
 ``.work/relay``.
 
 Backends (``backend``). ``local``: processes on this machine, which are
@@ -139,7 +139,7 @@ def setup_request(bench: dict, kind: str, attempt: Optional[int] = None) -> tupl
     ``kind`` runs (agent, capability, control): ``attempt`` when the benchmark tells attempts apart
     (``limits.attempts``), ``participant`` when its driver asks (``driver.participant``); the benchmark's
     ``limits.setup_seconds`` for an agent's unit,
-    ``DRIVER_SECONDS`` for any other. A run and a proof's checks build the request here, the one way."""
+    ``DRIVER_SECONDS`` for any other."""
     limits, drv = bench.get("limits") or {}, bench.get("driver") or {}
     sent = {"attempt": attempt} if attempt and limits.get("attempts") else {}
     if drv.get("participant"):
@@ -213,7 +213,7 @@ def forced_timeouts(given: Optional[dict]) -> Dict[str, float]:
 
 def key_header(provider: str, other: dict, env=os.environ) -> str:
     """How the agent's relay sends the key: by the protocol the agent (or capability) speaks on this
-    provider. Refused, as ``recipe.compile`` refuses it, on a provider that serves none of them."""
+    provider. Refused on a provider that serves none of them."""
     apis = (other.get("model") or {}).get("apis") or ["chat"]
     if provider not in providers.offered(apis, env):
         raise Refused(f"{providers.label(provider, env)} does not serve what {other.get('key') or 'the agent'} speaks "
@@ -226,8 +226,7 @@ def served_by(given, model: str) -> Dict[str, List[str]]:
     serving providers that may answer it, in the order they are tried, and no
     other (OpenRouter's slugs, as a model's page gives them: ``deepinfra``,
     ``deepinfra/fp8``). Without ``MODEL=`` it is the run's model. Refused as
-    ``relay.parse_served_by`` finds it wrong: the check the run and the
-    relay's own command make too."""
+    ``relay.parse_served_by`` finds it wrong."""
     out, bad = relay.parse_served_by(given, model)
     if bad:
         raise Refused("--served-by: " + "; ".join(bad))
@@ -453,9 +452,9 @@ def resolve_bench_options(bench: dict, dataset: str, given: Optional[dict] = Non
 
 class Run:
     call_seconds: float = relay.TIMEOUT
-    timeouts: Dict[str, float] = {}           # the run's own time limits by phase (__init__), none by default
+    timeouts: Dict[str, float] = {}           # the run's own time limits by phase (__init__)
     forced_turns: Optional[int] = None
-    max_calls: Optional[int] = None           # the run's cap on a unit's agent's model calls (__init__), none by default
+    max_calls: Optional[int] = None           # the run's cap on a unit's agent's model calls (__init__)
     def __init__(self, bench: dict, other: dict, *, model: str, provider: str, dataset: Optional[str] = None,
                  limit: Optional[int] = None, concurrency: int = 4, jobs_root: str = "jobs", name: Optional[str] = None,
                  turn_seconds: Optional[int] = None, say: Callable[[str], None] = print, env=os.environ,
@@ -473,7 +472,7 @@ class Run:
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: consent to execute code as the user: required for
         local agents, and for setup checks that run code without Docker.
-        ``backend``: ``local``, ``container`` (``docker``, its earlier name), which needs
+        ``backend``: ``local``, ``container`` (or ``docker``), which needs
         no such yes and is refused when docker is missing or not usable, or ``boat``;
         ``relay_container``: keep local task processes on the host but run each
         unit's relay in a separate container, as inside a whole-task Boat VM.
@@ -492,13 +491,13 @@ class Run:
         units.
         ``repeat``: each unit run that many times (a conformance check run for
         confidence, ``conform``), each run a trial of its own tagged
-        ``u0042r2``; once by default, tagged ``u0042`` as always. Each is an
+        ``u0042r2``; once by default, tagged ``u0042``. Each is an
         attempt, counted whatever its result.
         ``retries``: how many times an attempt that ended in a failure a
         further try may mend (``retry_if``, ``retries.retryable`` unless
         given: a proof run's is ``retries.rate_limited``) runs again, after
         the others and as many at once as the concurrency; each try before
-        is kept under the job's ``retried/``. 0 by default: none.
+        is kept under the job's ``retried/``.
         ``simulator_model``: a benchmark whose user a model plays
         (``simulator``): this model instead of its official one.
         ``prices``: this run's own prices, by model, over the user's list
@@ -510,8 +509,7 @@ class Run:
         ``max_usd``: the run's spending cap (``ledger``): every relay of the
         job books a call before sending it, and once one does not fit no
         further call goes out and nothing more is begun. Refused when a model
-        the run calls has no price: a call that cannot be priced cannot be
-        booked.
+        the run calls has no price.
         ``licences``: what the run holds of the benchmark's licences
         (:class:`Licences`); by default its store on this machine.
         ``bench_options``: the benchmark's own options for this run
@@ -756,7 +754,7 @@ class Run:
         self.name = name or (f"{stamp}__{definitions.job_word(bench)}__{definitions.job_word(other)}"
                              + (f"__shard-{self.shard[0]}of{self.shard[1]}" if self.shard else ""))
         self.job_dir = os.path.abspath(os.path.join(jobs_root, self.name))
-        # each stage said as it goes, on the cli's stderr and in the job's progress.jsonl (nullius/progress.py)
+        # each stage said as it goes
         self.progress = progress.Reporter(self.job_dir)
         self._said = threading.Lock()
         self.boat = boat.Backend(self.name, env, size=boat_size, say=say) if backend == "boat" else None
@@ -1089,14 +1087,13 @@ class Run:
             tag = self._counted.pop(n, None)
             if tag is not None and getattr(self, "ledger", None) is not None and self.unit_max_usd is not None:
                 try:
-                    self.ledger.forget(tag)      # the unit ended, no try of it to follow: its own count goes
+                    self.ledger.forget(tag)
                 except ledgers.Unavailable:
                     pass
 
     def run_again(self, results: List[dict], work: list, work_unit, done: Dict[str, dict], pool) -> None:
         """Each attempt that ended in a failure a further try may mend
-        (``retry_if``: a rate limit, a provider or setup error, an agent
-        crash), run again after the others, on the run's own ``pool`` (as
+        (``retry_if``), run again after the others, on the run's own ``pool`` (as
         many at once as its concurrency) and paced as the rest - a rate
         limit's retry not before the provider's pause is over - up to
         ``retries`` times. Each try before is moved into the job's
@@ -1121,7 +1118,7 @@ class Run:
             tries = {pool.submit(self.try_again, name, by_name[name], retry, work_unit): name for name in todo}
             pending = set(tries)
             while pending:
-                # timed, as the first pass: a Stop's signal is run in this thread
+                # Poll so this thread can handle Stop.
                 ended, pending = wait(pending, timeout=0.5, return_when=FIRST_EXCEPTION)
                 for future in ended:
                     res = future.result()
@@ -1163,7 +1160,7 @@ class Run:
                     shutil.rmtree(gone, ignore_errors=True)
                 os.replace(keep, here)
                 try:
-                    os.rmdir(os.path.dirname(keep))  # retried/ holds no try now: it goes
+                    os.rmdir(os.path.dirname(keep))
                 except OSError:
                     pass
         return res
@@ -1201,7 +1198,6 @@ class Run:
             if not_applied:
                 raise refusal("this machine's engine does not apply " + "; ".join(
                     f"{limits.BY_KEY[k].label} ({limits.explain(k, self.container_limits[k], why)})" for k, why in not_applied.items()))
-        # on the container backend the agent's packages are installed in the base image, with the Node, uv and libc it runs on
         image = self.image if self.backend == "container" else None
         run_in = (lambda cmd, where, env=None: container.install_argv(image, where, cmd, env)) if image else None
         try:
@@ -1520,7 +1516,7 @@ class Run:
                 exc, score = (ledgers.ERROR, late[0].get("error") or ""), None
         if self._stopped.is_set() and score is None:
             # the Stop ended its agent, its relay or its containers under it: what it then failed with is
-            # the Stop's doing, not the agent's nor the environment's (Harbor's name for a stopped trial)
+            # the Stop's doing, not the agent's nor the environment's
             exc = (CANCELLED, "the run was stopped before this unit ended" + (f"; it then failed with {exc[0]}" if exc else ""))
         if traj is None and self.other["_kind"] == "agent":
             traj = job.trajectory_from_events([], calls, self.other, self.model, f"{self.name}/{unit}")
@@ -1549,7 +1545,7 @@ class Run:
         if exc and exc[0] == ledgers.ERROR and getattr(self, "_halt", None) is not None:
             with self._said:
                 self._cut.append(self.attempt_name(unit, r))
-            self._halt.set()                     # the cap is reached: nothing more is begun
+            self._halt.set()
         elif exc and exc[0] == ledgers.UNIT_ERROR:
             with self._said:
                 self._over.append(self.attempt_name(unit, r))     # its own cap: the others go on
@@ -2054,8 +2050,7 @@ class Run:
             cfg = container.image_config(image)
             mounted, runtimes = [], {}
             if self.other["_kind"] == "agent":
-                # as on the base: its home, its install and definition, its MCP servers' files -
-                # never this application's folder nor the benchmark's; and what it runs on, under /opt/nullius
+                # as on the base: the unit home, install, definition, and MCP files, and what it runs on, under /opt/nullius
                 mounted = container.mounts([home, *getattr(rl, "unit_rw", [])],
                                            [self.inst, self.other.get("_here")],
                                            getattr(rl, "unit_files", []))
@@ -2243,7 +2238,7 @@ class Run:
     def agent_limit(self, setup: dict) -> float:
         """How long the agent's whole work on a unit may take, every turn of a conversation included:
         the run's own (``timeouts["agent"]``), else the unit's when its ``setup`` names one
-        (``agent_seconds``: a task that declares its agent timeout, as Terminal-Bench's task.toml does),
+        (``agent_seconds``: a task that declares its agent timeout),
         else the run's ``turn_seconds``."""
         if self.timeouts.get("agent"):
             return self.timeouts["agent"]
@@ -2283,10 +2278,9 @@ class Run:
                     # the agent never answered its start: this unit's setup failed, not the run
                     raise _Ended("AgentSetupTimeoutError", f"the agent did not answer {e} in time ({c.tail()})")
                 if clock is not None:
-                    clock["ready"] = time.time()         # started and in its session: its setup ends, its run begins
+                    clock["ready"] = time.time()
                 prompt = setup["prompt"]
                 answer = ""
-                # one limit for the agent's whole work on the unit, every turn and the simulated user's between them
                 limit = self.agent_limit(setup)
                 self.phase(name, unit, "agent_run", limit)
                 deadline = time.monotonic() + limit

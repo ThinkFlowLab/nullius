@@ -1,8 +1,4 @@
 """A judge batch asks several trials at once, in their order, and stops on a refused key.
-
-Judge all, a comparison's sides and task instructions asked one trial at a
-time inside the click's request: a 500-trial job at 2-5 s a call took most
-of an hour.
 """
 from __future__ import annotations
 

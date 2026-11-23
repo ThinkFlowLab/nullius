@@ -5,9 +5,7 @@ The Benchmarks page's *Add a Harbor benchmark* form uses two steps:
 - :func:`read` asks Harbor about a dataset, on the hub (``org/name``) or in
   the registry (``name@version``): how many tasks, its description and
   version, and the limits one of its tasks declares in its ``task.toml`` -
-  the environment build, the agent and the verifier. Harbor applies those
-  limits to every trial, so they are what the builder's timeouts start
-  from. Agent setup is the agent's own default, Harbor's 360 s.
+  the environment build, the agent and the verifier.
 - :func:`build` turns the form into a ``benchmark.json`` and :func:`save`
   writes it to ``benchmarks/<key>/``, after the catalogue's own checks
   (:func:`catalog.validate`) pass on the catalogue with it added. An
@@ -17,7 +15,7 @@ The Benchmarks page's *Add a Harbor benchmark* form uses two steps:
   does not show, and :func:`update` writes it back over itself.
 
 Only Harbor routes: a Nullius route is brought in by ``/import-benchmark``,
-then ``/import-standard``. Nothing here imports Flask; Harbor is reached through a ``fetch``
+then ``/import-standard``. Harbor is reached through a ``fetch``
 seam.
 """
 from __future__ import annotations
@@ -240,8 +238,7 @@ def save(entry: dict, root: str | None = None) -> str:
 
 # what the form shows of an entry, and so what a save of it replaces; anything
 # else an entry holds (its report block, a branch, notes)
-# is kept as it is. status, status_note and experiment are an older entry's
-# words for its origin, and todo its open work, no longer kept: a save drops them
+# is kept as it is. Saving drops legacy ``status``, ``status_note``, ``experiment`` and ``todo`` fields.
 FORM_FIELDS = ("title", "category", "domain", "scoring", "harness", "status", "status_note", "origin",
                "experiment", "upstream_limitations", "limitations", "todo", "timeouts", "citation", "citation_source")
 DATASET_FIELDS = ("key", "title", "tasks", "official", "source", "hub", "registry", "verifier")
@@ -262,8 +259,7 @@ def entry_of(key: str, root: str | None = None) -> dict | None:
 
 def not_editable(entry: dict) -> str:
     """Why the form cannot edit this entry, or ''. It edits a Harbor entry
-    with one dataset, on the hub or in the registry; an entry that also runs
-    on the Nullius standard is edited in its files, with the /import-standard skill."""
+    with one dataset, on the hub or in the registry."""
     if entry.get("harness") != ["harbor"]:
         return "an entry on the Nullius standard is edited in its files (the /import-standard skill)"
     ds = entry.get("datasets") or []
@@ -353,8 +349,7 @@ def harbor_route(old: dict, values: dict) -> dict:
     """``old`` - a benchmark run on the Nullius standard - with a Harbor route
     added: the form's dataset appended to its datasets, ``harbor`` to its
     harnesses, the limits its tasks declare when it had none. Everything
-    else the entry says stays: it is one benchmark, run either way, and one
-    card. The dataset's key is the form's, else ``<key>-harbor``."""
+    else the entry says stays. The dataset's key is the form's, else ``<key>-harbor``."""
     built = build(dict(values, key=old["key"], title=values.get("dataset_title") or old.get("title", "")))
     d = built["datasets"][0]
     d["key"] = (values.get("dataset_key") or "").strip() or f"{old['key']}-harbor"

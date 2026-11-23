@@ -23,10 +23,4 @@ rendered page, one package per purpose:
 - `execution`, `hosts`, `gitrefs` — running a recipe here or on a host, the
   hosts and their keys, a repository's branches and tags.
 - `workspace`, `settings`, `redact` — cross-cutting, at the top.
-
-**These are Nullius's own implementations**, each with the tests that pin it;
-nothing in this application installs another package to run.
-
-One name, one implementation: `app/tests/test_dependency_surface.py` counts
-providers so a local package cannot shadow an installed distribution.
 """

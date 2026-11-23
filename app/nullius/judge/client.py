@@ -11,11 +11,10 @@ that serves its protocol:
 - **The LLM judge**, any chat model named in Settings (``chat``, or Anthropic's
   ``messages``), asked to answer every question in one JSON object. Its numbers
   are what the model states, so a Choice or a Score carries no confidence; the
-  record names the provider and the model, and the pages say which judge spoke.
+  record names the provider and the model.
 
 The key goes in the header and nowhere else - not in argv, not in a log,
-not in the record. The transport is a call-time seam, so the suite asks a
-fake and the page code is exercised without a network."""
+not in the record."""
 from __future__ import annotations
 
 import json
@@ -93,7 +92,7 @@ def _choice(raw) -> str:
 
 def _table(protocols, env, known: bool) -> dict:
     """{choice: {label, url, key, ready, protocol, fit, listed}} of every provider that may serve one of
-    ``protocols``, ready or not (Settings shows one once its key is saved): ``fit`` the ones it may serve,
+    ``protocols``, ready or not: ``fit`` the ones it may serve,
     ``listed`` the ones it lists, ``protocol`` the first of them. ``known``: only those that list one."""
     out = {}
     for rec in providers.records(env):
@@ -311,7 +310,7 @@ def http_post(url: str, body: dict, key: str, timeout: float = 120.0, auth: Opti
         if not isinstance(detail, dict):
             detail = {}
         if e.headers and e.headers.get("Retry-After"):
-            detail[RETRY_AFTER] = e.headers.get("Retry-After")       # how long the provider asked to wait
+            detail[RETRY_AFTER] = e.headers.get("Retry-After")
         return e.code, detail
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise JudgeError(0, f"no answer from the judge: {getattr(e, 'reason', e)}") from e

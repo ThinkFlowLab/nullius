@@ -102,7 +102,7 @@ def record_problem(name: str, value: str) -> Optional[str]:
     fixed = [k for k in ("name", "base", "key") if preset and k in rec]
     if fixed:
         return f"a record without {', '.join(fixed)}: they are fixed for {PRESETS[preset]['name']}"
-    if rec.get("name") is not None and (not isinstance(rec["name"], str) or not 0 < len(rec["name"]) <= 400    # as MODEL_<ID>_NAME was
+    if rec.get("name") is not None and (not isinstance(rec["name"], str) or not 0 < len(rec["name"]) <= 400
                                         or any(ord(c) < 32 for c in rec["name"])):
         return "a record whose name is one line of 400 characters at most"
     if rec.get("base") is not None and (not isinstance(rec["base"], str) or settings.endpoint_url_problem(rec["base"])):
@@ -144,7 +144,7 @@ def record(choice: str, env=None) -> dict:
     preset = PRESETS.get(p)
     own = settings.json_object(env.get(setting_of(choice))) if setting_of(choice) else None
     if own is not None and record_problem(setting_of(choice), json.dumps(own)):
-        own = None                            # a record that does not validate is no record: Settings says why
+        own = None                            # a record that does not validate is no record
     rec = settings.merge_patch({k: v for k, v in (preset or {}).items()}, own or {})
     if preset:
         rec.update({k: preset[k] for k in ("name", "base", "key")},
@@ -220,21 +220,18 @@ def auth(protocol: str, key: str) -> dict:
     return {"Authorization": "Bearer " + key} if key else {}
 
 
-# The builder's steps (command-builder-core.js, STEP): an error names the step that edits it.
+# The builder's steps (command-builder-core.js, STEP).
 STEP = {"benchmark": 0, "runner": 1, "dataset": 2, "setup": 3, "agent": 4, "model": 5, "limits": 6, "where": 7, "review": 8}
 
-# Harbor's card on the builder's Runner step: compiled by the builder's own core
-# (static/builder/command-builder-core.js), not by the application.
+# Harbor's card on the builder's Runner step.
 HARBOR = {"key": "harbor", "label": "Harbor", "builtin": True,
           "summary": "Task directories in containers, with the oracle and nop bracket."}
 
-# A recipe whose harness is neither Harbor nor the standard: a runner of a benchmark's own scripts,
-# no longer offered - those scripts run as the benchmark's Original setup on the Nullius runner.
+# Said to a recipe whose harness is neither Harbor nor the standard.
 GONE = ("The Native runner is no longer offered: the benchmark's own code runs as its Original setup "
         "on the Nullius runner.")
 
-# The providers a run is sent to, in the order the builder prefers them. A run asks for what its agent
-# speaks, so the builder offers each only where its protocols fit (``offered``).
+# The providers a run is sent to, in the order the builder prefers them.
 PROVIDERS = ("openrouter", "openai", "anthropic", "custom")
 
 
@@ -295,7 +292,7 @@ def needs(value: str) -> str:
 
 def offered(apis, env=None) -> List[str]:
     """The run providers that may serve a consumer speaking ``apis``: every custom one, a preset only
-    when it lists one of them. Anthropic is not offered to a ``chat``-only agent."""
+    when it lists one of them."""
     return [p for p in PROVIDERS if any(serves(record(p, env), a) is not False for a in apis)]
 
 

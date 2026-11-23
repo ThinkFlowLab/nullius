@@ -8,10 +8,7 @@ known instant as a zero-length measurement, or dividing by a zero extent and
 rendering NaN as 0%.
 
 Several cases are pinned against the real capture in fixtures/trace_rich.json
-rather than a hand-built tree, because the awkward shapes here — a child
-starting before its parent, a parent and child sharing a label, span ids that
-are not OTel ids — were all found in real output and none of them would have
-been invented.
+to cover shapes found in production traces.
 """
 
 import json
@@ -152,7 +149,7 @@ class TotalsAreVerbatim(unittest.TestCase):
             self.assertEqual(getattr(totals, key), source[key], key)
 
     def test_reported_tool_time_is_not_the_sum_of_tool_spans(self):
-        # This is the whole point. Everything the instrumentation called a tool
+        # Everything the instrumentation called a tool
         # here sums to 46.1ms against a true 23.3ms, because the `claude_code.tool`
         # wrapper contains both of the spans it is being added to.
         tr = trace.load(RICH)
@@ -323,7 +320,7 @@ def wrapper(self_ns=0, label="Bash", inner_kind="tool"):
 class Groups(unittest.TestCase):
     """A span that is a namespace for its children, not an event of its own.
 
-    Two shapes, both of which drew one measurement as two rows. Harbor opens
+    Harbor opens
     `claude_code.tool` carrying `tool_name: "Bash"` and puts the permission wait
     and the actual Bash execution inside it; and an `llm_request` can hold a
     single content block of byte-identical extent, because a one-block response
@@ -386,7 +383,7 @@ class Groups(unittest.TestCase):
 
     def test_a_kind_that_already_brackets_its_children_is_left_alone(self):
         # `session` and `subagent` never claimed to be work, and the breakdown
-        # already charges them nothing. Renaming them adds noise, not honesty.
+        # already charges them nothing.
         for kind in ("session", "subagent"):
             outer = span("outer", 0, 100 * MS, kind=kind, children=[
                 span("inner", 0, 100 * MS, kind="llm_request"),
@@ -456,9 +453,6 @@ class Groups(unittest.TestCase):
 
 class DegradedTrace(unittest.TestCase):
     """The exporter captured nothing and the producer fell back to log parsing.
-
-    Two thirds of early real captures looked like this. Building only against a
-    rich capture ships an empty-looking view for most runs.
     """
 
     def test_zero_measured_spans_is_surfaced(self):

@@ -1,8 +1,7 @@
 # Settings
 
 Configure model and data providers, judges, custom keys, hosts and Docker.
-Existing results open without credentials. Model provider, agent key and host
-changes save automatically; data providers and benchmark credentials use **Save**.
+Existing results open without credentials.
 
 | Page | Sets |
 | --- | --- |
@@ -14,7 +13,7 @@ changes save automatically; data providers and benchmark credentials use **Save*
 | [Hosts](run-hosts.md) | SSH machines |
 | [Data providers](data-providers.md) | Hugging Face and Docker Hub connections |
 | [Sandbox](sandbox.md) | Docker on this machine, the Boat key |
-| [General](other.md) | Tour and checklist; start-up options remain in the environment |
+| [General](other.md) | Tour and checklist |
 
 ## Variables
 
@@ -62,18 +61,15 @@ and job roots also have command-line options. The app does not load `app/.env`.
 | Writes | The user configuration directory's `settings.json`, mode 0600, including saved provider credentials |
 | Edited by hand | Read on the next page, no restart |
 | Precedence | The process environment wins; its row is read-only |
-| Keys | No provider-specific length check; values must be single-line and contain no spaces. Agent key names use environment-variable syntax, without a length limit |
+| Keys | Single-line, no spaces. Agent key names use environment-variable syntax |
 | Secrets | Provider values are masked; custom-key rows show their saved status, never the value |
-| Guards | Its own address in the Host header, loopback browser, same origin, form token |
-| Out of date | A page loaded before a restart, or rendered by other templates, static files or web routes, says so once: reload it |
+| Out of date | A page loaded before a restart says so once: reload it |
 | Validation | One bad value, nothing written |
-| Code | `app/nullius/settings.py`; `app/.env.example` documents variable names for scripts and migration |
 
 ## Storage
 
 `nullius paths` (or `nullius paths --json`) shows the active locations without
-credential values. These Linux defaults are independent of the working
-directory and installation:
+credential values. Linux defaults:
 
 | Stores | Default |
 | --- | --- |
@@ -100,8 +96,7 @@ catalogue folder replaces the entire bundled folder of the same kind and key;
 files are never mixed between them. Standard commands that edit a bundled
 definition first copy that entry to the user catalogue. On a customized benchmark,
 agent or capability page, **Use bundled entry** removes that copy and its local
-proof records. Saved runs, results and credentials stay unchanged. This selects
-the entry shipped with Nullius; it does not create another benchmark version.
+proof records. Saved runs, results and credentials stay unchanged.
 
 ## Migrate an existing checkout
 
@@ -113,14 +108,13 @@ nullius migrate --from /path/to/old-checkout --apply
 | Rule | Behavior |
 | --- | --- |
 | Preview | File counts and conflicts; no credential values |
-| Settings | Copies `app/.env`; it is never loaded automatically |
+| Settings | Copies `app/.env` |
 | Workspaces | Preserves an explicit `WORKSPACES_DIR`; otherwise copies the checkout's workspaces |
 | Runs | Stay at their original paths; keep those directories available |
 | Benchmark credentials | Include with `--secrets /path/to/old/secrets` |
 | Linked folders | Selected storage roots can point to another disk; links inside copied contents are refused |
 | Conflicts | Differing destination files or folder contents stop the copy |
-| Catalogue | User copies override bundled updates; **Use bundled entry** on the entry's page restores the bundle |
-| Source | Unchanged; migrating the running checkout copies all its entries because no independent baseline exists |
+| Source | Unchanged; migrating the running checkout copies all its entries |
 
 Set `NULLIUS_HOME` before both commands to migrate into a separate profile.
 

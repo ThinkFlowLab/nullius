@@ -4,8 +4,7 @@ A benchmark that runs with Harbor and the Nullius standard reads its data two
 ways: Harbor from its registry or hub, the standard from the upstream it pins
 (a repository at a commit, or a file at a revision) or from the Hugging Face
 dataset its driver downloads (``data-source.json``: ``repository`` and
-``revision``). Each row names the source, the pin and who fetches it - always
-the harness, on a run, never the person - and the files a definition
+``revision``). Each row names the source, the pin and who fetches it and the files a definition
 checks by their sha256. Nothing here reads the network: it reads the
 catalogue entry and the definitions beside it.
 """

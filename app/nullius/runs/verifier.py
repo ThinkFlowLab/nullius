@@ -1,9 +1,7 @@
 """The verifier's own report, read as the benchmark's entry describes it.
 
-Everything else this app reads is Harbor's and the same for every benchmark:
-``result.json``, ``config.json``, ``exception_info``, ``trace.json``, the ATIF
-trajectory and ``verifier_result.rewards.reward``. The verifier's report is the
-exception - one benchmark writes a ``report.json``, another a CTRF
+The verifier's report is each
+benchmark's own - one benchmark writes a ``report.json``, another a CTRF
 ``ctrf.json`` - and its keys are the benchmark's. So no code here names them:
 a benchmark's ``benchmark.json`` carries a ``report`` block, and this module
 reads any report by it::
@@ -66,8 +64,7 @@ UNREAD = Verdict()
 class Vocabulary:
     """The benchmark's own names for its checks on screen (``report.words``).
 
-    `None` means the benchmark has no such category, and the pages leave the
-    row or column out rather than dash it under a foreign label. `has_patch`
+    `None` means the benchmark has no such category. `has_patch`
     gates the "Patch applied" card the same way.
     """
 
@@ -80,8 +77,7 @@ class Vocabulary:
     has_patch: bool = False
 
 
-# What a benchmark without a report block gets: no named categories, so the
-# check columns and patch cards are simply not drawn.
+# What a benchmark without a report block gets: no named categories.
 GENERIC_VOCABULARY = Vocabulary()
 
 
@@ -164,7 +160,7 @@ def _checks(doc, spec) -> tuple[int, int, tuple]:
         tests = [t for t in (_dig(doc, spec["tests"]) or []) if isinstance(t, dict)]
         name, status = spec.get("name", "name"), spec.get("status", "status")
         failing = tuple(str(t.get(name, "")) for t in tests if t.get(status) == spec.get("fail", "failed"))
-        # the producer's own counts when it gives them, as trace totals are taken
+        # the producer's own counts when it gives them
         passed = _dig(doc, spec["count_pass"]) if spec.get("count_pass") else None
         failed = _dig(doc, spec["count_fail"]) if spec.get("count_fail") else None
         if passed is None and failed is None and tests:

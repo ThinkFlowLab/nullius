@@ -33,7 +33,7 @@ import os
 import sys
 import tomllib
 
-# Fast to build, their reference solutions fetching nothing: the first ones build in seconds.
+# Fast to build, their reference solutions fetching nothing.
 SMALL = ["cancel-async-tasks", "regex-log", "sqlite-db-truncate", "fix-git", "polyglot-c-py",
          "git-leak-recovery", "sanitize-git-repo", "extract-elf"]
 
@@ -68,8 +68,7 @@ INTERNET = [
 ALL = sorted(OFFLINE + INTERNET)
 DATASETS = {"small": SMALL, "offline": OFFLINE, "full": ALL}
 
-# The prebuilt image each task's task.toml names (environment.docker_image, the one Harbor runs unless told
-# to build), by the digest its tag had when pinned here (Docker Hub, 2026-10-14).
+# The prebuilt image each task's task.toml names (environment.docker_image), by the digest its tag had when pinned here (Docker Hub, 2026-10-14).
 IMAGES = {
     "bn-fit-modify": "docker.io/alexgshaw/bn-fit-modify@sha256:5aeb11ca6e802b83816c9a31f055ac9d028309a853509400c2e3139ac2d8380d",
     "break-filter-js-from-html": "docker.io/alexgshaw/break-filter-js-from-html@sha256:d7bfb45e47cf10d2e21dc520239215498f4eba9c1ab2d0cd7d647985dddb4fa8",
@@ -170,8 +169,7 @@ PULL = {"fix-git"}
 IMAGE = os.environ.get("NULLIUS_OPTION_IMAGE", "build")
 LOGS = "/logs/verifier"
 
-# Tasks whose tests talk to a service the agent was asked to start and leave running (a mail server, an
-# SSH or telnet login into a VM, a web server behind a push hook): what the agent left running is kept
+# Tasks whose tests talk to a service the agent was asked to start and leave running: what the agent left running is kept
 # for their check. Every other task's check runs with nothing of the agent's still running.
 KEEP_PROCESSES = {"git-multibranch", "mailman", "qemu-alpine-ssh", "qemu-startup",
                   "configure-git-webserver", "kv-store-grpc", "nginx-request-logging", "pypi-server"}

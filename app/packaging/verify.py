@@ -5,7 +5,7 @@
 Requires uv. Installs only into the temporary environment; never runs a
 benchmark, opens a browser/server, or reads the caller's settings or secrets.
 The backend is exercised before Flask is installed, then the installed web
-application is rendered through its test client. Nothing is published.
+application is rendered through its test client.
 """
 from __future__ import annotations
 

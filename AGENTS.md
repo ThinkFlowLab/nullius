@@ -29,11 +29,9 @@ a recipe without a pin runs whatever `harbor` is on the target's PATH.
 The job records which one ran.
 
 Application code lives under `app/`; topic documentation lives under `docs/`.
-**New code goes under `app/`**, never loose at the root. `README.md`
-and `AGENTS.md` sit at the top because that is where people look for them;
-there is no `CLAUDE.md`, assistants read this file. Root `pyproject.toml`
+**New code goes under `app/`**, never loose at the root. Root `pyproject.toml`
 builds the `nullius-eval` distribution: `nullius` is the backend, `_nullius_app` is the UI
-and its resources. The source layout stays under `app/`.
+and its resources.
 
 - `app/app.py` — the entry point: the application object from `app/web/core.py`,
   the capability modules imported so each registers its routes, `main()`.
@@ -53,7 +51,7 @@ and its resources. The source layout stays under `app/`.
   `catalogue/` (`catalog`, which loads one folder per benchmark
   under `catalogue/benchmarks/`, named by its key: its `benchmark.json` with its
   datasets nested in it, its `report` block and its `standard.json` when it runs on the standard;
-  `verifier` in `runs/` reads a verifier's report by that block; `harbor_entry`,
+  `harbor_entry`,
   a Harbor benchmark added from the Benchmarks page's form; `citation`, an entry's
   BibTeX read into the paper its page shows; `storage`, whole-folder user overlays and restoring bundled entries; `sources`, where each dataset's data comes
   from for each way it runs), `recipes/`
@@ -91,9 +89,9 @@ and its resources. The source layout stays under `app/`.
   sections under `docs/` from explicit bundled catalogue roots, never user overlays: each section's README block and
   a page per benchmark, agent and capability (`test_catalogue_docs.py` fails
   when they are stale). The fixtures under `app/tests/fixtures/` are small and
-  hand-made; no recorded run is kept.
+  hand-made.
 - `app/site/` — the static website: MkDocs configuration and
-  source staging. It publishes `docs/`, including the metric field guide.
+  source staging. It publishes `docs/`.
   `diagrams.py` draws the figures under `docs/diagrams/`
   (`--write` after a change; `test_site.py` fails when they are stale).
   `readme_media.py` draws the README’s animated SVGs under
@@ -101,9 +99,7 @@ and its resources. The source layout stays under `app/`.
   Build dependencies are isolated in `app/site/requirements.txt`;
   build, preview and publishing instructions are in `app/site/README.md`.
 - `docs/` — the introduction, quickstart, concepts and results guides; `settings/`,
-  `benchmarks/`, `agents/` and `capabilities/` hold focused guides; plus topic pages (`builder.md`, `judgement.md`, `settings/README.md`,
-  `cli/`, one page per topic of the CLI) and the example of a new benchmark. Validations, captures and rendered reports are not kept
-  here; tests are the proof.
+  `benchmarks/`, `agents/` and `capabilities/` hold focused guides; topic pages and the example of a new benchmark. Keep validations, captures and rendered reports out of `docs/`.
 
 Benchmark integrations expose one current entry with supported behavior as options.
 Internal driver changes do not create selectable versions. Reserve benchmark versions
@@ -113,19 +109,14 @@ for explicit upstream releases or requested forks; retain only applicable proofs
 
 **Flask is the application's only direct runtime dependency.** Nullius itself
 is installed with `uv tool install nullius-eval` from PyPI, selecting the latest
-version unless one is explicitly pinned. Downloaded wheels and source builds
-remain available; the executable is `nullius` and storage paths keep that name. The
-Harbor a recipe runs is its pin's, run through `uvx` (or the target's own, for
-a recipe without a pin), and the viewer never imports it.
+version unless one is explicitly pinned. The executable is `nullius`.
 
 `nullius paths` lists persistent locations. On Linux, settings, the model price
 list and benchmark licences live under `~/.config/nullius/`, user catalogue entries, workspaces,
 runs, saved builder recipes and standard installs under `~/.local/share/nullius/`, and caches under
 `~/.cache/nullius/`. XDG variables move those roots; `NULLIUS_HOME` selects a
-separate profile with `config/`, `data/` and `cache/`. Existing storage overrides
-still apply. Settings saves owner-only JSON; process environment values win.
-No personal data belongs inside the installed package. Tests isolate these
-locations with temporary profiles. See `docs/getting-started.md` for installation
+separate profile with `config/`, `data/` and `cache/`. Settings saves owner-only JSON; process environment values win.
+No personal data belongs inside the installed package. See `docs/getting-started.md` for installation
 and migration, and `docs/settings/README.md` for paths and precedence.
 
 ## Instruction Priority
@@ -141,16 +132,11 @@ and migration, and `docs/settings/README.md` for paths and precedence.
 
 Three dependency rules. Each is load-bearing and each has a test.
 
-- **`app/nullius/` imports no Flask.** The backend is exercisable from a bare
-  shell or a notebook. `test_charts.NoFlask` checks every module in the
-  package, not one file. If a test in `app/tests` needs Flask, the layering
+- **`app/nullius/` imports no Flask.** `test_charts.NoFlask` checks every module. If a test in `app/tests` needs Flask, the layering
   has broken, not the test.
 - **One name, one implementation per interpreter.**
   `app/tests/test_dependency_surface.py` counts *providers* of `nullius` and
-  fails when there is more than one. A local package can shadow an installed
-  distribution, so successful imports alone do not prove this constraint.
-  Source tests use the checkout; wheel checks use an isolated interpreter
-  outside it. The wheel carries the backend once, separate from `_nullius_app`.
+  fails when there is more than one. A local package can shadow an installed distribution, so successful imports alone do not prove it.
 - **The templates' field contract is pinned.** Templates read Python data objects (such as Job, Trial and Verdict)
   by attribute name, and no import catches a renamed field —
   it surfaces as a blank cell or an `UndefinedError` at request time.
@@ -179,14 +165,13 @@ When invoking unittest directly, set `NULLIUS_HOME` to a temporary directory
 and unset personal catalogue/storage overrides before discovery.
 
 ```bash
-# no Python dependencies; git and uv/uvx are test tools
 python3 app/tests/parallel.py
 
 # with the docker tier: the tests that build and run containers for real
-# (app/tests/docker_tier.py), skipped otherwise; CI runs them nightly
+# (app/tests/docker_tier.py), skipped otherwise
 python3 app/tests/parallel.py --docker
 
-# only the route suite needs Flask
+# route suite
 uv run --no-project --with-requirements app/requirements.txt \
   python app/tests/parallel.py app/ui_tests
 
@@ -199,13 +184,10 @@ nullius serve
 # from a source checkout
 uv run --no-project --with-requirements app/requirements.txt app/app.py jobs
 
-# the templates' field contract: refresh the pin after a deliberate change to a
-# rendered class (the backend suite checks it; the refresh refuses while any
-# module cannot be imported)
+# refresh the templates' field contract
 python3 app/tests/field_contract.py --write
 
-# the Supported sections, a page per benchmark, agent and capability: refresh them after
-# a change to a definition under app/nullius/catalogue (the backend suite checks them)
+# refresh the Supported sections after a catalogue definition changes
 python3 app/tests/catalogue_docs.py --write
 
 # the importer registry: ATIF and OpenTelemetry
@@ -231,24 +213,11 @@ overrides an explicit `DEBUG=1` environment setting.
 
 See `app/packaging/README.md`, `docs/releases/` and `app/site/README.md`.
 
-**UI checks:** routine interface changes require relevant unit and route tests
-plus focused browser checks of the affected pages and interactions, including
-the themes and viewport sizes the change affects. Full screenshot coverage is
-nightly or manually requested, not required after every UI change. The
-`UI sweep` workflow (`.github/workflows/ui-sweep.yml`) is configured for 02:17 UTC
-nightly (`17 2 * * *`) and `workflow_dispatch`, with no push or pull-request
-trigger. Once it is on the default branch, use **Actions → UI sweep → Run
-workflow**, optionally supplying a benchmark key; leave it empty for full
-coverage. The isolated Flask/Playwright runner prints the report to the log,
-keeps no artifact (artifacts count against the account's storage), and fails
-on page JavaScript errors or clipped text. Screenshots are the local sweep's
-and need visual review; there is no pixel-baseline comparison.
-The `/ui-sweep` skill (`.claude/skills/ui-sweep/SKILL.md`) documents the local CLI
-and optional `--only KEY` for focused checks.
+**UI checks:** `.claude/rules/ui.md`. The `UI sweep` workflow runs nightly and by hand. A benchmark key narrows it. It fails on page JavaScript errors or clipped text. Screenshots are the local sweep's
+and need visual review.
 
 **The PR judge** (`.github/workflows/judge-pr.yml`, running
-`.github/scripts/judge_pr.py`, standard library only, nothing of the
-application imported) comments on every pull request: two ratings, then a
+`.github/scripts/judge_pr.py`) comments on every pull request: two ratings, then a
 table of questions. **Merge risk** (minor, medium, significant, major,
 severe) is the TypeSafe judge's reading of what happens if the change merges
 and is wrong, floored by the script (a deleted test, a key-shaped string or a
@@ -261,20 +230,10 @@ without one is judged whole), whether the issue and the PR describe the same
 change, whether the description matches the diff, whether the diff stays in
 scope, whether tests or the `## Verified` section cover it, whether the docs
 follow, whether `## Risk` names what could break; `## Before and after` is
-counted by the script when the diff touches what is visible. A PR that links
-no issue reads `–` on the issue rows. Folded: the per-criterion table and the
-script's own checks (no machine attribution trailer, new code under `app/`,
-no Flask import under the backend, no key-shaped string). Everything the
+counted by the script when the diff touches what is visible. Issue rows show `–` when the PR links no issue. Everything the
 judge reads has been through `redact` first: key-shaped strings and email
-addresses never leave the runner. The verdict is a new comment on every run
-with the earlier ones collapsed as outdated, never deleted, and the step
-summary (cost and calls there, never in the comment). Automatic judging skips
-draft PRs; a `/judge` comment from an owner, member or collaborator asks again
-on the same commit, including a draft. An eligible newer judge job cancels the
-older one for that PR; other comments cannot cancel it. The test workflow also
-cancels older runs for the same ref. Experimental:
-never a required check; without the secret `TYPESAFE_API_KEY` (or
-`API_KEY_TYPESAFE`, the older name) it reports "not configured" and stays
+addresses never leave the runner. `/judge` from an owner, member or collaborator asks again, a draft included. Experimental:
+never a required check; without the secret `TYPESAFE_API_KEY` (or `API_KEY_TYPESAFE`) it reports "not configured" and stays
 green. Offline: `python3 .github/scripts/judge_pr.py --pr-file pr.md
 --diff-file pr.diff [--issue-file issue.md] --dry` builds the states and asks
 nothing.
@@ -282,12 +241,10 @@ nothing.
 **Run analysis** is the `/run-analysis` skill
 (`.claude/skills/run-analysis/SKILL.md`): triage of a run that failed or looks
 wrong, an analysis of one job, or a comparison of several, written up as one
-self-contained page. Its script, `.claude/skills/run-analysis/scripts/runs.py`
-(standard library only, no import from `app/`, reads the job trees and writes
-only what `--out` names), prints health verdicts, computes the metrics and
+self-contained page. Its script, `.claude/skills/run-analysis/scripts/runs.py`,
+prints health verdicts, computes the metrics and
 renders the page from the template beside it; the findings and the prose are
-the assistant's, by the procedure in the SKILL.md. Nothing in it is specific to
-one assistant or one benchmark.
+the assistant's, by the procedure in the SKILL.md.
 
 ## Conventions
 
@@ -314,35 +271,31 @@ other session metadata, no generated-by signature. Keep the message about the
 change and why it was made.
 
 **Legitimate human co-authors are preserved.** A `Co-Authored-By` naming a real
-person who contributed is correct and expected; this rule removes machine
-trailers, not people.
+person who contributed is correct and expected.
 
-Two things enforce it, so it does not depend on anyone remembering:
+Two things enforce it:
 `.claude/settings.json` sets `attribution` to empty for `commit` and `pr` with
 `sessionUrl` off, and a `commit-msg` hook in the shared Git directory rejects
 machine signatures while allowing human co-authors. **Do not bypass the hook**
 (no `--no-verify`).
 
 Existing commits are **not** rewritten. Do not amend, rebase or force-push to
-strip trailers from history; what is already there is the repository
-owner's to audit. The rule applies to the next commit, not the last one.
+strip trailers from history.
 
-The metric field guide (`docs/field-guide.md`, published in the documentation
-under Reference → Metrics) is a living document: a change that alters what it
+The metric field guide (`docs/field-guide.md`) is a living document: a change that alters what it
 defines updates it in the same change. `app/tests/test_field_guide.py` fails
 when a field it names leaves the backend, when its stated counts stop
 matching its tables, or when its outcome vocabulary stops being the
 classifier's; what each metric means is still read by a person.
 
 The builder saves and imports recipes as JSON. Review runs them through the
-execution backend; script previews and downloads are not part of the interface.
+execution backend.
 `app/ui_tests/test_recipe_execution_fixtures.py` pins the compiled execution plans.
 
 ### Issues
 
 Before opening anything, **search existing issues *and* pull requests** —
-across the repositories involved, not just this one. A duplicate costs more
-than the search does, because it splits the evidence.
+across the repositories involved, not just this one.
 
 An issue carries enough to act on without a conversation. The forms under
 `.github/ISSUE_TEMPLATE/` (Bug, Enhancement) hold the fields: **Priority**
@@ -375,8 +328,7 @@ Where it goes:
 
 How it is kept:
 
-- **Set the native Type and Priority when the issue is created.** An empty
-  field is invisible in a list; where the priority is genuinely undecided,
+- **Set the native Type and Priority when the issue is created.** Where the priority is genuinely undecided,
   choose the lowest that is defensible and say in the body that it is a
   placeholder. Reuse the labels that exist (`bug`, `enhancement`).
 - **Assign `aitianshi`** where that is the real ownership; an inappropriate
@@ -405,8 +357,6 @@ recipe. Follow `docs/standard.md`, "Native capabilities and composition", and
 the import skills for evidence requirements and reporting integration gaps.
 
 ## More Detail
-
-One line each; the code and the pages carry the rest.
 
 - The product, what each page does and why — `README.md`, then the topic
   pages `docs/builder.md`, `docs/judgement.md`, `docs/settings/README.md`, `docs/cli/README.md`

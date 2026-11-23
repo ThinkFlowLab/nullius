@@ -70,7 +70,7 @@ class Store(unittest.TestCase):
         for unset in ({}, {"HF_TOKEN": ""}, {"HF_TOKEN": "  "}):
             with self.subTest(env=unset):
                 self.assertEqual(cli.licences(bench, env=unset)[0].get("HF_TOKEN"), {"kind": "value", "value": "stored-synthetic"})
-        self.assertIsNone(cli.licences(bench, env=dict(env), from_run=True)[0])                 # the app's run: as before
+        self.assertIsNone(cli.licences(bench, env=dict(env), from_run=True)[0])
         handed = {secrets.HANDED: base64.b64encode(json.dumps({"HF_TOKEN": base64.b64encode(b"handed-synthetic").decode()}).encode()).decode(), "HF_TOKEN": "env-synthetic"}
         self.assertEqual(cli.licences(bench, env=handed)[0].get("HF_TOKEN"), {"kind": "value", "value": "handed-synthetic"})
 

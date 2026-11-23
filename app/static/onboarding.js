@@ -1,7 +1,7 @@
 // First steps. On a first open the page asks whether to be guided; yes runs a short tour that moves
 // from page to page, then opens the checklist docked on the right. A section or a sub-task opens the page
 // that does it and points at the thing to do there. What is done comes from /onboarding (facts this
-// machine can check) and from the pages this browser has been on (visits, kept here, nowhere else).
+// machine can check) and from the pages this browser has been on.
 (() => {
   const me = document.currentScript, STATE_URL = me.dataset.state, TOUR = JSON.parse(me.dataset.tour || '[]');
   const KEY = 'nullius-onboarding';
@@ -51,7 +51,7 @@
   // ---- pointing at what to do: the first target on this page, else its page opened and pointed at there
   let pointed = null, label = null;
   // The label sits on the element's top edge, so a tall element (a whole form) keeps it in view, and it
-  // follows the element as the page around it grows or shrinks (a builder step changing, say).
+  // follows the element as the page around it grows or shrinks.
   const watch = new ResizeObserver(() => place());
   function unpoint() { pointed?.classList.remove('onb-todo'); label?.remove(); watch.disconnect(); pointed = label = null; }
   function place() {

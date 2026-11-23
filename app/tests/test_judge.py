@@ -21,8 +21,7 @@ KEY = "sk-fixture-key-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 
 class Vocabulary(unittest.TestCase):
-    # the v1 ids a stored record can carry: the trial page's and the compare page's. The acceptance probe's and the
-    # conformance audit's wrote their answers outside any workspace, so they left the vocabulary with those tools
+    # the v1 ids a stored record can carry: the trial page's and the compare page's.
     V1_IDS = ["better_of_two", "failure_cause", "task_completed", "transcript_quality", "user_facing_answer"]
 
     def test_the_ids_and_the_api_shape(self):
@@ -611,8 +610,7 @@ class PrJudgeWorkflow(unittest.TestCase):
     per run, the earlier ones collapsed as outdated, so the job needs
     `pull-requests: write` and `issues: write`; a `/judge` comment asks
     again, admitted by the job's `if` alone - the comment body must never
-    reach a shell line. The script is this repository's own, standard
-    library only."""
+    reach a shell line."""
     ROOT = HERE.parent.parent
     WORKFLOW = ROOT / ".github" / "workflows" / "judge-pr.yml"
     SCRIPT = ROOT / ".github" / "scripts" / "judge_pr.py"
@@ -656,7 +654,7 @@ class PrJudgeWorkflow(unittest.TestCase):
     def expression(self, source, event):
         """Exercise the workflow's boolean operators with event fixtures.
 
-        actionlint separately validates GitHub expression syntax. Event strings
+        Event strings
         remain dictionary values and are never interpolated into executable code.
         """
         source = source.replace("&&", " and ").replace("||", " or ")

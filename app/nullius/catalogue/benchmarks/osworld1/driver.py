@@ -79,9 +79,6 @@ deadline, early enough for that reap to end before the core's: the start gate
 a unit waits for, its runner's VM start, its task's setup. A unit holds the
 start gate until its VM start has ended, with no bound of its own. Score waits
 SCORE_SECONDS for the runner, the reap fitting after it within the core's.
-When this driver's input ends, each runner left, and one being reaped, is let
-go and handed to a reaper in a session of its own, which outlives the driver
-and does the same reap.
 """
 import fcntl
 import glob
@@ -747,7 +744,6 @@ def _reap_at_exit():
 
 
 def end(unit, dir, **_):
-    """The unit has ended, scored or not: its runner, when it still has one, goes now."""
     _reap_runner(_runner_dir(dir))
     return {}
 

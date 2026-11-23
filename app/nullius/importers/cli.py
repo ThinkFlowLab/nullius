@@ -7,10 +7,7 @@
 The harness is detected from the directory's own shape; ``--harness NAME``
 names one outright when detection would be ambiguous or a tree is unusual.
 Each importer lives in ``nullius/importers/`` and registers by being
-there, so this CLI never names one and gains nothing when one is added or
-loses anything when one is deleted. With none registered ``--list`` says
-``no importers registered`` rather than printing nothing, and every run tree
-is refused as unrecognised.
+there. With no importers, ``--list`` prints ``no importers registered`` and no tree is recognised.
 
 Every job written is named on stdout by its id — the directory's basename,
 which is what ``nullius.runs.cli list`` prints and ``/job/<id>`` opens — and
@@ -27,8 +24,7 @@ import sys
 
 from nullius import importers as harnesses
 
-# Exit codes — docs/cli.md is the contract; the other two CLIs use the same
-# numbers. 1 is left to Python itself: an uncaught exception is a bug.
+# See docs/cli.md for exit codes. 1 is left to Python itself: an uncaught exception is a bug.
 EXIT_OK = 0
 EXIT_NOT_FOUND = 3
 EXIT_FAILED = 4

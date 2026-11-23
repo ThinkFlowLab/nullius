@@ -126,7 +126,7 @@ class Consumers(unittest.TestCase):
 
     def test_the_llm_judge_falls_back_to_anthropic_last(self):
         env = {"ANTHROPIC_API_KEY": "k", "MODEL_API_URL": "http://localhost:1/v1"}
-        self.assertEqual(client.llm_judge(env).provider, "custom")                                     # as before Anthropic was a judge
+        self.assertEqual(client.llm_judge(env).provider, "custom")
         self.assertEqual(client.llm_judge({"ANTHROPIC_API_KEY": "k"}).provider, "anthropic")
         self.assertEqual(client.llm_judge(dict(env, OPENAI_API_KEY="k")).provider, "openai")
 

@@ -32,8 +32,7 @@
 </div>
 
 {# One grid, sections as full-width rows. Each section's cells land on the same
-   grid row, so every run's "Files edited" starts at the same y — which separate
-   per-run cards can never guarantee. #}
+   grid row, so every run's "Files edited" starts at the same y. #}
 <div class="table-wrap">
 <div class="cmp-grid" style="--cols: {{ panels|length }}">
 
@@ -78,8 +77,7 @@
     {% if not p.trial %}<p class="muted" style="margin:0">Didn't include this task.</p>{% else %}
     {# Check rows come from the dataset's Vocabulary. Panels compare one task,
        so every panel shares a dataset and the conditional rows stay aligned
-       across the grid — the same property the unconditional rows below rely
-       on. #}
+       across the grid. #}
     {% set vocab = p.trial.vocab %}
     <dl class="pane-stats">
       {% if vocab.gained %}<div><dt>{{ vocab.gained }}</dt><dd>{% if p.trial.f2p_pass or p.trial.f2p_fail %}<span class="ok">{{ p.trial.f2p_pass }}</span>/<span class="bad">{{ p.trial.f2p_fail }}</span>{% else %}<span class="faint">—</span>{% endif %}</dd></div>{% endif %}
@@ -88,8 +86,7 @@
       <div><dt>Agent time</dt><dd>{{ p.trial.dur_agent|secs }}</dd></div>
       {# Emit these two unconditionally. pane-stats is a grid, so a panel with
          fewer items shifts every later metric up a row and the columns stop
-         lining up — an agent's "Tool calls" ends up level with the oracle's
-         "Prompt size", and the oracle looks like it made tool calls. #}
+         lining up. #}
       <div><dt>Steps</dt><dd>{% if p.traj %}{{ p.traj.n_steps }}{% else %}<span class="faint">—</span>{% endif %}</dd></div>
       <div><dt>Tool calls</dt><dd>
         {%- if p.traj %}{{ p.traj.calls|length }}

@@ -132,7 +132,6 @@
     </figure>
     {% endfor %}
   </div>
-  {# The one thing these charts could be misread as. #}
   <p class="muted small chart-foot">These durations are how long each call lasted, not moments in the run.
     The {{ charts.summed_ns|nsdur }} they add up to is <b>not</b> wall clock: calls overlap and leave gaps. {{ tail }}
     {% if charts.note %}{{ charts.note }}{% endif %}

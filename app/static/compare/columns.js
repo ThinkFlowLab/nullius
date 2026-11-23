@@ -1,6 +1,6 @@
 /* Compare's columns (templates/compare/compare.html): each header's workspace and run. The page's URL is the
    comparison, its ordered pick= values: a run picked opens it with that run in its column; a workspace picked
-   lists its runs in place (/compare/runs). The run list searches as the table toolkit does. */
+   lists its runs in place (/compare/runs). */
 window.NulliusCompare = {
   /* This page's URL with column `k` holding `value` (`<workspace>:<run id>`, `<workspace>:` for none). */
   url(values, k, value) {

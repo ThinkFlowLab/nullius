@@ -3,18 +3,11 @@ each opening a page of its own - what it has proven, what it can run, and a
 check of its ports.
 
 Each entry is its definition in the catalogue (``catalogue/agents/<key>/``,
-``catalogue/capabilities/<key>/``, ``docs/standard.md``): how Nullius talks to it,
-what it installs, the ports it offers with the record of the kit that proved
-each - the skills of that kit it showed or not, and the job that shows it,
-when the open workspace holds that job - and
-every benchmark of its family, the ones it fits linked to a builder recipe for
-the pair and the others with the reasons. *Prove its ports* runs its conformance
+``catalogue/capabilities/<key>/``, ``docs/standard.md``): its port proofs and benchmark compatibility drive the page. *Prove its ports* runs its conformance
 kits as a run of this machine (``standard/recipe.py``, ``conformance``), the
 record rewritten by what passes.
 
-An agent or a capability with several versions is one card, its default
-version's; its page shows one version at a time (``?v=``, the default
-without it), with the list of its versions and what each has proven.
+A versioned entry is one card; ``?v=`` picks the version its page shows.
 """
 from __future__ import annotations
 
@@ -48,7 +41,7 @@ def _page(kind: str):
 
 
 def _choices(kind: str, entries: list) -> dict:
-    """A list's filters: the benchmarks each entry runs (its ``fits``, what Benchmarks it runs counts); for
+    """A list's filters: the benchmarks each entry runs; for
     agents also how Nullius talks to it, the ports it proves and where it comes from."""
     runs_on = list(dict.fromkeys((f["key"], f["label"]) for e in entries for f in e["fits"]))
     if kind != "agent":
@@ -60,8 +53,7 @@ def _choices(kind: str, entries: list) -> dict:
             "from": [(k, v) for k, v in definitions.FROM.items() if k in have], "runs_on": runs_on}
 
 
-# The From filter's default: the catalogue's own agents; a benchmark's own are one click away, and shown whenever
-# Runs on chooses their benchmark (their card's `unless`).
+# The From filter's default: the catalogue's own agents; benchmark-owned agents also show when Runs on selects their benchmark.
 ONLY = {"agent": {"from": ["bundled", "yours"]}}
 
 

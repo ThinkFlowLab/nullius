@@ -1,7 +1,6 @@
 """Categorical charts: a few named values, one per item (a run), drawn as bars, dots or a scatter.
 
-The trace distributions (:mod:`nullius.traces.charts`) bin nanosecond durations on a log axis; these place a
-handful of plain values on a linear one, so the two share no scale and no code. They share the split: this module
+The split: this module
 computes the geometry, in SVG user units, and ``templates/_charts.html`` draws it without arithmetic.
 
 A caller passes :class:`Metric` objects, each a label, a tick formatter and one :class:`Value` per item, already
@@ -15,8 +14,6 @@ one for bars and dots, x then y for a scatter. A caller reads the registry to of
 of each axis's metric. Adding a style is one drawing function, taking those metrics and returning a :class:`Panel` of
 :class:`Mark` and :class:`Text` that the template draws as they come, and one :data:`STYLES` entry. A new mark shape
 also needs its one element in the template.
-
-Stdlib only, and no Flask.
 """
 
 from __future__ import annotations
@@ -29,7 +26,7 @@ from typing import Callable
 WIDTH = 360.0           # every panel's viewBox width; the page scales it to the panel
 _LINE = 15.0            # a text line's height
 _CHARS = 46             # a label's line length, at the template's font size; longer labels wrap, never clip
-_BAR = 10.0             # a bar's thickness
+_BAR = 10.0
 _ROW_GAP = 9.0
 _LEFT, _RIGHT = 8.0, 70.0   # room before the plot, and after it for the values
 _AXIS = 20.0            # the tick labels under the rows
@@ -292,7 +289,7 @@ def scatter(x: Metric, y: Metric) -> Panel:
     for tag, (a, _) in zip(tags, pairs):
         # a name the caller numbered already (two runs of one agent) is not numbered twice
         lines = tuple(textwrap.wrap(a.name if a.name.startswith(f"{tag}. ") else f"{tag}. {a.name}", _CHARS))
-        if a.series:        # its colour beside its name; the name says which it is
+        if a.series:        # its colour beside its name
             marks.append(Mark("rect", _LEFT, key_y - 8, w=8, h=8, cls=a.cls("swatch")))
         texts.append(Text(key, key_y, lines, cls="label" if id(a) in drawn else "label none"))
         key_y += _LINE * len(lines)

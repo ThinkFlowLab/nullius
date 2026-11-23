@@ -1,4 +1,4 @@
-"""Every row and section the Compare page shows, pinned by name: a redesign of its columns keeps them all."""
+"""Every row and section the Compare page shows, pinned by name."""
 
 from contextlib import ExitStack
 from dataclasses import replace

@@ -4,8 +4,7 @@ JiuwenSwarm's ACP entry (``jiuwenswarm-acp``) is a stdio bridge to a running
 Gateway, which talks to an AgentServer. This wrapper, run with the install's
 own Python, gives the unit all three:
 
-1. a JiuwenSwarm home of its own under ``$HOME`` (Nullius gives every unit its
-   own), initialised once as ``jiuwenswarm-init`` does, in English;
+1. a JiuwenSwarm home of its own under ``$HOME``, initialised once as ``jiuwenswarm-init`` does, in English;
 2. ``config/.env`` written over with the relay as the model (an
    OpenAI-compatible client: ``MODEL_PROVIDER=OpenAI``, ``API_BASE``,
    ``API_KEY``, ``MODEL_NAME``) and free ports, so units run side by side;
@@ -116,7 +115,7 @@ def memory_off():
 def reasoning_level():
     """The run's reasoning effort (the option reasoning_effort, NULLIUS_REASONING) as
     JiuwenSwarm's own ``reasoning_level`` of its default model; default leaves it
-    unset, so nothing is sent, as JiuwenSwarm does on its own."""
+    unset, so nothing is sent."""
     level = os.environ.get("NULLIUS_REASONING", "default")
     if level in ("", "default"):
         return

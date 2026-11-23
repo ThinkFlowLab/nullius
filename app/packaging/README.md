@@ -1,19 +1,17 @@
 # Preparing and publishing a release
 
-The PyPI distribution is `nullius-eval`. The application, Python import package
-and executable remain `nullius`. The separate package named `nullius` on PyPI
-is not this application.
+The PyPI distribution is `nullius-eval`. The import package and executable are `nullius`.
 
 The `draft release` workflow prepares GitHub drafts with an installable wheel,
 a source distribution and `SHA256SUMS`. It does not publish the release or
 upload to PyPI. A separate manual `publish to PyPI` workflow uploads reviewed
-GitHub release assets. Neither workflow runs on a push or tag event.
+GitHub release assets.
 
 The repository stays private; publication to PyPI makes the uploaded package
 and its included source public, independently of GitHub access.
 
 `pyproject.toml` owns the package version. The release tag is that version
-prefixed with `v`: version `0.1.1` corresponds to tag `v0.1.1`. Release
+prefixed with `v`. Release
 notes live in `docs/releases/<tag>.md`.
 
 ## Build the downloads locally
@@ -35,12 +33,7 @@ nullius_eval-0.1.1.tar.gz
 SHA256SUMS
 ```
 
-The wheel is built from the source distribution, so both downloads participate
-in validation. The build uses the existing installed-package check in
-`app/packaging/verify.py`. That check installs into temporary environments,
-checks the backend without Flask, then checks the installed web UI and CLI.
-It verifies the resource inventory and preservation of user storage across
-tool replacement. It does not run a benchmark or read personal settings.
+The build checks the installed wheel with `app/packaging/verify.py`. It does not run a benchmark or read personal settings.
 
 To check a wheel independently:
 
@@ -57,8 +50,7 @@ python3 app/packaging/release.py verify \
   --tag v0.1.1
 ```
 
-The source distribution is a Python build input. Neither archive is a
-standalone Windows, macOS or Linux desktop installer. Current release checks
+Current release checks
 run on Linux with Python 3.12; do not infer additional platform support from
 the wheel's `py3-none-any` filename.
 
@@ -70,27 +62,18 @@ the wheel's `py3-none-any` filename.
 3. The workflow runs the backend and route suites, builds and verifies the
    packages, then creates a draft release for the exact commit it checked
    out: a prerelease for an `rc` tag such as `v0.1.0rc2`, the latest release
-   otherwise. Its assets are the wheel, source distribution and checksum file.
+   otherwise.
 4. Review the draft's target commit, notes, assets and installation instructions.
    Download and test the wheel before requesting permission to publish.
 
-The workflow refuses to overwrite an existing release. It has no push or
-scheduled trigger. Starting it prepares a draft; it does not authorize
-publication. Publish only after the repository owner explicitly approves the
+The workflow refuses to overwrite an existing release. Publish only after the repository owner explicitly approves the
 reviewed release.
-
-Drafts are for maintainers with write access. To offer the downloads to other
-repository readers, publish the reviewed release.
 
 Once a release is published, keep its tag and history stable. Put subsequent
 changes in new commits and a new version; do not amend the initial commit or
-replace a published package under the same version. One squash commit per PR
-remains compatible with this workflow.
+replace a published package under the same version.
 
 ## Configure PyPI publishing once
-
-This checkout prepares the workflow and package metadata; it does not create
-PyPI projects, register publishers or change GitHub environments.
 
 1. Check that `nullius-eval` is still available on PyPI, or that the publishing
    account controls the project if it already exists.
@@ -102,9 +85,7 @@ PyPI projects, register publishers or change GitHub environments.
    workflow filename `publish.yml`, and environment `pypi`. For an existing
    project, configure the same Trusted Publisher on that project instead.
 
-The workflow uses GitHub's short-lived OpenID Connect identity through
-`uv publish --trusted-publishing always`; no PyPI API token is stored in the
-repository. A pending publisher does not reserve a package name. See
+No PyPI API token is stored in the repository. A pending publisher does not reserve a package name. See
 [PyPI's pending-publisher guide](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
 
 ## Publish the reviewed release
@@ -112,18 +93,13 @@ repository. A pending publisher does not reserve a package name. See
 1. Obtain the repository owner's approval for the exact release and files.
    Confirm the package version, release notes, PyPI description in
    `app/packaging/PYPI.md`, wheel and source archive are ready to be public.
-2. Publish the reviewed GitHub draft as it was created. It remains subject to the
-   repository's access permissions. The PyPI workflow requires a published
-   GitHub release and does not publish a draft for you.
+2. Publish the reviewed GitHub draft as it was created.
 3. Open **Actions → publish to PyPI → Run workflow**, select `main`, enter the
-   release `tag` and enable `confirm`. Confirmation defaults to false.
+   release `tag` and enable `confirm`.
 4. The validation job downloads the release's wheel, source archive and
    checksums, validates their names, versions and hashes, runs isolated
    installation checks, and runs `twine check --strict` on the distributions.
-5. The publishing job uses the `pypi` environment and downloads the exact asset
-   IDs selected by validation. It compares their bytes with the validated
-   SHA-256 hashes before uploading those two distributions. It does not rebuild
-   the package, and its OpenID Connect permission is separate from validation.
+5. The publishing job uploads the validated files unchanged; it does not rebuild.
 6. After a successful PyPI upload, a separate job advances `docs-release` to
    the release tag's commit without force-pushing. Cloudflare builds that
    production branch with previews disabled; see `app/site/README.md` for the

@@ -134,7 +134,7 @@
           {% if removable and c.held_by_process %}<p class="st-note" id="remove-note-{{ loop.index }}">Set in the process environment: remove it there.</p>{% endif %}</div>
         {% if testable %}<button type="button" class="btn sm ghost" data-provider-test="{{ c.key }}" aria-label="Test {{ c.title }}" hidden><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Test</button>{% endif %}
         <button type="button" class="btn sm ghost" data-provider-edit="{{ c.key }}" hidden>{{ 'Edit' if writable else 'View' }}</button>
-        {#- removing asks first, in place, as a benchmark's Delete does -#}
+        {#- removing asks first, in place -#}
         {% if removable %}<button type="button" class="btn sm ghost danger" data-provider-remove-ask aria-label="Remove {{ c.title }}" aria-expanded="false" aria-controls="remove-ask-{{ loop.index }}"{% if c.held_by_process %} disabled aria-describedby="remove-note-{{ loop.index }}"{% endif %}>Remove</button>{% endif %}
       </div>
       {% if removable and not c.held_by_process %}

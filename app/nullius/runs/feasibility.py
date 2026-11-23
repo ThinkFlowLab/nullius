@@ -4,10 +4,7 @@ A sweep runs Harbor's two control agents over a task set to ask one question
 per task — *is the task feasible*: can an empty solution fail, and can a
 reference solution pass? ``nop`` does nothing, so the verifier must reject
 it; ``oracle`` applies the task's reference solution, so the verifier must
-accept it. Environment setup, data loading and the verifier are all
-exercised on the way. It is feasibility evidence and nothing else: not a
-configuration or hyperparameter search, and no promise that an agent will
-succeed on a feasible task.
+accept it.
 
 This module builds the report from recorded jobs. It never runs anything.
 
@@ -41,8 +38,7 @@ feasible only when both sides ran and said the right thing:
 
 One side alone never validates a task: oracle-only evidence cannot show that
 a verifier rejects an empty solution, nop-only evidence cannot show that a
-solution can pass. The header says which controls actually executed, and
-over what scope, so a report over one control reads as exactly that.
+solution can pass.
 
 ``task_broken`` is the same facet the trial page shows as *⚠ Broke tests*
 (`Trial.is_regression`, from `p2p_fail`), read on the control instead of the
@@ -109,8 +105,7 @@ class Side:
     reward: float | None = None
     exception_type: str = ""
     # Held (PASS_TO_PASS) checks the verifier saw fail on this control, as
-    # `Trial.p2p_fail` / `p2p_failures` record them — the same reading the
-    # trial page flags as *⚠ Broke tests*.
+    # `Trial.p2p_fail` / `p2p_failures` record them.
     p2p_fail: int = 0
     p2p_failures: list = field(default_factory=list)
 
@@ -212,10 +207,7 @@ class ControlSummary:
     side — ``unexpected reward`` for a resolved nop, ``reference rejected``
     for a failed oracle. A trial that failed before the verifier ran is a
     setup failure, and one with no verdict is unscored; neither says the
-    task is feasible, so neither counts as behaved. The runs list shows
-    this in place of the control's Solved/Raw/Adjusted cells and keeps its
-    trials out of the agents' totals — a nop that failed every task is the
-    expected result, not "Failed verification".
+    task is feasible, so neither counts as behaved.
     """
 
     control: str

@@ -16,14 +16,11 @@ description: >-
 
 # Import an agent
 
-An assistant without skills reads this file directly and follows it as
-written; "the question tool" is whatever multiple-choice prompt it has, else
+"The question tool" is whatever multiple-choice prompt the assistant has, else
 a plain question that waits for the answer.
 
-The user wants one thing: their agent offered in Nullius against every
-benchmark it fits. `cli` below is `nullius standard`; `python -m nullius standard`
-also works with a Python that has Nullius installed. The source form remains
-`PYTHONPATH=app python3 -m nullius.standard.cli` from the checkout root. Jobs
+`cli` below is `nullius standard`; `python -m nullius standard`
+also works with a Python that has Nullius installed. From the checkout root: `PYTHONPATH=app python3 -m nullius.standard.cli`. Jobs
 go to `jobs_standard/` relative to the working directory, or `--jobs PATH`;
 keep them outside package resources. Read `docs/standard.md` ("An agent",
 "Versions", "Options", "Fidelity") when available in a checkout, otherwise
@@ -31,17 +28,9 @@ the installed schema and examples below. An installation needs no `app/` tree.
 
 ## Locate the runtime and writable catalogue
 
-Run `nullius paths --json` with the same profile/environment as the app.
-`NULLIUS_HOME` selects `config/`, `data/` and `cache/` under a profile directory;
-otherwise platform user paths apply. `NULLIUS_CATALOGUE` overrides the user
-catalogue (Linux default: `~/.local/share/nullius/catalogue/`). Keep settings,
-secrets and mutable data outside the installed package.
+Run `nullius paths --json` in the app’s profile. Use `NULLIUS_HOME` for a separate profile and `NULLIUS_CATALOGUE` to override the catalogue. Keep mutable data and secrets outside the package.
 
-For reading modules or using their APIs, select the interpreter behind the
-`nullius` launcher, not an arbitrary `python3`. For a POSIX `uv tool` install,
-check `command -v nullius`, set `NULLIUS_PY="$(uv tool dir)/nullius/bin/python"`,
-and verify `"$NULLIUS_PY" -c 'import sys, nullius; print(sys.executable); print(nullius.__file__)'`.
-For a different installation, inspect its launcher or virtual environment.
+Use the launcher’s Python for APIs. On POSIX with `uv tool`, set `NULLIUS_PY="$(uv tool dir)/nullius/bin/python"` and verify `"$NULLIUS_PY" -c 'import nullius; print(nullius.__file__)'`. For other installs, inspect the launcher.
 For source inspection, use `NULLIUS_PY=python3` and prefix the command below
 with `PYTHONPATH="$PWD/app"` from the checkout root:
 
@@ -56,9 +45,7 @@ print("catalogue:", paths.catalogue_dir())
 PY
 ```
 
-`app/nullius/` references below identify source modules; read their resolved
-installed equivalents when no checkout exists. Path APIs return strings:
-join with `os.path.join` or `Path(value)`. In the same settings-loaded
+For an installation, resolve `app/nullius/` references to installed modules. Convert returned path strings with `Path(value)` as needed. In the same settings-loaded
 interpreter, `definitions.entry_dir("agent", key)` locates the selected
 entry; `definitions.writable_dir("agent", key)` copies a bundled entry's
 whole folder into the user catalogue before a manual edit. A user folder
@@ -229,8 +216,7 @@ run only if your instructions already say yes.
 An agent already here: `cli new version KEY VERSION`, check the pins it was
 given (a package that moved changes its name too), then `cli conform
 KEY@VERSION ...` and `cli fidelity KEY@VERSION ...`. Set `default` to make it
-the one a bare key names - ask first. These commands write the user copy,
-preserving all companion files when the original entry was bundled.
+the one a bare key names - ask first.
 
 ## 6. Report - decision first
 
@@ -254,5 +240,4 @@ default.
 
 Write the entry's summary as one short sentence, ideally under 100 characters.
 Name what it is and its distinguishing purpose. Keep installation requirements,
-protocol mechanics and limitations in their dedicated fields or documentation;
-do not rely on the card's line clamp to shorten a paragraph.
+protocol mechanics and limitations in their dedicated fields or documentation.

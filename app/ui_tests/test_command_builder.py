@@ -107,10 +107,8 @@ class RecipeCompiler(CompilerCase):
         self.assertTrue(out['errors']);self.assertEqual(out['artifacts'],[])
 
 
-
 class RouteCases(CompilerCase):
-    """The benchmark-discovery cases the preparation spec names that still
-    exist with one harness: Harbor-only (terminal-bench) and no usable route
+    """The benchmark-discovery cases: Harbor-only (terminal-bench) and no usable route
     (a blocked entry, given since none ships), each over a catalogue entry. A route the catalogue does
     not name is never inferred, and a benchmark without a route is an error
     with the catalogue's reason and no artifact — never a runnable-looking

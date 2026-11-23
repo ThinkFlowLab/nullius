@@ -8,8 +8,7 @@ The tour, the checklist, start-up options.
 | Show it again | Restores a dismissed First steps checklist |
 
 Both are kept in the browser. Under **Settings → Appearance**, choose System,
-Light, Neutral charcoal, Cool graphite or Midnight blue. System follows the
-device and retains the last selected dark palette; changes apply immediately.
+Light, Neutral charcoal, Cool graphite or Midnight blue.
 
 **Settings → Local data** shows the active storage paths without changing them.
 

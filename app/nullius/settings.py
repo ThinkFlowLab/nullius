@@ -1,16 +1,14 @@
 """The application's settings: every environment variable it reads, in one
 table, and the one file it writes them to.
 
-The user configuration ``settings.json`` is loaded at startup (``load``) with the rule the application has
-always had — a variable already in the process environment wins over the
+The user configuration ``settings.json`` is loaded at startup (``load``) — a variable already in the process environment wins over the
 file — and read again (``refresh``) whenever the file has changed on disk
 (``sync``, which the application calls before each request), so a file
 edited by hand while the application runs counts from the next request,
 without a restart; the Settings page edits
 the same file (``save``) and names the keys in it that nothing reads (``unread``). What the page
 shows for each variable is its *state*, never a secret's value: ``set`` from
-the environment or from the file, or ``not set``, with a fixed mask and nothing else. Values are validated per variable before a byte is written;
-the file is written whole, to a temporary name first, with mode 0600; a
+the environment or from the file, or ``not set``, with a fixed mask and nothing else. Values are validated per variable before a byte is written; a
 variable the process environment holds is shown read-only, because the file
 could not override it anyway.
 
@@ -40,7 +38,7 @@ _SECRET_OK = re.compile(r"^[!-~]+$")   # printable ASCII, no spaces
 _LOCAL_KEY_OK = re.compile(r"^[!-~]+$")   # the same, any length: a local server's key is often a word ("ollama", "EMPTY")
 _TEXT_OK = re.compile(r"^[^\x00-\x1f]{1,400}$")
 _MODEL_OK = re.compile(r"^~?[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,159}$")     # an OpenRouter model id: [~]vendor/model[:variant]
-# a provider choice each judge can use: a preset that serves its protocols, or custom (local, its old name);
+# a provider choice each judge can use: a preset that serves its protocols, or custom (`local` alias);
 # Decision's custom provider is a named one, the only kind whose record lists a decision protocol
 _ID = r"[A-Z0-9]+(_[A-Z0-9]+)*"
 _DECISION_PROVIDER_OK = re.compile(rf"^(typesafe|openrouter|openai|(custom|local):{_ID})$")
@@ -204,9 +202,7 @@ ENDPOINT_PARTS = ("NAME", "API_URL", "API_KEY")
 # A custom provider's record, MODEL_<ID>: the id may not end like one of the old settings above
 _PROVIDER_VAR = re.compile(r"^MODEL_(?!(?:.*_)?(?:NAME|API_URL|API_KEY)$)([A-Z0-9]+(?:_[A-Z0-9]+)*)$")
 
-# What a person sets. Everything else the application reads is a start-up
-# option with a command-line form or a sensible default (STARTUP below) and
-# is not on the page.
+# What a person sets.
 VARIABLES: List[Variable] = [
     Variable("MODEL_API_KEY", GROUPS[0], "The key of the OpenAI-compatible endpoint at MODEL_API_URL: a recipe on that endpoint is sent there with this key. Optional, for a server that checks none: without it the run is sent the word " + repr(MODEL_KEY_PLACEHOLDER) + " as its key. A run gets it as API_TOKEN, OPENAI_API_KEY and LLM_API_KEY in its environment - over stdin to a host - and never in a recipe or a log.", "localkey", "sk-…"),
     Variable("MODEL_API_URL", GROUPS[0], "The base URL of an OpenAI-compatible endpoint, API path included, required for a recipe on it: there is no default to fall back on, and the builder offers the endpoint only once it is set. It is shown on the page, so it holds no credential: no user or password, no key in its query. More custom providers, each with a name, are a record MODEL_<ID> and a key MODEL_<ID>_API_KEY. A run gets it as API_URL, OPENAI_BASE_URL and LLM_BASE_URL.", "endpoint", "https://…/v1"),
@@ -270,8 +266,7 @@ INSTEAD: Dict[str, str] = {**RENAMED, "API_TOKEN": "MODEL_API_KEY", "API_URL": "
 
 def parse(path: str) -> List[Tuple[str, Optional[str], Optional[str]]]:
     """The file as a list of (line, key, value): key and value are None for
-    a comment or blank line. Quotes around a value are dropped, as ``load``
-    always has."""
+    a comment or blank line. Quotes around a value are dropped."""
     out = []
     if not os.path.isfile(path):
         return out
@@ -473,7 +468,7 @@ def agent_key_names(env=None) -> List[str]:
 
 
 def reserved_agent_keys(env=None) -> List[str]:
-    """The names AGENT_KEYS lists that are now something else's (a provider record's): Settings says so."""
+    """The names AGENT_KEYS lists that are now something else's (a provider record's)."""
     return [n for n in dict.fromkeys(n.strip() for n in (os.environ if env is None else env).get("AGENT_KEYS", "").split(","))
             if _ENVNAME_OK.match(n) and reserved_name(n)]
 
@@ -563,9 +558,7 @@ def take(path: str, name: str) -> Optional[str]:
     """Move a line out of the file: ``name``'s value, its line removed and,
     when the file put it there, its variable gone from the process
     environment; None when the file has no such line. Only for a name no
-    setting reads (``unread``) - a benchmark's licence from before licences
-    were kept per benchmark (``nullius.secrets``), which its page moves
-    there on the user's word."""
+    setting reads (``unread``)."""
     if name in BY_NAME or name in STARTUP or name in set(agent_key_names()):
         raise ValueError(f"{name} is a setting of its own; it is not moved")
     value = in_file(path).get(name)
@@ -585,8 +578,7 @@ def unread(path: str) -> List[dict]:
     """Keys in the file that no setting or start-up option reads, each with
     the page's own name when it is a known other spelling (``API_TOKEN``):
     the file applies them to the environment, but nothing here reads them.
-    A run inherits those its launcher does not withhold
-    (``execution.withheld``: every other spelling of a key among them)."""
+    """
     keys = set(agent_key_names()) | set(agent_key_names(in_file(path)))
     return [{"name": k, "instead": INSTEAD.get(k, "")} for k in in_file(path)
             if k not in BY_NAME and k not in STARTUP and k not in keys and not endpoint_variable(k)]
@@ -596,7 +588,7 @@ def unread(path: str) -> List[dict]:
 # says anything about it.
 SECRET_SHOWN = "********"
 
-# Said beside an endpoint set without a key: allowed, the user's choice, but advised.
+# Said beside an endpoint set without a key.
 LOCAL_KEY_ADVICE = "No key: the run is sent the word " + repr(MODEL_KEY_PLACEHOLDER) + ". Fine for a server that checks none, but a key is advised."
 
 

@@ -6,20 +6,13 @@
 
 ``<root>`` is what the other CLIs take: a Harbor job directory, a parent of
 several, or an imported tree; ``parse.load_all`` walks it. The jobs are
-resolved and the cohort built by ``nullius.compare.comparison`` — the page's
-own computation, not a second one — so ``--matched`` keeps exactly the
+resolved and the cohort built by ``nullius.compare.comparison`` so ``--matched`` keeps exactly the
 trials the page keeps (the intersection of exact dataset/task identifiers,
 every recorded attempt), and the totals printed per column are the ``Job``
-properties the page's summary table reads over that cohort: trials, the
-mean score and its breakdown when the benchmark scores, solved, the two
-solve rates, infra errors, regressions, the token block, the
-estimated cost and, for whole runs only, the wall-clock interval. A matched
-cohort has no truthful interval, so none is printed for it — as on the page.
+properties the page's summary table reads over that cohort.
 
-The task rows below the totals are the page's: one per dataset/task, the
-outcome recorded in each column with its score, the attempts each column made, the rows
-that differ first. A development build (source or unknown runtime) is
-compared when named, with a note on stderr; the page asks for a tick.
+The task rows below the totals are the page's. A development build (source or unknown runtime) is
+compared when named, with a note on stderr.
 
 Reading only: nothing is written, anywhere, and no socket is opened. The
 exit codes are the contract in ``docs/cli.md``, shared by the CLIs.
@@ -55,8 +48,7 @@ With --json, stdout is exactly one JSON document; everything else goes to stderr
 """
 
 # The totals the page's summary table reads off each column's Job, in its
-# order. Each is a Job property over the cohort's trials — comparison.build
-# replaced the trial list, the arithmetic stayed Job's.
+# order. Each is a Job property over the cohort's trials.
 TOTALS = (
     ("n_trials", "Trials"),
     ("mean_score", "Mean score"),
@@ -87,7 +79,7 @@ def totals_of(job: parse.Job, cohort: str) -> dict:
     """The column's totals as the page's summary rows read them."""
     doc = {
         "n_trials": len(job.trials),
-        # A benchmark that scores (an F1, partial credit): the mean over every
+        # A benchmark that scores: the mean over every
         # part scored, and by the field it breaks the score down by. A run
         # with a score and no pass or fail has nothing solved to count.
         "mean_score": job.mean_score,

@@ -1,8 +1,6 @@
 """SWE-bench Verified's driver for the Nullius standard (JSON lines on stdin and stdout).
 
-Each instance is a GitHub issue of a Python project, and a container the
-SWE-bench authors built for it: the repository at the issue's base commit in
-``/testbed``, its dependencies installed. The dataset (the SWE-bench
+Each instance has the authors' container, the repository in ``/testbed``. The dataset (the SWE-bench
 organisation's own, on Hugging Face, at a pinned revision) carries, per
 instance, the problem statement, the gold patch, the image's name, the eval
 script the harness runs and the name of the log parser that reads its output.
@@ -13,9 +11,7 @@ setup  - the problem statement as the prompt, verbatim; the instance's own
          its tag had when pinned here, ``images.json``), ``/testbed`` as the
          working directory, and the check (``verify``: the harness's eval
          script for the instance, written into the container once the agent
-         has ended and run there with a way out to download what it installs
-         - it resets the test files to the base commit, applies the test
-         patch and runs the FAIL_TO_PASS and PASS_TO_PASS tests). The agent's
+         has ended and run there with a way out to download what it installs). The agent's
          changes are tested where it made them; the harness would re-apply
          them as a patch in a fresh container.
 score  - the harness's own grading (``swebench.harness.grading.get_eval_report``)

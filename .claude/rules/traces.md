@@ -1,9 +1,7 @@
 ## Traces, as this application renders them
 
 The reader itself — folding, grouping, normalisation — is
-`app/nullius/traces/trace.py`. What
-this rule keeps is what the **pages** do with it, and these are the parts a plausible change
-breaks silently.
+`app/nullius/traces/trace.py`.
 
 Four things about a rendered trace are load-bearing:
 
@@ -20,14 +18,12 @@ Four things about a rendered trace are load-bearing:
 
 ### Filtering a trace, and saving the view
 
-The trial page can leave spans out: a label chip drops every span carrying that
-label, the × on a row (or alt-click on its bar) drops one call. Both take the
-span's subtree with them. The filter lives in the query string
+The trial page can hide a label's spans or one call, each with its subtree. The filter lives in the query string
 (`?hide=<label>&hide_span=<span id>`), which is what keeps a single definition of
 "which spans are in this view" — the page renders from it and the save writes
 from it, so a saved file cannot drift from what was on screen.
 
-Four rules here, each of them something a plausible "fix" would break:
+Four rules:
 
 - **The axis does not move.** It comes from the *unfiltered* spans, so hiding one
   leaves a gap instead of re-scaling the survivors — otherwise a filter looks
@@ -48,22 +44,18 @@ Four rules here, each of them something a plausible "fix" would break:
   inside reclaims the instants the two overlapped.
 
 **Zooming is not filtering.** `?zoom=<span id>` re-bases the waterfall on one
-subtree's own extent (`extent_of` over that span — the same walk as the global
-axis, so a child that outruns its parent widens the window instead of being
-clamped) and draws that subtree alone; spans outside it are left out, never
+subtree's own extent (`extent_of`, never clamped) and draws that subtree alone; spans outside it are left out, never
 re-scaled in. It rides on `trace.Filter` so every filter link carries it, but it
 hides nothing: the coverage strip, `totals`, the breakdown and the charts are
 exactly what the un-zoomed view shows, and a saved view is the filtered tree
-whole — the zoom is a way of looking, carried by the link and never written.
+whole.
 Offsets in a zoomed view count from the zoomed span's start; the chip says where
 that is in the capture. A zoom on a span not in the view — unknown, or hidden by
 the filter — is the whole trace with a note.
 
 Saving writes a new `harbor-trace-v1` document into the trial's own `agent/`
 directory, under a name typed into the form. It is the only write the app makes
-into a *source* tree — the other write, the on-load conversion of a foreign
-run into the workspace's `imported/`, lands only in that derived root and rewrites it
-freely, because the source stays authoritative — and it refuses to overwrite
+into a *source* tree and it refuses to overwrite
 anything at all — `trace.json` above all, since a capture cannot be taken a
 second time. The file carries `totals` recomputed over
 what is left, the producer's own numbers under `filtered.source_totals`, and
