@@ -43,7 +43,12 @@ class ConformTest(unittest.TestCase):
 
     def test_benchmark_restriction_allows_kit_but_survives_proof(self):
         d = definitions.get("capability", "fakemem", self.root)
-        definitions.save(d, lambda current: current.update(only_for=["intended-benchmark"]))
+        path = definitions.path_of(d)
+        with open(path) as f:
+            authored = json.load(f)
+        authored["only_for"] = ["intended-benchmark"]
+        with open(path, "w") as f:
+            json.dump(authored, f)
         got, saved = self.check("capability", "fakemem", ["cap.memory/v1"])
         self.assertTrue(got["cap.memory/v1"]["ok"])
         self.assertEqual(saved["only_for"], ["intended-benchmark"])
