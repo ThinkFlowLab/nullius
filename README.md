@@ -22,7 +22,7 @@ uv tool install nullius-eval
 nullius serve
 ```
 
-A specific version: `uv tool install nullius-eval==0.1.1`.\
+A specific version: `uv tool install nullius-eval==0.2.0`.\
 The main branch, from source:
 
 ```bash

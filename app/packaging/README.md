@@ -21,15 +21,15 @@ From the repository root, with Python 3.12 or later and `uv` available:
 ```bash
 python3 app/packaging/release.py build \
   --out-dir /tmp/nullius-release \
-  --tag v0.1.1
+  --tag v0.2.0
 ```
 
 The tag must match the package version, and the output directory must be absent
 or empty. Existing downloads are never overwritten. The output contains:
 
 ```text
-nullius_eval-0.1.1-py3-none-any.whl
-nullius_eval-0.1.1.tar.gz
+nullius_eval-0.2.0-py3-none-any.whl
+nullius_eval-0.2.0.tar.gz
 SHA256SUMS
 ```
 
@@ -38,7 +38,7 @@ The build checks the installed wheel with `app/packaging/verify.py`. It does not
 To check a wheel independently:
 
 ```bash
-python3 app/packaging/verify.py /tmp/nullius-release/nullius_eval-0.1.1-py3-none-any.whl
+python3 app/packaging/verify.py /tmp/nullius-release/nullius_eval-0.2.0-py3-none-any.whl
 ```
 
 To validate the complete downloaded set, including checksums and package
@@ -47,7 +47,7 @@ metadata, without rebuilding it:
 ```bash
 python3 app/packaging/release.py verify \
   --dist-dir /tmp/nullius-release \
-  --tag v0.1.1
+  --tag v0.2.0
 ```
 
 Current release checks
@@ -58,7 +58,7 @@ the wheel's `py3-none-any` filename.
 
 1. Review and merge the version, release notes and intended changes into `main`.
 2. Open **Actions → draft release → Run workflow**, select `main`, and provide
-   the matching tag, such as `v0.1.1`.
+   the matching tag, such as `v0.2.0`.
 3. The workflow runs the backend and route suites, builds and verifies the
    packages, then creates a draft release for the exact commit it checked
    out: a prerelease for an `rc` tag such as `v0.1.0rc2`, the latest release
@@ -120,6 +120,6 @@ uninstall that tool with `uv tool uninstall nullius` before installing
 tool environment and remain in place.
 
 The default command installs the latest version without a pin. To select this
-specific version, use `uv tool install nullius-eval==0.1.1`. Add `--force`
+specific version, use `uv tool install nullius-eval==0.2.0`. Add `--force`
 when replacing an existing installation. `uv tool upgrade nullius-eval`
 updates an unpinned installation; it retains an explicit version constraint.
