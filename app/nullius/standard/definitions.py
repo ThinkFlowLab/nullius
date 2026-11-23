@@ -46,8 +46,9 @@ agent's is; :func:`load` and :func:`get` resolve a benchmark as they resolve
 an agent.
 
 A benchmark may give its units **environments** (``environments``): named
-Dockerfiles in its folder, each a layer on the standard's base image (the
-Dockerfile has no ``FROM``: Nullius writes it), with the files it copies
+Dockerfiles in its folder, each a layer on the standard's base image, or on
+its own ``base`` pinned by digest (the Dockerfile has no ``FROM``: Nullius
+writes it), with the files it copies
 listed (``files``), the licences it needs (``needs_secrets``: each a
 ``value`` - a key, given as a variable -, a ``file`` - mounted read-only at
 its ``path`` -, or a ``server`` - the one ``host:port`` the agent may reach -,
@@ -165,7 +166,9 @@ HOST_INSTALLERS = ("apt", "npm")
 # A benchmark's environment (``environments``): its name, what it may say, and where a secret it needs may go -
 # into the agent's container (``agent``) or the driver's process, which scores (``driver``).
 _ENV_KEY = re.compile(r"^[a-z][a-z0-9-]{0,29}$")
-ENV_FIELDS = ("summary", "dockerfile", "files", "needs_secrets", "local_ok", "image", "network")
+ENV_FIELDS = ("summary", "dockerfile", "files", "needs_secrets", "local_ok", "image", "network", "base")
+# an environment's own base image, in place of the standard's: a registry reference pinned by digest
+_BASE_REF = re.compile(r"[a-z0-9][a-z0-9._/-]*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}")
 OWN_IMAGE = "own"                    # an environment whose units each bring their own image (``image``)
 SECRET_TO = ("agent", "driver")
 # A licence's shape (``kind``): `value` as an environment variable, `file` as a read-only mount, `server` as one reachable address.
@@ -890,7 +893,7 @@ def _dockerfile(w: str, text: str, files: List[str]) -> List[str]:
         word, _, rest = line.partition(" ")
         word = word.upper()
         if word == "FROM":
-            bad.append(f"{w}: no FROM - Nullius writes FROM nullius/base:<hash>, the layer's base")
+            bad.append(f"{w}: no FROM - Nullius writes it: nullius/base:<hash>, or the environment's base")
         elif word == "ADD":
             bad.append(f"{w}: COPY, not ADD")
         elif word == "COPY":
@@ -906,7 +909,7 @@ def _dockerfile(w: str, text: str, files: List[str]) -> List[str]:
 
 def _environments(envs, here: Optional[str]) -> List[str]:
     """``environments``: name -> {summary, dockerfile, files?, needs_secrets?,
-    local_ok?}, or {summary, image: "own", needs_secrets?} for units that
+    local_ok?, base?}, or {summary, image: "own", needs_secrets?} for units that
     each bring their own image. ``dockerfile`` and each of ``files`` are paths in the
     benchmark's folder; ``needs_secrets`` is [{name, to, kind, ...}] - a
     credential the user sets in Settings → Data providers (one with ``provider``)
@@ -958,6 +961,11 @@ def _environments(envs, here: Optional[str]) -> List[str]:
                     bad += _dockerfile(f"{w}.dockerfile", f.read(), files)
             except OSError:
                 bad.append(f"{w}.dockerfile: {df} is not in the benchmark's folder")
+        if "base" in e:
+            if own_image(e):
+                bad.append(f"{w}.base: not with an own image - the unit's setup names the image")
+            elif not isinstance(e["base"], str) or not _BASE_REF.fullmatch(e["base"]):
+                bad.append(f"{w}.base: an image reference pinned by digest (name[:tag]@sha256:<64 hex>)")
         if "local_ok" in e and not isinstance(e["local_ok"], bool):
             bad.append(f"{w}.local_ok: true or false")
         if "network" in e:

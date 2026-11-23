@@ -40,7 +40,8 @@
   },
   "environments": {
     "desktop": {
-      "summary": "The kit's desktop, which the driver starts for each unit: a virtual X display, a window manager, a session bus, the accessibility bus, Python with Tk, pyautogui and Pillow, and the kit's fixture. No agent runs in it but through the port.",
+      "summary": "The kit's desktop, which the driver starts for each unit: a virtual X display, a window manager, a session bus, Python with Tk, pyautogui and Pillow, and the kit's fixture. No agent runs in it but through the port.",
+      "base": "docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2",
       "dockerfile": "desktop.Dockerfile",
       "files": [
         "desktop-requirements.txt",
@@ -131,10 +132,10 @@
       },
       "leak": {
         "units": 9,
-        "looked_for": 2,
-        "short": 7,
+        "looked_for": 1,
+        "short": 8,
         "passed": "9/9",
-        "note": "7 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
+        "note": "8 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
       },
       "nop": {
         "passed": "0/9",

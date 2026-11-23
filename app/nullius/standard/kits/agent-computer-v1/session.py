@@ -21,6 +21,7 @@ import time
 
 DISPLAY = ":0"
 SCREEN = "1920x1080x24"
+WINDOW_MANAGER = "matchbox-window-manager"
 UID = 1000
 HOME = "/home/user"
 SERVER_UID = 1002                                  # `display`, as whom the X server runs
@@ -64,7 +65,7 @@ REPEAT_DELAY_MS = 65535
 def server_argv():
     """The X server's command: the screen, its cookie file, no TCP, access control left on, and every
     keyboard's repeat delayed as long as XKB allows (the core switch below misses the input-test device)."""
-    return ["Xvfb", DISPLAY, "-screen", "0", SCREEN, "-auth", SERVER_AUTH, "-nolisten", "tcp",
+    return ["Xvfb", DISPLAY, "-screen", "0", SCREEN, "-auth", SERVER_AUTH, "-nolisten", "tcp", "-extension", "GLX",
             "-ardelay", str(REPEAT_DELAY_MS), "-arinterval", str(REPEAT_DELAY_MS)]
 
 
@@ -121,7 +122,7 @@ def main():
     os.chmod(RUNTIME, 0o700)
     bus = as_user(["dbus-daemon", "--session", f"--address={BUS}", "--nofork", "--nopidfile"])
     wait_for("the session bus", lambda: os.path.exists(f"{RUNTIME}/bus"))
-    wm = as_user(["openbox"])
+    wm = as_user([WINDOW_MANAGER])
     wait_for("the window manager", lambda: _with_display(window_manager_up))
     with open(READY, "w") as f:
         f.write(f"{time.monotonic():.6f}\n")

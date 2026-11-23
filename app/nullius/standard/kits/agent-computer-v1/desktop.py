@@ -3,8 +3,8 @@ desktop the agent sees and acts on, and the five operations a benchmark's
 side gives the port's server.
 
 **The image** is an environment of the kit, as a benchmark's environments
-are (``container.env_image``): ``desktop.Dockerfile`` on Nullius's base
-image, its build context the three files :data:`KIT` lists, tagged
+are (``container.env_image``): ``desktop.Dockerfile`` on its own base,
+Debian slim pinned by digest (:data:`BASE`), its build context the three files :data:`KIT` lists, tagged
 ``nullius/env-agent-computer-v1-desktop:<hash>`` by the sha256 of that text
 and those files, and built the first time it is asked for (:func:`image`).
 
@@ -40,8 +40,9 @@ from nullius.standard import container
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENVIRONMENT = "desktop"
+BASE = "docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
 KIT = {"key": "agent-computer-v1", "_here": HERE,
-       "environments": {ENVIRONMENT: {"dockerfile": "desktop.Dockerfile",
+       "environments": {ENVIRONMENT: {"base": BASE, "dockerfile": "desktop.Dockerfile",
                                       "files": ["desktop-requirements.txt", "fixture.py", "session.py"]}}}
 SCREEN = (1920, 1080)
 USER = "1000:1000"
