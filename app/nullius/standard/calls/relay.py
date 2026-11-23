@@ -39,6 +39,12 @@ A run may pin, for a model, the serving providers that may answer it
 that model, in place of the caller's own, and records both, cleaned of
 credentials. Without a pin a request's body goes on as it did.
 
+A run may also keep each call of an agent's route whole (``exchanges``):
+the request as sent, by part, and the reply as it arrived, beside the call
+record, which then numbers those calls (``n``). It is written before the
+caller has the end of its reply, and a failure to write it never changes
+nor stops that reply.
+
 One answer is the relay's own: a run with a spending cap (``ledger``) books
 each call before it goes out, and a call that does not fit is not sent. Its
 caller gets a 402 that names the relay and the cap, and the record says
@@ -62,7 +68,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Optional
 
 from nullius.redact import redact
-from nullius.standard.calls import ledger as ledgers
+from nullius.standard.calls import exchanges as exchange_store, ledger as ledgers
 
 PLACEHOLDER_KEY = "nullius-relay"
 _TAG = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -94,7 +100,7 @@ _CONTEXT = re.compile(r"context[ _-]?(length|window|limit)|prompt is too long|to
 
 
 def _cut(text, n=4000):
-    if not isinstance(text, str) or len(text) <= n:
+    if not isinstance(text, str) or n is None or len(text) <= n:
         return text
     return text[: n // 4] + f"\n[... {len(text) - n} characters left out ...]\n" + text[-(3 * n // 4):]
 
@@ -174,7 +180,7 @@ def _usage(u: Optional[dict]) -> Optional[dict]:
     return got
 
 
-def _text_of_responses(resp: dict) -> (str, List[dict]):
+def _text_of_responses(resp: dict, limit: Optional[int] = 2000) -> (str, List[dict]):
     text, calls = [], []
     for item in resp.get("output") or []:
         if item.get("type") == "message":
@@ -183,18 +189,34 @@ def _text_of_responses(resp: dict) -> (str, List[dict]):
                     text.append(c.get("text") or "")
         elif item.get("type") in ("function_call", "custom_tool_call", "local_shell_call"):
             calls.append({"name": item.get("name") or item.get("type"),
-                          "arguments": _cut(item.get("arguments") or item.get("input") or json.dumps(item.get("action")), 2000)})
+                          "arguments": _cut(item.get("arguments") or item.get("input") or json.dumps(item.get("action")), limit)})
     return "".join(text), calls
 
 
-def _text_of_messages(msg: dict) -> (str, List[dict]):
+def _reasoning_of_responses(resp: dict) -> str:
+    """A Responses object's reasoning items: their text, else their summary."""
+    out = []
+    for item in resp.get("output") or []:
+        if isinstance(item, dict) and item.get("type") == "reasoning":
+            said = [c.get("text") or "" for c in item.get("content") or [] if isinstance(c, dict) and c.get("type") == "reasoning_text"]
+            out += said or [c.get("text") or "" for c in item.get("summary") or [] if isinstance(c, dict)]
+    return "".join(out)
+
+
+def _text_of_messages(msg: dict, limit: Optional[int] = 2000) -> (str, List[dict]):
     text, calls = [], []
     for c in msg.get("content") or []:
         if c.get("type") == "text":
             text.append(c.get("text") or "")
         elif c.get("type") in ("tool_use", "server_tool_use"):
-            calls.append({"name": c.get("name"), "arguments": _cut(json.dumps(c.get("input")), 2000)})
+            calls.append({"name": c.get("name"), "arguments": _cut(json.dumps(c.get("input")), limit)})
     return "".join(text), calls
+
+
+def _chat_reasoning(m: dict) -> str:
+    """A chat message's or delta's reasoning: OpenRouter's ``reasoning``, or ``reasoning_content``."""
+    said = m.get("reasoning") if isinstance(m.get("reasoning"), str) else m.get("reasoning_content")
+    return said if isinstance(said, str) else ""
 
 
 def _hollow(path: str, body: bytes) -> Optional[tuple]:
@@ -216,8 +238,19 @@ def _hollow(path: str, body: bytes) -> Optional[tuple]:
         else (502, "no reply")
 
 
-def read_reply(path: str, body: bytes, streamed: bool) -> dict:
-    """What a reply said: its text, its tool calls, its usage."""
+def read_reply(path: str, body: bytes, streamed: bool, reasoning: bool = False, whole: bool = False) -> dict:
+    """What a reply said: its text, its tool calls, its usage; with
+    ``reasoning``, also the reasoning text it gave (chat's ``reasoning`` or
+    ``reasoning_content``, Messages' thinking blocks, a Responses reasoning
+    item's text or summary). A tool call's arguments are cut to 2,000
+    characters, as the call record keeps them, unless ``whole``."""
+    got = _read_reply(path, body, streamed, reasoning, None if whole else 2000)
+    if not reasoning:
+        got.pop("reasoning", None)
+    return got
+
+
+def _read_reply(path: str, body: bytes, streamed: bool, reasoning: bool, limit: Optional[int]) -> dict:
     if not streamed:
         try:
             got = json.loads(body)
@@ -225,19 +258,20 @@ def read_reply(path: str, body: bytes, streamed: bool) -> dict:
             return {}
         if "choices" in got:
             m = ((got.get("choices") or [{}])[0].get("message")) or {}
-            calls = [{"name": (c.get("function") or {}).get("name"), "arguments": _cut((c.get("function") or {}).get("arguments"), 2000)}
+            calls = [{"name": (c.get("function") or {}).get("name"), "arguments": _cut((c.get("function") or {}).get("arguments"), limit)}
                      for c in m.get("tool_calls") or []]
-            return {"text": m.get("content"), "tool_calls": calls, "usage": _usage(got.get("usage"))}
+            return {"text": m.get("content"), "tool_calls": calls, "usage": _usage(got.get("usage")), "reasoning": _chat_reasoning(m)}
         if got.get("type") == "message" and isinstance(got.get("content"), list):
-            text, calls = _text_of_messages(got)
-            return {"text": text, "tool_calls": calls, "usage": _usage(got.get("usage"))}
+            text, calls = _text_of_messages(got, limit)
+            return {"text": text, "tool_calls": calls, "usage": _usage(got.get("usage")),
+                    "reasoning": "".join(c.get("thinking") or "" for c in got["content"] if isinstance(c, dict) and c.get("type") == "thinking")}
         if got.get("object") == "response" or "output" in got:
-            text, calls = _text_of_responses(got)
-            return {"text": text, "tool_calls": calls, "usage": _usage(got.get("usage"))}
+            text, calls = _text_of_responses(got, limit)
+            return {"text": text, "tool_calls": calls, "usage": _usage(got.get("usage")), "reasoning": _reasoning_of_responses(got)}
         if got.get("object") == "list" and path.split("?")[0].endswith("/embeddings"):     # how many inputs, and the usage: never the vectors
             return {"embeddings": len(got.get("data") or []), "usage": _usage(got.get("usage"))}
         return {}
-    text, calls, usage, args = [], {}, None, {}
+    text, calls, usage, args, thought = [], {}, None, {}, []
     told = None                                  # Messages: the usage of message_start, then message_delta's on it
     for line in body.decode("utf-8", "replace").splitlines():
         if not line.startswith("data:"):
@@ -262,6 +296,8 @@ def read_reply(path: str, body: bytes, streamed: bool) -> dict:
                 calls[i], args[i] = b.get("name"), ""
             elif b.get("text"):
                 text.append(b["text"])
+            elif b.get("type") == "thinking" and isinstance(b.get("thinking"), str):
+                thought.append(b["thinking"])
             continue
         if kind == "content_block_delta":
             d, i = ev.get("delta") or {}, ev.get("index", 0)
@@ -269,14 +305,19 @@ def read_reply(path: str, body: bytes, streamed: bool) -> dict:
                 text.append(d.get("text") or "")
             elif d.get("type") == "input_json_delta":
                 args[i] = args.get(i, "") + (d.get("partial_json") or "")
+            elif d.get("type") == "thinking_delta":
+                thought.append(d.get("thinking") or "")
             continue
         if kind in ("response.completed", "response.done", "response.incomplete", "response.failed"):
-            t, c = _text_of_responses(ev.get("response") or {})
-            return {"text": t, "tool_calls": c, "usage": _usage((ev.get("response") or {}).get("usage"))}
+            t, c = _text_of_responses(ev.get("response") or {}, limit)
+            return {"text": t, "tool_calls": c, "usage": _usage((ev.get("response") or {}).get("usage")),
+                    "reasoning": _reasoning_of_responses(ev.get("response") or {})}
         for ch in ev.get("choices") or []:
             d = ch.get("delta") or {}
             if d.get("content"):
                 text.append(d["content"])
+            if reasoning:
+                thought.append(_chat_reasoning(d))
             for tc in d.get("tool_calls") or []:
                 i = tc.get("index", 0)
                 f = tc.get("function") or {}
@@ -285,8 +326,8 @@ def read_reply(path: str, body: bytes, streamed: bool) -> dict:
                 args[i] = args.get(i, "") + (f.get("arguments") or "")
         if ev.get("usage"):
             usage = _usage(ev["usage"])
-    return {"text": "".join(text), "tool_calls": [{"name": calls[i], "arguments": _cut(args.get(i, ""), 2000)} for i in sorted(calls)],
-            "usage": _usage(told) if told is not None else usage}
+    return {"text": "".join(text), "tool_calls": [{"name": calls[i], "arguments": _cut(args.get(i, ""), limit)} for i in sorted(calls)],
+            "usage": _usage(told) if told is not None else usage, "reasoning": "".join(thought)}
 
 
 # -- serving providers: the pin a run sets, and what a reply says of who served it --
@@ -348,9 +389,8 @@ def _clean(value, secrets=()):
     if isinstance(value, list):
         return [_clean(v, secrets) for v in value]
     if isinstance(value, str):
-        for s in secrets:
-            if s:
-                value = value.replace(s, "[REDACTED]")
+        for s in exchange_store.secret_keys(secrets):
+            value = value.replace(s, "[REDACTED]")
         return redact(value)
     return value
 
@@ -661,7 +701,8 @@ class Relay:
     def __init__(self, base: str, key: str, record_dir: str, prices: Optional[Dict[str, dict]] = None,
                  model: Optional[str] = None, side_models=(), key_header: str = "authorization", fields: bool = False,
                  ledger: Optional[str] = None, unit_caps: bool = True, serving: Optional[Dict[str, List[str]]] = None,
-                 facts: Optional[bool] = None, timeout: float = TIMEOUT, max_calls: Optional[int] = None):
+                 facts: Optional[bool] = None, timeout: float = TIMEOUT, max_calls: Optional[int] = None,
+                 exchanges: str = "off", exchanges_max_mb: int = exchange_store.MAX_MB):
         """``base``: the provider's endpoint (``https://api.openai.com/v1``).
         ``model``: when given, every call is sent as this model, whatever the
         caller named - the run's model is the recipe's, not the agent's. A
@@ -684,9 +725,18 @@ class Relay:
         routing facts, where its reply names who served it; by default when
         ``base`` is OpenRouter's. ``timeout``: the seconds one call may wait.
         ``max_calls``: the most model calls the agent's own route of a unit
-        may make (:func:`agent_route`), each answered call counted."""
+        may make (:func:`agent_route`), each answered call counted.
+        ``exchanges``: ``whole`` or ``text`` keeps each call of an agent's
+        route whole in ``<record_dir>/exchanges`` (``exchanges``), bounded at
+        ``exchanges_max_mb``, and numbers its calls in the record (``n``);
+        ``off``, the default, keeps the call record alone."""
         self.fields = fields
         self.max_calls = max_calls
+        if exchanges not in exchange_store.MODES:
+            raise ValueError(f"exchanges {exchanges!r}: one of {', '.join(exchange_store.MODES)}")
+        self.exchanges = (exchange_store.Store(record_dir, exchanges, exchanges_max_mb, (key, (key or "").strip()))
+                          if exchanges != "off" else None)
+        self.numbered: Dict[str, int] = {}       # the calls each agent route was sent, for the record's n
         self.answered: Dict[str, int] = {}       # the calls each agent route had answered, for max_calls
         self.serving = {m: list(s) for m, s in (serving or {}).items()}
         host = (urllib.parse.urlsplit(base).hostname or "").lower()
@@ -749,7 +799,7 @@ class Relay:
         quotes a header value it refuses (a key with a stray CR, a BOM), so
         the key itself is cut out of the text whatever else it says."""
         text = f"{type(e).__name__}: {e}"
-        for k in {self.key, self.key.strip()} - {""}:
+        for k in exchange_store.secret_keys((self.key, self.key.strip())):
             text = text.replace(k, "[REDACTED]")
         return redact(text)[:200]
 
@@ -793,9 +843,14 @@ class Relay:
             req = json.loads(raw) if raw else {}
         except ValueError:
             req = {}
+        number = None                            # a call of an agent's route kept whole: its number there, in its record and its line
+        if self.exchanges is not None and agent_route(tag) and h.command == "POST":
+            with self.lock:
+                number = self.numbered[tag] = self.numbered.get(tag, 0) + 1
         asked = req.get("model") if isinstance(req, dict) else None
         side = False
         routing_asked, pinned = None, None
+        dumped = False                           # raw is json.dumps(req): what the store splits into parts
         if isinstance(req, dict) and req:
             if rest.split("?")[0] == "/embeddings" and self.embedding_models.get(tag):
                 req["model"] = self.embedding_models[tag]
@@ -812,7 +867,7 @@ class Relay:
             if pinned:
                 routing_asked = req.get("provider")
                 req["provider"] = routing(pinned)
-            raw = json.dumps(req).encode()
+            raw, dumped = json.dumps(req).encode(), True
         if not side and not self.models.get(tag) and self._asked():
             h.send_error(400, "the unit was asked to stop")
             return
@@ -821,7 +876,7 @@ class Relay:
                 made = self.answered.get(tag, 0)
             if made >= self.max_calls:
                 self._refuse(h, tag, rest, req, asked, f"the unit's cap of {self.max_calls} model calls was reached: "
-                             "no further call of its agent is sent", "calls")
+                             "no further call of its agent is sent", "calls", number=number)
                 return
         booking = booked = None
         # a call that names its model is booked, whatever its route, but a token count, which costs nothing and
@@ -838,16 +893,18 @@ class Relay:
             if by == "gone":                     # its caller hung up while it waited: nothing was booked, nothing is sent
                 return
             if why:
-                self._refuse(h, tag, rest, req, asked, why, by)
+                self._refuse(h, tag, rest, req, asked, why, by, number=number)
                 return
         t0 = time.time()
         conn, r, back, body = None, None, [], b""
         cut = False                              # the reply was cut off: the call may have been billed
+        sent_headers: Dict[str, str] = {}
         cut_off = None
         try:
             # a Responses reply names its provider in the routing facts alone; a Messages reply names it of itself
             facts = bool(pinned) and self.facts and rest.split("?")[0].endswith(("/chat/completions", "/responses"))
-            conn, r = self.pool.send(h.command, rest, raw if h.command == "POST" else None, self._headers(h.headers, tag, facts))
+            sent_headers = self._headers(h.headers, tag, facts)
+            conn, r = self.pool.send(h.command, rest, raw if h.command == "POST" else None, sent_headers)
             status, kind, back = r.status, r.getheader("Content-Type") or "application/json", returned(r.headers)
         except Exception as e:
             status, kind = 502, "application/json"
@@ -924,12 +981,17 @@ class Relay:
                         self.ledger.release(booking)
                 except ledgers.Unavailable:
                     pass                         # the booking stays held, against the cap
+            if number is not None:
+                rec = {"n": number, **rec}
             with self.lock:
                 with open(os.path.join(self.dir, tag + ".jsonl"), "a") as f:
-                    f.write(json.dumps(rec) + "\n")
+                    f.write(json.dumps(exchange_store._cut_key(rec, self.exchanges.keys) if self.exchanges else rec) + "\n")
                 if not side and not self.models.get(tag) and overflowed(rec):
                     with open(os.path.join(self.dir, STOP), "a") as f:
                         f.write(OVERFLOW + "\n")
+            if number is not None:               # the exchange whole, after its record: it never raises
+                self.exchanges.write(tag, number, t0, rest, req if dumped else None, raw,
+                                     {k: v for k, v in sent_headers.items() if not _CREDENTIAL.search(k)}, status, streamed, body)
 
         h.send_response(status)
         if not any(n.lower() == "content-type" for n, _ in back):
@@ -1006,18 +1068,22 @@ class Relay:
         amount = seen["amount"]
         return (booking, amount, None, None) if booking else (None, amount, ledgers.refusal(seen, amount), seen["by"])
 
-    def _refuse(self, h: BaseHTTPRequestHandler, tag: str, rest: str, req, asked, why: str, by: str = "cap") -> None:
+    def _refuse(self, h: BaseHTTPRequestHandler, tag: str, rest: str, req, asked, why: str, by: str = "cap",
+                number: Optional[int] = None) -> None:
         """A call a capped run did not let out - at the run's cap (``by`` is
         ``cap``), at its unit's own (``unit``), or for want of a price
         (``price``): answered here and recorded as the relay's own
-        (``refused``), nothing sent."""
+        (``refused``), nothing sent. ``number``: its ``n`` on a route whose
+        calls are kept whole; nothing sent, it has no line there."""
         t = time.time()
         rec = {"t0": t, "t1": t, "path": rest, "model": req.get("model") if isinstance(req, dict) else None, "model_asked": asked,
                "status": 402, "refused": by, "error": why, "request": _request_tail(req) if isinstance(req, dict) else {},
                "headers": sorted(k.lower() for k in forwarded(h.headers))}
+        if number is not None:
+            rec = {"n": number, **rec}
         with self.lock:
             with open(os.path.join(self.dir, tag + ".jsonl"), "a") as f:
-                f.write(json.dumps(rec) + "\n")
+                f.write(json.dumps(exchange_store._cut_key(rec, self.exchanges.keys) if self.exchanges else rec) + "\n")
         body = json.dumps({"type": "error", "error": {"type": "call_cap" if by == "calls" else "spending_cap",
                                                       "code": {"unit": "unit_spending_cap", "price": "unpriced_model", "ledger": "ledger_unavailable",
                                                                "calls": "unit_call_cap"}.get(by, "spending_cap"),
@@ -1164,7 +1230,8 @@ def overflowed(call: dict) -> bool:
 def serve(argv=None) -> int:
     """``python3 -m nullius.standard.calls.relay serve --listen HOST:PORT --base URL
     --record DIR --key-file PATH [--model M] [--route TAG=MODEL ...] [--side-model M ...] [--key-header NAME]
-    [--public URL] [--prices JSON] [--ledger FILE] [--served-by MODEL=SLUG[,SLUG...] ...]``.
+    [--public URL] [--prices JSON] [--ledger FILE] [--served-by MODEL=SLUG[,SLUG...] ...]
+    [--exchanges whole|text|off] [--exchanges-max-mb N]``.
 
     ``--base``: provider endpoint. ``--route``: send a tag as another model. ``--public``: address returned by ``url``.
     The real key is read from ``--key-file`` and nowhere else: an argument or
@@ -1193,7 +1260,15 @@ def serve(argv=None) -> int:
     ap.add_argument("--routing", action="store_true",
                     help="the endpoint at --base routes a model to several serving providers, as OpenRouter does")
     ap.add_argument("--timeout", type=float, default=TIMEOUT, help="seconds one call may wait for the provider's reply")
+    ap.add_argument("--exchanges", default="off", choices=exchange_store.MODES,
+                    help="keep each call of an agent's route whole in the record's exchanges/ (whole), without "
+                         "the pictures' bytes (text), or not (off, the default)")
+    ap.add_argument("--exchanges-max-mb", type=int, default=exchange_store.MAX_MB, metavar="N",
+                    help=f"the most MB a unit's exchanges take: past it a call's line says cut (default {exchange_store.MAX_MB})")
     a = ap.parse_args(argv)
+    if a.exchanges_max_mb < 1:
+        print(json.dumps({"error": f"--exchanges-max-mb {a.exchanges_max_mb}: a whole number of MB, at least 1"}), flush=True)
+        return 2
     serving, bad = parse_served_by(a.served_by, "")
     if serving and not bad:
         host = (urllib.parse.urlsplit(a.base).hostname or "").lower()
@@ -1218,7 +1293,7 @@ def serve(argv=None) -> int:
     host, _, port = a.listen.rpartition(":")
     r = Relay(a.base, key, a.record, prices=json.loads(a.prices) if a.prices else None, model=a.model,
               side_models=a.side_model, key_header=a.key_header, ledger=a.ledger, serving=serving,
-              timeout=a.timeout, max_calls=a.max_calls)
+              timeout=a.timeout, max_calls=a.max_calls, exchanges=a.exchanges, exchanges_max_mb=a.exchanges_max_mb)
     for route in a.route:
         tag, _, model = route.partition("=")
         if not _TAG.match(tag) or not model:

@@ -7,7 +7,7 @@ nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--
     [--unsandboxed | --backend container|boat] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
     [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS]... [--max-turns N] [--max-calls N] \
     [--constraint KEY=VALUE]... \
-    [--served-by [MODEL=]SLUG[,SLUG...]]... \
+    [--served-by [MODEL=]SLUG[,SLUG...]]... [--exchanges whole|text|off] [--exchanges-max-mb N] \
     [--attempts K] [--retries N] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
 ```
 
@@ -38,6 +38,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--max-calls N` | The most model calls a unit's agent may make: [below](#a-cap-on-model-calls) |
 | `--constraint KEY=VALUE` | What the machine allows the run (repeatable): `cpus`, `memory_mb`, `processes`, `cpu_set`, `concurrency`, `gpu_ids` (indices, empty for none); [constraints](../settings/run-hosts.md#constraints). A recipe passes each machine's own |
 | `--served-by [MODEL=]SLUG[,SLUG...]` | On OpenRouter, the serving providers that may answer a model (repeatable): [below](#serving-providers) |
+| `--exchanges MODE`, `--exchanges-max-mb N` | What each unit's relay keeps of its agent's calls (`whole`, `text`, `off`), and its bound: [below](#the-exchange-record) |
 | `--attempts K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--retries N` | Run a failed attempt again, up to N times: [below](#retries) |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--attempts`); by default they stay for the next run |
@@ -84,6 +85,23 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | Not exact | Calls in flight together may pass it by the few already sent |
 | The upstream's own | A step limit of the benchmark's (τ³-bench's `--max-steps`, an OSWorld agent's `--max_steps`) still holds; this cap is on top |
 | The result | `config.json` records it under `standard.max_calls` |
+
+## The exchange record
+
+Each unit's relay keeps every call of its agent whole, its side calls included: the request as sent and the reply as it arrived. `--exchanges off` keeps the call record alone.
+
+| Rule | Detail |
+| --- | --- |
+| Where | The trial's `.work/relay/exchanges/`: a line per call (`<unit>.jsonl`), each distinct message, tool or system text once (`parts.jsonl`), each distinct inline picture once (`blobs/`: PNG, JPEG, WebP, GIF) |
+| Its version | Each `.jsonl` file's first line names its format, `{"schema": "nullius.exchanges/v1"}`; a file without it is version 1. A later version is refused, never guessed: the message names both, and a later Nullius reads it |
+| What a call keeps | The request after the relay's changes (the model it sends, a pin) and its sha256, the headers sent without the credentials, the reply's status and body. `agent/calls.jsonl` numbers the same calls (`n`) |
+| Stored as sent | Prompts and pictures are not redacted: a secret the agent typed or a screenshot showed is in the job's folder. Only the relay's key is cut out; a request that held it no longer rebuilds to its hash |
+| `text` | The same without the pictures' bytes: their hash, type and size |
+| The bound | `--exchanges-max-mb`, 256 MB a unit by default. Past it, a call's line and every later one say `cut`; the call record goes on |
+| Never in the way | A failure to write it (a full disk) leaves the agent's reply as it was; the call's line says what failed |
+| Not kept | The judge's and the simulated user's calls, and an option's embeddings: their call record alone |
+| Retries | A retried try's record goes with it under `retried/`; the next try starts its own |
+| The result | `config.json`: `standard.exchanges` and `standard.exchanges_max_mb`; a recipe's `exchanges` and `exchanges_max_mb` |
 
 ## A spending cap
 
