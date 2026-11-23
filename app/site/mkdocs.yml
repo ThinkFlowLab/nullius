@@ -92,6 +92,7 @@ nav:
           - Supported agents: agents/supported/README.md
           - Add manually: agents/add-manually.md
           - Add with an assistant: agents/add-with-assistant.md
+          - SWE-agent: agents/swe-agent.md
       - Capabilities:
           - Supported capabilities: capabilities/supported/README.md
           - Add manually: capabilities/add-manually.md
@@ -122,6 +123,7 @@ nav:
   - Reference:
       - Interfaces:
           - The standard: standard.md
+          - The computer port: ports/agent-computer-v1.md
       - Examples:
           - Harbor benchmark entry: examples/new-benchmark/README.md
       - Internals:
