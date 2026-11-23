@@ -1259,6 +1259,64 @@ class WorkspacesPage(unittest.TestCase):
         del execution.EXECUTIONS["r9"]                                                        # the run records change
         self.assertEqual(counts(), ("2", "1", "1"))
 
+    def test_counts_after_a_restart_come_from_the_disk(self):
+        from tests.test_feasibility import write_job
+        jobs, stored = str(self.run_dir / "jobs"), os.path.join(self.other().jobs_dir, "counts.json")
+        counts = lambda: (self.cell(self.other(), 2), self.cell(self.other(), 3))
+
+        def restart():                                       # what a new process has: no counts, no decoded job of it
+            web.workspaces._COUNTS.clear()
+            with workspace._DECODED_LOCK:
+                for p in [p for p in workspace._DECODED if os.path.dirname(p) == self.other().jobs_dir]:
+                    del workspace._DECODED[p]
+
+        def counted_again():                                 # (the counts, whether its jobs were read for them)
+            restart()
+            with patch.object(web.runs, "_grouped", wraps=web.runs._grouped) as grouped:
+                got = counts()
+            return got, any(c.args and c.args[0] is not None and c.args[0].name == self.other().name for c in grouped.call_args_list)
+
+        self.assertEqual(counts(), ("2", "0"))
+        self.assertEqual(json.loads(Path(stored).read_text())["counts"], {"runs": 2, "checks": 0})
+        self.assertFalse(os.path.exists(os.path.join(self.ws.jobs_dir, "counts.json")))          # the open one: never stored
+        restart()
+        with patch.object(workspace, "job_from_dict", side_effect=AssertionError("decoded")), \
+                patch.object(parse, "parse_job", side_effect=AssertionError("parsed")):
+            self.assertEqual(counts(), ("2", "0"))                                                # no trial read
+        self.assertEqual(counted_again(), (("2", "0"), False))
+        write_job(jobs, "r1-c", "nop", {"a": 0})                                                  # a moved head
+        self.assertEqual(counted_again(), (("2", "1"), True))
+        rec = LaunchesPage.record(self, "r9")                                                     # a changed root
+        other = self.other(); other.roots.append(rec.jobs); workspace.save(other)
+        self.assertEqual(counted_again(), (("3", "2"), True))
+        del execution.EXECUTIONS["r9"]                                                            # a changed run record
+        self.assertEqual(counted_again(), (("3", "1"), True))
+        with patch.object(workspace, "COUNTS_VERSION", workspace.COUNTS_VERSION + 1):             # another shape on disk
+            self.assertEqual(counted_again(), (("3", "1"), True))
+        with patch.object(web.workspaces.catalog, "signature", return_value=(("elsewhere", None),)):   # a changed catalogue
+            self.assertEqual(counted_again(), (("3", "1"), True))
+        self.assertEqual(counted_again(), (("3", "1"), True))                                     # and back
+        self.assertEqual(counted_again(), (("3", "1"), False))
+        self._write_json(os.path.join(jobs, "r1-c", "result.json"), {"stats": {"n_running_trials": 1}})   # a job still running
+        self.assertEqual(counted_again(), (("3", "1"), True))
+        self.assertFalse(os.path.exists(stored))
+        self.assertNotIn(self.other().name, web.workspaces._COUNTS)
+        self.assertEqual(counted_again()[1], True)                                                # counted each time
+
+    def test_counts_from_the_disk_are_todays_for_every_workspace(self):
+        from tests.test_feasibility import write_job
+        live = str(self.tmp / "live"); write_job(live, "l-a", "my-agent", {"a": 1}); write_job(live, "l-nop", "nop", {"a": 0})
+        self._write_json(os.path.join(live, "l-a", "result.json"), {"stats": {"n_running_trials": 1}})
+        running = workspace.create(self.home, [live], label="running")
+        table = lambda: {ws.name: (self.cell(ws, 2), self.cell(ws, 3)) for ws in (self.ws, self.other(), running)}
+        first = table()
+        web.workspaces._COUNTS.clear()                                                            # a restart
+        self.assertEqual(table(), first)
+        web.workspaces._COUNTS.clear()
+        with patch.object(workspace, "stored_counts", return_value=None):                       # as today: counted from the jobs
+            self.assertEqual(table(), first)
+        self.assertEqual(first[running.name], ("1", "1"))
+
     def test_launches_count_as_the_filtered_launches_page(self):
         bare = workspace.create(self.home, [str(self.tmp / "none")], label="bare")
         rows = re.findall(r'<tr data-launch="[^"]+".*?data-f-ws="([^"]*)"', self.get("/launches").get_data(as_text=True))

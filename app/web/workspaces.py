@@ -9,6 +9,7 @@ from flask import abort, flash, redirect, render_template, request, url_for
 from markupsafe import Markup, escape
 from nullius.runs import parse
 from nullius import execution, workspace
+from nullius.catalogue import catalog
 from nullius.judge import store
 
 from .core import app
@@ -59,26 +60,34 @@ def _root(path, launched, memo) -> dict:
     return {**memo[real], "path": path}
 
 
-def _counts(ws, recs) -> dict:
+def _counts(ws, recs, cat) -> dict:
     """The runs and the checks (nop, oracle) of *ws*, summed over the launches
     its Runs page shows, each counted as there and on the Launches page
     (``runs._tally``). Its roots are walked, each unchanged job read from its
-    cache. A closed workspace whose jobs had all ended keeps its counts while
-    its roots, their heads (``workspace.heads``) and ``recs``, the run records'
-    ids and states, are unchanged."""
+    cache. A closed workspace whose jobs had all ended keeps its counts, in
+    memory and on disk beside its job caches (``workspace.store_counts``), while
+    its roots, their heads (``workspace.heads``), ``recs``, the run records' ids
+    and states, and ``cat``, the catalogue's signature, are unchanged."""
     is_open = shared.STATE["workspace"] is not None and shared.STATE["workspace"].name == ws.name
-    key = None if is_open else (tuple(ws.roots), tuple(ws.job_roots), workspace.heads(ws.job_roots or ws.roots), recs)
+    key = None if is_open else (tuple(ws.roots), tuple(ws.job_roots), workspace.heads(ws.job_roots or ws.roots), recs, cat)
     last = _COUNTS.get(ws.name)
     if key is not None and last and last[0] == key:
         return last[1]
+    stored = None if key is None else workspace.stored_counts(ws, key)      # a restart: no trial read
+    if stored is not None:
+        _COUNTS[ws.name] = (key, stored)
+        return stored
     jobs, _, _, groups = runs_web._grouped(None if is_open else ws)
     by_id = {j.job_id: j for j in jobs}
     tallies = [runs_web._tally(g, by_id) for g in groups]
     counts = {"runs": sum(t["n_runs"] for t in tallies), "checks": sum(t["n_checks"] for t in tallies)}
     if key is not None and all(j.state == "finished" for j in jobs):
         _COUNTS[ws.name] = (key, counts)
+        workspace.store_counts(ws, key, counts)
     else:
         _COUNTS.pop(ws.name, None)
+        if key is not None:
+            workspace.store_counts(ws, key, None)
     return counts
 
 
@@ -89,9 +98,9 @@ _COUNTS: dict = {}      # workspace name -> (key, _counts) of a workspace whose 
 def workspaces_page():
     wss, launched = workspace.list_all(shared.WS_HOME), runs_web._held_launches()
     held = [w.name for _, _, holders in launched[0] for w in holders]
-    recs = tuple((e.id, e.state) for e in execution.EXECUTIONS.values())
+    recs, cat = tuple((e.id, e.state) for e in execution.EXECUTIONS.values()), catalog.signature()
     return render_template("workspaces/workspaces.html", workspaces=wss, csrf=shared._csrf_token(),
-                           counts={ws.name: _counts(ws, recs) for ws in wss}, n_judged={ws.name: store.count(ws.dir) for ws in wss}, n_launches={ws.name: held.count(ws.name) for ws in wss})
+                           counts={ws.name: _counts(ws, recs, cat) for ws in wss}, n_judged={ws.name: store.count(ws.dir) for ws in wss}, n_launches={ws.name: held.count(ws.name) for ws in wss})
 
 
 @app.route("/workspaces/open/<name>", methods=["POST"])

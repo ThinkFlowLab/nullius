@@ -437,6 +437,30 @@ class Cache(unittest.TestCase):
         gone = os.path.join(self.root, "gone")
         self.assertEqual(workspace.heads([gone]), ((gone, None),))
 
+    def test_stored_counts_answer_their_own_key_alone(self):
+        key = ((self.root,), (), workspace.heads([self.root]), (("r1", "done"),), ())
+        self.assertIsNone(workspace.stored_counts(self.ws, key))
+        workspace.load_job(self.ws, self.job_dir)
+        workspace.store_counts(self.ws, key, {"runs": 3, "checks": 1})
+        self.assertEqual(workspace.stored_counts(self.ws, key), {"runs": 3, "checks": 1})
+        self.assertEqual(self.ws.n_cached, 1)                                      # not a job's cache
+        self.assertIsNone(workspace.stored_counts(self.ws, key[:3] + ((("r1", "running"),), ())))
+        with patch.object(workspace, "COUNTS_VERSION", workspace.COUNTS_VERSION + 1):
+            self.assertIsNone(workspace.stored_counts(self.ws, key))
+        path = os.path.join(self.ws.jobs_dir, "counts.json")
+        for bad in ("[1]", "{", '{"version": 1, "key": "x"}',
+                    json.dumps({"version": 1, "key": workspace._key_digest(key), "counts": {"runs": "3"}})):
+            with self.subTest(bad=bad):
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(bad)
+                self.assertIsNone(workspace.stored_counts(self.ws, key))
+        workspace.store_counts(self.ws, key, {"runs": 3, "checks": 1})
+        workspace.store_counts(self.ws, key, None)
+        self.assertFalse(os.path.exists(path))
+        workspace.store_counts(self.ws, key, {"runs": 3, "checks": 1})
+        self.assertEqual(workspace.clear_cache(self.ws), 1)                        # Refresh drops them with the jobs
+        self.assertIsNone(workspace.stored_counts(self.ws, key))
+
     def test_index_lists_runs_without_a_parse(self):
         self.assertEqual(workspace.job_index(self.ws), {})
         workspace.load_job(self.ws, self.job_dir)

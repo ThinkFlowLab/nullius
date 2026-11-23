@@ -8,6 +8,7 @@ run tree — happens once per change rather than once per page.
     <home>/<name>/workspace.json   name, label, roots, created, opened, closed
     <home>/<name>/imported/        foreign run trees converted to job dirs
     <home>/<name>/jobs/<id>.json   a parsed Job, keyed by the job dir's signature
+    <home>/<name>/jobs/counts.json its runs and checks, while its jobs had all ended
 
 ``home`` is ``WORKSPACES_DIR`` or ``workspaces/`` in the persistent user data directory.
 A name is a slug the user typed, or two words picked at random.
@@ -104,7 +105,7 @@ class Workspace:
     def n_cached(self) -> int:
         try:
             return sum(1 for n in os.listdir(self.jobs_dir)
-                       if n.endswith(".json") and n != "index.json")
+                       if n.endswith(".json") and n not in _NOT_JOBS)
         except OSError:
             return 0
 
@@ -368,6 +369,9 @@ def _cache_file(ws: Workspace, job_dir: str) -> str:
     return os.path.join(ws.jobs_dir, f"{key}.json")
 
 
+_NOT_JOBS = ("index.json", "counts.json")    # in jobs/ beside the job caches
+
+
 def _index_path(ws: Workspace) -> str:
     return os.path.join(ws.jobs_dir, "index.json")
 
@@ -401,6 +405,41 @@ def _note_in_index(ws: Workspace, job_dir: str, job: parse.Job, index: dict | No
 def _write_index(ws: Workspace, index: dict) -> None:
     os.makedirs(ws.jobs_dir, exist_ok=True)
     ondisk.write_whole(_index_path(ws), lambda fh: json.dump(index, fh, ensure_ascii=False, indent=1))
+
+
+COUNTS_VERSION = 1   # bump when what counts.json holds changes
+
+
+def _key_digest(key) -> str:
+    return hashlib.sha256(json.dumps(key, default=str).encode()).hexdigest()
+
+
+def stored_counts(ws: Workspace, key) -> dict | None:
+    """The counts ``store_counts`` kept for *ws* under *key*, else None: no
+    trial is read. Plain JSON, job-level only: ``{"version", "key", "counts"}``."""
+    try:
+        with open(os.path.join(ws.jobs_dir, "counts.json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    counts = data.get("counts") if isinstance(data, dict) else None
+    if (isinstance(counts, dict) and data.get("version") == COUNTS_VERSION and data.get("key") == _key_digest(key)
+            and all(isinstance(counts.get(k), int) for k in ("runs", "checks"))):
+        return counts
+    return None
+
+
+def store_counts(ws: Workspace, key, counts: dict | None) -> None:
+    """*counts* of *ws* kept beside its job caches under *key*; None removes them."""
+    path = os.path.join(ws.jobs_dir, "counts.json")
+    if counts is None:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return
+    os.makedirs(ws.jobs_dir, exist_ok=True)
+    ondisk.write_whole(path, json.dumps({"version": COUNTS_VERSION, "key": _key_digest(key), "counts": counts}))
 
 
 # Jobs already decoded in this process, by cache file: (signature, Job, trial
@@ -511,4 +550,4 @@ def clear_cache(ws: Workspace) -> int:
             os.remove(os.path.join(ws.jobs_dir, n))
         except OSError:
             pass
-    return len([n for n in names if n != "index.json"])
+    return len([n for n in names if n not in _NOT_JOBS])
