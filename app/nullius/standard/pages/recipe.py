@@ -424,10 +424,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     the run sends it as."""
     d = defs or _all()
     errors, notes = [], []
-    # each problem once; shown: the step already says it elsewhere, so only Review lists it
-    def add(step, message, shown=False):
+    # each problem once; shown: the step already says it elsewhere, so only Review lists it; field: the input it is about
+    def add(step, message, shown=False, field=None):
         if not any(e["step"] == STEP[step] and e["message"] == message for e in errors):
-            errors.append({"step": STEP[step], "message": message, **({"shown": True} if shown else {})})
+            errors.append({"step": STEP[step], "message": message, **({"shown": True} if shown else {}), **({"field": field} if field else {})})
     out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": "",
            "served_models": {}}
     name = str(recipe.get("name") or "")
@@ -669,7 +669,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         turns = None
     limit = recipe.get("limit")
     if limit not in ("", None) and _int(limit, 1) is None:
-        add("limits", "The number of units is a whole number of at least 1, or empty for all of them.")
+        # the noun of the field's own label (command-builder.js, unitsOf): Original's when it alone runs, an own agent counted as it
+        alone = refs and {"original" if ref == "original" or (":" in ref and definitions.own_agent(base, ref)) else ref for ref in refs} == {"original"}
+        units = (((b.get("setups") or {}).get("original") or {}).get("units") if alone else None) or b.get("units") or {}
+        add("limits", f"Number of {units.get('nouns', 'units')}: a whole number of at least 1, or empty for all.", field="limit")
     # empty: one at a time; on Boat, as many as the account runs at once (the run caps it to that, boat.slots)
     conc = _int(recipe.get("concurrency") or (MAX_CONCURRENT if backend == "boat" else 1), 1, MAX_CONCURRENT)
     if conc is None:
@@ -1036,7 +1039,7 @@ def proving(benchmark: str, *, dataset: str = "", limit=None, provider: str = "o
     if not sets:
         errors.append(f"Choose one of {b['label']}'s datasets, or each of them.")
     if limit not in ("", None) and _int(limit, 1) is None:
-        errors.append("The number of units is a whole number of at least 1, or empty for all of them.")
+        errors.append(f"Number of {(b.get('units') or {}).get('nouns', 'units')}: a whole number of at least 1, or empty for all.")
     if _int(concurrency, 1, MAX_CONCURRENT) is None:
         errors.append(f"Units at a time: a whole number from 1 to {MAX_CONCURRENT}.")
     if judged and provider not in PROVIDERS:
