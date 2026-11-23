@@ -1,16 +1,14 @@
 """Runs grouped by the launch that made them.
 
 Runs started together ran the same tasks: the agents a recipe named, and the
-nop and oracle controls that check those tasks. The Runs page shows each launch
-as one block, so it needs to know which runs belong together. Two sources, in
+nop and oracle controls that check those tasks. Two sources, in
 this order:
 
 - **The run record.** A run started from the builder's Run writes
   ``runs/<name>/run.json``, and its plan names every job it launches
   (``execution.Plan.jobs``). Those jobs are one launch, including the ones
   Harbor has not written yet.
-- **Inferred, for everything else** — an imported tree, a job run by hand, a run
-  from before the record existed: runs on the same dataset whose start is within
+- **Inferred, for everything else** — an imported tree, a job run by hand: runs on the same dataset whose start is within
   ``WINDOW_SEC`` of the launch's first run are one launch. A run with no start
   time at all is a launch of its own.
 
@@ -21,8 +19,7 @@ launch: a shard joins the launch that holds another shard of its id before
 any other rule is asked. A run record's plan names the launch id of its shards
 too, so a shard joins its launch before its job is written.
 
-``group`` reads no file: it takes the parsed jobs and the records' job lists,
-and groups. Newest launch first. ``fold`` reads one participant's shards as
+``group`` puts the newest launch first. ``fold`` reads one participant's shards as
 ``cli merge`` would put them together, again only when the workspace parsed one of
 them again, and writes nothing.
 """
@@ -53,8 +50,7 @@ class Launch:
     @property
     def title(self) -> str:
         """What the launch is called on the Runs page: the standard's launch id
-        when its runs are the shards of one launch - what every shard
-        records, and what ``cli merge`` puts together - else ``prefix``."""
+        when its runs are the shards of one launch, else ``prefix``."""
         return next(iter(self.launch_ids)) if len(self.launch_ids) == 1 else self.prefix
 
     @property

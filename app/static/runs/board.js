@@ -137,7 +137,7 @@
     if (KEYS.some(k => st[k])) { KEYS.forEach(k => { st[k] = ''; }); apply(); light(null); }
   });
 
-  // ---- one tooltip: the same words on hover and on keyboard focus; it repeats the page, never gates it ----
+  // ---- one tooltip ----
   const tip = document.createElement('div'); tip.className = 'rp-tip'; tip.id = 'rp-tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true; document.body.append(tip);
   let tipFor = null, muted = null;
   const show = el => { tipFor = el; tip.textContent = el.dataset.tip; tip.hidden = false; el.setAttribute('aria-describedby', 'rp-tip');

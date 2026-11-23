@@ -1,11 +1,7 @@
 """Distribution charts over a trace's spans.
 
-The failure this guards is a chart that reads as an accounting of the run. Every
-number here is derived by summing or counting spans, and spans nest and overlap —
-so a total computed this way overshoots the wall clock, and a chart presenting it
-next to the breakdown strip would look authoritative while disagreeing with the
-only numbers on the page that partition the timeline. `SummedTimeIsNotWallClock`
-pins that apart deliberately, so nobody later "fixes" the disagreement.
+The failure this guards is a chart that reads as an accounting of the run. `SummedTimeIsNotWallClock`
+pins summed span time apart from the wall clock deliberately, so nobody later "fixes" the disagreement.
 
 The rest is the arithmetic that quietly lies when it goes wrong: a log axis whose
 last bin drops the longest span in the trace, a zero-width range on a trace where
@@ -401,7 +397,7 @@ class AxisLabelsSayWhatTheyMean(unittest.TestCase):
 class TheLegendIsAControl(unittest.TestCase):
     """Switching a kind off redraws one chart and nothing else.
 
-    Two ways this goes wrong, and both look reasonable from inside the code. One
+    Two ways this goes wrong. One
     is reaching for `trace.Filter` — the spans would leave the waterfall, the
     breakdown and the saved file too, when all the reader asked was that a line
     stop being drawn. The other is leaving the axis where it was, which is the

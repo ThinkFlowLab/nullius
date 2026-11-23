@@ -1,8 +1,5 @@
 {# The Judgement tab: the judge's answers beside the recorded evidence, never in its place.
-   Outcome questions as cards (the answer, a pill saying how it reads, the judge's own confidence or
-   Nullius's decisiveness for a yes/no), then the behaviour flags as a table (a human name, a result pill,
-   the likelihood as a bar, a row that opens on the question's own wording and the hygiene reading of its
-   state). "Not judged" until asked; Judge asks. Every count is Nullius's; the judge is never asked how many. #}
+   Outcome questions as cards, then the behaviour flags as a table. "Not judged" until asked; Judge asks. Every count is Nullius's; the judge is never asked how many. #}
 {% macro pill(r) -%}
 <span class="jpill {{ 'warn' if r.undecided else ('bad' if r.tone == 'bad' else ('good' if r.tone == 'good' else 'none')) }}" title="{% if r.undecided %}Undecided: within the judge's measured run-to-run spread of the 50% line (±{{ '%.0f'|format(r.floor * 100) }} points on this question), so another ask could land on the other side{% elif r.flag and r.floor is not none %}{{ r.pill }} by more than the judge's measured spread on this question (±{{ '%.0f'|format(r.floor * 100) }} points){% elif r.flag %}{{ r.pill }}: probability {{ 'at or above' if r.raised else 'below' }} 50%; no run-to-run spread has been measured for this question{% else %}{{ r.pill }}{% endif %}">{% if r.undecided %}—{% elif r.flag and r.raised %}⚑{% elif r.flag %}✓{% endif %} {{ r.pill }}</span>
 {%- endmacro %}
@@ -66,7 +63,7 @@
   </table>
 </div>
 <script>
-  // a flag's row opens on the question's own wording; no request, nothing asked. The page holds two
+  // The page holds two
   // panels (Decision, the LLM judge): each script binds its own, the panel just before it.
   document.currentScript.previousElementSibling.querySelectorAll('.jdisclose').forEach(b => b.addEventListener('click', () => {
     const open = b.getAttribute('aria-expanded') !== 'true'; b.setAttribute('aria-expanded', String(open));

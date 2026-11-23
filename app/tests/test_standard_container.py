@@ -769,8 +769,7 @@ class DockerTest(unittest.TestCase):
         self.assertEqual((left.stdout.strip(), nets.stdout.strip()), ("", ""))
 
     def test_a_relay_reaches_a_model_server_on_this_machines_loopback(self):
-        """A local model server (Ollama on localhost:11434) answered every
-        unit of a docker run with a refused connection: 127.0.0.1 in the
+        """127.0.0.1 in the
         relay's container is the container."""
         import http.server, threading
         class Chat(http.server.BaseHTTPRequestHandler):

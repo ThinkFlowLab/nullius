@@ -21,16 +21,16 @@ Decision asks a provider that lists a decision protocol
 
 | Reply | Recorded as |
 | --- | --- |
-| A question the model refuses | `refusals` in the record, never an answer; the trial page counts them |
+| A question the model refuses | `refusals` in the record, never an answer |
 | The provider's own cost (`usage.cost`) | `usage.cost_usd` |
-| The calls' time | `usage.seconds`; the judge tab shows it beside the button |
+| The calls' time | `usage.seconds` |
 | HTTP 402 | Said as such: the key's credit is spent, or the model is not free |
 
 ## Configure
 
-Add the connection in **Settings → Model providers** first. **Judges** offers only configured, compatible providers. A sole provider is selected automatically; with several, choose one and set the model. Under the provider, the card names the protocol Decision uses. When the provider serves more than one, choose one under **Protocol**. Keys and endpoints stay in Model providers.
+Add the connection in **Settings → Model providers** first. **Judges** offers only configured, compatible providers. With several, choose one, its model and its protocol.
 
-On OpenRouter, the **Model** suggestions are OpenRouter's public list of decision models. Nullius gets the list without a key when you first use the field, and keeps it in the cache for 6 hours. With no network and no cache, the suggestions are a short built-in list.
+On OpenRouter, the **Model** suggestions are OpenRouter's public list of decision models.
 
 You can also merge the shown properties into
 your existing `settings.json` ([location and precedence](README.md#save)).

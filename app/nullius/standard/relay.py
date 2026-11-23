@@ -9,11 +9,7 @@ A reply is passed through as it arrives - a streamed one (server-sent events)
 byte for byte - and recorded once it is complete, one line per call in
 ``<record_dir>/<tag>.jsonl``: when it started and ended, the model, the status,
 the tokens, and an abridged request and reply. Three API shapes are read,
-Chat Completions, Responses and Anthropic's Messages, streamed or not. Read
-apart from the rest (:func:`reply_facts`), the reply also says, when it does,
-the serving provider that answered (``served_by``), how it ended (``end``)
-and an error it holds though its status was a success (``error``); reading
-them never changes what the caller receives, nor the rest of the record but a failed Responses object's cost. The
+Chat Completions, Responses and Anthropic's Messages, streamed or not. :func:`reply_facts` extracts ``served_by``, ``end`` and errors on successful HTTP responses. This leaves the caller's reply unchanged and affects only the cost of failed Responses. The
 cost is the provider's when it says it (OpenRouter's ``usage.cost``), else an
 estimate from ``prices`` when one is given for exactly that model (the
 user's price list, ``nullius.prices``), marked as an estimate. A Responses object answered 200 that failed (its ``end``) with no usage
@@ -22,8 +18,7 @@ key's usage compared with the relay's sum would show one billed after all.
 
 What the relay changes on the way is kept small, so a call through it costs
 what the same call made directly would: the connection to the provider is
-kept open between calls (a new TLS handshake per call was most of what the
-relay added); the caller's headers go on as they came - an agent's session
+kept open between calls; the caller's headers go on as they came - an agent's session
 and capability headers are the provider's to read - except the credentials,
 which the relay replaces with its own key, and the headers of the hop itself;
 the provider's headers come back the same way (its request id, its rate
@@ -305,8 +300,7 @@ def routing(slugs) -> dict:
 
 
 def serving_problems(serving) -> List[str]:
-    """What is wrong with a pin by model (``{model: [slug, ...]}``): the one
-    check the run, its command line and the relay's own command share."""
+    """What is wrong with a pin by model (``{model: [slug, ...]}``)."""
     if not isinstance(serving, dict):
         return ["the serving providers are given by model: {MODEL: [SLUG, ...]}"]
     bad = []
@@ -494,7 +488,7 @@ def _request_tail(req: dict) -> dict:
     """The part of a request a reader needs: the model, how many messages,
     the last two, abridged, and the reasoning effort it asked for (chat's
     ``reasoning_effort``, the Responses API's ``reasoning.effort``; None when
-    it sent none), so a run shows the effort its agent really sent. A coding
+    it sent none). A coding
     agent resends its whole context on every call; the trajectory comes from
     the session, not from here."""
     items = req.get("messages") if isinstance(req.get("messages"), list) else req.get("input")
@@ -683,9 +677,7 @@ class Relay:
         bearer ``authorization``, or Anthropic's ``x-api-key``.
         ``fields``: each record also holds the request's fields as sent
         (:func:`request_fields`) - ``fidelity``'s, never a normal run's.
-        ``ledger``: the file of the run's spending cap (``ledger``), shared
-        by every relay of the job: a call is booked there before it is sent,
-        and not sent when it does not fit. ``serving``: by model, the serving
+        ``ledger``: the file of the run's spending cap (``ledger``). ``serving``: by model, the serving
         providers that may answer a request sent as that model (:func:`routing`),
         put on every such request in place of the caller's own. ``facts``: a
         pinned Chat Completions or Responses request asks OpenRouter for its
@@ -899,7 +891,6 @@ class Relay:
                     with self.lock:
                         self.answered[tag] = self.answered.get(tag, 0) + 1
                 rec["reply"] = read_reply(rest, body, streamed)
-                # who served it, how it ended, an error under the 200: beside what was read, never in its place
                 try:
                     rec["reply"].update({k: v for k, v in _clean(reply_facts(rest, body, streamed), (self.key, self.key.strip())).items()
                                          if k not in rec["reply"]})
@@ -999,7 +990,6 @@ class Relay:
         if not row:
             return None, None, f"no price for the model {req.get('model')!r}: a run with a spending cap sends no call it cannot price", "price"
         try:
-            # a call only the calls in flight keep out waits for them: their bookings are estimates, and settle
             deadline = time.time() + ledgers.WAIT
             least = ledgers.bound(req, raw, row, rest, output=False)
             while True:
@@ -1064,7 +1054,7 @@ class Relay:
         self.server = ThreadingHTTPServer((host, port), Handler)
         self.server.daemon_threads = True
         # stop() waits for the serving loop's next look: at the default half-second that idled a worker
-        # slot up to 0.5 s at the end of every unit (minutes over a 1319-unit GSM8K run)
+        # slot up to 0.5 s at the end of every unit
         threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
         return self
 
@@ -1108,7 +1098,7 @@ def asked(record_dir: str) -> Optional[str]:
 
 
 # what a unit whose agent reached the run's cap on model calls carries (``max_calls``): an agent error, counted
-# against the agent, as a timeout is (runs.classify)
+# against the agent (runs.classify)
 CALLS_ERROR = "UnitCallCapError"
 
 
@@ -1130,7 +1120,7 @@ def failure(calls: List[dict], words: bool = True, agent: bool = False) -> Optio
     if over:                                     # its own cap: the unit's doing, and the run goes on
         return ledgers.UNIT_ERROR, over.get("error") or ""
     many = next((c for c in calls if c.get("refused") == "calls"), None)
-    if many:                                     # its agent made the calls it was allowed: the agent's, as its time running out is
+    if many:                                     # its agent made the calls it was allowed: the agent's doing
         return CALLS_ERROR, many.get("error") or ""
     calls = _begun(calls)
     ok = [i for i, c in enumerate(calls) if c.get("status") == 200]
@@ -1150,7 +1140,7 @@ def failure(calls: List[dict], words: bool = True, agent: bool = False) -> Optio
         # OpenAI's spent credit comes as a 429 too: a usage limit, no pace mends it
         return ("ApiUsageLimitError" if last.get("error_code") == "insufficient_quota" else "RateLimitError"), said
     if s == 402 and not last.get("refused"):
-        return "ApiUsageLimitError", said        # the provider's credit spent (the relay's own refusals say so above, or are its own)
+        return "ApiUsageLimitError", said        # the provider's credit spent
     if s in (401, 403):
         return "AgentAuthenticationError", said
     if (s == 404 and "model" in (last.get("error") or "").lower()) or (s == 400 and _NO_MODEL.search(last.get("error") or "")):
@@ -1176,8 +1166,7 @@ def serve(argv=None) -> int:
     --record DIR --key-file PATH [--model M] [--route TAG=MODEL ...] [--side-model M ...] [--key-header NAME]
     [--public URL] [--prices JSON] [--ledger FILE] [--served-by MODEL=SLUG[,SLUG...] ...]``.
 
-    ``--base`` is the provider's endpoint, ``--route`` a route sent as another
-    model (a benchmark's judge), ``--public`` the address ``url`` hands out.
+    ``--base``: provider endpoint. ``--route``: send a tag as another model. ``--public``: address returned by ``url``.
     The real key is read from ``--key-file`` and nowhere else: an argument or
     an environment variable is visible to anyone who lists processes or
     inspects a container. One JSON line, ``{"listening": "http://host:port"}``, says it

@@ -353,7 +353,7 @@ class Prove(unittest.TestCase):
     def test_units_that_may_not_be_redistributed_are_counted_never_named(self):
         """A prompt naming its answer as declared, and a reference left in a
         file: the definition keeps the counts, not the units; one whose units
-        may be redistributed names them, as before."""
+        may be redistributed names them."""
         here = os.path.join(self.tmp, "held")
         os.makedirs(here)
         with open(os.path.join(here, "driver.py"), "w") as f:

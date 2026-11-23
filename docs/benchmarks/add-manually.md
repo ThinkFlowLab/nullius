@@ -56,15 +56,13 @@ A standard benchmark from a scaffold, its driver calling the upstream's own code
 | Public web | An environment's `network` ([details](../standard.md#public-web-requirements)) |
 
 The commands also work [from source](../cli/README.md). Additions go under the
-user catalogue reported by `nullius paths`, without changing the installed
-package, icon sprite or project tests. A folder with a bundled key overrides
+user catalogue reported by `nullius paths`. A folder with a bundled key overrides
 that entire entry; copy the complete folder before editing it.
 
 For a contribution to the bundled catalogue, copy the finished entry into
 `app/nullius/catalogue/benchmarks/` in a source checkout, add its mark in
 `app/static/catalogue/marks.svg`, run the relevant suites and refresh
-`python3 app/tests/catalogue_docs.py --write`. Those are contribution steps,
-not requirements for a personal addition.
+`python3 app/tests/catalogue_docs.py --write`.
 
 !!! warning "A benchmark without working controls has proven nothing"
     Inspect the control jobs and the proof report before running an agent on it.

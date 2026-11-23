@@ -32,7 +32,7 @@ uv run --no-project --with-requirements app/requirements.txt app/app.py
 ```
 
 Open **[127.0.0.1:5057](http://127.0.0.1:5057)** to go straight to **Runs**.\
-The [Quickstart guide](docs/getting-started.md) covers open results, a first run, the app on another machine, upgrades, wheel installation and migration from a checkout.
+The [Quickstart guide](docs/getting-started.md) covers the rest.
 
 ```bash
 # open job folders from the command line
@@ -44,7 +44,7 @@ nullius serve --host 127.0.0.1 --port 8080
 
 Settings, licences, user catalogue entries and runs live outside the installed
 package. `nullius paths` shows their locations; `NULLIUS_HOME` selects a separate
-profile. Provider keys can be saved in Settings without creating an `.env` file.
+profile. Save provider keys in Settings.
 
 ## What it does
 
@@ -158,7 +158,7 @@ uv run --no-project --with-requirements app/requirements.txt \
 ```
 
 The [tests workflow](https://github.com/thinkflowlab/nullius/actions/workflows/tests.yml)
-runs both suites on pull requests; they can also be run locally.
+runs both suites on pull requests.
 
 ## License
 
@@ -171,7 +171,7 @@ agents, capabilities and datasets retain their own licenses.
 
 ## Credits
 
-Built by the Nullius contributors. To cite it:
+To cite it:
 
 ```bibtex
 @software{Nullius,

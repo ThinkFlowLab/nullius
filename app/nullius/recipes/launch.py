@@ -3,26 +3,22 @@
 The catalogue owns benchmark facts. This module owns only launch choices and
 parameter metadata: the agents the builder offers by name and the parameters
 it knows for them. The browser compiles recipes locally; this module never
-executes commands, and nothing here imports a harness or a runtime.
+executes commands.
 
 Every name here has to match what Harbor accepts - an agent's import path, the
 ``--ak`` a parameter is sent as - and this repository has no Harbor source to
-check them against. What is checked here is the other half:
-``app/ui_tests/test_command_builder.py`` pins the recipes this module
-produces, so a change made *here* cannot silently alter what the builder emits.
+check them against.
 """
 from dataclasses import asdict
 
 # `kind` groups the builder's agent list: the reference agent a benchmark
-# brings and the controls that bracket it. Harbor's own agents join them once
-# the pinned Harbor is scanned (`builtin`); an agent under evaluation is
-# typed per recipe, as an import path.
+# brings and the controls that bracket it.
 AGENTS = [
     # A benchmark's own reference agent: lives in Harbor's source tree, not its package,
     # so it needs the adapter directory on PYTHONPATH (see running.md). The path is
     # anchored on the run target's home, not on a sibling of a checkout: a run from
     # the builder starts in its own run directory, on this machine or a host, and
-    # `../harbor-src` from there pointed nowhere. A recipe may name another.
+    # `../harbor-src` from there pointed nowhere.
     {"id": "tau3-llm-agent", "label": "tau3-llm-agent (τ³ reference)", "arg": "tau3_llm_agent:Tau3LLMAgent",
      "control": False, "benchmarks": ["tau3-bench"], "pythonpath": "~/harbor-src/adapters/tau3-bench", "kind": "reference",
      "summary": "τ³'s own reference agent, from Harbor's source tree."},
@@ -63,11 +59,11 @@ def payload(cat, jobs):
     latest = max(dated, key=lambda j: j.started_at.timestamp()).model_name if dated else ""
     return {
         "version": 1, "agents": AGENTS,
-        # Harbor and the Nullius standard: the page offers choices, the core and standard/recipe.py compile them.
+        # Harbor and the Nullius standard.
         "runners": [standard.RUNNER, providers.HARBOR],
-        # why a saved recipe of a runner no longer offered does not open (a benchmark's own scripts: its Original setup)
+        # why a saved recipe of a runner no longer offered does not open
         "runnerGone": providers.GONE,
-        # the providers a run is sent to, from the registry: the Model step offers each where its protocols fit
+        # the providers a run is sent to, from the registry
         "providers": providers.run_choices(),
         # the standard's benchmarks, agents and capabilities, and why a pair does not fit (standard/recipe.py, choices)
         "standard": standard.choices(),

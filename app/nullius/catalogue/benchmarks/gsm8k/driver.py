@@ -18,8 +18,7 @@ answer - the original setup: the problem asked of a model in one call through
          temperature option asks for (default: the provider's own, since a
          model that reasons refuses one)
 
-The upstream's module imports torch (for a training dataset class the score
-never uses), and Platinum is published as a parquet file, read with pyarrow, so
+The upstream's module imports torch, and Platinum is published as a parquet file, read with pyarrow, so
 the driver runs in the environment of its own that standard.json declares
 (driver.install), never in Nullius's.
 

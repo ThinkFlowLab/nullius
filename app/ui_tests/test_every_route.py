@@ -4,8 +4,7 @@ The rule list comes from ``app.url_map`` rather than a list written here, so a
 route added later is covered without anyone remembering to add it. Arguments
 are filled from the jobs and trials the fixture workspace actually loads. A
 rule that cannot be filled is never dropped: it is reported as a skipped
-sub-test with the argument it lacks, and a rule whose arguments only mean
-something inside a selection is driven below as a workflow instead.
+sub-test with the argument it lacks.
 
 The workspace is opened through ``open_workspace`` on a copy of the recorded
 Harbor jobs, under a temporary workspace home: the live-board workflow writes
@@ -13,8 +12,6 @@ a feed into a job directory, and that must never be a fixture's. No request
 leaves the process: ``urllib.request.urlopen`` refuses for the whole class, and
 so does the program a runner's versions are listed with where that is ``git``
 (``nullius.gitrefs``, when present, is pointed at one that does not exist).
-What the runner-versions route exercises is therefore the offline answer - the
-tested version, and the reason the rest is missing.
 """
 from __future__ import annotations
 
@@ -34,7 +31,7 @@ from nullius import workspace
 from nullius.catalogue import catalog, harbor_entry
 from nullius.traces import trace as trace_mod
 
-try:                    # a repository's refs listed by `git ls-remote`, where that has landed
+try:                    # a repository's refs listed by `git ls-remote`
     from nullius import gitrefs
 except ImportError:
     gitrefs = None

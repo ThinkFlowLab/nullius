@@ -161,8 +161,7 @@ class Problems(unittest.TestCase):
 
     def test_a_save_applies_its_change_to_the_file_as_it_is_now(self):
         """Two proofs of one benchmark overlap, or the user edits it while a
-        conformance check runs: each save used to write back the copy loaded
-        at its start and drop what the other wrote."""
+        conformance check runs: both writes must survive."""
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "standard.json")
             with open(path, "w") as f:
@@ -183,7 +182,7 @@ class Problems(unittest.TestCase):
 
     def test_a_field_of_the_wrong_type_leaves_the_definition_out_and_says_so(self):
         """agent.json with "model": "gpt-4o", standard.json with "score": "pass":
-        the checks crashed and /new-run, /agents and /benchmarks returned 500."""
+        the checks say so and the pages answer."""
         with tempfile.TemporaryDirectory() as tmp:
             for kind, wrong in (("agent", {"model": "gpt-4o"}), ("benchmark", {"score": "pass"})):
                 path = os.path.join(tmp, definitions.KINDS[kind]["file"])

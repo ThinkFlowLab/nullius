@@ -2,8 +2,7 @@
 
 The failure it catches is quiet: an outcome with no stylesheet entry paints a
 colourless dot, which reads as "no data" rather than as the outcome it is.
-Adding a label without adding a colour is the easy half of the mistake, and the
-light palette is a second block that is simple to forget.
+Both palettes need every outcome.
 """
 from __future__ import annotations
 

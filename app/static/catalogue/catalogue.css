@@ -1,4 +1,4 @@
-/* Benchmarks: two shelves of cards, official then community; a card opens its benchmark's page. */
+/* Benchmarks: two shelves of cards, official then community. */
 .bench-index, .bench-page { width: 100%; max-width: 1120px; margin: 0 auto; }
 .bench-index:not(.bench-new) { max-width: 1320px; }
 /* the cards' controls row, under the title */
@@ -78,7 +78,7 @@ tr:has([data-pick]:not(:disabled)) { cursor: pointer; }
 .bench-card-blocker { font-size: 13px; line-height: 1.5; color: var(--text-dim); }
 .bench-none { color: var(--text-dim); font-size: 14px; }
 
-/* A benchmark's page: what it is, what runs it, its datasets, its limits, how to cite it. */
+/* A benchmark's page. */
 .bench-domain { margin: 0 0 24px; max-width: 62ch; font-size: 16px; line-height: 1.55; color: var(--text-dim); }
 .bench-blocked { margin: 0 0 28px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); font-size: 14px; line-height: 1.55; color: var(--text); }
 .bench-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 32px; }
@@ -297,7 +297,7 @@ dialog.std-how::backdrop { background: rgba(0, 0, 0, .45); }
 .std-code-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--border-soft); font: 11.5px var(--mono); color: var(--text-faint); }
 .std-copy { border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); border-radius: 6px; padding: 2px 9px; font-size: 11.5px; cursor: pointer; }
 .std-code pre { white-space: pre; margin: 0; padding: 10px 12px; overflow-x: auto; font: 12px/1.55 var(--mono); color: var(--text); background: none; border: 0; }
-/* An agent's page: a port by what it does, its id beside it; the proof's kit and backend; fidelity, options. */
+/* An agent's page. */
 .std-portname { font-weight: 500; }
 .std-portid { font-size: 13px; color: var(--text-faint); }
 .std-subhead { margin-top: 22px !important; }
@@ -315,7 +315,7 @@ dialog.std-how::backdrop { background: rgba(0, 0, 0, .45); }
 .std-prooftable .std-ctls { margin-top: 0; }
 .std-joblink { display: inline-block; font-size: 11.5px; margin: 6px 10px 0 0; }
 @media (max-width: 760px) { .std-prooftable th, .std-prooftable td { display: block; width: auto; } .std-prooftable td { border-top: 0; padding-top: 0; } }
-/* The Add dialog on the Agents and Capabilities tabs: two tabs, the assistant's three fields and the prompt they build. */
+/* The Add dialog on the Agents and Capabilities tabs. */
 .std-how-tabs { display: flex; gap: 4px; margin: 14px 0 4px; border-bottom: 1px solid var(--border); }
 .std-how-tabs [role=tab] { font: inherit; font-size: 13.5px; font-weight: 500; color: var(--text-dim); background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 12px; min-height: 40px; cursor: pointer; }
 .std-how-tabs [role=tab][aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); }
@@ -424,8 +424,6 @@ a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underli
 .std-optvals-detailed { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }
 .std-optvals-detailed li { align-content: start; padding: 12px; }
 
-
-/* Each benchmark topic has a clear boundary without oversized spacing. */
 .bench-main { gap: 20px; }
 .bench-main > .bench-section, .bench-main > .bench-cols > .bench-section { padding: 22px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); min-width: 0; }
 .bench-main > .bench-section > h2, .bench-main > .bench-cols > .bench-section > h2 { margin-bottom: 18px; }

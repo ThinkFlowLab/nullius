@@ -55,15 +55,11 @@ Fields read from an ATIF `trajectory.json`, all optional:
 
 ## Known limits
 
-- An agent that writes no ATIF trajectory has no call-level, tool or step metrics. Its own logs in
-  `agent/` may hold them in another shape.
+- Without ATIF, call, tool and step metrics are unavailable. Check `agent/` logs.
 - Some agents log a wrapper call and the underlying call as two tool calls. Inspect `top_tools` and
   use `--ignore-tool`.
-- Token and cost totals come from the agent. Two agents may account for cache or reasoning tokens
-  differently; compare with care and say so when the accounting differs.
-- Configuration differences come from the job `config.json`. Settings inside an agent (sampling
-  temperature, seed, stop rules, cache keys) are not there; read the run scripts and the agent's own
-  settings when a difference in cost or behaviour needs explaining.
+- Agents can account for cache and reasoning tokens differently; compare with care and say so when the accounting differs.
+- Read the run scripts and agent settings for configuration differences absent from the job's `config.json`.
 - Benchmark-specific evidence, such as which verifier check failed or why a conversation ended,
   lives in `verifier/` and in benchmark state files. The script does not parse these; read them
   during the investigation and add what matters to the page.

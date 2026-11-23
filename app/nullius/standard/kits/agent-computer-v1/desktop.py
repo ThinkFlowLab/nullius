@@ -14,13 +14,7 @@ the X display, the session bus and the window manager, and the desktop is
 ready once the window manager holds the display. Everything after is
 ``docker exec``:
 
-- :meth:`Desktop.python` runs code as ``user`` in the desktop's Python and
-  answers ``{status, output, error, returncode}``, or None when it did not
-  end within its bound (it is killed then);
-- :meth:`Desktop.upload` and :meth:`Desktop.read` write and read a file as
-  ``user``, a read bounded at 12 MiB and of a regular file alone;
-  :meth:`Desktop.capture` is the screen as PNG bytes;
-  :meth:`Desktop.password` is ``""``: ``user`` has no password and no sudo;
+- :meth:`Desktop.password` is ``""``: ``user`` has no password and no sudo;
 - :meth:`Desktop.act` runs one action, Python text with ``pyautogui`` and
   ``time`` imported, as ``user``, and keeps its start and end, read on the
   desktop's monotonic clock (the fixture's) by the root process that runs it:

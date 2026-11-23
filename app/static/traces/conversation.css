@@ -1,5 +1,4 @@
-/* Uses the application's theme tokens: no hard-coded dark text on light-only
-   surfaces. Bounded readers prevent long captures stretching the whole page. */
+/* Bounded readers prevent long captures stretching the whole page. */
 .trial-tabs{display:flex;gap:24px;border-bottom:1px solid var(--border);margin:28px 0 26px;overflow-x:auto}
 .trial-tabs button{border:0;border-bottom:2px solid transparent;background:none;color:var(--text-dim);font:inherit;padding:12px 0;cursor:pointer;white-space:nowrap}
 .trial-tabs button[aria-selected=true]{color:var(--text);border-bottom-color:var(--accent)}

@@ -112,8 +112,7 @@ class StandardBenchmarkSwitch(CompilerCase):
 
     def test_attempts_and_the_judge_and_simulator_models_survive_reopening(self):
         """New run like this, the draft, Load and Import all go through
-        fromJSON: a tau3-bench recipe at 3 attempts with a judge model chosen
-        came back at 1 attempt with the official judge, and ran so."""
+        fromJSON."""
         out = self.js('const r=C.createStandard("tau3-bench");r.repeat=3;r.judge_model="openai/gpt-5";r.simulator_model="openai/gpt-4.1";'
                       'const back=C.fromJSON(JSON.stringify(r));'
                       'const d=C.unpackDraft(C.packDraft({recipe:r,step:C.STEP.model,tab:"select"}),{});'
@@ -238,7 +237,7 @@ class EveryTask(CompilerCase):
 
     def test_a_task_name_filter_is_not_every_task(self):
         """An include or exclude pattern with no limit runs the matching tasks, not the
-        whole dataset; the Review and Run's question said "every task (375)" regardless."""
+        whole dataset."""
         out = self.js('const r=C.create("harbor");r.agents=["tau3-llm-agent"];r.model="openai/x";r.tasks="";r.include="airline*";' + PIN + 'const scope=()=>C.review(r).find(x=>x[1]==="Scope")[2];'
                       'const a=scope(),ca=C.runnable(r).confirm;r.tasks=5;const b=scope();r.tasks="";r.include="";'
                       'r.custom.push({scope:"harness",key:"exclude-task-name",type:"string",value:"telecom*"});const c=scope(),cc=C.runnable(r).confirm;'

@@ -370,8 +370,7 @@ print(json.dumps({"providers": providers, "backend": nullius.__file__,
         self.assertEqual(parent["successful_launches"], 3)
         probe = json.loads((self.tmp / "probe.json").read_text())
         snapshot = Path(parent["snapshot"])
-        # The same installed interpreter with only PYTHONPATH (the previous
-        # dispatch) really does see both providers; a successful import alone
+        # The same installed interpreter with only PYTHONPATH really does see both providers; a successful import alone
         # would therefore miss the regression this test guards.
         old = subprocess.run([str(python), "-c",
             "import json, pathlib, sys; print(json.dumps(sorted({"

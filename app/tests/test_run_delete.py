@@ -205,7 +205,7 @@ class Owners(unittest.TestCase):
             owner = execution.owners()
             for job in "abcd":
                 found = [e for e in recs if any(j["name"] == job for j in e.plan.jobs)]
-                before = max(found, key=lambda e: e.started) if found else None     # for_job as it was: one scan per job
+                before = max(found, key=lambda e: e.started) if found else None     # Reference scan: once per job.
                 self.assertIs(owner.get(job), before)
                 self.assertIs(execution.for_job(job), before); self.assertIs(execution.for_job(job, owner), before)
         self.assertEqual({j: e.id for j, e in owner.items()}, {"a": "new", "b": "tie-1", "c": "tie-1"})

@@ -12,7 +12,7 @@ Neither agent's history is shortened beyond the upstream's own screenshot trimmi
 
 ## The LLM grader and the simulated user
 
-The LLM grader (21 tasks) and the simulated user (6 tasks) are Claude Sonnet 4.6 through the run's provider, whichever agent runs; a null control pays for the grader too. The simulated user's calls count in the agent's tokens and cost; with M3 it is almost never asked.
+The LLM grader (21 tasks) and the simulated user (6 tasks) are Claude Sonnet 4.6 through the run's provider, whichever agent runs; a null control pays for the grader too. The simulated user's calls count in the agent's tokens and cost.
 
 ## Particular tasks
 

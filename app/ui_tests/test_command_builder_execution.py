@@ -133,7 +133,7 @@ class RunFromHere(CompilerCase):
         s = out['script']
         self.assertIn('"$NULLIUS_HARBOR" run', s); self.assertIn('-p "$NULLIUS_TASKS"', s); self.assertIn('--jobs-dir "$NULLIUS_JOBS"', s)
         self.assertNotIn('with_key', s); self.assertNotIn('/data/tau3 demo', s)
-        self.assertIn('LLM_API_KEY="${API_TOKEN', s)                                                     # the credentials map as before
+        self.assertIn('LLM_API_KEY="${API_TOKEN', s)
         self.assertTrue(s.startswith('#!/usr/bin/env bash')); self.assertIn('exit "$status"', s)
         subprocess.run(['bash', '-n'], input=s, text=True, check=True)
         # a registry dataset: no task folder to send

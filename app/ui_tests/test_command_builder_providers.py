@@ -62,8 +62,7 @@ class ProviderAndModel(CompilerCase):
 
     def test_an_openai_model_run_on_openrouter_stays_on_openrouter(self):
         """A job that ran openrouter/openai/gpt-4o, reopened or prefilled, and
-        an old recipe {provider: openrouter, model: openai/gpt-4o}: the page
-        read OpenAI from the model while /run used the recipe's OpenRouter."""
+        an old recipe {provider: openrouter, model: openai/gpt-4o} must both preserve OpenRouter."""
         out = self.js('const pre=C.prefill({model:"openrouter/openai/gpt-4o"});'
                       'const old=C.fromJSON(JSON.stringify({...C.create("harbor"),provider:"openrouter",model:"openai/gpt-4o",modelFormat:undefined}));'
                       'const job=C.fromJob({launch:{agents:[{name:"claude-code",model:"openrouter/openai/gpt-4o"}]}}).recipe||C.fromJob({launch:{agents:[{name:"claude-code",model:"openrouter/openai/gpt-4o"}]}});'
@@ -75,8 +74,7 @@ class ProviderAndModel(CompilerCase):
         self.assertTrue(any('provider' in e.lower() for e in errs('r.provider="bogus"')))
         self.assertTrue(any('endpoint' in e for e in errs('r.provider="openrouter";r.urlEnv=""')))
         self.assertEqual([e for e in errs('r.provider="openai";r.urlEnv=""') if 'endpoint' in e], [])
-        self.assertEqual([e for e in errs('r.provider="openrouter";r.urlEnv="API_URL"') if 'provider/model' in e], [])   # a bare name is the norm now
-
+        self.assertEqual([e for e in errs('r.provider="openrouter";r.urlEnv="API_URL"') if 'provider/model' in e], [])
 
 
 class ProviderFromSettings(CompilerCase):
@@ -123,7 +121,7 @@ class ProviderFromSettings(CompilerCase):
         self.assertEqual(self.on(['openai', 'custom'], new), ['openai', 'openai'])
         self.assertEqual(self.on(['openrouter', 'openai', 'custom'], new), ['openrouter', 'openrouter'])
         self.assertEqual(self.on(['custom'], new), ['custom', 'custom'])
-        self.assertEqual(self.on([], new), ['openai', 'openai'])          # none set: as before, from the latest model seen (openai/test-model)
+        self.assertEqual(self.on([], new), ['openai', 'openai'])          # No selection: infer from the latest observed model.
 
     def test_run_waits_for_a_provider_that_is_set_and_never_switches_one(self):
         state = ("const r=C.create();r.agents=['tau3-llm-agent'];" + PIN.replace('%', '%%') + "r.model='x';r.provider=%s;const back=C.fromJSON(JSON.stringify(r));"

@@ -15,5 +15,4 @@ rendering a logo makes no request to its upstream website.
 | Terminus 2 | Harbor's mark in `../../brand/marks.svg`, identifying its maker |
 
 The four SVG files are copied unchanged from these pinned sources. These marks
-belong to their respective owners; inclusion does not imply endorsement. The
-Example agent has no upstream brand and keeps its initial.
+belong to their respective owners; inclusion does not imply endorsement.

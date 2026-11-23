@@ -1,6 +1,6 @@
 # Add a capability with an assistant
 
-Open **Capabilities → Add**. The shared dialog preselects **Capability**;
+Open **Capabilities → Add**. Then
 enter its name and source, then copy the prompt to your coding assistant.
 It uses `/import-capability`. See the [shared import procedure](../standard.md#with-an-assistant).
 

@@ -636,7 +636,6 @@ class TaskClasses(unittest.TestCase):
         self.assertEqual(len(_task_classes()) - len(hosted | proxied), 63)
 
     def test_the_graded_tasks_that_catch_a_grader_error_themselves(self):
-        """The graded tasks that catch a grader error themselves; pinned, so a change shows."""
         catching = set()
         for p in _task_classes():
             with open(p, encoding="utf-8") as f:

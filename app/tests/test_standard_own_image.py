@@ -312,8 +312,7 @@ class ImagesKept(unittest.TestCase):
 
     def test_an_image_found_present_is_never_counted_as_fetched(self):
         """present() remembers every image it finds; fetched() read that, so
-        a task image already on the machine was removed after its last unit
-        (alexgshaw/cancel-async-tasks, on a Terminal-Bench oracle run)."""
+        a task image already on the machine was removed after its last unit."""
         calls, have = [], {"theirs@sha256:1"}
 
         def docker(args, **kw):

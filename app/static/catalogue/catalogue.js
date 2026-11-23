@@ -1,8 +1,7 @@
 (() => {
   const hash = () => { try { return decodeURIComponent(location.hash.slice(1)); } catch { return ''; } };
 
-  // Hash links (/benchmarks#key, /benchmarks#dataset, /kits#key) open the card's own page; the search and filters
-  // are the card toolkit's (static/tables.js).
+  // Hash links (/benchmarks#key, /benchmarks#dataset, /kits#key) open the card's own page.
   const cards = [...document.querySelectorAll('.bench-card[data-keys]')];
   if (cards.length) {
     const key = hash();
@@ -51,7 +50,7 @@
   fromHash();
 })();
 
-// A code block's Copy button (a benchmark's machine setup): its code to the clipboard.
+// A code block's Copy button (a benchmark's machine setup).
 document.querySelectorAll('.bench-page .std-copy').forEach(b => b.addEventListener('click', async () => {
   const text = b.closest('.std-code').querySelector('code').textContent;
   try { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; } catch { b.textContent = 'Select it'; }

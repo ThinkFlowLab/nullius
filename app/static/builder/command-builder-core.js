@@ -25,8 +25,7 @@
   const runners = () => schema.runners || [{key: 'harbor', label: 'Harbor', builtin: true}];
   // Unsupported runners use the server's rejection message.
   const RUNNER_GONE = schema.runnerGone || 'Only Harbor and Nullius recipes are supported.';
-  // The Nullius standard (nullius/standard/recipe.py): a benchmark, an agent or a capability that proved the ports it
-  // needs, a model. Its choices and why a pair does not fit come with the schema; the server compiles the recipe.
+  // The standard's choices and why a pair does not fit come with the schema; the server compiles the recipe.
   const isStandard = r => !!(r && r.harness === 'standard');
   const standard = () => schema.standard || {benchmarks: [], agents: [], capabilities: [], fits: {}, ports: {}};
   // A recipe names a benchmark by its key (its default version) or key@version, one of the page's versions.
@@ -68,7 +67,6 @@
   const standardKeyless = r => { const b = standardBench(r), c = chosenOf(r); return !!b && !b.judged && c.length > 0 && c.every(k => (b.controls || []).some(x => x.key === k)); };
   // Where a standard recipe runs: a list of machines, 'local' or a host's entry; one machine is kept as a word.
   const whereList = r => Array.isArray(r.where) ? r.where : [r.where || 'local'];
-  // A step this recipe shows: every one but Setup.
   const stepShown = (r, i) => i !== STEP.setup;
   // Every participant except an unjudged control uses the one selected model.
   // Like the paper's models: the Original setup's, those of the chosen own agents when the benchmark has agents of its own
@@ -258,7 +256,7 @@
   // recipe's Harbor registers it, and - once that Harbor has been scanned
   // (GET/POST /new-run/harbor/agents) - every other name it registers, as a
   // Harbor built-in named as Harbor names it. Without a scan there are no
-  // built-ins to offer, and the page says where they come from.
+  // built-ins to offer.
   let scannedAgents = null;
   function mergeAgents(names, source) {
     if (!Array.isArray(names)) return schema.agents.map(a => ({...a, scanned: false}));
@@ -355,8 +353,7 @@
   // The τ² simulated user and judge: litellm with OPENAI_API_KEY + OPENAI_BASE_URL, whatever the provider.
   const tau2Model = (m, r) => 'openai/' + (r.modelFormat === 'provider-id' ? String(m || '') : bareModel(m));
   // The τ³ reference agent: litellm-native, with the provider's own key name bound beside it (credentialBindings).
-  // The τ³ runtime container reads that same name too: τ²'s OpenRouter embedder (dense
-  // search in the alltools-qwen retrieval setup) takes OPENROUTER_API_KEY and nothing
+  // The τ³ runtime container reads that same name too: τ²'s OpenRouter embedder takes OPENROUTER_API_KEY and nothing
   // else, so every part of a τ³ run on OpenRouter carries it, including the reference agent.
   const litellmModel = (r, m = r.model) => agentModel(r, m);
   const benchmarkCallsModel = r => r.benchmark === 'tau3-bench';
@@ -669,7 +666,7 @@
       'set -uo pipefail', 'status=0', ...runs.map(a => '# ' + a.label + '\n' + a.text + ' || status=1'), 'exit "$status"'].join('\n\n') + '\n';
     const parts = runs.map(a => ({id: a.id.slice(4), label: a.label, script: '#!/usr/bin/env bash\nset -uo pipefail\n' + a.text + '\n'}));
     const jobs = order.map(id => ({name: r.name + (r.agents.length > 1 ? '-' + id : ''), agent: agentById(id, r)?.arg || id, dataset: r.source === 'local' ? r.path.replace(/\/$/, '').split('/').pop() : r.dataset}));
-    // No task limit means the whole dataset - 375 tasks and five hours on τ³ - so Run asks first, with the count when the catalogue knows it.
+    // No task limit means the whole dataset so Run asks first, with the count when the catalogue knows it.
     // A task-name pattern narrows it to the tasks that match, a number only Harbor knows, so the question names the pattern instead.
     const confirm = r.tasks !== '' ? '' : taskFilter(r)
       ? 'Run the tasks of ' + datasetLabel(r) + ' ' + taskFilter(r) + ' (no limit)?'
@@ -689,10 +686,7 @@
     return 'every task' + (count ? ' (' + count + ' in this dataset)' : '');
   }
   // What the Review step shows: one row per thing a person is asked to
-  // confirm - the harness and benchmark, the dataset or source, the agents,
-  // the model, the task scope and the execution location (and, on Harbor,
-  // which runtime and executable) - each with the step that edits it. The
-  // page renders these rows as they are; the route suite reads them here.
+  // confirm, each with the step that edits it.
   function review(r) {
     const b = benchmarks(r.harness).find(b => b.key === r.benchmark) || {title: 'Custom benchmark', category: 'Custom tasks'};
     const label = id => agentById(id, r)?.label || id;
@@ -855,8 +849,7 @@
   const runnerFor = (r, key) => { const has = runnersOf(key); return has.includes(r.harness) ? r.harness : has[0] || r.harness; };
   // The benchmark a recipe names, by its key whichever runner it is for (a version of the standard's is its benchmark).
   const benchKey = r => isStandard(r) ? (standardBench(r) || {}).key || r.benchmark : r.benchmark;
-  // The page keeps what is on screen as a draft in the browser, so leaving for
-  // another page and coming back finds the recipe as it was left. Pure halves:
+  // The page keeps what is on screen as a draft in the browser. Pure halves:
   // the page owns the storage. A draft does not come back when the page was
   // opened for something else - a prefill from a run, or a run's own recipe.
   const OPENED_FOR = ['run','like','saved','dataset','model','agent','n_tasks','standard','other'];

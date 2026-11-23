@@ -31,7 +31,7 @@ Nullius runs AI evaluations on your machines and opens every score into the evid
 | [CLI](cli/README.md) | Every command, by topic |
 | [Release notes](releases/v0.1.1.md) | Highlights, changelog and installation notes by version |
 | [Architecture](how-it-works.md) | Execution paths and files on disk |
-| [Metric field guide](field-guide.md) | Every metric and outcome; *Reference → Metrics* on the website |
+| [Metric field guide](field-guide.md) | Every metric and outcome |
 
 ## This folder
 
@@ -42,4 +42,4 @@ Nullius runs AI evaluations on your machines and opens every score into the evid
 | `releases/` | Reviewed notes for each release |
 | `examples/new-benchmark/` | A worked Harbor entry to copy |
 | `assets/` | The screenshots these pages use |
-| `diagrams/` | The figures these pages use, drawn by `app/site/diagrams.py` |
+| `diagrams/` | The figures these pages use |

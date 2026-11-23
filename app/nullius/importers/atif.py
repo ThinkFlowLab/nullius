@@ -5,13 +5,10 @@
 
 An ATIF document is the file Harbor's agents write as ``agent/trajectory.json``
 and the reader already opens inside a trial (``nullius.traces.trajectory``).
-On its own — dropped on the import picker, or a directory of them with no
-``result.json`` beside — nothing recognised it. This does, by content: a JSON
+This recognises one on its own by content: a JSON
 object whose ``schema_version`` reads ``ATIF-v1.x`` and which carries
 ``steps``. The producer's name, the file's name and the directory it sits in
-are not consulted, so a trajectory from claude-code, opencode or
-any other adopter of the schema is read the same way, and two copies of one
-document normalise identically wherever they were found.
+are not consulted.
 
 **Supported schema versions**: ``ATIF-v1.0`` through ``ATIF-v1.7``
 (``SUPPORTED_VERSIONS``) — the versions Nullius already parses inside a job,
@@ -40,13 +37,12 @@ the one reader, here and on the trial page — and nothing is re-measured:
   ``source_document``.
 - **The recorded command is the import.** No harness ran here, so the line
   the job page offers to copy is the one that reproduces this job
-  directory, not a ``harbor run`` that never happened.
+  directory.
 
 A tree this claims but cannot read is refused before anything is written,
 with a ``SystemExit`` whose message names the file (relative to the tree
 given) and what is wrong — a document that is not JSON, one without
-``steps``, one of an unsupported version — and is redacted: a credential in
-a bad file's name or content must not travel into the error. A ``.json``
+``steps``, one of an unsupported version — and is redacted. A ``.json``
 that is well-formed but not ATIF at all (a ``trace.json``, a
 ``spans.meta.json``) is simply not one of ours and is passed over.
 
@@ -77,8 +73,7 @@ from nullius.traces.trajectory import parse_ts
 NAME = "atif"
 LABEL = "ATIF"
 
-# The schema versions this reads — the ones `trajectory.py` is known to
-# parse inside a Harbor job. Anchoring on the list is what keeps detect()
+# The schema versions this reads. Anchoring on the list is what keeps detect()
 # from claiming a future shape and reading it as one of these.
 SUPPORTED_VERSIONS = tuple(f"ATIF-v1.{minor}" for minor in range(8))
 
@@ -114,8 +109,7 @@ def _mentions_atif(path: str) -> bool:
 def _read(path: str, shown: str) -> dict:
     """The document at *path*, or a SystemExit naming what is wrong with it.
 
-    The message is what the CLI prints and the picker shows, so it is
-    redacted here, at construction, whichever branch built it.
+    The message is redacted here.
     """
     try:
         with open(path, encoding="utf-8") as fh:

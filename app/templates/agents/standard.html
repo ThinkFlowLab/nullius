@@ -7,7 +7,7 @@
 <script src="{{ url_for('static', filename='tables.js') }}"></script>{% endblock %}
 {% from '_cards.html' import cards %}
 {% block body %}
-{# The standard's agents (or capabilities) as cards, as the benchmarks are; a card opens its own page. docs/standard.md #}
+{# The standard's agents (or capabilities) as cards. docs/standard.md #}
 <div class="bench-index">
   {% set actions %}<button type="button" class="btn sm" id="std-how-open" aria-haspopup="dialog">+ Add {{ 'an agent' if kind == 'agent' else 'a capability' }}</button>{% endset %}
   {{ page_head(plural, sub=items|length ~ ' ' ~ (plural|lower if items|length != 1 else kind), actions=actions) }}
@@ -34,9 +34,7 @@
   {% if problems %}<div class="std-problems"><strong>Not offered: a definition with problems</strong><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
   {% if not items %}<p class="bench-none">No {{ kind }} yet.</p>{% endif %}
 
-  {#- A card's fields (web/agents.py `_card`), in the slots of the builder's Agent step (builder/agents.html): the name and
-      its version, what it is and proves as badges, its protocol and where it comes from at the foot; an agent's protocol,
-      the ports it proves and where it comes from as filters. #}
+  {#- A card's fields (web/agents.py `_card`), in the slots of the builder's Agent step (builder/agents.html). #}
   {% set cols = [dict(key='icon', label='Logo', card='icon', table=false, class='std-mark small'), dict(key='title', label='Name', card='title'),
                  dict(key='kind', label='Kind', card='badge', class='cat-tag'), dict(key='protocol', label='Protocol', card='tag', class='std-tag'),
                  dict(key='uses', label='Uses', card='badge', class='std-tag', off=true), dict(key='from', label='From', card='meta'), dict(key='runs_on', label='Runs on', class='cat-tag', off=true), dict(key='models', label='Models', card='note', width='expand'),

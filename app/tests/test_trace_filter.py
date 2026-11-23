@@ -1,11 +1,8 @@
 """Filtering a trace, and the one breakdown this tree is allowed to recompute.
 
-Two failures are worth more than the rest here.
-
 **A filter that changes the timings it was only asked to leave out.** Hiding a
 span must not move the axis, must not touch the producer's `totals`, and must not
-mutate the document on disk. Each has its own test, because each would produce a
-picture that still looks plausible.
+mutate the document on disk.
 
 **A recomputed breakdown that double-counts.** A tool call runs inside the LLM
 call that asked for it and a parent tool span contains its own execution span, so
@@ -290,7 +287,7 @@ class ComparedToTheUnfilteredRun(unittest.TestCase):
     def test_hiding_a_tool_gives_its_overlap_back_to_the_call_that_ran_it(self):
         # Not a rounding artefact: those 3.5ms were covered by both the tool span
         # and the LLM span, and went to the tool. With the tool gone they are the
-        # call's, and pretending otherwise would leave them nowhere.
+        # call's.
         filtered = trace.load(RICH, trace.Filter.of(["Write"]))
         changed = {s["key"]: s["delta_ns"] for s in filtered.view.compared_to(filtered.baseline)}
         self.assertEqual(changed["llm"], 3519315)

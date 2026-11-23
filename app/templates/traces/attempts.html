@@ -25,7 +25,7 @@
   <tbody>
   {% for a in attempts.trials %}
   {% set k = loop.index %}
-  {#- an attempt whose runner kept its earlier tries: a line each, the last the one that counts #}
+  {#- an attempt whose runner kept its earlier tries #}
   {% for n, t in tries.get(a.trial_name) or [(none, a)] %}
   {% set used = (t.n_input_tokens or 0) + (t.n_output_tokens or 0) %}
   <tr{% if not loop.last %} class="replaced" title="Not counted"{% endif %}>

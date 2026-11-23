@@ -1,6 +1,5 @@
 // Add a Harbor benchmark: "Read from Harbor" fills what Harbor knows (the task
-// count, the limits a task declares, a key and title from the name). The form
-// saves as a plain post.
+// count, the limits a task declares, a key and title from the name).
 (() => {
   const form = document.getElementById('nb-form');
   if (!form) return;

@@ -12,8 +12,7 @@ Launch Nullius, open results and inspect a trial, with no model key.
 ## Install and launch
 
 The default installation uses `uv` and the PyPI package `nullius-eval`.
-The application and its command remain `nullius`. The package named `nullius`
-on PyPI is a different project.
+The command is `nullius`.
 
 1. Install the latest version, then start:
 
@@ -22,7 +21,7 @@ on PyPI is a different project.
     nullius serve
     ```
 
-2. Open [127.0.0.1:5057](http://127.0.0.1:5057). Nullius opens on **Runs**; a first launch offers a tour and a *First steps* checklist.
+2. Open [127.0.0.1:5057](http://127.0.0.1:5057).
 
 | Option | Sets |
 | --- | --- |
@@ -45,23 +44,17 @@ An explicit version pin is retained by `uv tool upgrade`; change the pin with
 `uv tool install --force nullius-eval`.
 
 Settings, catalogue additions and runs stay outside the installed package
-and are preserved when the tool is replaced. If you installed an earlier
-private build of this application under the package name `nullius`, remove
-that tool with `uv tool uninstall nullius` before installing `nullius-eval`.
-This removes its tool environment, not the user storage shown by `nullius paths`.
+and are preserved when the tool is replaced.
 
 ### Install a wheel
 
 Wheel downloads are listed under
-[Releases](https://github.com/thinkflowlab/nullius/releases) and follow the
-repository's access permissions. From the folder containing the file:
+[Releases](https://github.com/thinkflowlab/nullius/releases). From the folder containing the file:
 
 ```bash
 uv tool install ./nullius_eval-0.1.1-py3-none-any.whl
 nullius serve
 ```
-
-Add `--force` to replace an existing `nullius-eval` installation.
 
 ### Build a wheel from source
 
@@ -73,7 +66,7 @@ uv tool install ./dist/nullius_eval-0.1.1-py3-none-any.whl
 nullius serve
 ```
 
-Use the filename produced by the build if the version changes. To use an
+To use an
 existing Python environment instead, `uv pip install --python /path/to/venv/bin/python
 /path/to/nullius.whl` installs the same wheel; that interpreter supports
 `python -m nullius` with the same subcommands.
@@ -88,16 +81,12 @@ uv run --no-project --with-requirements app/requirements.txt app/app.py
 
 The backend commands also work without installation:
 `PYTHONPATH=app python3 -m nullius --help`. See the [CLI](cli/README.md).
-`--no-project` keeps the source command from also installing the project into
-a second Python location. Flask is the application's only direct runtime
-dependency; benchmark and agent environments stay separate.
 
 ### Your settings and data
 
-Save provider credentials in **Settings**. The owner-only `settings.json` lives
-in the user configuration directory, and environment variables override it.
+Save provider credentials in **Settings**.
 `nullius paths` lists settings, licences, user catalogue, workspaces, runs, saved
-recipes and cache paths without showing credentials. Linux defaults use XDG directories;
+recipes and cache paths without showing credentials. For the locations,
 see [Settings](settings/README.md#storage).
 
 For a separate profile, use the same `NULLIUS_HOME` for each command:

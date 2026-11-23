@@ -7,7 +7,6 @@ The scenes are conceptual, not interface captures. Compare uses one recorded
 SWE-bench Verified task's values: Codex resolved in 3.1m with 178.9k tokens;
 mini-swe-agent returned an agent error in 4.7m, tokens not recorded.
 The visible task and run labels are generic. No aggregate rate is implied.
-The accepted simpler baseline is preserved under previews/readme-motion/baseline/.
 """
 from __future__ import annotations
 

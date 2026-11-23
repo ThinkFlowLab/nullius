@@ -26,8 +26,7 @@ unless ``force``. Shards run with different benchmark options keep them each
 in ``merged_from``.
 
 Files are hard-linked into the merged job where the file system allows (a
-copy where it does not), so a merge of a thousand trials costs no second
-copy of their workspaces; each trial's ``result.json`` is a copy of its own,
+copy where it does not); each trial's ``result.json`` is a copy of its own,
 rewritten to name the merged job. The shards are left as they were.
 """
 from __future__ import annotations
@@ -79,7 +78,7 @@ def _at(d, path):
 
 
 def _same(cfg: dict, path) -> object:
-    """What a shard's config says at ``path`` (``SAME``); a shard written before ``retries`` was recorded allowed none."""
+    """What a shard's config says at ``path`` (``SAME``); ``retries`` absent reads as none."""
     got = _at(cfg, path)
     return got or 0 if path == ("standard", "retries") else got
 
@@ -161,7 +160,7 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
         shards.append({"dir": d, "name": os.path.basename(d), "config": cfg, "result": res, "shard": sh or {}})
     if len({s["dir"] for s in shards}) != len(shards):
         raise Refused("a job is named twice")
-    # one list of units, force or not: the merged job records one
+    # one unit list even with ``force``
     lists = [_listed(s["config"]) for s in shards]
     if len(set(lists)) > 1:
         odd = sorted({u for got in lists for u in got or ()} - set.intersection(*(set(got or ()) for got in lists)))
@@ -272,8 +271,7 @@ def _budget(budgets: list) -> Optional[dict]:
 
 def result_of(shards: list, results: List[dict]) -> dict:
     """The merged job's ``result.json``, but its ``id`` and its ``served`` (``_served``, which ``merge`` adds):
-    ``shards`` as ``check`` reads them, ``results`` every trial's record. The runs page folds a launch's shards
-    with it (``runs.launches.fold``)."""
+    ``shards`` as ``check`` reads them, ``results`` every trial's record."""
     planned = sum(int(s["result"].get("n_total_trials") or len(s["trials"])) for s in shards)
     starts = [s["result"].get("started_at") for s in shards if s["result"].get("started_at")]
     ends = [s["result"].get("finished_at") for s in shards if s["result"].get("finished_at")]
@@ -305,7 +303,7 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
     results = []
     for s in shards:
         for t in s["trials"]:
-            # the trial, and each of its tries before it a retry kept (``retried/``), as the pages read them
+            # the trial, and each of its tries before it a retry kept (``retried/``)
             for src, dest in [(os.path.join(s["dir"], t), os.path.join(out, t))] + [
                     (os.path.join(s["dir"], "retried", k), os.path.join(out, "retried", k)) for k in _tries(s["dir"], t)]:
                 _link_tree(src, dest)

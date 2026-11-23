@@ -338,7 +338,7 @@ class ServedInTheCore(CompilerCase):
                       'C.setServed(r,"model","a, b");const typed=r.served_by.model;C.setServed(r,"model","");const emptied=!(r.served_by||{}).model;'
                       'C.setServed(r,"model",["a"]);C.setChoice(r,"openai");'
                       'process.stdout.write(JSON.stringify([kept,typed,emptied,r.served_by===undefined]));')
-        # kept as written, the judge's bad slug included: the server refuses it in sight (test_a_pin_is_kept_as_written...)
+        # kept as written, the judge's bad slug included
         self.assertEqual(out, [{'model': ['deepinfra/fp8', 'together'], 'judge': ['bad slug']}, ['a', 'b'], True, True])
 
     def test_a_pin_goes_with_the_model_it_was_set_for(self):

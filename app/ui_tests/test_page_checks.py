@@ -3,9 +3,7 @@
 Each test here is one statement a user could confirm by looking: it opens a
 workspace on the recorded fixture jobs, requests the page through the app's
 own test client, reduces it to the text of its main content, and asserts the
-statement's own sentence against that text. Reader properties (folding,
-digests, replay) keep their tests beside the reader; these are the checks of
-what the pages say about them.
+statement's own sentence against that text.
 
 The workspace lives under a temporary workspace home and the fixture roots
 are only read; no judge key is in the environment, so the pages show the
@@ -84,20 +82,13 @@ class Pages(unittest.TestCase):
         self.assertIn(marker, text, f"{name}: the marker is gone from the page")
         return text
 
-    # --- views.md ---------------------------------------------------------
-
-
     def test_a_control_with_no_trajectory_still_draws_its_phases(self):
         control = self.page("trial-oracle-control")
         self.assertIn("Verify 6.72s", control)
         self.assertIn("Agent 0.20s", control)                                  # the phases are the trial's, whatever else it recorded
         self.assertIn("No trajectory recorded for this trial.", control)
 
-
-
-
     def test_a_benchmark_the_standard_runs_builds_a_run_on_its_runner(self):
-        """the page half; validation itself is test_catalog"""
         page = self.page("benchmarks-runner")
         self.assertIn("Official", page)
         self.assertNotIn("No usable route", page)
@@ -114,9 +105,7 @@ class Pages(unittest.TestCase):
     def test_the_harbor_that_ran_is_shown_where_the_job_recorded_it(self):
         self.assertIn("harbor 0.22.0 · editable checkout", self.page("job-oracle-board"))
 
-
     def test_the_board_of_a_recorded_run_renders_from_its_own_clock(self):
-        """the page half; the replay of every pair is test_live"""
         board = self.page("job-oracle-board")
         self.assertIn("hello-alpine Resolved 0 22.91s 4.90s 0.20s 6.72s", board)
         self.assertIn("reward-kit-example Resolved 0 24.29s 2.93s 1.95s 7.91s", board)

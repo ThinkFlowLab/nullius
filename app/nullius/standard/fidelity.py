@@ -1,8 +1,6 @@
 """Fidelity: driving an agent over ACP sends the model what its own CLI sends.
 
-An agent reached through an adapter is not obviously the agent as its users
-run it: the adapter may choose a setting the CLI leaves to the provider, or
-leave out a tool. This puts the two side by side. The agent's definition names
+The agent's definition names
 its own non-interactive command (``fidelity.command``, a template carrying
 ``{prompt}``); the same units - the workspace kit's - are run both ways, each
 unit at the same paths every time, its calls on a route of its own on a relay

@@ -1,5 +1,5 @@
 // A skeleton over the page while the next one loads: shown only when the document itself navigates,
-// a moment after the click or submit, so a fast page never flashes it. The next page replaces it.
+// a moment after the click or submit, so a fast page never flashes it.
 (() => {
   const main = document.getElementById('main-content');
   if (!main) return;

@@ -1,8 +1,4 @@
 """Tests for behavioral metrics over a parsed trajectory.
-
-These read the *shape* of a run — was the agent methodical or flailing —
-which the outcome alone can't show: two resolved trials can hide very
-different amounts of wasted work.
 """
 
 import json

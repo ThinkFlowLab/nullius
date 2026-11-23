@@ -13,9 +13,7 @@ nullius standard new capability my-memory
 nullius_catalogue=$(nullius paths --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["catalogue"])')
 ```
 
-The new folder is `capabilities/my-memory/` below that catalogue. It survives
-application upgrades. No package resources or repository tests need changing
-for a personal addition.
+The new folder is `capabilities/my-memory/` below that catalogue. It survives upgrades.
 
 ```json title="capability.json · excerpt of the scaffold"
 {
@@ -100,8 +98,7 @@ Examples: `app/nullius/catalogue/capabilities/mem0/capability.py` calls an upstr
 
 To contribute the entry to the bundled catalogue, copy its whole folder into
 `app/nullius/catalogue/capabilities/` in a source checkout, run the relevant suites
-and refresh `python3 app/tests/catalogue_docs.py --write`. The generated docs
-read only bundled definitions.
+and refresh `python3 app/tests/catalogue_docs.py --write`.
 
 !!! warning "Conformance and a benchmark make paid model calls"
     Each check and unit calls the model through the relay.

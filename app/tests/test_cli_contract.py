@@ -3,16 +3,12 @@ states them — one test per statement.
 
 Each test asserts one sentence of the shell side's contract (the command
 line, importing), whose wording opens its docstring, as directly as the code
-allows. The other suites pin the pieces — a message, a code, a digest — and
-each test here puts the pieces together in the order the sentence states them.
+allows.
 
 Every fixture is written by the test into a temporary directory: the
 smallest Harbor job, ATIF document or OTLP export that has the shape the
 check names. Nothing here reads a run from outside the repository, asks a
-model, or opens a socket: the in-process calls run with `socket.socket` and
-`socket.create_connection` patched to raise, and the subprocesses inherit a
-`sitecustomize` that does the same, so a command that tried to reach a
-network would fail the test rather than pass it.
+model, or opens a socket: a command that tried would fail its test.
 """
 from __future__ import annotations
 
@@ -215,7 +211,7 @@ class CommandLine(Scratch):
                 ("runs.cli", ["show", self.tmp, "failed-job", "--json"], 0, ""),
                 ("runs.cli", ["list", self.tmp, "--json"], 0, ""),
             ],
-            # No command takes a credential any more: the authorization
+            # No command takes credentials: the authorization
             # failure a shell meets is one a run recorded - a trial that died
             # on a 401.
             "authorization failure": [

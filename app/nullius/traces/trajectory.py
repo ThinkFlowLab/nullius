@@ -17,8 +17,7 @@ A benchmark's own tools reach the agent over MCP, where each agent spells the
 same tool its own way (``mcp.kit.get_code``, ``Tool: kit/get_code``,
 ``kit: get code``). :func:`mcp_tool` reads the server and the tool back from any
 of them, and such a tool's category comes from what its name says it does:
-``lookup`` or ``change``. No benchmark is named here, and the coding rules below
-are left to the agent's own tools.
+``lookup`` or ``change``.
 """
 
 from __future__ import annotations
@@ -74,9 +73,7 @@ def mcp_tool(function_name: str, servers=()) -> tuple | None:
 def categorize(function_name: str, servers=()) -> str:
     """The coarse category of a tool call - the one key comparable across agents.
 
-    The name it is derived from is not: agents name the same tool differently
-    (module docstring). A name no rule matches is ``other``, which is a
-    category like the rest and is summarised like the rest.
+    A name no rule matches is ``other``.
     """
     tool = mcp_tool(function_name, servers)
     if tool:
@@ -103,7 +100,7 @@ class Step:
 
 # Observations are serialised as `success=<bool> data={...} error=<repr>`, so
 # status is explicit — no need to guess from the text. Fall back to scanning
-# for tracebacks only when that prefix is absent (older/other writers).
+# for tracebacks only when that prefix is absent.
 _SUCCESS_RE = re.compile(r"^success=(True|False)\b")
 _ERROR_RE = re.compile(r"error='((?:[^'\\]|\\.)*)'|error=\"((?:[^\"\\]|\\.)*)\"")
 _FAILURE_MARKERS = [
@@ -117,9 +114,7 @@ _FAILURE_MARKERS = [
 def _first_line(text: str) -> str:
     """Most informative line of an error blob.
 
-    Skips the exit-code header, and for a traceback takes the *last* line —
-    "Traceback (most recent call last):" says nothing, the final
-    "ModuleNotFoundError: ..." says everything.
+    Skips the exit-code header, and for a traceback takes the *last* line.
     """
     # The blob arrives as a Python repr, so quotes and newlines are escaped.
     text = text.replace("\\n", "\n").replace("\\'", "'").replace('\\"', '"')
@@ -142,21 +137,15 @@ PATCH_PATHS = [
     re.compile(r"(?m)^\*\*\* (?:Update|Add|Delete) File:\s*(\S+)"),
     re.compile(r"(?m)^\+\+\+ (?:b/)?(\S+)"),
 ]
-# Public for the same reason as trace.clean: behavior.py reads both this and
-# parse_ts, and it stayed with the application when the reader was packaged.
+# behavior.py reads this and parse_ts.
 _PATCH_PATHS = PATCH_PATHS
 
-
-# Container WORKDIRs an agent runs in, such as /testbed or /app. Whether a path arrives absolute or relative is the model's
-# choice, not the harness's — one agent passed relative paths on two runs of
-# one task and absolute on a third, same model, same task. Left alone, the same
-# file is two different strings and every set operation over them lies:
-# "which files did both agents touch" answered 0 when the answer was 2.
+# Container WORKDIRs an agent runs in. Whether a path arrives absolute or relative is the model's
+# choice, not the harness's. Left alone, the same
+# file is two different strings and every set operation over them lies.
 #
 # Normalising here rather than at each comparison keeps one canonical form. The
-# agent's original string stays on the tool call, because *that* difference is
-# real signal about how the agent behaved — it just must not reach set
-# arithmetic. `behavior._same_file` still suffix-matches for gold patches,
+# agent's original string stays on the tool call. `behavior._same_file` still suffix-matches for gold patches,
 # which covers workspace roots this list doesn't know.
 _WORKSPACE_ROOTS = ("/testbed/", "/app/")
 
@@ -327,13 +316,11 @@ class Trajectory:
     error: str = ""             # set if the file could not be parsed
     calls: list = field(default_factory=list)          # flat, in order
     files_touched: list = field(default_factory=list)  # paths from edit calls
-    # False when the writer stamped every step at the same instant (older
-    # trajectories) — durations would be noise, so none are set.
+    # False when the writer stamped every step at the same instant — durations would be noise, so none are set.
     has_step_clock: bool = False
     # One entry per step that carries per-call metrics (ATIF v1.7 writers, and
     # runs where a gateway-log matcher attached them):
-    # {step_id, prompt, cached, completion}. Prompt growth across this series
-    # is the caching story of the whole session in one curve.
+    # {step_id, prompt, cached, completion}.
     token_series: list = field(default_factory=list)
     # Reads/new fold over the series, convention detected — None when the
     # file carries no usage at all.
@@ -342,8 +329,7 @@ class Trajectory:
     # "not reported" and "zero reasoning" are different claims.
     total_reasoning_tokens: int | None = None
     # {category: Counter(name)} over the same calls as category_freq: what each
-    # category folded, in the agent's own words. Evidence beside the key, so a
-    # reader can check the fold - never a key itself (module docstring).
+    # category folded, in the agent's own words.
     name_freq: dict = field(default_factory=dict)
 
     @property
@@ -372,8 +358,7 @@ class Trajectory:
 
 
 def parse_ts(value: str):
-    """An ISO timestamp, or None — a record with an unreadable clock is not
-    an error here, it is a record whose clock we decline to guess at."""
+    """An ISO timestamp, or None when unreadable."""
     if not value:
         return None
     try:
@@ -393,8 +378,7 @@ def _tool_ns(step: dict) -> int | None:
 
 
 # Below this, the trajectory's whole clock spread is treated as one write-time
-# stamp, not a real per-step clock. Same refuse-don't-guess policy as the
-# agent-side metrics matcher.
+# stamp, not a real per-step clock.
 _MIN_CLOCK_SPAN_SEC = 1.0
 
 
@@ -560,8 +544,7 @@ def load(path: str) -> Trajectory:
             call["dur"] = step.dur
 
     # Agents whose LLM calls cannot be matched to steps leave per-step metrics
-    # unset and report the total in final_metrics instead. Reading only the
-    # per-step path renders nothing while the number sits in the file.
+    # unset and report the total in final_metrics instead.
     if reasoning_total is None:
         fallback = _extension(data.get("final_metrics") or {}, "total_reasoning_tokens")
         if isinstance(fallback, (int, float)):

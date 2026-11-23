@@ -2,8 +2,7 @@
 
 `style.css` states the bar its palettes were chosen against — WCAG AA against
 `--bg`, >=25 CIE76 between outcome colours, >=17 ΔE2000 between tool categories
-with dichromacy simulated — but the script that checked it is not in the tree,
-so nothing stops a later edit from quietly breaking it. This is that script.
+with dichromacy simulated. This script checks it.
 
 It reads the values out of `style.css` rather than taking a hardcoded copy: an
 audit against numbers that have drifted from the stylesheet is worse than no
@@ -113,7 +112,7 @@ def delta_e_76(a: tuple, b: tuple) -> float:
 
 
 def delta_e_2000(c1: tuple, c2: tuple) -> float:
-    """CIE ΔE2000. Perceptually saner than CIE76 at high chroma."""
+    """CIE ΔE2000."""
     l1, a1, b1 = to_lab(c1)
     l2, a2, b2 = to_lab(c2)
 

@@ -5,8 +5,7 @@ podman (``container.DOCKER``).
   benchmark with an image per unit part-way. The username and an access token
   go to ``docker login --password-stdin`` (``podman login ... docker.io``)
   once; the engine keeps them in its own store (``~/.docker/config.json`` or
-  the credential helper it names; podman's ``auth.json``), the same as a
-  login typed in a terminal. Nullius stores neither, and reads back only the
+  the credential helper it names; podman's ``auth.json``). Nullius stores neither, and reads back only the
   username.
 """
 from __future__ import annotations

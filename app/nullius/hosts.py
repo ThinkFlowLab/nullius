@@ -49,7 +49,7 @@ class Host:
     host: Optional[str] = None
     port: Optional[int] = None
     key: Optional[str] = None       # a path, never its contents
-    display_name: Optional[str] = None  # optional name for a manual connection
+    display_name: Optional[str] = None
 
     @property
     def label(self) -> str:
@@ -204,8 +204,7 @@ def test(host: Host, run: Optional[Callable] = None, timeout: float = 12.0, prog
     podman and harbor are there (``engine``: which of docker and podman the
     standard's container backend runs there, or None) - and, given ``programs`` (a benchmark's host
     requirements), which of them are not on its PATH (``missing``). Nothing
-    but the probe command is sent. ``run`` is looked up at call time so a
-    test can stand in for ssh."""
+    but the probe command is sent."""
     programs = [p for p in programs or [] if _PROGRAM.match(p)]
     probe = PROBE + ("; for p in " + " ".join(programs) + '; do command -v "$p" >/dev/null 2>&1 || printf \'missing=%s\\n\' "$p"; done'
                      if programs else "")
@@ -286,8 +285,7 @@ def _reason(rc: int, last: str) -> str:
 # of which stores a password: a key already on this machine (a path), a key
 # file handed to the page (saved under the user's Nullius config, mode 0600), or a
 # password used once to put Nullius's own public key into the host's
-# authorized_keys — the password goes to ssh through a pty and nowhere else,
-# and the entry that comes back names the key, not the password.
+# authorized_keys — the password goes only to ssh over a PTY, and the entry names the key.
 
 # Optional explicit overrides; defaults are resolved at use time so a
 # NULLIUS_HOME profile does not share the real user's key store.

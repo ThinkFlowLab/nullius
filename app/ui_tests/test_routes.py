@@ -1,8 +1,5 @@
 """Exercise public UI routes against temporary, synthetic benchmark records.
 
-Run separately from app/tests (which deliberately has no Flask dependency):
-    uv run --offline --with-requirements app/requirements.txt python -m unittest discover -s app/ui_tests -t app
-
 No real workspace is opened, refreshed, converted, or written.
 """
 from __future__ import annotations
@@ -181,8 +178,7 @@ class Routes(unittest.TestCase):
         html = self.get_ok("/runs").get_data(as_text=True)
         self.assertIn("<h1>Runs</h1>", html)
         self.assertIn("active-run", html)
-        # the Columns menu lists every column of the table - it rendered empty
-        # once, when the context key and the template's name disagreed
+        # the Columns menu lists every column of the table
         for c in web.shared.COLUMNS:
             self.assertRegex(html, f'data-col="{c["key"]}"( data-off)?> {c["label"]}</label>')
         self.assertNotIn('id="landing-title"', html)
@@ -392,8 +388,7 @@ class Routes(unittest.TestCase):
     def test_a_rewardkit_verifier_scores_on_the_job_page(self):
         """Harbor's real liveboard-oracle-x4 tree: reward-kit-example's verifier
         writes verifier/reward.json and no reward.txt. The page reads the run
-        as Harbor recorded it — oracle passed 4/4, every row Resolved —
-        instead of dropping that trial to Unknown and 3/4. The run is a
+        as Harbor recorded it — oracle passed 4/4, every row Resolved. The run is a
         control, so its headline is the verdict, not a Solved figure."""
         tree = APP_DIR / "tests" / "fixtures" / "harbor-jobs" / "liveboard-oracle-x4"
         job = parse.parse_job(str(tree))

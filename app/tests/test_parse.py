@@ -56,8 +56,7 @@ class JobDiscovery(unittest.TestCase):
 
     def test_a_launched_job_with_only_its_config_is_discovered_as_preparing(self):
         # Harbor writes the job-level config.json first; between the launch and
-        # job.start there is nothing else. That is the row a person who just
-        # pressed Run is waiting for.
+        # job.start there is nothing else.
         with tempfile.TemporaryDirectory() as tmp:
             d = os.path.join(tmp, "launched")
             os.makedirs(d)
@@ -444,7 +443,6 @@ class HarborCommand(unittest.TestCase):
 
     Faithful to the file: only recorded flags appear, so a copied command
     reruns what ran — the `--ak` kwargs included, which no form rebuilds.
-    Covers both local datasets and registry fetches.
     """
 
     def test_local_checkout_with_kwargs(self):
@@ -452,9 +450,7 @@ class HarborCommand(unittest.TestCase):
             "n_concurrent_trials": 1,
             "retry": {"max_retries": 3},
             # an old job's recorded module:Class name. It is reproduced verbatim
-            # and nothing is prepended: the lane in service is Harbor's built-in
-            # agent, and a name is a fact about the job, not an instruction to
-            # rebuild the adapter checkout it once resolved in.
+            # and nothing is prepended.
             "agents": [{"name": "harbor_agent:MyAgent",
                         "model_name": "openai/gpt-5.6-luna",
                         "kwargs": {"use_responses_api": 1}}],
@@ -469,7 +465,6 @@ class HarborCommand(unittest.TestCase):
         )
 
     def test_module_class_name_gets_no_pythonpath_either(self):
-        """A module:class agent name needs no application PYTHONPATH."""
         cfg = {"agents": [{"name": "some.module:SomeAgent", "model_name": "openai/m"}],
                "datasets": [{"path": "../x"}]}
         out = parse.harbor_command(cfg, env_type="docker")

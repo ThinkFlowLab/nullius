@@ -16,7 +16,7 @@
 
 An agent runs commands as you on the local backend, which is not a sandbox:
 an agent's run or conformance check there is refused without ``--unsandboxed``.
-``--backend container`` (``docker``, its earlier name) runs each unit's agent or capability in a container whose
+``--backend container`` (``docker`` alias) runs each unit's agent or capability in a container whose
 only way out is the unit's relay, or a public web proxy when its environment
 declares ``network`` (``standard/container.py``), and needs no such yes.
 ``--backend boat`` runs each unit's agent or capability in a boat.dev VM of its
@@ -35,8 +35,8 @@ version of an agent or a capability (``new version``: the default's pins, with
 the version replaced, and nothing proven); ``fit`` says, for one benchmark, what can run it and
 why the rest cannot; ``conform`` runs the kits and writes what passed into the
 definition - the port, and each skill of its kit shown or not (``--attempts K``:
-each check K times, held by a majority); ``run`` runs a benchmark into a job under ``--jobs`` (``jobs_standard/``),
-which the application opens like any other; ``fidelity`` drives an agent over
+each check K times, held by a majority); ``run`` runs a benchmark into a job under ``--jobs`` (``jobs_standard/``);
+``fidelity`` drives an agent over
 ACP and through its own command, compares the requests its model was sent, and
 writes the verdict into the definition (``standard/fidelity.py``). ``--shard I/N`` runs one
 shard of the dataset's units (``standard/shard.py``: by the unit id's hash, then
@@ -51,10 +51,9 @@ a model on OpenRouter, in that order (``run.served_by``); each call's record
 names the provider that served it.
 A run says each stage before its first unit, and each unit's end, as one
 ``[nullius] stage=...`` line on stderr and in the job's ``progress.jsonl``
-(``nullius/progress.py``): what the run's page shows while it goes.
+(``nullius/progress.py``).
 
-Keys come from the process environment, then the saved user settings - the
-file the Settings page edits. Nothing is printed of them. With ``--from-run`` (a run
+Keys come from the process environment, then the saved user settings. Nothing is printed of them. With ``--from-run`` (a run
 the builder or a page started, ``standard/recipe.py``) saved settings are not
 read: the key is the one the run was handed, ``OPENAI_API_KEY``, and the
 endpoint ``OPENAI_BASE_URL`` when it names one (``run_env``). The licences a
@@ -78,7 +77,7 @@ import time
 from nullius.standard.retries import MAX_RETRIES, RETRIES
 from nullius import constraints as limits, paths, prices as price_list, progress, providers, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
-# and other runtime defaults are computed, just like the unified CLI does.
+# and other runtime defaults are computed.
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
     settings.load(paths.settings_file())
 
@@ -747,10 +746,7 @@ def cmd_prove(a):
 
 
 def _exit_on_term():
-    """Stop sends SIGTERM, and its default ends the process where it stands:
-    Run.start's cleanup never ran, so a docker run's unit and relay
-    containers (the relay holding the key) kept running and the job had no
-    result.json. The first TERM is an exit, which runs every ``finally``; a
+    """Stop sends SIGTERM, whose default skips cleanup and can leave containers running. The first TERM is an exit, which runs every ``finally``; a
     second one (Stop signals the group, then the process) is ignored so it
     cannot cut that cleanup short."""
     def stopped(signum, frame):

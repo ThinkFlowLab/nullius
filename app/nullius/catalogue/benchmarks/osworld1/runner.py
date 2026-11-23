@@ -4,12 +4,10 @@ they are, with the computer port's bridge as the loop's agent (nullius.standard.
     runner.py --example TASK_JSON --result-dir DIR --socket PATH --ready FILE --lifeline FD --steps N --pause SECONDS
               --vm VM_IMAGE --calls FILE [--held FOLDER] [--prepared FILE] [--given FILE]
 
-The driver starts it in an agent's unit's setup, in the unit's runner folder (the trial's .work/osworld/), with the
-upstream's folder and the nullius package on its import path. It builds the upstream's DesktopEnv as the null control
+The driver starts it in the unit's runner folder with the upstream and Nullius on its import path. It builds the upstream's DesktopEnv as the null control
 does (nop.py), serves the MCP server computer at PATH (a Unix socket in a folder of the user's alone, which the driver
 made) over a Desktop of five methods on the upstream's controllers, and calls run_single_example with the bridge as the
-loop's agent, N as max_steps and SECONDS as sleep_after_execution. No file of the upstream is edited, patched or
-replaced. The loop is handed the DesktopEnv through a view (Watched) that keeps the screenshot of the observation each
+loop's agent, N as max_steps and SECONDS as sleep_after_execution. The loop is handed the DesktopEnv through a view (Watched) that keeps the screenshot of the observation each
 env.step returns: a step's observation is the one the loop hands its agent for the next decision, with no capture
 added. The agent's folder in the VM is FOLDER.
 
@@ -22,8 +20,7 @@ added. The agent's folder in the VM is FOLDER.
 - FOLDER, the run's folder of files sent once, when the driver gives one (computer_port.Held).
 
 A stop is taken once. The clean-up (the bridge's end and the server's close, then the desktop's close within
-CLOSE_SECONDS) takes at most STOP_SECONDS; past it the runner exits 1 all the same, and the driver, which lets a
-runner go for longer than that, removes what is left. At every exit READY and the socket's folder are removed. The
+CLOSE_SECONDS) takes at most STOP_SECONDS; past it the runner exits 1 all the same. At every exit READY and the socket's folder are removed. The
 exit status is 0 only for a loop that ran to its end and a desktop closed in its time.
 """
 import argparse

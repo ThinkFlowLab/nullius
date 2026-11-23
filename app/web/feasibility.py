@@ -31,7 +31,7 @@ def feasibility_page(job_id):
 
 @app.route("/judge/feasibility/<job_id>", methods=["POST"])
 def judge_feasibility_route(job_id):
-    """Ask why each misbehaving control side misbehaved, for every side not yet judged, on the click of the button."""
+    """Ask why each misbehaving control side misbehaved, for every side not yet judged."""
     from . import judge
     jobs = shared._jobs_for_request()
     j = shared._find_job(jobs, job_id)

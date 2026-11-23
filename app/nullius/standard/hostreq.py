@@ -8,7 +8,7 @@ Each requirement is checked by its programs and optional GPU memory minimum
 (:func:`problems`) and installed by the commands
 :func:`install_lines` gives: shown to a person to run, or run for them on an
 explicit choice (``web/execute.py``), with ``sudo -n`` so a password is never
-asked for - a machine where sudo needs one is told the commands instead.
+asked for.
 """
 from __future__ import annotations
 
@@ -59,8 +59,7 @@ def gpu_memory_mb(gpu_ids: Optional[List[int]] = None) -> Optional[int]:
 
 
 def problems(bench: dict, names: List[str], which=None, gpu_ids: Optional[List[int]] = None) -> Dict[str, str]:
-    """Why each selected requirement is missing on this machine, shared by
-    the builder and run startup. Query GPU memory only when needed, once,
+    """Why each selected requirement is missing on this machine. Query GPU memory only when needed, once,
     among the GPUs ``gpu_ids`` allows (the machine's constraint; [] allows
     none, so a requirement a GPU's memory meets is refused)."""
     which = which or shutil.which

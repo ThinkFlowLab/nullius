@@ -1,7 +1,6 @@
 """Provider pins and machine constraints on the same run and recipe.
 
-These intersections need both features: neither side's tests exercise them
-together. The fixture driver scores locally; no endpoint or engine is used.
+The fixture driver scores locally; no endpoint or engine is used.
 """
 from __future__ import annotations
 

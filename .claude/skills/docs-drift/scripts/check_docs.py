@@ -2,8 +2,7 @@
 
 The mechanical half of the /docs-drift skill, run by hand. It checks the things that rot
 silently when files move — links that no longer resolve, paths named in prose
-that no longer exist — and nothing that needs judgement. Prose that describes
-a module which changed shape is a human's job.
+that no longer exist — and nothing that needs judgement.
 
     python3 .claude/skills/docs-drift/scripts/check_docs.py
 
@@ -59,8 +58,7 @@ def tracked_md() -> list[Path]:
     """Tracked .md files that are still on disk.
 
     `git ls-files` lists the index, which still names a file deleted in the
-    working tree. Reading one crashes the gate — and a gate that crashes is a
-    gate nobody runs, so the deletion is simply skipped.
+    working tree.
     """
     out = subprocess.run(["git", "ls-files", "*.md"], cwd=REPO,
                          capture_output=True, text=True).stdout.split()
@@ -89,10 +87,7 @@ def check_md_paths() -> list[str]:
     Only paths *rooted in this repository* are checked, which is decided by
     whether the first segment is a top-level entry. Without that rule the
     pattern also matches things shaped like paths and meaning something else —
-    `thinkflowlab/nullius` is a repository slug, `aitianshi/setup-first-delivery` a
-    branch, `docs/split/package-manifest.md` a file in a different repository —
-    and a gate that cries wolf on those gets ignored, which costs more than it
-    catches.
+    `thinkflowlab/nullius` is a repository slug.
     """
     roots = _top_level()
     bad = []
@@ -112,9 +107,7 @@ def check_md_paths() -> list[str]:
 def check_fenced_paths() -> list[str]:
     """Every file of this repository named in a fenced command exists.
 
-    `check_md_paths` reads inline code; the README's commands sit in fences,
-    and a fence that says `python3 app/import_run.py` after the file became
-    `nullius.importers.cli` is a command that fails on paste.
+    `check_md_paths` reads inline code; the README's commands sit in fences.
     """
     bad = []
     for doc in tracked_md():
@@ -219,7 +212,7 @@ def check_folders() -> list[str]:
 
 
 def checks() -> list[str]:
-    """Every finding, in one list, for main() to print."""
+    """Every finding, in one list."""
     return (check_hrefs() + check_md_links() + check_md_paths() + check_fenced_paths()
             + check_folders() + check_map() + check_importers())
 

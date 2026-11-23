@@ -1,9 +1,4 @@
-"""τ³-bench in the standard runs its upstream: the upstream's batch runner
-(run_tasks) runs the unit's task - its seed for the trial, its retries - and
-its Orchestrator holds the conversation - its user simulator, its environment executing each
-tool call the agent makes over MCP, its limits and stop rules - and its
-evaluator scores the SimulationRun the Orchestrator returns. The MCP server
-declares the upstream's tools and passes each call to the driver. The
+"""τ³-bench in the standard runs its upstream: its batch runner, user simulator, MCP tools, and evaluator. The
 simulated user and the judge are a local fake endpoint (litellm pointed at
 it, as at the relay): no key, no network.
 

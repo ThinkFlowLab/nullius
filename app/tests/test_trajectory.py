@@ -2,8 +2,7 @@
 
 Step timestamps exist in both writers, but some older trajectories
 were stamped at write time — every step within the same few milliseconds.
-Durations from such a clock would be noise, so the parser must refuse them
-(same policy as the agent-side metrics matcher).
+Durations from such a clock would be noise, so the parser must refuse them.
 """
 
 import json
@@ -26,8 +25,7 @@ def _load(steps, **top):
 
 
 class MultimodalMessages(unittest.TestCase):
-    """ATIF v1.6 allows a step's message to be a list of content parts; the
-    trial, conversation, compare and judge pages raised TypeError on it."""
+    """ATIF v1.6 allows a step's message to be a list of content parts."""
 
     def test_the_text_parts_read_and_another_part_is_named(self):
         t = _load([{"step_id": 1, "source": "user", "message": [
@@ -116,9 +114,7 @@ class WorkspacePaths(unittest.TestCase):
     """Absolute and relative forms of one path must not read as two files.
 
     Whether a path arrives as /testbed/x.py or x.py is the model's choice, not
-    the harness's: one agent passed relative paths on two runs of a task and
-    absolute on a third. Before normalising, "which files did both agents
-    touch" answered 0 when both had edited the same two files.
+    the harness's.
     """
 
     def test_known_roots_are_stripped(self):
@@ -146,9 +142,7 @@ class ReasoningTotalFallback(unittest.TestCase):
     """Where the reasoning count lives depends on which agent wrote the file.
 
     Agents whose LLM calls can be matched to steps carry it per step, under
-    `metrics.extra.reasoning_tokens`. Some agents often cannot match them — the
-    log says "could not match LLM calls to steps; per-step metrics stay unset"
-    — and reports the total in `final_metrics` instead. Reading only the
+    `metrics.extra.reasoning_tokens`. Some agents often cannot match them and reports the total in `final_metrics` instead. Reading only the
     per-step path renders nothing for those runs while the number sits in the
     file.
     """

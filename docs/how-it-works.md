@@ -8,13 +8,9 @@ The pieces of the application, its four execution paths, and what each leaves on
 
 `app/web/`, the Flask side, one module per capability; `app/nullius/`, the backend, one package per purpose, no Flask; `app/templates/` and `app/static/`, the interface.
 
-Root `pyproject.toml` packages the backend as `nullius` and the web layer
-and its assets as the private `_nullius_app` package. The unified CLI loads
-Flask only for `serve`; backend commands do not import it.
-
 Bundled resources are read-only. User config, data and cache roots come from
 `nullius.paths` ([locations](settings/README.md#storage)); the user catalogue
-overrides bundled entries by whole folder. No personal data lives in the wheel.
+overrides bundled entries by whole folder.
 
 ## Path 1: open results that exist
 
@@ -23,7 +19,6 @@ overrides bundled entries by whole folder. No personal data lives in the wheel.
 | Step | Detail |
 | --- | --- |
 | Recognised | Nullius and Harbor jobs (one shape); ATIF trajectories; OTLP/JSON span exports |
-| Folder picker | Matching folders appear as you type, including mounted disks and linked directories |
 | Refused | Any other root, with the reason |
 | From a shell | `nullius import <tree> -o <root>` ([Import a run](cli/import.md)) |
 | Refresh | *Refresh runs* re-parses and re-converts |
@@ -44,10 +39,9 @@ overrides bundled entries by whole folder. No personal data lives in the wheel.
 `nop`, `oracle`, then the agents; a failed part pauses the run: Continue or Stop. Stop, restart, credentials and what cannot run from the page: [Run](builder.md#run).
 
 For the standard, the host receives a deterministic snapshot of the running
-backend and effective catalogue, addressed by its contents. Source edits and
+backend and effective catalogue. Source edits and
 user entries travel together; configuration, credentials and licence stores
-are excluded. Local source runs use the current checkout.
-
+are excluded.
 
 ## What a run leaves behind
 
@@ -89,7 +83,7 @@ workspace root. `nullius paths` shows the active location.
 | `/job/<id>/reconcile` | Outcome versus judged failure cause |
 | `/job/<id>/feasibility` | Oracle and nop brackets, broken tasks |
 | `/compare` | Runs, whole or matched by task |
-| `/benchmarks`, `/agents`, `/capabilities`, `/kits` | Catalogue cards and entry pages; each section expands into a list in the left navigation |
+| `/benchmarks`, `/agents`, `/capabilities`, `/kits` | Catalogue cards and entry pages |
 
 <div class="grid cards" markdown>
 

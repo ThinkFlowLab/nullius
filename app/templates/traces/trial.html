@@ -3,7 +3,7 @@
 {% block crumb %}/ <a href="{{ url_for('job', job_id=job.job_id) }}">{{ job.job_id }}</a> / {{ trial.task_base }}{% endblock %}
 
 {# The chart grid and the label chips are shared with the compare page's
-   sides, so there is one definition of each and the two cannot drift apart.
+   sides, using the same macros.
    They take `view_url` below as their link builder. #}
 {% import "traces/_charts.html" as ui %}
 
@@ -32,9 +32,7 @@
 {% set sub %}
   <span class="tag oc-{{ trial.outcome }}">{{ trial.outcome_label }}</span>
   {# The recorded exception type, beside the label that came from it. For an
-     Unknown it says which class the classifier has no side for, so a reader
-     can place it (classify._AGENT_EXCEPTIONS / _INFRA_EXCEPTIONS) instead of
-     guessing from the colour. #}
+     Unknown it says which class the classifier has no side for, named for triage. #}
   {% if trial.exception_type %}<span class="mono faint exception-type"
     title="{% if trial.outcome == 'unknown' %}Harbor recorded this exception on the trial and the classifier has no side for it, so the trial counts and is charged to nobody. To place it, add the name to _AGENT_EXCEPTIONS or _INFRA_EXCEPTIONS in app/nullius/runs/classify.py.{% else %}Harbor recorded this exception on the trial; the outcome label follows from it.{% endif %}">{{ trial.exception_type }}</span>{% endif %}{% endset %}
 {{ page_head(trial.task_base, sub=sub, mono=true) }}
@@ -42,9 +40,7 @@
 {% set replaced = trial.trial_name != attempt.trial_name %}
 {# What ran (traces/_head.html, the same on All attempts), then how it went: the dataset's own
    checks, the reward or the score, the agent's time and its steps. A value the trial does not
-   have has no cell, and a block with no cell is not drawn. A task run several times, or an attempt
-   tried again, has its tabs between the two: what ran is every attempt's and stays above them,
-   the numbers are this one's and change under them. #}
+   have has no cell, and a block with no cell is not drawn. #}
 {% set vocab = trial.vocab %}
 {% set cells %}
   {%- if vocab.gained and (trial.f2p_pass or trial.f2p_fail) %}<div><span class="k">{{ vocab.gained }}</span><span class="n"><span class="ok">{{ trial.f2p_pass }}</span><small>/{{ trial.f2p_fail }}</small></span></div>{% endif -%}
@@ -205,9 +201,7 @@
     </div>
     {# Tool summary. Grouped by category, never by the agent's own tool names:
        OpenCode writes `bash`, Claude Code `Bash`, another agent a
-       sentence, so a count by name compares nothing across agents. The names
-       stay beside each category as the evidence of what it folded — in the
-       chip's hover and in the table below — so the fold can be checked. #}
+       sentence, so a count by name compares nothing across agents. #}
     <div class="legend tool-summary" style="margin:.6rem 0 0" aria-label="Tool calls by category">
       {% for cat, n in traj.category_freq.most_common() %}
         <span class="chip cat-{{ cat }}" data-category="{{ cat }}" data-count="{{ n }}"
@@ -216,7 +210,7 @@
       {% if traj.n_failed_calls %}<span class="chip failed-chip">failed <b>{{ traj.n_failed_calls }}</b></span>{% endif %}
     </div>
     {% if traj.name_freq %}
-    {# Each tool once, under the server that offers it. An agent's spellings of a name are its hover: evidence, never a comparison key. #}
+    {# Each tool once, under the server that offers it. #}
     <table class="grid compact tool-names" style="margin-top:.6rem">
       <thead><tr><th>Tool</th><th>Category</th><th class="num">Calls</th><th class="num">Failed</th><th class="num">Time</th></tr></thead>
       <tbody>
@@ -291,8 +285,7 @@
 {% endif %}
 <section class="trial-tab" id="trial-task" role="tabpanel" aria-labelledby="tab-task">
 {# The task's instruction, scored on its own text: once per dataset and task, the same for every attempt,
-   nothing of any run read. An unclear instruction caps every agent on this task - a finding about the
-   benchmark, not this trial. The score changes no outcome. #}
+   nothing of any run read. The score changes no outcome. #}
 {% set tt = task_tab(job, trial, traj) %}
 {% set tq = tt.quality %}
 <div class="judgement" id="task-quality">
@@ -414,8 +407,7 @@
 
 {# ---- distributions ----
    The population of calls, not the timeline: how long a typical call runs and
-   where the summed time sits. Deliberately above the waterfall, since it is the
-   summary you read before scrolling one. It draws from `trace.roots`, which is
+   where the summed time sits. It draws from `trace.roots`, which is
    already pruned by the same query string the page rendered from.
 
    The same macro draws each side of the compare page. Only the closing
@@ -453,7 +445,7 @@
     <span class="muted" style="font-weight:400">· recomputed here</span></h3>
   {# Each Δ is against the same partition run over the unfiltered tree, so it is
      the filter's effect alone — not the gap between this arithmetic and the
-     producer's, which is a different quantity and can be much larger. #}
+     producer's. #}
   {% set changed = trace.view.compared_to(trace.baseline) %}
   {% if changed %}
   <div class="bar strip">
@@ -516,8 +508,7 @@
     .wf-zoomchip { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: 0 0 .6rem; }
   </style>
   {# ---- zoom ----
-     A second, explicit window on the axis (`?zoom=<span id>`), for the trace
-     where one global axis over an hour makes a 20ms Read a hairline. It is
+     A second, explicit window on the axis (`?zoom=<span id>`). It is
      not the filter and not a re-scaling of it: the rows are the zoomed span's
      subtree alone, placed on that span's own extent, and everything outside it
      is left out rather than squeezed in. The strips above are untouched — the
@@ -611,7 +602,7 @@
 </div>
 
 {# Content is fetched for the selected normalised span only. A large trace
-   must not inline every prompt/result into hidden DOM (A15). #}
+   must not inline every prompt/result into hidden DOM. #}
 {% if trace.has_spans %}
 <div class="panel wf-detail" id="wf-detail"
      data-endpoint="{{ url_for('trace_span_data', job_id=job.job_id, trial_name=trial.trial_name) }}">
@@ -640,8 +631,7 @@
 <script src="{{ url_for('static', filename='traces/conversation.js') }}"></script>
 <script>
 (() => {
-  /* Every filter and zoom control is a link to this page with another query (the
-     filter lives in the URL: the top of this file). Followed here, it puts in the
+  /* Every filter and zoom control is a link to this page with another query. Followed here, it puts in the
      Trace tab that URL renders and keeps the page around it: no reload, no jump. */
   const panel = document.getElementById('trial-trace');
   async function showView(url, push = true) {

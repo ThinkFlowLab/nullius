@@ -2,19 +2,16 @@
 outcome (``runs.classify``, deterministic, from the evidence on disk) and
 the judge's ``failure_cause`` (a Choice over the transcript) disagree.
 
-That disagreement is the investigation Nullius exists to surface. A trial
+A trial
 classified ``agent_error`` that the judge reads as ``environment_error``
 is either a classifier gap or a misleading transcript, and both are
-findings. Agreement is not news; disagreement is ranked so the strongest
-come first.
+findings. Disagreement is ranked, strongest first.
 
 The two vocabularies do not line up one to one, so the join is a stated
 table (``COMPATIBLE``) rather than a rename: a classifier label names the
 judge options it is *compatible* with, and a trial agrees when the judge's
 pick is one of them. A label compatible with several options is one the
-classifier cannot split further - ``patch_failed_tests`` is the verifier
-saying no, which the judge may read as the agent's error, the verifier's,
-or an undefined task, and none of the three contradicts the record. A
+classifier cannot split further. A
 label compatible with nothing (``unknown``) is *not comparable*: the
 classifier made no claim to agree or disagree with. For those the judge's
 pick is turned round (``SUGGESTS``) into the labels it is compatible with,
@@ -23,8 +20,7 @@ shown as an advisory suggestion and never written back.
 Every count here is code. Nothing is asked of the judge; the page reads
 the store. The confidence gate uses the Choice's own ``confidence``, the
 number the judge returned with the pick - never a Noul's probability
-turned into one - and a threshold is a number a person can change, so it
-is a module constant the page also takes as a parameter.
+turned into one.
 """
 from __future__ import annotations
 
@@ -51,7 +47,6 @@ COMPATIBLE = {
     # compatible. `not_a_failure` here is a disagreement worth seeing.
     classify.PATCH_FAILED_TESTS: ("agent_error", "verifier_disagrees", "task_ambiguous"),
     classify.FAILED_VERIFICATION: ("agent_error", "verifier_disagrees", "task_ambiguous"),
-    # A patch that would not apply is the agent's doing.
     classify.PATCH_NOT_APPLIED: ("agent_error",),
     # No patch at all: the classifier charges the agent. A judge reading the
     # transcript as an environment failure is a finding, not a join.
@@ -69,7 +64,6 @@ COMPATIBLE = {
     # from a transcript, so nothing agrees or disagrees with it and no cause suggests it.
     classify.SPENDING_CAP: (),
     classify.CANCELLED: (),       # the run recorded its stop; never inferred from a transcript
-    # No claim made: not comparable. The judge's pick becomes a suggestion.
     classify.UNKNOWN: (),
 }
 
@@ -127,7 +121,7 @@ def row_of(trial, record, threshold: float = THRESHOLD) -> dict:
     confident = isinstance(confidence, (int, float)) and confidence >= threshold
     if not COMPATIBLE.get(label):
         # no claim to compare with: a suggestion where the pick names labels, else not comparable. An unknown trial
-        # asked `likely_outcome` (a Choice over the classifier's own labels) suggests that pick directly, its own
+        # asked `likely_outcome` suggests that pick directly, its own
         # confidence gating it; without one, the failure_cause pick is turned round through SUGGESTS.
         likely = answer_of(record, LIKELY) if label == classify.UNKNOWN else None
         if likely and likely["choice"] in classify.ORDER:

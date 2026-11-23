@@ -22,7 +22,7 @@ from .core import app
 from .filters import agent_mark_url
 
 # Harbor agents that call their vendor with a key of their own, beside the model's (read from Harbor's agents): each
-# entry's names are alternatives, any one of them will do. A recipe naming one whose key Settings lacks says so on Review.
+# entry's names are alternatives, any one of them will do.
 AGENT_NEEDS = {"cursor-cli": ["CURSOR_API_KEY"], "copilot-cli": ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"],
                "rovodev-cli": ["ROVODEV_USER_API_TOKEN"]}
 from . import shared
@@ -66,9 +66,9 @@ def new_run():
 def new_run_benchmarks():
     """The Benchmark step's grid, as a fragment the builder puts in its page: the Benchmarks page's cards
     (``catalogue.benchmark_cards``) as single-choice pick cards (templates/builder/benchmarks.html), or rows with
-    ?view=table; the builder presses the one its recipe names."""
+    ?view=table."""
     cat = shared._catalog_cached()
-    # a community benchmark says so; an official one says nothing
+    # a community benchmark says so
     # a benchmark with versions carries each one's Tasks (the default's under ""), for the builder to show the chosen one's
     items = [dict(i, pick={"value": i["key"], "one": True}, id="pick-bench-" + i["key"], title={"text": i["title"], "title": i["domain"]},
                   origin=i["origin"] if i["shelf"] != "official" else None,
@@ -181,7 +181,7 @@ def _builder_data() -> dict:
     data["credentials"] = {"available": providers.available(os.environ), "model_key": bool(os.environ.get("MODEL_API_KEY")),
                            "endpoints": {e["id"]: e["name"] for e in providers.endpoints(os.environ) if e["id"]},
                            "broken": providers.broken(os.environ),           # a URL that holds a credential: fixed in Settings first
-                           # the agent keys Settings holds, by name only: a Harbor agent that needs one it lacks is named on Review
+                           # the agent keys Settings holds, by name only
                            "agent_keys": sorted(settings.agent_key_values(os.environ))}
     data["agentNeeds"] = AGENT_NEEDS
     # The standard's Where step: why its container backend cannot run on this machine (None: it can); and, per
@@ -233,8 +233,7 @@ def _standard_compile(recipe: dict) -> dict:
 def new_run_prerequisites():
     """What the recipe needs of each machine it runs on, and whether that
     machine has it (``nullius/prerequisites.py``): {machines: [{where,
-    label, rows}], ready, notes}. The Review step asks on opening and on *Check
-    again*, and Run waits for ``ready``; the run asks again as it starts.
+    label, rows}], ready, notes}.
     A host is asked over ssh, so this is never asked on a page load."""
     shared._require_csrf()
     if not shared_local_client():
@@ -267,7 +266,7 @@ def new_run_prerequisites():
     known = {h.entry: h for h in execute._hosts()}
 
     runner = "standard" if recipe.get("harness") == standard_recipe.HARNESS else "harbor"
-    backend = definitions.names.backend(recipe.get("backend"))   # docker: the container backend's earlier name
+    backend = definitions.names.backend(recipe.get("backend"))
     own = runner == "standard" and bool(out["docker"])      # its containers, own images on the local backend included
 
     def machine(w):
@@ -277,8 +276,7 @@ def new_run_prerequisites():
         if w not in known:
             return {"where": w, "label": w, "rows": [prerequisites.row("connect", "missing", f"{w} is not one of the hosts in Settings", label="Connection")]}
         return {"where": w, "label": known[w].label, "rows": prerequisites.check_host(known[w], host_needs, setups, standard=standard) + limits}
-    # one ssh probe per host, all at once: one after another, Review waited for their sum
-    # (an unreachable host alone holds a probe 8 to 12 s)
+    # one ssh probe per host, all at once: an unreachable host can hold a probe for 8–12 s
     with ThreadPoolExecutor(max(1, min(8, len(wheres)))) as pool:
         machines = list(pool.map(machine, wheres))
     # a notice, not a refusal: the provider's last test in Settings failed (providers.test)
@@ -299,7 +297,7 @@ _HARBOR_REFS: dict = {}
 @app.route("/new-run/harbor/releases")
 def new_run_harbor_releases():
     """The official Harbor's releases on PyPI, newest first, for the
-    builder's Harbor panel; read after the page loads, never blocking it."""
+    builder's Harbor panel."""
     if not _HARBOR_RELEASES:
         found = harbor_source.releases()
         if found["error"]:
@@ -401,7 +399,7 @@ def recipes_delete(recipe_id):
 @app.route("/new-run/recipes/import", methods=["POST"])
 def recipes_import():
     """One recipe or a list, or {"recipes": [...], "lenient": true}: each one added unless its name is saved
-    already. Lenient (the builder's move of its earlier browser list) adds the good ones and names the bad."""
+    already. Lenient adds the good ones and names the bad."""
     body = _recipe_write()
     wrapped = isinstance(body, dict) and "recipes" in body
     items = body["recipes"] if wrapped else body
@@ -482,8 +480,6 @@ def new_run_host_install():
 def new_run_dirs():
     """Directory completions for the local-checkout field. Names only.
 
-    Read-only like everything else here, and no more than a shell tab-complete
-    reveals: subdirectory names under the typed prefix, never file contents.
     The typed spelling is preserved in the suggestions (a `~` or a relative
     path stays as typed) because the shell, not this app, will resolve it.
     """
@@ -511,10 +507,8 @@ RUN_REGISTRY_URL = (
     "https://raw.githubusercontent.com/laude-institute/harbor/main/registry.json"
 )
 
-# One fetch per process — every app start re-fetches on the first page view,
-# so the list is as fresh as the launch, and a dead network is not retried on
-# every view. The page fetches this endpoint after load, so a slow or failed
-# fetch never delays rendering.
+# One fetch per process — a dead network is not retried on
+# every view.
 _REGISTRY_SCAN: dict = {}
 
 
@@ -566,11 +560,8 @@ def _fetch_hub_names():
 def new_run_registry():
     """Dataset names from Harbor's two catalogs, best-effort.
 
-    `names` is the registry file's name@version entries (pinned, what the
-    README documents); `hub` is the hub website's org/name entries (resolves
-    latest unless pinned). The page shows them as two groups of one select —
-    only one value ever reaches the command. Model catalogues are fetched
-    separately through /new-run/models using the configured provider.
+    `names` is the registry file's name@version entries (pinned); `hub` is the hub website's org/name entries (resolves
+    latest unless pinned).
     """
     if "names" not in _REGISTRY_SCAN:
         _REGISTRY_SCAN["names"] = _fetch_registry_names() or []

@@ -152,7 +152,7 @@ def build(selected: Sequence[SelectedRun], cohort: str = "whole") -> Comparison:
 
     Matching uses the dataset string as recorded, without alias/path guessing.
     Every attempt on a shared task remains in the rates, costs and token sums.
-    A task row holds every attempt and keeps the last indexed one to link to;
+    Each task row links to its last indexed attempt;
     rows sort by how far the pass rate moved (``TaskRow.movement``), the
     largest first, then the other rows whose rate moved, then the rest that
     differ.
@@ -190,7 +190,6 @@ def build(selected: Sequence[SelectedRun], cohort: str = "whole") -> Comparison:
             by_task.setdefault(key(selection, trial), [[] for _ in selected])[column].append(trial)
 
     def task_row(task_key, columns):
-        # the cell links to the last indexed attempt
         return TaskRow(*task_key, tuple(ts[-1] if ts else None for ts in columns), tuple(len(ts) for ts in columns),
                        tuple(task_attempts.Attempts(tuple(task_attempts.ordered(ts))) if ts else None for ts in columns))
 
@@ -206,8 +205,7 @@ def build(selected: Sequence[SelectedRun], cohort: str = "whole") -> Comparison:
 
 # Two sides' scores closer than this are a tie. Half a rubric level: the
 # judge's own spread on one state has been measured at 0.06, so anything
-# under a level's half is within what a re-ask could flip. Change it here;
-# nothing asks the model to compare.
+# under a level's half is within what a re-ask could flip.
 TIE_MARGIN = 0.5
 
 
@@ -216,7 +214,7 @@ def better_of(score_a: float | None, score_b: float | None, margin: float = TIE_
     higher side winning by at least `margin`; None until both are scored.
     The scores are the judge's expectations over the rubric's levels,
     compared as given - never a magnitude read between two levels.
-    Symmetric by construction: swapping the sides mirrors the answer."""
+    """
     if score_a is None or score_b is None:
         return None
     if abs(score_a - score_b) < margin:

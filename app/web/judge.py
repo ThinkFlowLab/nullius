@@ -25,8 +25,7 @@ def key(lane: str = "decision") -> client.Judge:
     return client.judge_for(lane, os.environ)
 
 
-# Judge calls in flight at once for a batch (Judge all, a comparison's sides, task instructions). One
-# at a time, a 500-trial job at 2-5 s a call took most of an hour inside the click's request.
+# Judge calls in flight at once for a batch (Judge all, a comparison's sides, task instructions).
 CONCURRENCY = 8
 
 
@@ -108,7 +107,7 @@ def panel(job, trial, lane: str = "decision") -> dict:
             "hygiene": hygiene_summary(hygiene)}
 
 
-FLAG_THRESHOLD = 0.5   # a Noul at or above this reads as raised; a threshold for Nouls only, never carried to a Choice or Score
+FLAG_THRESHOLD = 0.5   # a Noul at or above this reads as raised
 
 
 def row_of(q: str, a, hygiene: dict | None = None) -> dict:
@@ -136,8 +135,7 @@ def headline_of(row: dict) -> dict:
     """What a card or a result cell shows for one answer: the `headline`
     number, its `unit`, the `pill` (Yes / No / Undecided / Raised / Clear /
     the score's level label) and the `measure` beside it (the judge's
-    confidence, or Nullius's decisiveness for a yes/no). Nothing here is a
-    new number: it is the answer, formatted."""
+    confidence, or Nullius's decisiveness for a yes/no)."""
     a, kind = row["answer"], row["type"]
     if not a:
         return {"headline": None, "unit": "", "pill": "Not judged", "measure_label": "", "measure": None}
@@ -181,7 +179,7 @@ def tone_of(q: str, kind: str, flag: bool, a, undecided: bool, warnings) -> str:
 
 # --- hygiene: the state is untrusted text, and the judge read it as such -------------
 
-HYGIENE_THRESHOLD = 0.5   # a hygiene Noul at or above this is a warning; its own constant, shared with no other question type or flag
+HYGIENE_THRESHOLD = 0.5   # a hygiene Noul at or above this is a warning
 
 HYGIENE_LABELS = {"addresses_the_judge": "text addresses the judge", "credential_visible": "a credential may still be visible"}
 
@@ -212,8 +210,7 @@ def is_undecided(kind: str, a, floor) -> bool:
     """A yes/no answer whose probability sits within the judge's measured
     run-to-run spread of the 50% line: another ask could land on the other
     side, so it is shown as undecided rather than raised or clear. Without
-    a measured floor nothing is undecided - and the row says no floor was
-    measured."""
+    a measured floor nothing is undecided."""
     if not a or kind != "noul" or not isinstance(floor, (int, float)):
         return False
     p = a.get("noul")
@@ -480,7 +477,7 @@ def _sides_todo(view) -> list:
 @app.route("/judge/compare", methods=["POST"])
 def judge_compare_route():
     """Judge the unjudged pairs of this comparison - every side that lacks
-    its score - on the click of the button."""
+    its score."""
     from . import compare as compare_web
     view = compare_web._comparison_requested()
     if len(view.jobs) != 2:
@@ -497,8 +494,7 @@ def judge_compare_route():
 
 # --- feasibility triage, task-instruction quality
 # Each over a small, purpose-built state (`state.control_state`,
-# `task_state`); every count is code's; every answer is
-# advisory beside the number, the verdict or the outcome it sits next to.
+# `task_state`).
 
 def _choice_row(q: str, a) -> dict:
     """A Choice's answer as a page shows it: the pick, its probability, the judge's confidence."""

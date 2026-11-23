@@ -149,7 +149,7 @@ def png_rows(data, last_row=None):
 
 def read_lines(data, scale, ink=INK):
     """The lines of glyphs drawn at ``scale`` in ``ink`` on a screen's PNG, top to bottom; an unreadable line
-    reads ``?``. What the kit's reference reads from a screenshot, as an agent would from its eyes."""
+    reads ``?``."""
     colour = bytes(int(ink[i:i + 2], 16) for i in (1, 3, 5))
     w, rows = png_rows(data)
     lit = []
@@ -246,7 +246,7 @@ class Fixture:
         handle.place(relx=0.25, rely=0.5, anchor="center")
         self.names[str(handle)] = "handle"
 
-        def follow(e):                                  # the handle goes where the pointer drags it
+        def follow(e):
             handle.place(relx=0, rely=0, x=e.x_root - self.root.winfo_rootx(), y=e.y_root - self.root.winfo_rooty(),
                          anchor="center")
         handle.bind("<B1-Motion>", follow, add="+")

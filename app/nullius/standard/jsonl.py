@@ -135,7 +135,7 @@ def serve(handlers: dict, out=None) -> None:
             if op not in handlers:
                 raise ValueError(f"unknown op {op!r}")
             reply = handlers[op](**req)
-        except Exception as e:                       # the error is the reply
+        except Exception as e:
             reply = {"error": f"{type(e).__name__}: {e}"}
         out.write(json.dumps(reply) + "\n")
         out.flush()

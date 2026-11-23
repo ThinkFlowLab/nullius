@@ -17,7 +17,7 @@ from . import settings as settings_web
 
 @app.route("/run", methods=["POST"])
 def run_start():
-    """Start a plan. The builder posts the runner script and what it needs;
+    """Start a plan. The builder posts the recipe;
     the target is this machine or one of the Settings' hosts. Same guards
     as every mutation: form token, same origin, and a loopback client -
     running is writing to a machine."""
@@ -74,8 +74,7 @@ def credentials_for(provider, endpoint=None) -> dict:
     or a provider this does not know - with that provider's base and key
     (``endpoint``, its id: none, MODEL_API_URL and MODEL_API_KEY), which such a
     run cannot go without. Every run is given its endpoint: a Harbor part's
-    script requires API_URL, and an OpenAI run left without one exited before
-    Harbor began."""
+    script requires API_URL."""
     if provider in providers.PROVIDERS and provider in providers.PRESETS:      # a run provider: never TypeSafe's key
         rec = providers.record(provider)
         return {"key_var": rec["key"], "url_var": "", "base_url": rec["base"]}
@@ -122,7 +121,7 @@ def standard_plans(recipe: dict, out: dict, known) -> tuple:
 
 
 def _start_standard(recipe: dict):
-    """The standard: compiled here from its definitions, like a runner's; on
+    """The standard: compiled here from its definitions; on
     this machine, a host, or split over several - one run per machine, every
     one checked before any starts."""
     if len(json.dumps(recipe)) > 200_000:
@@ -208,8 +207,7 @@ def _start(plan: execution.Plan):
         return jsonify(ok=False, error=execution.name_taken(plan.name)), 409
     ex = execution.start(plan)
     # The job lands (or is mirrored) under runs/<name>/jobs: the workspace
-    # reads it from now on. The Runs page, by launch, shows it from the first
-    # second: its runs queued, preparing, then running, each opening its job.
+    # reads it from now on.
     shared.adopt_runs([ex])
     return jsonify(ok=True, open=url_for("index", view="launch"), **ex.summary())
 

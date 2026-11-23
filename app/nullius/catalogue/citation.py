@@ -1,8 +1,7 @@
 """A benchmark's citation, read: its ``citation`` field is BibTeX, as the
 benchmark's authors publish it; this turns each entry into the parts a page
 shows - the title, the people, the venue and year, the link - beside the
-entry itself, which is what a reader copies. Nothing is fetched and nothing
-is rewritten: a field the entry lacks is left empty.
+entry itself. A field the entry lacks is left empty.
 """
 from __future__ import annotations
 

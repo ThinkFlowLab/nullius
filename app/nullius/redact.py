@@ -4,9 +4,6 @@ Job directories are arbitrary text from wherever an exception was raised, and
 this app renders that text into a browser. Never surface raw text from a job
 directory without passing it through :func:`redact` first.
 
-``app/tests/test_redact.py`` pins what the patterns below catch and what they
-leave alone.
-
 Two properties matter:
 
 * **Anchored.** ``sk-`` must start at a token boundary, or the pattern fires

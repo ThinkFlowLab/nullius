@@ -15,8 +15,7 @@ Everything goes under ``STANDARD_DIR`` (``standard/`` in the persistent user dat
 - ``upstreams/<key>/<commit>/``: a benchmark's upstream repository at its
   tested commit;
 - ``datasets/<sha256>/<file>``: a dataset or auxiliary file served outside its upstream, under
-  ``STANDARD_DATA_DIR`` instead when that is set - datasets can be gigabytes
-  where installs are not, so they may sit on a bigger disk than the installs.
+  ``STANDARD_DATA_DIR`` instead when that is set.
 
 On the container backend an agent's or a capability's packages are installed in
 the base image (``container.install_argv``), and the base image's tag is part
@@ -62,8 +61,7 @@ class InstallFailed(Exception):
 
 
 # A variable an install step is never given: a package's install script runs
-# as published, and a run's process holds the model key (under --from-run as
-# OPENAI_API_KEY, API_TOKEN, LLM_API_KEY) - the relay is the only holder meant.
+# as published, and a run's process holds the model key - the relay is the only holder meant.
 SECRET = re.compile(r"(?:^|_)(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS?)$", re.I)      # the last word: GIT_CONFIG_KEY_0 is git's own
 
 
@@ -153,8 +151,7 @@ def packages_dir(d: dict, home: str = HOME, image: Optional[str] = None) -> str:
 
 
 def ready(where: Optional[str]) -> bool:
-    """Whether an install folder is complete (its marker is there): a run says
-    the stage was there already rather than that it took no time."""
+    """Whether an install folder is complete (its marker is there)."""
     return bool(where) and os.path.exists(os.path.join(where, MARK))
 
 
@@ -245,7 +242,7 @@ def _steps(inst: dict, where: str, up: Optional[dict], src: Optional[str], log: 
                 os.makedirs(src)
                 for cmd in (["git", "init", "--quiet"], ["git", "fetch", "--quiet", "--depth", "1", up["repository"], up["tested"]],
                             ["git", "checkout", "--quiet", "FETCH_HEAD"]):
-                    _run(cmd, src, log, env=git_env())        # on this machine, with its git credentials
+                    _run(cmd, src, log, env=git_env())
             proj = os.path.normpath(os.path.join(src, inst["project"]))
             extras = "[" + ",".join(inst["extras"]) + "]" if inst.get("extras") else ""
             if locked:
@@ -313,9 +310,7 @@ def bin_dirs(where: str) -> List[str]:
 def driver_packages(bench: dict, home: str = HOME) -> Optional[str]:
     """The folder a benchmark's ``driver.install`` is installed in, installing
     it first when it is not (once per digest, as an agent's packages); None
-    for a driver that declares none and runs on what the machine has. Its
-    ``project`` comes from the benchmark's upstream clone, cloned first when
-    it is not there: the same commit, fetched once."""
+    for a driver that declares none and runs on what the machine has."""
     d = definitions.driver_install(bench)
     if not d["install"]:
         return None
@@ -334,8 +329,7 @@ def driver_argv(bench: dict, home: str = HOME) -> tuple:
     ``{here}`` (the definition's folder) and ``{install}`` (its
     ``driver.install`` folder, installed first when it is not) filled, and
     what that install adds to the driver's environment (``HF_HUB_CACHE``
-    when it prefetched models). Every place that starts a driver - a run, a
-    shard, a proof's checks - starts it here; a container setup, whose install
+    when it prefetched models). Every place that starts a driver starts it here; a container setup, whose install
     is made in its image, through :func:`driver_command`."""
     return driver_command(bench, driver_packages(bench, home), home)
 
