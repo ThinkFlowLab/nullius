@@ -40,6 +40,8 @@ engine and its own systemd before its first unit (``standard/runner/run.py``).
 """
 from __future__ import annotations
 
+import calendar
+import contextlib
 import functools
 import json
 import math
@@ -49,7 +51,6 @@ import shlex
 import stat
 import subprocess
 import textwrap
-import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
@@ -559,7 +560,7 @@ def samples(cap: Optional[dict] = None) -> dict:
 
 # -- what the last test found, per machine ----------------------------------------
 
-_STORE = threading.Lock()                 # one load-modify-write at a time: Test all tests every machine at once
+VERSION = 1                               # the store's shape: {"version", "machines"}; a bare object of machines before it
 
 
 def store_path(env=None) -> str:
@@ -567,34 +568,59 @@ def store_path(env=None) -> str:
 
 
 def load(env=None) -> Dict[str, dict]:
-    """Every machine's last test: ``{machine: {capacity, enforced, refused, applied, at}}``; empty when unread."""
+    """Every machine's last test: ``{machine: {capacity, enforced, refused, applied, at}}``; empty when unread.
+    A file of before ``version`` is the bare object of machines."""
     try:
         with open(store_path(env), encoding="utf-8") as f:
             doc = json.load(f)
     except (OSError, ValueError):
         return {}
+    if not isinstance(doc, dict):
+        return {}
+    if "version" in doc:
+        doc = doc.get("machines")
     return doc if isinstance(doc, dict) else {}
+
+
+def tested_at(at: Optional[str]) -> str:
+    """A test's ``at`` in this machine's local time, as Settings shows it: UTC with ``Z``
+    since ``version`` 1, local with no zone before it, shown as it was."""
+    if not at or not at.endswith("Z"):
+        return (at or "").replace("T", " ")
+    try:
+        t = calendar.timegm(time.strptime(at, "%Y-%m-%dT%H:%M:%SZ"))
+    except ValueError:
+        return at.replace("T", " ")
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t))
+
+
+@contextlib.contextmanager
+def _changing(env=None):
+    """The store as it is now, for one change, written when the change is done;
+    one change at a time across processes, so none loses another's machine."""
+    out = store_path(env)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with ondisk.locked(out + ".lock"):
+        doc = load(env)
+        yield doc
+        ondisk.write_whole(out, json.dumps({"version": VERSION, "machines": doc}, indent=1, sort_keys=True), mode=0o600)
 
 
 def save(machine: str, found: dict, env=None) -> None:
     """One machine's test over what it found before (a test that did not reach
     the engine keeps the last capacity), kept beside the others."""
-    with _STORE:
-        doc = load(env)
-        doc[machine] = {**(doc.get(machine) or {}), **found, "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    with _changing(env) as doc:
+        doc[machine] = {**(doc.get(machine) or {}), **found, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
         doc[machine].pop("stale", None)
-        _write(doc, env)
 
 
 def move(old: str, new: Optional[str], stale: bool = False, env=None) -> None:
     """A machine's last test under its new entry (``stale`` when it now names
     another machine), or forgotten when ``new`` is None."""
-    with _STORE:
-        doc = load(env)
+    with _changing(env) as doc:
         found = doc.pop(old, None)
         if found is not None and new is not None:
             doc[new] = dict(found, stale=True) if stale else found
-        _write(doc, env)
 
 
 def rekey(text: str, old: str, new: Optional[str]) -> Optional[str]:
@@ -609,13 +635,6 @@ def rekey(text: str, old: str, new: Optional[str]) -> Optional[str]:
     if values is not None and new is not None:
         doc[new] = values
     return json.dumps(doc) if doc else None
-
-
-def _write(doc: dict, env=None) -> None:
-    """The store, written whole to a file of its own, then renamed."""
-    out = store_path(env)
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-    ondisk.write_whole(out, json.dumps(doc, indent=1, sort_keys=True), mode=0o600)
 
 
 def engine_less(found: Optional[dict]) -> bool:
