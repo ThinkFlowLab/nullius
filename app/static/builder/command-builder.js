@@ -789,8 +789,10 @@
       return '<div class="nb-sectionhead"><h2>Scope</h2></div><div class="nb-two">'
         + field('Number of ' + u.nouns, 'limit', rec.limit, {type: 'number', min: 1, placeholder: all, hint: 'The first ones' + per + ', in its order.'})
         + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: rec.backend === 'boat' ? String((schema.standardHere || {}).boatSlots || 'Boat\'s limit') : '1'}) + '</div>'
-        + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
-        + field('Retries per attempt', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0'}) + '</div>'
+        + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1',
+            hint: 'Each ' + esc(u.noun) + ' is run and scored this many times.'})
+        + field('Retries after an error', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0',
+            hint: 'A try that ends in an error, such as a rate limit or a crash, is run again. A failed ' + esc(u.noun) + ' never is.'}) + '</div>'
         // a conversation's most agent turns (recipe.py: run --max-turns): only a benchmark that holds conversations has turns
         + ((b.needs || []).includes('agent.conversation/v1')
           ? field('Turns per conversation', 'turns', rec.turns ?? '', {type: 'number', min: 1, placeholder: String((b.timeouts || {}).turns || ''),
@@ -810,6 +812,7 @@
   // take, each empty at its default, shown greyed - an agent's own under ``by`` (OSWorld's agents' steps).
   function benchLimits(rec, b) {
     const chosen = C.runsOf(rec), yours = chosen.some(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k));
+    const theirs = chosen.some(k => ['original', 'model'].includes(k));
     // a default by agent: the chosen own agents' one when they share it
     const own = [...new Set(C.ownChosen(rec).map(a => a.agent))], given = rec.bench_options || {};
     const of = k => k === 'agent' && own.length ? (own.length === 1 ? own[0] : '') : given[k] ?? (b.options[k] || {}).default;
@@ -818,8 +821,9 @@
       .filter(([, o]) => (o.setups || ['yours']).some(s => s === 'yours' ? yours : chosen.includes(s)))
       .map(([n, o]) => {
         const [k, by] = Object.entries(o.by || {})[0] || [];
-        const def = (!yours && k && by[of(k)]) || o.default;
-        return `<label class="nb-field" title="${esc(o.summary)}">${esc(o.label)}<input class="nb-declared" data-bench-opt-select="${esc(n)}" type="number" min="1" step="1" value="${esc(given[n] ?? '')}" placeholder="${esc(def)}" aria-label="${esc(o.label)}" autocomplete="off"></label>`;
+        // an agent's or a capability's run alone gets the benchmark's value for it (``yours``), the benchmark's own agents theirs
+        const def = yours ? (!theirs && o.yours) || o.default : (k && by[of(k)]) || o.default;
+        return `<label class="nb-field" title="${esc(o.summary)}">${esc(o.label)}${/^\d+$/.test(def) ? ` (default ${esc(def)})` : ''}<input class="nb-declared" data-bench-opt-select="${esc(n)}" type="number" min="1" step="1" value="${esc(given[n] ?? '')}" placeholder="${esc(def)}" aria-label="${esc(o.label)}" autocomplete="off"></label>`;
       });
     return rows.length ? `<div class="nb-sectionhead nb-sectionnext"><h2>${esc(b.label)}</h2></div>` + rows.join('') : '';
   }

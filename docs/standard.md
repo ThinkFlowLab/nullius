@@ -493,6 +493,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `limit` | `true`: a bound of the upstream's own (steps, errors) |
 | `step` | `where`: where the work runs, such as the VMs' provider, asked on Where, one value as fixed; `dataset`: what its datasets need, asked on Dataset for the datasets it applies to |
 | `by` | Its default under each value of another option, e.g. each OSWorld agent's own steps |
+| `yours` | Beside `by`: the value an agent's or a capability's run gets for a default of `default`, e.g. the steps of OSWorld's loop through the computer port |
 | `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`); `["agent"]`: an agent's run alone, never a capability's or a control's |
 
 - **Temperature** in GSM8K and HumanEval's Original setups: a non-negative decimal, or `default` for the provider's own (`--bench-option temperature=0.5`).
