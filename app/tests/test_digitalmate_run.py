@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import json
 import signal
 import subprocess
 import sys
@@ -90,8 +91,15 @@ class PreparedInstallTests(unittest.TestCase):
                 adapter.run(self.install, "Keep this prompt unchanged.")
             stop.assert_called_once_with(service)
             self.assertTrue(launch.call_args.kwargs["start_new_session"])
-            self.assertEqual(submit.call_args.args[:2], ("Keep this prompt unchanged.", Path.cwd()))
-            self.assertEqual(submit.call_args.args[2], launch.call_args.kwargs["env"]["DIGITALMATE_ACCESS_TOKEN"])
+            env = launch.call_args.kwargs["env"]
+            self.assertEqual(submit.call_args.args, ("Keep this prompt unchanged.", env["DIGITALMATE_ACCESS_TOKEN"]))
+            # The release serves only as Hive Home, under direct instance authentication.
+            self.assertEqual(env["DIGITALMATE_CLIENT_AUTH"], "instance")
+            self.assertEqual(json.loads(env["DIGITALMATE_WORKSWARM_COMMAND"])[1:], ["-m", "server_engine.workswarm_launcher"])
+            argv = launch.call_args.args[0]
+            for flag in ("--hive-results", "--hive-turns", "--hive-bees"):
+                self.assertIn(flag, argv)
+            self.assertEqual(argv[argv.index("--hive-beebou-id") + 1], "beebou")
 
     def test_local_backend_is_refused(self):
         with patch.object(adapter.Path, "exists", return_value=False):

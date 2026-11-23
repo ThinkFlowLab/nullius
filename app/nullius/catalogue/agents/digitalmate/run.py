@@ -58,7 +58,8 @@ def run(install: Path, prompt: str) -> str:
         token = uuid.uuid4().hex
         env.update(
             DIGITALMATE_ACCESS_TOKEN=token,
-            DIGITALMATE_WORKSWARM_COMMAND=json.dumps([str(runtime), str(launcher)]),
+            DIGITALMATE_CLIENT_AUTH="instance",
+            DIGITALMATE_WORKSWARM_COMMAND=json.dumps([str(runtime), "-m", "server_engine.workswarm_launcher"]),
             DIGITALMATE_SEARCH_PYTHON=sys.executable,
             DIGITALMATE_WORKSWARM_TOOL_PYTHON=str(runtime),
         )
@@ -67,11 +68,13 @@ def run(install: Path, prompt: str) -> str:
         env.setdefault("DIGITALMATE_MEMORY_BACKEND", "sqlite-offline")
         env.setdefault("DIGITALMATE_SCHEDULE_SCAN_ENABLED", "0")
         # These values must not redirect this trial to a deployed service.
-        for key in ("DIGITALMATE_WORKSWARM_WS", "DIGITALMATE_CONFIG_FILE", "DIGITALMATE_CLIENT_AUTH"):
+        for key in ("DIGITALMATE_WORKSWARM_WS", "DIGITALMATE_CONFIG_FILE", "DIGITALMATE_HIVE_CONFIG"):
             env.pop(key, None)
         service = subprocess.Popen(
             [sys.executable, "-m", "server_engine.engine_cli", "serve", "--workspace", str(state),
-             "--host", "127.0.0.1", "--port", "18092"],
+             "--host", "127.0.0.1", "--port", "18092",
+             # The release serves only as Hive Home: Beebou takes the turn, Bees run what it dispatches.
+             "--hive-results", "--hive-turns", "--hive-bees", "--hive-beebou-id", "beebou"],
             env=env, stdin=subprocess.DEVNULL, stdout=sys.stderr, stderr=sys.stderr,
             start_new_session=True,
         )
@@ -94,17 +97,18 @@ def run(install: Path, prompt: str) -> str:
                 if time.monotonic() >= deadline:
                     raise RuntimeError("DigitalMate service did not become ready in 180 seconds")
                 time.sleep(0.5)
-            return submit_task(prompt, Path.cwd(), token)
+            return submit_task(prompt, token)
         finally:
             stop(service)
-            # Preserve WorkSwarm's separate log before deleting trial state.
-            runtime_log = state / "workswarm/process.log"
-            if runtime_log.is_file():
-                from server_engine.engine_config import redact_credentials
-                with runtime_log.open("rb") as handle:
-                    handle.seek(max(0, runtime_log.stat().st_size - 32768))
-                    tail = handle.read().decode("utf-8", errors="replace")
-                print(redact_credentials(tail, env), file=sys.stderr)
+            # Preserve both WorkSwarm runtimes' logs before deleting trial state.
+            for name in ("workswarm", "bee-workswarm"):
+                runtime_log = state / name / "process.log"
+                if runtime_log.is_file():
+                    from server_engine.engine_config import redact_credentials
+                    with runtime_log.open("rb") as handle:
+                        handle.seek(max(0, runtime_log.stat().st_size - 32768))
+                        tail = handle.read().decode("utf-8", errors="replace")
+                    print(redact_credentials(tail, env), file=sys.stderr)
             for signum, handler in previous.items():
                 signal.signal(signum, handler)
 

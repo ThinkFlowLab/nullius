@@ -81,9 +81,9 @@ class Tabs(unittest.TestCase):
             detail = self.get("/agents/digitalmate").get_data(as_text=True)
         self.assertIn('/agents/digitalmate', listing)
         self.assertIn('DigitalMate', detail)
-        self.assertIn('709f4d39d613c', detail)
+        self.assertIn('7dbfc6729963e', detail)
         agent = _GET("agent", "digitalmate")
-        self.assertEqual(agent["upstream"]["tag"], "v0.1.12")
+        self.assertEqual(agent["upstream"]["tag"], "v0.1.13")
         self.assertEqual(agent["offers"], ["agent.task/v1"])
         proof = agent["proven"]["agent.task/v1"]
         self.assertEqual(proof["passed"], "3/3")

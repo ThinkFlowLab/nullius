@@ -9,7 +9,7 @@ Every agent in the catalogue, the ports each version has proven, and the benchma
 | Agent | Versions (bare key: the default) | What it is | Driven over | From | Licence |
 |---|---|---|---|---|---|
 | [Codex](codex.md) | `codex@2.2.2`, `codex@0.16.0` | OpenAI's coding agent. | ACP via `codex-acp` | npm | Apache-2.0 |
-| [DigitalMate](digitalmate.md) | `digitalmate` | DigitalMate's Personal Agent service with its owned WorkSwarm runtime. | a command | repository | Apache-2.0 |
+| [DigitalMate](digitalmate.md) | `digitalmate` | DigitalMate's Personal Agent service, run as Hive Home with its owned WorkSwarm runtimes. | a command | repository | Apache-2.0 |
 | [Goose](goose.md) | `goose` | The AAIF's open-source agent, formerly Block's. | ACP | npm | Apache-2.0 |
 | [JiuwenSwarm](jiuwenswarm.md) | `jiuwenswarm@0.2.7`, `jiuwenswarm@0.2.8` | openJiuwen's agent. | ACP | PyPI | Apache-2.0 |
 | [mini-swe-agent](mini-swe-agent.md) | `mini-swe-agent` | Princeton's 100-line agent, bash only. | a command | PyPI | MIT |
