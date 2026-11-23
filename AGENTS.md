@@ -39,7 +39,7 @@ and its resources.
   workspace and its jobs, path resolution, the catalogue cache, the query
   helpers, the form-token guard), `filters` (template filters, page context),
   then `runs`, `traces`, `compare`, `builder`, `catalogue`, `agents`,
-  `settings`, `workspaces`, `execute`, `judge`, `feasibility`, `reconcile`, `judge_tasks`, `onboarding`, `failure` (the trial page's User judge tab; `agents` is the Agents
+  `settings`, `workspaces`, `execute`, `judge`, `feasibility`, `reconcile`, `judge_tasks`, `onboarding`, `failure` (`agents` is the Agents
   and Capabilities tabs and conformance Kits catalogue). Cross-module names are reached as
   attributes (`shared.STATE`, `traces._trial_evidence`): patch one, patched for all.
 - `app/nullius/` — its backend, one package per purpose: `runs/` (reading one
