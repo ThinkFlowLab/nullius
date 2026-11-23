@@ -10,6 +10,7 @@ import sys
 import subprocess
 import json
 import shutil
+import shlex
 from contextlib import contextmanager
 
 
@@ -62,17 +63,24 @@ def main():
     # upstream tool environment option for pip constraints and preparation's
     # temporary proxy; normal execution receives no proxy variables.
     values = config['agent']['tools'].setdefault('env_variables', {})
-    for name in ('PIP_CONSTRAINT', 'PATH', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY',
+    for name in ('PIP_CONSTRAINT', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY',
                  'http_proxy', 'https_proxy', 'no_proxy'):
         if name in os.environ:
             values[name] = os.environ[name]
-    environment = {'deployment': {'type': 'local'}}
+    # Set the task PATH once, before ToolHandler adds its bundle directories.
+    # ToolConfig.env_variables is applied again on reset and would hide them.
+    environment = {'deployment': {'type': 'local'},
+                   'post_startup_commands': ['export PATH=' + shlex.quote(os.environ['PATH'])]}
     if sys.argv[1] == 'prepare':
         env = SWEEnv.from_config(EnvironmentConfig.model_validate(environment))
         try:
             env.start()
             with tool_staging():
-                ToolHandler(ToolConfig.model_validate(config['agent']['tools'])).install(env)
+                handler = ToolHandler(ToolConfig.model_validate(config['agent']['tools']))
+                handler.install(env)
+                # Installation checks before reset; ensure reset kept the tools.
+                for command in handler.config.commands:
+                    env.communicate('command -v ' + shlex.quote(command.name), check='raise')
         finally:
             env.close()
         return
