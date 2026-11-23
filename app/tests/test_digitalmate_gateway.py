@@ -42,14 +42,24 @@ def report(ref, *, seq=2, children=(), text="  FINAL ANSWER: São Paulo\n"):
             "task_refs": list(children), "text": text}
 
 
+def question_card(*questions):
+    return {"interaction_id": "hive-question-token", "interaction_ref": "q1", "execution_id": "run-a",
+            "question_version": 1, "questions": list(questions) or [{"question": "Cancel EHGLP3? Reply yes."}]}
+
+
 class Socket:
     """A scripted product protocol peer, including pushes interleaved with RPCs."""
     def __init__(self, *, tasks=(), status="committed", answer="FINAL ANSWER: 42", before=(), polls=None,
-                 initial_error=None, waiting=(), receipt=True):
+                 initial_error=None, waiting=(), receipt=True, card=None, answers=("consumed",),
+                 still_open=0):
         self.tasks, self.status, self.answer = list(tasks), status, answer
         self.before, self.polls = list(before), polls or {}
         self.initial_error, self.waiting = initial_error, set(waiting)
         self.receipt = receipt
+        self.card = card or question_card()
+        # Answer receipts in order, and how many polls an answered card still reads as open.
+        self.answers, self.still_open = deque(answers), still_open
+        self.answered = set()
         self.frames, self.inbox = [], deque()
         self.now = 0.0
 
@@ -72,14 +82,25 @@ class Socket:
                     event["source_message_id"] = params["message_id"]
         elif method == "hive.result.get":
             ref = params["task_ref"]
+            pending = self.polls.get(ref, deque())
             if ref in self.waiting:
-                response["result"] = {"status": "waiting_user", "task_ref": ref,
-                                      "interaction": {"interaction_id": "q", "questions": [{"question": "Sure?"}]}}
+                if ref in self.answered:
+                    if self.still_open:
+                        self.still_open -= 1
+                    else:
+                        self.waiting.discard(ref)
+            if ref in self.waiting:
+                response["result"] = {"status": "waiting_user", "task_ref": ref, "interaction": self.card}
             else:
-                pending = self.polls.get(ref, deque())
                 events = pending.popleft() if pending else []
                 response["result"] = {"status": "available" if any(
                     e.get("event") == "digitalmate.task.text" for e in events) else "pending", "task_ref": ref}
+        elif method == "digitalmate.request" and params.get("action") == "task.answer":
+            status = self.answers.popleft()
+            if status == "consumed":
+                self.answered.add(params["task_id"])
+            response["result"] = {"hive_answer": {"status": status, "task_ref": params["task_id"],
+                                                  "interaction_id": params["interaction_id"]}}
         elif method == "hive.bee.stop":
             response["result"] = {"status": "stopped"}
         else:
@@ -99,12 +120,13 @@ class Socket:
 class GatewayTests(unittest.TestCase):
     prompt = '  Read the file.\nReturn {"answer": "its content"}.\n'
 
-    def submit(self, socket, timeout=3):
+    def submit(self, socket, timeout=3, conversation=None, prompt=None):
         connection = MagicMock()
         connection.__enter__.return_value = socket
         with patch.object(gateway, "connect", return_value=connection) as connect, \
                 patch.object(gateway.time, "monotonic", side_effect=lambda: socket.now):
-            answer = gateway.submit_task(self.prompt, "local-test-token", timeout=timeout)
+            answer = gateway.submit_task(prompt or self.prompt, "local-test-token",
+                                         timeout=timeout, conversation=conversation)
         self.assertEqual(connect.call_args.args, ("ws://127.0.0.1:18092/digitalmate/ws",))
         self.assertEqual(connect.call_args.kwargs["additional_headers"],
                          {"Authorization": "Bearer local-test-token"})
@@ -157,7 +179,7 @@ class GatewayTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "Bee task ended: " + state):
                     self.submit(socket)
 
-    def test_a_bee_question_fails_the_task_and_requests_stop_once(self):
+    def test_without_a_session_a_bee_question_fails_and_requests_stop_once(self):
         socket = Socket(tasks=("a",), waiting=("a",))
         with self.assertRaisesRegex(RuntimeError, "requires user input"):
             self.submit(socket)
@@ -165,6 +187,82 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(len(stops), 1)
         self.assertEqual(stops[0]["params"]["task_ref"], "a")
         self.assertTrue(stops[0]["params"]["operation_id"])
+
+    def test_session_returns_a_bee_question_and_answers_it_on_the_next_turn(self):
+        socket = Socket(tasks=("a",), answer="I handed this to a helper.", waiting=("a",),
+                        polls={"a": deque([[terminal("a"), report("a", text="Cancelled. No refund.")]])})
+        conversation = gateway.Conversation()
+        self.assertEqual(self.submit(socket, conversation=conversation), "Cancel EHGLP3? Reply yes.")
+        self.assertFalse(any(f["method"] == "hive.bee.stop" for f in socket.frames))
+        self.assertIsNotNone(conversation.waiting)
+
+        self.assertEqual(self.submit(socket, conversation=conversation, prompt="yes"), "Cancelled. No refund.")
+        answers = [f["params"] for f in socket.frames if f["method"] == "digitalmate.request"]
+        self.assertEqual(len(answers), 1)
+        self.assertEqual({k: v for k, v in answers[0].items() if k != "message_id"}, {
+            "action": "task.answer", "task_id": "a", "interaction_id": "hive-question-token",
+            "answers": {"Cancel EHGLP3? Reply yes.": "yes"}})
+        self.assertTrue(answers[0]["message_id"])
+        self.assertEqual(sum(f["method"] == "hive.message.send" for f in socket.frames), 1)
+        self.assertIsNone(conversation.waiting)
+        self.assertFalse(any(f["method"] == "hive.bee.stop" for f in socket.frames))
+
+    def test_question_options_are_part_of_the_reply(self):
+        card = question_card({"question": "Which cabin?", "options": [{"label": "Economy"}, {"value": "business"}]})
+        socket = Socket(tasks=("a",), waiting=("a",), card=card)
+        self.assertEqual(self.submit(socket, conversation=gateway.Conversation()),
+                         "Which cabin?\n\nOptions: Economy, business")
+
+    def test_answered_card_still_open_is_not_asked_again(self):
+        socket = Socket(tasks=("a",), waiting=("a",), still_open=2,
+                        polls={"a": deque([[terminal("a"), report("a")]])})
+        conversation = gateway.Conversation()
+        self.submit(socket, conversation=conversation)
+        self.assertEqual(self.submit(socket, conversation=conversation, prompt="yes"),
+                         "  FINAL ANSWER: São Paulo\n")
+
+    def test_unproven_answer_delivery_is_retried_with_the_same_operation(self):
+        socket = Socket(tasks=("a",), waiting=("a",), answers=("delivery_pending", "unknown", "consumed"),
+                        polls={"a": deque([[terminal("a"), report("a")]])})
+        conversation = gateway.Conversation()
+        self.submit(socket, conversation=conversation)
+        self.submit(socket, conversation=conversation, prompt="yes")
+        operations = {f["params"]["message_id"] for f in socket.frames if f["method"] == "digitalmate.request"}
+        self.assertEqual(len(operations), 1)
+        self.assertEqual(sum(f["method"] == "digitalmate.request" for f in socket.frames), 3)
+
+    def test_refused_answer_fails_the_turn_and_stops_the_task(self):
+        for status in ("stale_question", "closed", "not_resumed", "invalid", None):
+            with self.subTest(status=status):
+                socket = Socket(tasks=("a",), waiting=("a",), answers=(status,))
+                conversation = gateway.Conversation()
+                self.submit(socket, conversation=conversation)
+                with self.assertRaisesRegex(RuntimeError, "did not accept the answer: " + str(status)):
+                    self.submit(socket, conversation=conversation, prompt="yes")
+                self.assertEqual([f["params"]["task_ref"] for f in socket.frames
+                                  if f["method"] == "hive.bee.stop"], ["a"])
+                self.assertIsNone(conversation.waiting)
+
+    def test_malformed_or_multipart_question_fails_closed(self):
+        cards = {"several questions": question_card({"question": "One?"}, {"question": "Two?"}),
+                 "invalid Bee question": {"questions": [{"question": "No token?"}]},
+                 "without a final answer": question_card({"question": "  "})}
+        for message, card in cards.items():
+            with self.subTest(message=message):
+                socket = Socket(tasks=("a",), waiting=("a",), card=card)
+                with self.assertRaisesRegex(RuntimeError, message):
+                    self.submit(socket, conversation=gateway.Conversation())
+                self.assertEqual(sum(f["method"] == "hive.bee.stop" for f in socket.frames), 1)
+
+    def test_failed_bee_question_conversation_starts_a_new_turn_next(self):
+        socket = Socket(tasks=("a",), waiting=("a",), answers=("closed",))
+        conversation = gateway.Conversation()
+        self.submit(socket, conversation=conversation)
+        with self.assertRaises(RuntimeError):
+            self.submit(socket, conversation=conversation, prompt="yes")
+        fresh = Socket()
+        self.assertEqual(self.submit(fresh, conversation=conversation, prompt="new"), fresh.answer)
+        self.assertEqual(fresh.frames[0]["method"], "hive.message.send")
 
     def test_failed_beebou_report_is_not_a_final_answer(self):
         failed = report("a")
@@ -201,6 +299,7 @@ class GatewayTests(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             gateway.Gateway(socket, gateway.time.monotonic() - 1).rpc("hive.result.get", task_ref="a")
         socket.send.assert_not_called()
+
 
     def test_connection_failure_is_reported_without_credentials(self):
         with patch.object(gateway, "connect", side_effect=gateway.WebSocketException("private header")):

@@ -97,6 +97,51 @@ class PreparedInstallTests(unittest.TestCase):
                 self.assertIn(flag, argv)
             self.assertEqual(argv[argv.index("--hive-beebou-id") + 1], "beebou")
 
+    def test_fixed_version_binds_its_project_and_hands_over_its_mcp_servers(self):
+        self.prepare()
+        service = Mock(pid=43210)
+        service.poll.return_value = None
+        response = MagicMock()
+        response.__enter__.return_value.status = 200
+        with patch.dict(adapter.os.environ, dict(self.relay, DIGITALMATE_HIVE_HOME_MCP_SERVERS="/elsewhere"), clear=True), \
+                patch.object(adapter, "require_container"), \
+                patch.object(adapter.Path, "home", return_value=self.root), \
+                patch.object(adapter.subprocess, "run") as bind, \
+                patch.object(adapter.subprocess, "Popen", return_value=service) as launch, \
+                patch.object(adapter, "urlopen", return_value=response), \
+                patch.object(adapter.signal, "signal", return_value=signal.SIG_DFL), \
+                patch.object(adapter, "stop"):
+            with adapter.product(self.install, port=4321, project=Path("/workspace"),
+                                 mcp_config=Path("/private/servers.json")):
+                pass
+        argv = bind.call_args.args[0]
+        self.assertEqual(argv[1:3], ["-m", "dm_hive_tools.workspace"])
+        self.assertEqual(argv[argv.index("--project-dir") + 1], "/workspace")
+        state = argv[argv.index("--state-dir") + 1]
+        serve = launch.call_args.args[0]
+        self.assertEqual(serve[serve.index("--workspace") + 1], state)
+        self.assertEqual(serve[serve.index("--port") + 1], "4321")
+        self.assertEqual(launch.call_args.kwargs["env"]["DIGITALMATE_HIVE_HOME_MCP_SERVERS"], "/private/servers.json")
+
+    def test_release_runs_have_no_project_binding_or_inherited_mcp(self):
+        self.prepare()
+        service = Mock(pid=43210)
+        service.poll.return_value = None
+        response = MagicMock()
+        response.__enter__.return_value.status = 200
+        with patch.dict(adapter.os.environ, dict(self.relay, DIGITALMATE_HIVE_HOME_MCP_SERVERS="/elsewhere"), clear=True), \
+                patch.object(adapter, "require_container"), \
+                patch.object(adapter.Path, "home", return_value=self.root), \
+                patch.object(adapter.subprocess, "run") as bind, \
+                patch.object(adapter.subprocess, "Popen", return_value=service) as launch, \
+                patch.object(adapter, "urlopen", return_value=response), \
+                patch.object(adapter.signal, "signal", return_value=signal.SIG_DFL), \
+                patch.object(adapter, "stop"):
+            with adapter.product(self.install):
+                pass
+        bind.assert_not_called()
+        self.assertNotIn("DIGITALMATE_HIVE_HOME_MCP_SERVERS", launch.call_args.kwargs["env"])
+
     def test_local_backend_is_refused(self):
         with patch.object(adapter.Path, "exists", return_value=False):
             with self.assertRaisesRegex(RuntimeError, "requires --backend container"):
@@ -121,6 +166,24 @@ class ProcessCleanupTests(unittest.TestCase):
         with patch.object(adapter.os, "killpg", side_effect=[None, ProcessLookupError]):
             adapter.stop(service)
         service.wait.assert_any_call()
+
+
+class VersionTests(unittest.TestCase):
+    def test_the_fixed_version_names_its_fork_and_the_upstream_changes_it_carries(self):
+        from nullius.standard.contract import definitions
+        release = definitions.get("agent", "digitalmate")
+        self.assertEqual(release["upstream"]["tag"], "v0.1.13")
+        self.assertEqual(release["offers"], ["agent.task/v1", "agent.search/v1"])
+        fixed = definitions.get("agent", "digitalmate@0.1.13-fixes")
+        self.assertEqual(fixed["upstream"]["repository"], "https://github.com/aitianshi/DigitalMate")
+        self.assertEqual(fixed["upstream"]["branch"], "nullius/v0.1.13")
+        fixes = " ".join(fixed["upstream"]["fixes"])
+        for reference in ("#699", "#2483", "#2484"):
+            self.assertIn(reference, fixes)
+        self.assertEqual(fixed["offers"], ["agent.task/v1", "agent.workspace/v1", "agent.tools/v1",
+                                           "agent.conversation/v1", "agent.search/v1"])
+        self.assertIn("acp", fixed["start"])
+        self.assertIn("command", release["start"])
 
 
 if __name__ == "__main__":

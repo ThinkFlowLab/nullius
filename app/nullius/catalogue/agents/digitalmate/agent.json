@@ -3,82 +3,6 @@
   "key": "digitalmate",
   "label": "DigitalMate",
   "summary": "DigitalMate's Personal Agent service, run as Hive Home with its owned WorkSwarm runtimes.",
-  "upstream": {
-    "repository": "https://github.com/openJiuwen-ai/DigitalMate",
-    "tested": "7dbfc6729963ea9173c50f30c38385a8980a4b11",
-    "license": "Apache-2.0",
-    "tag": "v0.1.13",
-    "core": "Bundled WorkSwarm 0d6857507236d1299276caf0f6fe09e5baaa4c23 and agent-core 8f9f112698d5580b749158b21b1a89a54e16a8f9, verified and installed by the release installer",
-    "version": "0.1.13"
-  },
-  "install": {
-    "python": "3.13",
-    "project": ".",
-    "pip": [
-      "websockets==15.0.1"
-    ],
-    "commands": [
-      [
-        "uv",
-        "venv",
-        "--quiet",
-        "--seed",
-        "--python",
-        "{install}/.venv/bin/python",
-        "{install}/runtime"
-      ],
-      [
-        "{install}/runtime/bin/python",
-        "{install}/src/harness/personal-agent/deploy/install_runtime.py",
-        "--wheel-dir",
-        "{install}/wheels"
-      ],
-      [
-        "{install}/runtime/bin/python",
-        "-m",
-        "pip",
-        "install",
-        "--quiet",
-        "{install}/src/temp/history-context-recovery",
-        "{install}/src",
-        "{install}/src/harness/personal-agent/services/agent_bridge"
-      ],
-      [
-        "{install}/runtime/bin/python",
-        "-m",
-        "pip",
-        "check"
-      ],
-      [
-        "uv",
-        "pip",
-        "install",
-        "--quiet",
-        "--python",
-        "{install}/.venv/bin/python",
-        "{install}/src/plugins",
-        "{install}/src/temp/history-context-recovery",
-        "{install}/wheels/openjiuwen-0.1.19-py3-none-any.whl",
-        "{install}/src/harness/personal-agent/services/agent_bridge[geo,agent]"
-      ],
-      [
-        "uv",
-        "pip",
-        "check",
-        "--python",
-        "{install}/.venv/bin/python"
-      ]
-    ]
-  },
-  "start": {
-    "command": [
-      "{install}/.venv/bin/python",
-      "{here}/run.py",
-      "--install",
-      "{install}",
-      "{prompt}"
-    ]
-  },
   "model": {
     "apis": [
       "chat"
@@ -88,6 +12,166 @@
       "API_KEY": "{key}",
       "MODEL_NAME": "{model}",
       "MODEL_PROVIDER": "OpenAI"
+    }
+  },
+  "default": "0.1.13",
+  "versions": {
+    "0.1.13": {
+      "upstream": {
+        "repository": "https://github.com/openJiuwen-ai/DigitalMate",
+        "tested": "7dbfc6729963ea9173c50f30c38385a8980a4b11",
+        "license": "Apache-2.0",
+        "tag": "v0.1.13",
+        "core": "Bundled WorkSwarm 0d6857507236d1299276caf0f6fe09e5baaa4c23 and agent-core 8f9f112698d5580b749158b21b1a89a54e16a8f9, verified and installed by the release installer"
+      },
+      "install": {
+        "python": "3.13",
+        "project": ".",
+        "pip": [
+          "websockets==15.0.1"
+        ],
+        "commands": [
+          [
+            "uv",
+            "venv",
+            "--quiet",
+            "--seed",
+            "--python",
+            "{install}/.venv/bin/python",
+            "{install}/runtime"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "{install}/src/harness/personal-agent/deploy/install_runtime.py",
+            "--wheel-dir",
+            "{install}/wheels"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            "{install}/src/temp/history-context-recovery",
+            "{install}/src",
+            "{install}/src/harness/personal-agent/services/agent_bridge"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "-m",
+            "pip",
+            "check"
+          ],
+          [
+            "uv",
+            "pip",
+            "install",
+            "--quiet",
+            "--python",
+            "{install}/.venv/bin/python",
+            "{install}/src/plugins",
+            "{install}/src/temp/history-context-recovery",
+            "{install}/wheels/openjiuwen-0.1.19-py3-none-any.whl",
+            "{install}/src/harness/personal-agent/services/agent_bridge[geo,agent]"
+          ],
+          [
+            "uv",
+            "pip",
+            "check",
+            "--python",
+            "{install}/.venv/bin/python"
+          ]
+        ]
+      },
+      "start": {
+        "command": [
+          "{install}/.venv/bin/python",
+          "{here}/run.py",
+          "--install",
+          "{install}",
+          "{prompt}"
+        ]
+      }
+    },
+    "0.1.13-fixes": {
+      "upstream": {
+        "repository": "https://github.com/aitianshi/DigitalMate",
+        "branch": "nullius/v0.1.13",
+        "tested": "5a2a3b9fb539978accc4e37fc5e6e81d824c58f7",
+        "license": "Apache-2.0",
+        "core": "Bundled WorkSwarm 0d6857507236d1299276caf0f6fe09e5baaa4c23 and agent-core 8f9f112698d5580b749158b21b1a89a54e16a8f9, verified and installed by the release installer",
+        "fixes": [
+          "Hive project workspace binding: openJiuwen-ai/DigitalMate PR #699, cherry-picked onto v0.1.13 (its project note keeps v0.1.13's bash and deliver_file guidance)",
+          "Operator stdio MCP servers for Bees: openJiuwen-ai/DigitalMate issue #2483, PR #2484"
+        ]
+      },
+      "install": {
+        "python": "3.13",
+        "project": ".",
+        "pip": [
+          "websockets==15.0.1"
+        ],
+        "commands": [
+          [
+            "uv",
+            "venv",
+            "--quiet",
+            "--seed",
+            "--python",
+            "{install}/.venv/bin/python",
+            "{install}/runtime"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "{install}/src/harness/personal-agent/deploy/install_runtime.py",
+            "--wheel-dir",
+            "{install}/wheels"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            "{install}/src/temp/history-context-recovery",
+            "{install}/src",
+            "{install}/src/harness/personal-agent/services/agent_bridge"
+          ],
+          [
+            "{install}/runtime/bin/python",
+            "-m",
+            "pip",
+            "check"
+          ],
+          [
+            "uv",
+            "pip",
+            "install",
+            "--quiet",
+            "--python",
+            "{install}/.venv/bin/python",
+            "{install}/src/plugins",
+            "{install}/src/temp/history-context-recovery",
+            "{install}/wheels/openjiuwen-0.1.19-py3-none-any.whl",
+            "{install}/src/harness/personal-agent/services/agent_bridge[geo,agent]"
+          ],
+          [
+            "uv",
+            "pip",
+            "check",
+            "--python",
+            "{install}/.venv/bin/python"
+          ]
+        ]
+      },
+      "start": {
+        "acp": [
+          "{install}/.venv/bin/python",
+          "{here}/acp.py",
+          "--install",
+          "{install}"
+        ]
+      }
     }
   }
 }
