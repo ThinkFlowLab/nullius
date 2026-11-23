@@ -24,6 +24,8 @@ class Preparation(unittest.TestCase):
         self.assertIn(('run', '/agent-install/python', {'HTTPS_PROXY': 'http://egress:3128'}), box.did)
         self.assertTrue(os.path.isfile(os.path.join(self.tmp.name, 'agent', 'prepare.txt')))
         self.assertFalse(os.path.exists(os.path.join(self.tmp.name, 'setup')))
+        self.assertTrue(os.path.isfile(os.path.join(self.tmp.name, 'agent', 'prepare-egress.log')))
+        self.assertFalse(os.path.exists(os.path.join(self.tmp.name, 'agent', 'egress.log')))
         self.assertEqual(box.did[-2:], ['offline', 'settle'])
 
     def test_preparation_preserves_the_tasks_python_before_image_python(self):

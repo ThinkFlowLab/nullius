@@ -2191,7 +2191,7 @@ class Run:
                 try:
                     said = box.egress_said()
                     if said:
-                        with open(os.path.join(out, "egress.log"), "w") as f:
+                        with open(os.path.join(out, "prepare-egress.log" if agent else "egress.log"), "w") as f:
                             f.write(said)
                 finally:
                     box.offline()

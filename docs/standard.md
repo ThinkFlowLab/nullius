@@ -510,7 +510,7 @@ An agent may declare `prepare` for an own-image container: `run` (argv,
 `{here}` and `{install}`), optional `copy`, `write`, `seconds` and `network`.
 It runs as root before agent startup. Public access, when requested, ends
 and remaining processes stop before the agent starts. Failure refuses the
-unit. Evidence is in `agent/prepare.txt` and `agent/egress.log`; benchmark
+unit. Evidence is in `agent/prepare.txt` and `agent/prepare-egress.log`; benchmark
 preparation remains separate. Other environments refuse agent preparation.
 
 For root-dependent workspace conformance, `conform --port agent.workspace/v1
