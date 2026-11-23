@@ -54,17 +54,21 @@ Real terminal tasks in a container: build, configure, debug.
 
 - The agent must work in the image's working directory, /app.
 - A local run is not a leaderboard entry: that needs Harbor's submission flow.
-- In the offline set, the solutions of bn-fit-modify and mteb-retrieve download from CRAN and Hugging Face, so even the reference solution fails them there.
-- qemu-alpine-ssh and qemu-startup fail even with the reference solution: their tests install Debian packages that are no longer published.
+- qemu-alpine-ssh and qemu-startup cannot run their checks when Debian package downloads return 404; their scripts then write zero without running the tests.
 - The tests of torch-pipeline-parallelism and torch-tensor-parallelism download about 3 GB of PyTorch, which can outlast their time limit on a slow connection.
 - mailman's tests fail now and then even with the reference solution.
 - fix-git's image no longer builds as published, so it is pulled even when the image option builds.
 - The build-pmars reference solution pins dpkg-dev 1.22.21, which Debian's repositories did not serve during validation; it exited 100 before verification.
+- build-cython-ext can fail even with the reference solution: its nested pyknotid test_constructed_space_curve test fails.
+- The protein-assembly reference solution can stop with DNA Chisel NoSolutionError while enforcing translation constraints.
+- The caffe-cifar-10 reference solution can exceed its 1,200-second limit while downloading Ubuntu packages.
+- The mcmc-sampling-stan reference solution omits CMake, which its RcppParallel dependency requires; RStan installation then fails.
+- The rstan-to-pystan reference solution can exceed its 1,800-second limit while installing Ubuntu dependencies.
 
 ## Nullius limitations
 
-- The benchmark grants public internet access to 36 tasks during the agent or reference solution. The other 53 keep only their model route. Proxy access is removed before the tests start, and its traffic is recorded.
-- On Nullius, the tests get internet access after the agent ends. What the agent left running is stopped first, except in the 8 tasks whose tests need it.
+- The benchmark grants public internet access to 38 tasks during the agent or reference solution. The other 51 keep only their model route. Proxy access is removed before the tests start, and its traffic is recorded.
+- On Nullius, the tests get internet access after the agent ends. What the agent left running is stopped first, except in the 10 tasks whose tests need it.
 
 ## Cite
 

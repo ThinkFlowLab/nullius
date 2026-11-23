@@ -14,6 +14,7 @@ import tempfile
 import threading
 import unittest
 import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from unittest import mock
 
 from nullius.standard.backends import container, egress
@@ -174,6 +175,23 @@ class Order(unittest.TestCase):
         self.r.verify(dict(self.step, keep_processes=True), box, os.path.join(self.tmp, "trial"))
         self.assertNotIn("settle", box.did)
 
+    def test_a_timed_out_check_keeps_evidence_but_cannot_be_scored(self):
+        box = FakeBox()
+        trial = os.path.join(self.tmp, "trial")
+        with mock.patch.object(box, "run", return_value={
+            "exit": None, "output": "Downloading torch\n", "timed_out": True,
+        }), mock.patch.object(box, "copy_out", return_value=True) as collect:
+            with self.assertRaises(run._Ended) as e:
+                self.r.verify(dict(self.step, collect="/logs/verifier"), box, trial)
+        self.assertEqual(e.exception.kind, "VerifierError")
+        self.assertFalse(e.exception.retryable)
+        self.assertIn("Downloading torch", e.exception.said)
+        collect.assert_called_once_with("/logs/verifier", os.path.join(trial, "verifier"))
+        with open(os.path.join(trial, "verifier", "test-stdout.txt")) as f:
+            self.assertEqual(f.read(), "Downloading torch\n")
+        with open(os.path.join(trial, "verifier", "egress.log")) as f:
+            self.assertIn("refused", f.read())
+
     def test_a_check_without_the_network_has_no_proxy(self):
         box = FakeBox()
         self.r.verify(dict(self.step, network=False), box, os.path.join(self.tmp, "trial"))
@@ -255,7 +273,7 @@ class AgentInternet(unittest.TestCase):
             box.online = proxy
             try:
                 with self.r.agent_internet({"internet": True, "verify": {"keep_processes": True}}, box, rl, self.trial):
-                    self.assertEqual(box.agent_proxy["NO_PROXY"], "localhost,127.0.0.1,::1,relay,benchmark-tools,licence-server-1")
+                    self.assertEqual(box.agent_proxy["NO_PROXY"], "localhost,127.0.0.1,::1,0.0.0.0,relay,benchmark-tools,licence-server-1")
                     self.r.in_box(box, {"run": ["solve"]}, collect=False, what="oracle")
                     self.assertEqual(box.did[-1][2], box.agent_proxy)
                     if error:
@@ -289,13 +307,43 @@ class AgentInternet(unittest.TestCase):
         box = container.Box("test", "u0001", "img", workdir="/")
         with mock.patch.object(container, "base_image", return_value="base"), \
                 mock.patch.object(container, "make_bridge") as bridge, \
-                mock.patch.object(container, "_docker") as docker, mock.patch.object(container, "wait_listening") as ready:
+                mock.patch.object(container, "_docker") as docker, mock.patch.object(container, "wait_listening") as ready, \
+                mock.patch.object(box, "run", return_value={"exit": 0, "output": "/etc/sudoers.d/nullius-egress-0123456789\n"}) as policy:
             first = box.online()
             started = list(docker.call_args_list)
             self.assertEqual(box.online(), first)
             self.assertEqual(docker.call_args_list, started)
         ready.assert_called_once()
         bridge.assert_called_once()
+        policy.assert_called_once_with(["sh", "-c", container.PROXY_SUDOERS], 60, user="0")
+
+    def test_a_failed_proxy_policy_install_is_not_accepted(self):
+        box = container.Box("test", "u0001", "img", workdir="/")
+        with mock.patch.object(container, "base_image", return_value="base"), \
+                mock.patch.object(container, "make_bridge"), mock.patch.object(container, "_docker"), \
+                mock.patch.object(container, "wait_listening"), \
+                mock.patch.object(box, "run", return_value={"exit": 1, "output": "read-only filesystem"}):
+            with self.assertRaisesRegex(container.Unavailable, "preserved through sudo"):
+                box.online()
+        self.assertIsNone(box.proxy_sudoers)
+
+    def test_the_sudo_policy_is_removed_when_the_proxy_closes_and_cleanup_errors_are_reported(self):
+        for code in (0, 1):
+            with self.subTest(exit=code):
+                box = container.Box("test", "u0001", "img", workdir="/")
+                box.egress = box.name + "-egress"
+                path = box.proxy_sudoers = "/etc/sudoers.d/nullius-egress-0123456789"
+                with mock.patch.object(container, "_docker", return_value=subprocess.CompletedProcess([], 0, "", "")), \
+                        mock.patch.object(box, "run", return_value={"exit": code, "output": ""}) as remove:
+                    if code:
+                        with self.assertRaisesRegex(container.Unavailable, "sudo could not be removed"):
+                            box.offline()
+                        self.assertEqual(box.proxy_sudoers, path)
+                    else:
+                        box.offline()
+                        self.assertIsNone(box.proxy_sudoers)
+                        self.assertIsNone(box.egress)
+                remove.assert_called_once_with(["rm", "-f", path], 30, user="0")
 
 
 class Rule(unittest.TestCase):
@@ -363,6 +411,35 @@ class Refusals(unittest.TestCase):
     def test_what_is_not_a_proxy_request_is_refused(self):
         self.assertTrue(self.ask(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n").startswith(b"HTTP/1.1 400"))
 
+    def test_a_local_service_at_the_unspecified_address_bypasses_the_public_proxy(self):
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"local service")
+
+            def log_message(self, *args):
+                pass
+
+        origin = HTTPServer(("127.0.0.1", 0), Handler)
+        worker = threading.Thread(target=origin.serve_forever, daemon=True)
+        worker.start()
+        try:
+            with mock.patch.object(container, "EGRESS_ALIAS", "127.0.0.1"), \
+                    mock.patch.object(container, "EGRESS_PORT", self.srv.getsockname()[1]):
+                env = container.proxy_env()
+            with mock.patch.dict(os.environ, env, clear=True):
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler())
+                with opener.open(f"http://0.0.0.0:{origin.server_port}/", timeout=5) as response:
+                    self.assertEqual(response.read(), b"local service")
+            self.assertEqual(self.said, [])
+            self.assertTrue(self.ask(b"GET http://0.0.0.0:5000/ HTTP/1.1\r\nHost: 0.0.0.0\r\n\r\n")
+                            .startswith(b"HTTP/1.1 403"))
+        finally:
+            origin.shutdown()
+            origin.server_close()
+            worker.join(timeout=5)
+
 
 class TerminalBench(unittest.TestCase):
     """The driver's setup, over a made-up upstream: processes are kept for the
@@ -371,7 +448,8 @@ class TerminalBench(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        for t in ("mailman", "regex-log", "build-pmars", "nginx-request-logging"):
+        for t in ("mailman", "regex-log", "build-pmars", "nginx-request-logging", "bn-fit-modify", "mteb-retrieve",
+                  "hf-model-inference", "install-windows-3.11"):
             os.makedirs(os.path.join(self.tmp, t))
             with open(os.path.join(self.tmp, t, "instruction.md"), "w") as f:
                 f.write("do it\n")
@@ -393,15 +471,22 @@ class TerminalBench(unittest.TestCase):
         self.assertNotIn("internet", self.setup_of("regex-log"))
         self.assertIs(self.setup_of("build-pmars")["internet"], True)
         self.assertIs(self.setup_of("nginx-request-logging")["verify"]["keep_processes"], True)
+        self.assertIs(self.setup_of("hf-model-inference")["verify"]["keep_processes"], True)
+        self.assertIs(self.setup_of("install-windows-3.11")["verify"]["keep_processes"], True)
 
-    def test_all_tasks_have_image_pins_and_only_the_36_added_tasks_get_internet(self):
+    def test_all_tasks_have_image_pins_and_only_downloading_tasks_get_internet(self):
         data = runpy.run_path(os.path.join(TB, "driver.py"), run_name="metadata")
-        self.assertEqual((len(data["ALL"]), len(data["INTERNET"]), len(data["OFFLINE"])), (89, 36, 53))
+        self.assertEqual((len(data["ALL"]), len(data["INTERNET"]), len(data["OFFLINE"])), (89, 38, 51))
         self.assertFalse(set(data["INTERNET"]) & set(data["OFFLINE"]))
         self.assertEqual(set(data["ALL"]), set(data["IMAGES"]))
         for image in data["IMAGES"].values():
             self.assertEqual(container.spec_problems({"pull": image}), [])
         self.assertEqual(data["DATASETS"]["full"], data["ALL"])
+
+    def test_r_packages_and_hugging_face_weights_need_the_same_public_proxy(self):
+        for unit in ("bn-fit-modify", "mteb-retrieve"):
+            with self.subTest(unit=unit):
+                self.assertIs(self.setup_of(unit)["internet"], True)
 
     def test_every_task_is_prepared_with_tmux_through_the_proxy(self):
         for unit in ("mailman", "regex-log"):

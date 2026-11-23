@@ -40,12 +40,12 @@ SMALL = ["cancel-async-tasks", "regex-log", "sqlite-db-truncate", "fix-git", "po
 # Every task whose solve.sh fetches nothing (no package manager, no download): the agent works with
 # no way out but its model on these tasks.
 OFFLINE = [
-    "bn-fit-modify", "break-filter-js-from-html", "cancel-async-tasks", "circuit-fibsqrt", "code-from-image",
+    "break-filter-js-from-html", "cancel-async-tasks", "circuit-fibsqrt", "code-from-image",
     "constraints-scheduling", "custom-memory-heap-crash", "db-wal-recovery", "distribution-search", "extract-elf",
     "extract-moves-from-video", "feal-differential-cryptanalysis", "feal-linear-cryptanalysis", "filter-js-from-html",
     "fix-code-vulnerability", "fix-git", "fix-ocaml-gc", "git-leak-recovery", "git-multibranch", "gpt2-codegolf",
     "headless-terminal", "large-scale-text-editing", "llm-inference-batching-scheduler", "mailman",
-    "make-mips-interpreter", "model-extraction-relu-logits", "modernize-scientific-stack", "mteb-retrieve",
+    "make-mips-interpreter", "model-extraction-relu-logits", "modernize-scientific-stack",
     "multi-source-data-merger", "openssl-selfsigned-cert", "password-recovery", "path-tracing", "path-tracing-reverse",
     "polyglot-c-py", "polyglot-rust-c", "portfolio-optimization", "prove-plus-comm", "pytorch-model-recovery",
     "qemu-alpine-ssh", "qemu-startup", "query-optimize", "regex-chess", "regex-log", "reshard-c4-data",
@@ -55,12 +55,12 @@ OFFLINE = [
 # Tasks whose solutions need the internet at the pinned upstream. The benchmark grants it,
 # through the public-address proxy, to the agent and reference solution alike.
 INTERNET = [
-    "adaptive-rejection-sampler", "build-cython-ext", "build-pmars", "build-pov-ray",
+    "adaptive-rejection-sampler", "bn-fit-modify", "build-cython-ext", "build-pmars", "build-pov-ray",
     "caffe-cifar-10", "chess-best-move", "cobol-modernization", "compile-compcert",
     "configure-git-webserver", "count-dataset-tokens", "crack-7z-hash", "dna-assembly",
     "dna-insert", "financial-document-processor", "gcode-to-text", "hf-model-inference",
     "install-windows-3.11", "kv-store-grpc", "largest-eigenval", "log-summary-date-ranges",
-    "make-doom-for-mips", "mcmc-sampling-stan", "merge-diff-arc-agi-task", "mteb-leaderboard",
+    "make-doom-for-mips", "mcmc-sampling-stan", "merge-diff-arc-agi-task", "mteb-leaderboard", "mteb-retrieve",
     "nginx-request-logging", "overfull-hbox", "protein-assembly", "pypi-server",
     "pytorch-model-cli", "raman-fitting", "rstan-to-pystan", "sam-cell-seg",
     "sparql-university", "sqlite-with-gcov", "train-fasttext", "winning-avg-corewars",
@@ -172,7 +172,8 @@ LOGS = "/logs/verifier"
 # Tasks whose tests talk to a service the agent was asked to start and leave running: what the agent left running is kept
 # for their check. Every other task's check runs with nothing of the agent's still running.
 KEEP_PROCESSES = {"git-multibranch", "mailman", "qemu-alpine-ssh", "qemu-startup",
-                  "configure-git-webserver", "kv-store-grpc", "nginx-request-logging", "pypi-server"}
+                  "configure-git-webserver", "hf-model-inference", "install-windows-3.11", "kv-store-grpc",
+                  "nginx-request-logging", "pypi-server"}
 
 
 # Terminal-Bench's own harness gives every task's container tmux (its reference agent works in a tmux
