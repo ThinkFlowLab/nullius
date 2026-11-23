@@ -276,6 +276,20 @@ reader chooses, does or concludes.
 - A prerequisite Review already checks is not repeated.
 - `docs/standard.md` headings are never renamed: the import skills cite them.
 
+### Test design
+
+- Test observable behavior, contracts and meaningful failure modes—not incidental
+  wording, internal structure or current catalogue contents.
+- Before adding a test, inspect nearby coverage. Extend an existing case or use
+  subtests when the fixture and behavior are shared.
+- Add a separate test when it protects a distinct regression or needs a different
+  setup. A past bug alone does not require a separate test.
+- Assert exact text only when that text is a contract.
+- Before removing a test as redundant, identify the surviving assertions that
+  protect its behavior. Shared line coverage alone is insufficient.
+- Consolidation must preserve edge cases and fixture isolation. Fewer test methods
+  is not itself the goal.
+
 ### Attribution
 
 **No machine attribution in commit messages or pull request descriptions** — no
