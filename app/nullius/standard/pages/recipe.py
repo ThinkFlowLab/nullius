@@ -897,15 +897,16 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                      [STEP["dataset"], "Datasets" if many else "Dataset",
                       ", ".join(f"{x.get('label') or x['id']}" + (f" · {x['units']} {nouns}" if x.get("units") else "") for x in dss)],
                      *[[STEP["limits" if (b.get("options") or {})[k].get("limit") else "dataset" if (b.get("options") or {})[k].get("step") else "agent"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
-                        _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)") + f" · {', '.join(x['id'] for x in dss if per_ds[x['id']].get(k) == v)}"]
-                       for k, v in {k: v for vals in per_ds.values() for k, v in vals.items()}.items()
+                        _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)")
+                        + ("" if all(per_ds[x["id"]].get(k) == v for x in dss) else f" · {', '.join(x.get('label') or x['id'] for x in dss if per_ds[x['id']].get(k) == v)}")]
+                       for k, v in dict.fromkeys((k, v) for vals in per_ds.values() for k, v in vals.items())     # a row per value: datasets may differ
                        if (b.get("options") or {})[k].get("step") != "where" and not (k == "agent" and definitions.own_agents(b))
                        and not ((b.get("options") or {})[k].get("when") or {}).get("agent")
                        or "agent" in ((b.get("options") or {})[k].get("when") or {}) and any(      # one of its own agents' settings: that agent's
                            p.get("agent") and p["agent"]["start"]["driver"]["agent"] in b["options"][k]["when"]["agent"] for p in picks)],
                      *[row(p) for p in picks],
                      *[[STEP["agent"], "Options" + (f" of {p['o']['label']}" if several else ""),
-                        ", ".join(f"{k} {v}" + ("" if k in p["given"] else " (its default)") for k, v in p["opts"].items())]
+                        ", ".join(f"{(p['o'].get('options') or {}).get(k, {}).get('label') or k.replace('_', ' ').capitalize()} {v}" + ("" if k in p["given"] else " (its default)") for k, v in p["opts"].items())]
                        for p in picks if p["opts"]],
                      [STEP["model"], "Model", "none: a control calls no model" if out["keyless"]
                       else f"{providers.label(providers.choice(provider, str(recipe.get('endpoint') or '')))} · " + (model if needs_model else ", ".join(p["o"]["sent"] for p in picks if p.get("setup")) or "the judge only")
