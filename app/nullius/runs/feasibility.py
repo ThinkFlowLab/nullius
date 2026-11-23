@@ -355,7 +355,11 @@ def related(job, jobs) -> dict:
 
     Matched by the builder's naming: a job's own base name, and — for an
     agent job named `<base>-<agent>` — the base with its last segment
-    dropped. A control job is always its own side. The dataset must agree
+    dropped. A control still unfound is then looked for under the base
+    with the job's recorded agent dropped, and the version a standard
+    job's name adds (`<base>-claude-code`, `<base>-codex-2.2.2`), so a
+    match the first rule makes stays as it was.
+    A control job is always its own side. The dataset must agree
     where both record one, so a control over another dataset that happens
     to share a name is not read as this job's.
     """
@@ -366,14 +370,20 @@ def related(job, jobs) -> dict:
     bases = [base_name(job.job_id)]
     if not own and "-" in job.job_id:
         bases.append(job.job_id.rsplit("-", 1)[0])
-    wanted = {f"{b}{infix}{c}": c for b in bases for infix in ("-", "-bracket-") for c in CONTROLS}
-    for other in jobs:
-        c = wanted.get(other.job_id)
-        if not c or c in out or control_of(other) != c:
-            continue
-        if job.dataset and other.dataset and job.dataset != other.dataset:
-            continue
-        out[c] = other
+    tiers = [bases]
+    agent = job.agent_label
+    m = re.fullmatch(rf"(.+)-{re.escape(agent)}(?:-.+)?", job.job_id) if agent and not own else None
+    if m:
+        tiers.append([m.group(1)])
+    for tier in tiers:
+        wanted = {f"{b}{infix}{c}": c for b in tier for infix in ("-", "-bracket-") for c in CONTROLS}
+        for other in jobs:
+            c = wanted.get(other.job_id)
+            if not c or c in out or control_of(other) != c:
+                continue
+            if job.dataset and other.dataset and job.dataset != other.dataset:
+                continue
+            out[c] = other
     return out
 
 

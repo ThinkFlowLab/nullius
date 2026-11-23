@@ -36,6 +36,7 @@ class FeasibilityPage(unittest.TestCase):
             write_job(self.tmp.name, "tb-x4-oracle", "oracle", {"good": 1, "leaky": 1, "env": 1}, n_tasks=4),
             write_job(self.tmp.name, "tb-x4-agent", "my-agent", {"good": 1, "leaky": 1, "env": 0, "half": 0}, n_tasks=4),
             write_job(self.tmp.name, "unrelated", "my-agent", {"good": 1}),
+            write_job(self.tmp.name, "tb-x4-claude-code", "claude-code", {"good": 1}, n_tasks=4),
         ]
         self.stack.enter_context(patch.object(web.shared, "_jobs_for_request", return_value=self.jobs))
         self.client = web.app.test_client()
@@ -105,6 +106,10 @@ class FeasibilityPage(unittest.TestCase):
         self.assertIn("Feasibility · nop + oracle", text_of(self.get("/job/tb-x4-agent")))
         self.assertIn('href="/job/tb-x4-nop/feasibility"', self.get("/job/tb-x4-nop"))
         self.assertNotIn("/feasibility", self.get("/job/unrelated"))
+
+    def test_an_agent_whose_name_has_a_hyphen_links_the_report_too(self):
+        self.assertIn('href="/job/tb-x4-claude-code/feasibility"', self.get("/job/tb-x4-claude-code"))
+        self.assertIn("nop · 4 trials", text_of(self.get("/job/tb-x4-claude-code/feasibility")))
 
 
 class TaskBrokenRow(unittest.TestCase):
