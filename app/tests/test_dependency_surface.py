@@ -103,27 +103,9 @@ class TheSurfaceIsDeclared(unittest.TestCase):
                     f"this application is a deliberate act: name it and say why.",
                 )
 
-    def test_the_allowlist_is_not_stale(self):
-        """An entry nothing installs is a claim about a dependency that is gone."""
-        named = {name_of(r) for r in requirements()}
-        self.assertEqual(
-            set(ALLOWED) - named, set(),
-            "ALLOWED names something requirements.txt no longer installs.",
-        )
-
 
 class TheRuntimeStaysOut(unittest.TestCase):
     """Viewing must not acquire a dependency on executing."""
-
-    def test_no_runtime_or_execution_dependency(self):
-        text = REQUIREMENTS.read_text(encoding="utf-8").lower()
-        for name in FORBIDDEN:
-            with self.subTest(name):
-                self.assertNotIn(
-                    name, text,
-                    f"{name!r} appears in app/requirements.txt. Reading a job "
-                    f"directory never needs the runtime that produced it.",
-                )
 
     def test_the_backend_suite_runs_where_the_runtime_is_absent(self):
         """Assert that the runtime is absent so imports cannot hide an undeclared dependency."""

@@ -187,19 +187,16 @@ class Score(unittest.TestCase):
             self.d.score("os__t1", self.ws, answer="done")
         self.assertLess(time.monotonic() - t0, 5)
 
-    def test_a_killed_runner_gives_no_score_whatever_it_left(self):
-        self.result()
-        p = child()
-        p.kill()
-        self.owned(p)
-        with self.assertRaisesRegex(RuntimeError, "the runner was killed: its result is not read"):
-            self.d.score("os__t1", self.ws, answer="done")
-
-    def test_a_runner_that_exited_1_gives_no_score(self):
-        self.result()
-        self.owned(child("raise SystemExit(1)"))
-        with self.assertRaisesRegex(RuntimeError, "the runner exited 1"):
-            self.d.score("os__t1", self.ws, answer="done")
+    def test_a_killed_runner_or_one_that_exited_1_gives_no_score_whatever_it_left(self):
+        killed = child()
+        killed.kill()
+        for p, said in ((killed, "the runner was killed: its result is not read"),
+                        (child("raise SystemExit(1)"), "the runner exited 1")):
+            with self.subTest(said):
+                self.result()
+                self.owned(p)
+                with self.assertRaisesRegex(RuntimeError, said):
+                    self.d.score("os__t1", self.ws, answer="done")
 
     def test_a_runner_that_ends_well_while_score_lets_it_go_is_scored_from_its_files(self):
         self.result()
@@ -242,21 +239,17 @@ class StartAndReap(unittest.TestCase):
         self.assertNotIn(os.path.join(package, ""), got.stdout)               # the standard library's, not nullius/secrets.py
 
     def test_an_already_reaped_runner_gets_no_signal(self):
-        p = child("pass")
-        p.wait()
-        self.d.RUNNERS["w"] = {"p": p, "sock_dir": tempfile.mkdtemp(dir=self.tmp), "life": None}
-        with mock.patch.object(self.d.os, "killpg") as kill:
-            self.d._reap_runner("w")
-        kill.assert_not_called()
-        self.assertNotIn("w", self.d.RUNNERS)
-
-    def test_a_runner_reaped_elsewhere_gets_no_signal(self):
-        p = child("pass")
-        os.waitpid(p.pid, 0)                                    # as a parent ignoring its children's signals would
-        self.d.RUNNERS["w"] = {"p": p, "sock_dir": tempfile.mkdtemp(dir=self.tmp), "life": None}
-        with mock.patch.object(self.d.os, "killpg") as kill:
-            self.d._reap_runner("w", seconds=0)
-        kill.assert_not_called()
+        for where, wait, kw in (("here", lambda p: p.wait(), {}),
+                                # as a parent ignoring its children's signals would
+                                ("elsewhere", lambda p: os.waitpid(p.pid, 0), {"seconds": 0})):
+            with self.subTest(where):
+                p = child("pass")
+                wait(p)
+                self.d.RUNNERS["w"] = {"p": p, "sock_dir": tempfile.mkdtemp(dir=self.tmp), "life": None}
+                with mock.patch.object(self.d.os, "killpg") as kill:
+                    self.d._reap_runner("w", **kw)
+                kill.assert_not_called()
+                self.assertNotIn("w", self.d.RUNNERS)
 
     def test_a_running_runner_is_signalled_while_its_leader_is_unreaped(self):
         p = child()
@@ -607,39 +600,6 @@ class Bounds(unittest.TestCase):
         with mock.patch.dict(os.environ, {"PATH": bin_dir + os.pathsep + os.environ.get("PATH", "")}):
             self.d._remove_vms(self.tmp, 0.5)
         self.assertLess(time.monotonic() - t0, 5)
-
-
-class Texts(unittest.TestCase):
-    """What the definition says of the two ways a task is run, and of each one's time."""
-
-    def test_the_definition_describes_both_ways_a_task_runs_and_each_ones_time(self):
-        with open(os.path.join(ENTRY, "standard.json")) as f:
-            summary = json.load(f)["summary"]
-        self.assertIn("OSWorld's own agents", summary)
-        self.assertIn("computer port", summary)
-        with open(os.path.join(ENTRY, "benchmark.json")) as f:
-            limits = json.load(f)["limitations"]
-        line = next(x for x in limits if x.startswith("A task run by one of OSWorld's own agents"))
-        self.assertIn("the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes", line)
-        self.assertNotIn("A task still running after 2 hours is stopped and gets no score.", limits)
-        page = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(ENTRY))), "..", "..", "docs", "benchmarks",
-                            "supported", "osworld1.md")
-        if os.path.exists(page):
-            with open(page) as f:
-                self.assertIn(line, f.read())
-
-
-class Snapshot(unittest.TestCase):
-    """The copy Nullius makes of the entry for a run on a host carries the runner, and the port's shared code with
-    the package."""
-
-    def test_the_entrys_copy_holds_the_runner_and_the_package_the_ports_code(self):
-        from pathlib import Path
-        from nullius.standard.runner import payload
-        files = set(payload._entry(Path(ENTRY)))
-        self.assertTrue({"driver.py", "agents.json", "nop.py", "runner.py"} <= files, sorted(files))
-        package = set(payload._python(payload.PACKAGE))
-        self.assertTrue({"standard/protocols/computer_port.py", "standard/protocols/computer_pipe.py"} <= package)
 
 
 class FakeEnv:

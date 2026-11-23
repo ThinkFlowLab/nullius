@@ -42,11 +42,9 @@ class Add(unittest.TestCase):
         self.m.add({"id": "s1", "date": "2023/05/21 (Sun) 16:22", "turns": [{"role": "user", "text": "hi"}]})
         self.assertEqual(self.m.mem.added[0]["metadata"],
                          {"session": "s1", "date": "2023/05/21 (Sun) 16:22", "timestamp": "2023/05/21 (Sun) 16:22"})
-
-    def test_an_undated_session_has_no_timestamp(self):
         # an empty timestamp would be an Observation Date of nothing; without one Mem0 keeps its default
         self.m.add({"id": "s1", "turns": [{"role": "user", "text": "hi"}]})
-        self.assertNotIn("timestamp", self.m.mem.added[0]["metadata"])
+        self.assertNotIn("timestamp", self.m.mem.added[1]["metadata"])
 
 
 if __name__ == "__main__":

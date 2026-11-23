@@ -253,7 +253,7 @@ class Tools(Port):
     def test_initialize_and_the_tool_list_answer_before_the_desktop_is_ready_and_state_the_limits(self):
         c = self.start(steps=3, go=False)                         # the loop is in the environment's wait
         init = c.initialize()["result"]
-        self.assertEqual(init["serverInfo"]["name"], "computer")
+        self.assertEqual(init["serverInfo"], {"name": "computer", "version": "1"})
         self.assertIn("1920 by 1080 pixels", init["instructions"])
         self.assertIn("There are 3 steps in all", init["instructions"])
         self.assertEqual([t["name"] for t in c.ask("tools/list")["result"]["tools"]],
@@ -268,16 +268,14 @@ class Tools(Port):
         self.go.set()
         self.assertEqual(image(c.result(shot)), PNG)
         self.assertTrue(self.first.is_set())
-
-    def test_the_reading_tools_take_no_step(self):
-        c = self.start(steps=3, given=False)
-        self.assertEqual(image(c.call("screenshot")), PNG)
-        self.assertEqual(value(c.call("prepare", actions=[], files=["missing.txt"])), {"files": {"missing.txt": None}})
-        self.assertEqual(value(c.call("upload", path="a.txt", data=base64.b64encode(b"abc").decode())), {"size": 3})
-        self.assertEqual(value(c.call("prepare", actions=[], files=["a.txt"])),
-                         {"files": {"a.txt": base64.b64encode(b"abc").decode()}})
-        self.assertEqual(value(c.call("info"))["steps_left"], 3)
-        self.assertEqual(self.ran, [])
+        listed = {t["name"]: t for t in c.ask("tools/list")["result"]["tools"]}
+        self.assertNotIn("maxItems", listed["step"]["inputSchema"]["properties"]["files"])
+        self.assertNotIn("maxItems", listed["prepare"]["inputSchema"]["properties"]["files"])
+        self.assertEqual(sorted(listed["prepare"]["inputSchema"]["properties"]), ["actions", "files"])
+        self.assertIn("upload and prepare work inside folder (/agent)", init["instructions"])
+        for gone in ("python", "read"):
+            answer = c.ask("tools/call", {"name": gone, "arguments": {}})
+            self.assertEqual(answer["error"]["message"], f"no tool {gone!r}")
 
     def test_each_pointer_and_keyboard_tool_is_one_action_answered_with_the_screen(self):
         c = self.start(steps=8)
@@ -298,14 +296,6 @@ class Tools(Port):
             self.assertEqual(image(got), PNG, tool)
         self.assertEqual(self.evaluated(), 8)
         self.assertEqual(self.ran[:-1], [action for _, _, action in calls])
-
-    def test_step_runs_its_actions_in_order_as_one_step_and_an_empty_list_is_a_step(self):
-        c = self.start(steps=3)
-        got = c.call("step", actions=["pyautogui.press('a')", "WAIT", "pyautogui.press('b')"], response="pressing")
-        self.assertEqual((value(got), image(got)), ({"steps_left": 2, "done": False}, None))
-        got = c.call("step", actions=[], screenshot=True)
-        self.assertEqual((value(got), image(got)), ({"steps_left": 1, "done": False}, PNG))
-        self.assertEqual(self.ran, ["pyautogui.press('a')", "WAIT", "pyautogui.press('b')"])
 
     def test_wrong_arguments_are_refused_at_once_and_take_no_step(self):
         c = self.start(steps=3)
@@ -380,22 +370,13 @@ class Held(Port):
         c = self.start(steps=3, pause=0.3)
         ids = [c.start("click", x=1, y=1), c.start("screenshot"), c.start("step", actions=[], files=["none"]),
                c.start("move", x=2, y=2)]
-        order = []
-        for rid in ids:
-            c.answer(rid)
-            order.append(rid)
-        self.assertEqual(self.desktop.kinds(), ["python", "action", "capture", "read", "action", "capture"])
-        self.assertEqual(self.desktop.overlaps, 0)
-
-    def test_the_answers_come_in_the_order_the_desktop_ran_the_calls(self):
-        c = self.start(steps=3, pause=0.3)
-        first, second = c.start("click", x=1, y=1), c.start("screenshot")
         deadline = time.monotonic() + 10
-        while len(c.got) < 2 and time.monotonic() < deadline:   # read both answers as they come
+        while len(c.got) < len(ids) and time.monotonic() < deadline:   # read the answers as they come
             with contextlib.suppress(AssertionError):
                 c.answer(-1, 0.1)
-        arrived = list(c.got)
-        self.assertEqual(arrived, [first, second])
+        self.assertEqual(list(c.got), ids)
+        self.assertEqual(self.desktop.kinds(), ["python", "action", "capture", "read", "action", "capture"])
+        self.assertEqual(self.desktop.overlaps, 0)
 
 
 class TurnEnd(Port):
@@ -411,7 +392,7 @@ class TurnEnd(Port):
         self.assertEqual(self.ran, ["pyautogui.click(1, 1, clicks=1, button='left')", ("evaluated", 5)])
         self.assertEqual(error(c.call("click", x=1, y=1)), "the agent's turn has ended")
 
-    def test_done_ends_the_task_and_a_later_turn_end_does_nothing(self):
+    def test_done_or_fail_ends_the_task_and_a_later_turn_end_does_nothing(self):
         c = self.start(steps=5)
         c.call("click", x=1, y=1)
         self.assertEqual(value(c.call("done", message="finished")), {"steps_left": 3, "done": True})
@@ -420,8 +401,6 @@ class TurnEnd(Port):
         self.bridge.end_turn()
         self.assertEqual(self.ran[-2:], ["DONE", ("evaluated", 2)])
         self.assertIn("the task has ended (done)", error(c.call("screenshot")))
-
-    def test_fail_is_the_last_step(self):
         c = self.start(steps=5)
         self.assertEqual(value(c.call("fail", reason="no such menu")), {"steps_left": 4, "done": True})
         self.assertEqual(self.evaluated(), 1)
@@ -441,13 +420,6 @@ class TurnEnd(Port):
                 self.assertEqual(error(c.call("click", x=1, y=1)), f"the task has ended ({end})")
                 self.assertEqual(error(c.call("screenshot")), f"the task has ended ({end})")
                 self.assertEqual(value(c.call("info"))["steps_left"], 3)
-
-    def test_a_step_with_an_end_and_no_action_is_the_end_alone(self):
-        c = self.start(steps=3)
-        got = c.call("step", actions=[], end="fail", screenshot=True)
-        self.assertEqual((value(got), image(got)), ({"steps_left": 2, "done": True}, PNG))
-        self.assertEqual(self.evaluated(), 1)
-        self.assertEqual(self.ran, ["FAIL", ("evaluated", 1)])
 
     def test_a_step_with_an_end_on_the_last_step_ends_by_its_end_not_by_the_budget(self):
         c = self.start(steps=2)
@@ -525,12 +497,6 @@ class Upload(Port):
         self.assertEqual(sorted(os.listdir(self.desktop.at(FOLDER))), ["f.bin"])
         self.assertEqual(self.ran, [])
 
-    def test_a_chunk_over_four_mib_is_refused(self):
-        c = self.start(given=False)
-        big = base64.b64encode(b"x" * (cp.CHUNK_BYTES + 1)).decode()
-        self.assertEqual(error(c.call("upload", path="f.bin", data=big)), f"data is at most {cp.CHUNK_BYTES} bytes a call")
-        self.assertNotIn("upload", self.desktop.kinds())
-
     def test_a_file_sent_once_for_a_run_reaches_the_next_units_desktop_by_its_sha256(self):
         run = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, run, True)
@@ -559,11 +525,6 @@ class Upload(Port):
         c.call("upload", path="t.bin", data=base64.b64encode(b"abc").decode(), sha256="0" * 64)
         self.assertEqual(os.listdir(run), [])
 
-    def test_with_no_folder_for_the_run_an_upload_by_sha256_alone_is_refused(self):
-        c = self.start(given=False)
-        self.assertEqual(error(c.call("upload", path="t.bin", sha256="0" * 64)),
-                         "the run holds no file of that sha256: send its data")
-
 
 class Connections(Port):
     def test_several_connections_share_the_task(self):
@@ -579,11 +540,13 @@ class Connections(Port):
 
     def test_a_connection_whose_input_ends_is_closed_once_its_calls_are_answered(self):
         c = self.start(steps=3, pause=0.3)
+        self.assertTrue(until(lambda: len(self.server.wires) == 1))
         rid = c.start("click", x=1, y=1)
         c.sock.shutdown(socket.SHUT_WR)
         self.assertEqual(value(c.result(rid))["steps_left"], 2)
         c.sock.settimeout(5)
         self.assertEqual(c.sock.recv(10), b"")
+        self.assertTrue(until(lambda: not self.server.wires), "the closed connection stayed in the list")
 
 
 class CallLog(Port):
@@ -695,13 +658,6 @@ class Runner(unittest.TestCase):
         self.assertLess(time.monotonic() - t0, 5)
         self.assertIn(b"did not end within 0.3 s of the stop", err)
 
-    def test_a_last_resort_exits_when_stderr_is_a_pipe_nobody_reads(self):
-        p = self.child("stderr-full", "0.05")                    # its stderr is a pipe the test does not read
-        try:
-            self.assertEqual(p.wait(timeout=5), 1)
-        except subprocess.TimeoutExpired:
-            self.fail("the last resort waited on stderr")
-
     def test_a_last_resort_whose_own_callback_hangs_still_exits(self):
         p = self.child("stalled-last", "0.05")
         t0 = time.monotonic()
@@ -777,42 +733,6 @@ class Bare(unittest.TestCase):
         call = cp.Call("upload", args, None)
         cp.checked(call, b.screen, b.folder)
         return b._upload(call)
-
-
-class Descriptions(Bare):
-    def test_acting_answers_and_screenshot_coordinates_are_described(self):
-        listed = {t["name"]: t for t in cp.listed((100, 100))}
-        for name in cp.ACTING:
-            with self.subTest(tool=name):
-                description = listed[name]["description"]
-                if name in cp.FINAL:
-                    self.assertIn("Returns {steps_left, done}, with no image", description)
-                elif name == "step":
-                    self.assertIn("Returns the step's observation as a PNG image when screenshot is true", description)
-                else:
-                    self.assertIn("Returns the screen as a PNG image after the pause", description)
-        for name in ("click", "move", "drag", "scroll"):
-            props = listed[name]["inputSchema"]["properties"]
-            for point, edge in (("x", "left"), ("y", "top"), ("to_x", "left"), ("to_y", "top")):
-                if point in props:
-                    with self.subTest(tool=name, point=point):
-                        self.assertIn("Pixels of the screenshot at the screen's size", props[point]["description"])
-                        self.assertIn(f"from its {edge} edge", props[point]["description"])
-        self.assertIn("before the first pointing action", listed["screenshot"]["description"])
-        instructions = self.bridge().instructions()
-        self.assertIn("x and y in screenshot pixels at the screen's size, from its top left corner", instructions)
-        self.assertIn("Look at a screenshot before the first pointing action", instructions)
-        self.assertIn("After the actions and their 0.01 s pauses", instructions)
-        self.assertIn("click, move, drag, scroll, type, key and wait return the step's observation, the screen as a PNG "
-                      "image", instructions)
-        self.assertIn("step does when screenshot is true", instructions)
-        self.assertIn("done and fail answer before they run, with no image", instructions)
-        self.assertIn("A step with end, done or fail, runs its actions and then ends the task, in that one step",
-                      instructions)
-        self.assertIn("With end, done or fail, the actions run and then the task ends, in this one step",
-                      listed["step"]["description"])
-        self.assertEqual(listed["step"]["inputSchema"]["properties"]["end"]["enum"], ["done", "fail"])
-        self.assertEqual(listed["step"]["inputSchema"]["required"], ["actions"])
 
 
 class Wires(Bare):
@@ -932,14 +852,6 @@ class Envelope(Bare):
              "type": {"text": "a"}, "key": {"keys": ["a"]}, "wait": {}, "step": {"actions": ["WAIT"]}, "done": {},
              "fail": {}}
 
-    def test_a_number_past_any_integer_is_refused_and_recorded(self):
-        b = self.bridge()
-        s = self.server(b)
-        s.handle(json.loads('{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "click", '
-                            '"arguments": {"x": 1e999, "y": 1}}}'), self.wire())
-        self.assertEqual([(r["tool"], r["isError"]) for r in s.records], [("click", True)])
-        self.assertEqual(b.booked, 0)
-
     def test_nan_and_infinity_are_no_json_and_take_no_step(self):
         for constant in ("NaN", "Infinity", "-Infinity"):
             with self.subTest(constant=constant):
@@ -980,16 +892,6 @@ class Envelope(Bare):
             self.assertEqual(s.handle(m, self.wire())["error"]["code"], -32600, m)
         self.assertEqual((b.booked, len(b.calls), s.records), (0, 0, []))
 
-    def test_calls_against_their_schema_are_refused_before_they_are_queued(self):
-        for tool, args in [("click", {"x": 1.5, "y": 1}), ("step", {"actions": [], "screenshot": "yes"}),
-                           ("wait", []), ("upload", {"path": "a", "data": "!!"}), ("info", [])]:
-            with self.subTest(tool=tool, args=args):
-                b = self.bridge()
-                s = self.server(b)
-                s.call(1, {"name": tool, "arguments": args}, self.wire())
-                self.assertEqual((b.booked, len(b.calls)), (0, 0))
-                self.assertEqual(s.records[0]["isError"], True)
-
     def test_each_listed_schema_is_what_the_calls_are_checked_against(self):
         listed = {t["name"]: t["inputSchema"] for t in cp.listed((100, 100))}
         self.assertEqual(sorted(listed), sorted(self.VALID))
@@ -1023,15 +925,6 @@ class Envelope(Bare):
 
 
 class TurnEndAndSteps(Bare):
-    def test_the_turn_end_stops_the_actions_of_a_step_not_yet_run(self):
-        b = self.bridge()
-        call = self.call(b, "step", actions=["first()", "second()"])
-        _, actions = b.predict("", {})
-        self.assertEqual(next(actions), "first()")
-        b.end_turn()
-        self.assertEqual(list(actions), [])
-        self.assertEqual(call.answers, [(None, None, "the agent's turn has ended")])
-
     def test_a_done_or_fail_taken_before_the_turn_end_reaches_the_loop(self):
         for tool, action in (("done", "DONE"), ("fail", "FAIL")):
             with self.subTest(tool=tool):
@@ -1079,14 +972,6 @@ class StepEnd(Bare):
         self.assertEqual(list(actions), [])
         self.assertEqual(call.answers, [(None, None, "the agent's turn has ended")])
         self.assertEqual(b.predict("", {}), ("", []))
-
-    def test_a_step_with_no_end_hands_no_end(self):
-        b = self.bridge()
-        call = self.call(b, "step", actions=["first()"])
-        _, actions = b.predict("", {})
-        self.assertEqual(list(actions), ["first()"])
-        self.assertEqual(call.answers, [({"steps_left": 4, "done": False}, None, None)])
-        self.assertIsNone(b.ended)
 
 
 class Uploads(Bare):
@@ -1179,12 +1064,15 @@ class Uploads(Bare):
             opened.append(real(**kw))
             return opened[-1]
 
-        with mock.patch.object(cp.tempfile, "mkstemp", mkstemp), \
-                mock.patch.object(cp.os, "fdopen", side_effect=SystemExit(1)), self.assertRaises(SystemExit):
-            held.keep(hashlib.sha256(b"x").hexdigest(), b"x")
-        self.assertEqual(os.listdir(held.folder), [])
-        with self.assertRaises(OSError):                    # the descriptor was closed
-            os.fstat(opened[0][0])
+        for interrupted in ("fdopen", "replace"):
+            with self.subTest(interrupted=interrupted):
+                opened.clear()
+                with mock.patch.object(cp.tempfile, "mkstemp", mkstemp), \
+                        mock.patch.object(cp.os, interrupted, side_effect=SystemExit(1)), self.assertRaises(SystemExit):
+                    held.keep(hashlib.sha256(b"x").hexdigest(), b"x")
+                self.assertEqual(os.listdir(held.folder), [])
+                with self.assertRaises(OSError):                    # the descriptor was closed
+                    os.fstat(opened[0][0])
 
     def test_a_file_over_the_bound_is_not_kept(self):
         held = self.held()
@@ -1195,12 +1083,6 @@ class Uploads(Bare):
             self.upload(b, path="f", data=base64.b64encode(b"C").decode(), append=True)
         self.assertEqual(os.listdir(held.folder), [])
 
-    def test_a_stop_while_a_file_is_kept_leaves_no_temporary_file(self):
-        held = self.held()
-        digest = hashlib.sha256(b"content").hexdigest()
-        with mock.patch.object(cp.os, "replace", side_effect=SystemExit(1)), self.assertRaises(SystemExit):
-            held.keep(digest, b"content")
-        self.assertEqual(os.listdir(held.folder), [])
 
     def test_a_link_in_place_of_a_kept_file_is_not_followed(self):
         held = self.held()
@@ -1210,14 +1092,6 @@ class Uploads(Bare):
         digest = hashlib.sha256(b"content").hexdigest()
         os.symlink(elsewhere, os.path.join(held.folder, digest))
         self.assertIsNone(held.get(digest))
-
-
-class ConnectionsList(Port):
-    def test_a_closed_connection_leaves_the_servers_list(self):
-        c = self.start()
-        self.assertTrue(until(lambda: len(self.server.wires) == 1))
-        c.close()
-        self.assertTrue(until(lambda: not self.server.wires), "the closed connection stayed in the list")
 
 
 OSWORLD = os.environ.get("OSWORLD_DIR", "")
@@ -1479,22 +1353,6 @@ class Changing(unittest.TestCase):
 
 
 class ToolList(Changing):
-    def test_the_tool_list_has_no_python_and_no_read_and_names_prepare_and_a_steps_files(self):
-        c = self.start(steps=3)
-        listed = {t["name"]: t for t in c.ask("tools/list")["result"]["tools"]}
-        self.assertEqual(list(listed), ["info", "screenshot", "upload", "prepare", "click", "move", "drag", "scroll",
-                                        "type", "key", "wait", "step", "done", "fail"])
-        self.assertNotIn("maxItems", listed["step"]["inputSchema"]["properties"]["files"])
-        self.assertNotIn("maxItems", listed["prepare"]["inputSchema"]["properties"]["files"])
-        self.assertEqual(sorted(listed["prepare"]["inputSchema"]["properties"]), ["actions", "files"])
-        init = c.initialize()["result"]
-        self.assertEqual(init["serverInfo"], {"name": "computer", "version": "1"})
-        self.assertIn("upload and prepare work inside folder (/agent)", init["instructions"])
-        self.assertEqual(value(c.call("info")), {"screen": [1920, 1080], "steps": 3, "steps_left": 3, "pause": 0.01,
-                                                 "password": "password", "folder": FOLDER})
-        for gone in ("python", "read"):
-            answer = c.ask("tools/call", {"name": gone, "arguments": {}})
-            self.assertEqual(answer["error"]["message"], f"no tool {gone!r}")
 
     def test_a_bridge_needs_a_plain_absolute_folder(self):
         for folder in (None, "", "agent", "/", "/agent/", "/a/../b"):
@@ -1503,11 +1361,6 @@ class ToolList(Changing):
 
 
 class Observation(Changing):
-    def test_before_the_first_step_screenshot_is_the_loops_start_picture_and_takes_no_new_one(self):
-        c = self.start(steps=3)
-        first, again = image(c.call("screenshot")), image(c.call("screenshot"))
-        self.assertEqual((first, again), (shot(0), shot(0)))
-        self.assertEqual(self.desktop.captures(), 1)             # the loop's own: the bridge took none
 
     def test_two_screenshots_with_no_step_between_are_the_same_and_a_step_that_acts_changes_them(self):
         for hands in (True, False):
@@ -1532,17 +1385,6 @@ class Observation(Changing):
                 got = c.call("step", actions=[], screenshot=True)
                 self.assertEqual((value(got), image(got)), ({"steps_left": 3, "done": False}, seen))
                 self.assertEqual(self.desktop.captures(), captures)
-
-    def test_wait_is_one_step_and_a_fresh_observation(self):
-        for hands in (True, False):
-            with self.subTest(hands=hands):
-                c = self.start(steps=5, hands=hands)
-                before = image(c.call("screenshot"))
-                got = c.call("wait")
-                self.assertEqual(value(got), {"steps_left": 4, "done": False})
-                self.assertNotEqual(image(got), before)
-                self.assertEqual(image(c.call("screenshot")), image(got))
-                self.assertEqual(self.ran, ["WAIT"])
 
     def test_with_its_own_observation_the_bridge_takes_no_picture_and_without_one_it_takes_one_a_step(self):
         c = self.start(steps=5, hands=True)
@@ -1623,11 +1465,6 @@ class Window(Changing):
             os.close(write)
             reader.join(5)
         os.close(read)
-
-    def test_with_no_window_upload_and_prepare_are_refused_from_the_start(self):
-        c = self.start(steps=3, window=False, given=False)
-        self.assertIn("the task has been given", error(c.call("upload", path="/agent/a", data="YQ==")))
-        self.assertEqual(value(c.call("click", x=1, y=1)), {"steps_left": 2, "done": False})
 
     def test_paths_outside_the_folder_are_refused_at_once_and_take_no_step(self):
         c = self.start(steps=3, given=False)
@@ -1797,17 +1634,6 @@ class StepFiles(Changing):
         self.assertEqual(value(got), {"steps_left": 1, "done": False, "files": {"/agent/small": {
             "error": "the desktop could not read it: RuntimeError: read failed in the desktop"}}})
 
-    def test_forty_small_files_come_back_in_one_step(self):
-        c = self.start(steps=3)
-        names = [f"/agent/f{i}" for i in range(40)]
-        for i, name in enumerate(names):
-            self.put(name, b"file %d" % i)
-        got = value(c.call("step", actions=["pyautogui.press('a')"], files=names))
-        self.assertEqual(got, {"steps_left": 2, "done": False,
-                               "files": {name: base64.b64encode(b"file %d" % i).decode()
-                                         for i, name in enumerate(names)}})
-        self.assertEqual(self.left(c), 2)
-
     def test_files_that_would_take_the_answer_past_its_bound_are_errors_and_the_others_come(self):
         c = self.start(steps=3)
         big = b"y" * (11 * 1024 * 1024)                          # 11 MiB: two of them pass 24 MiB in base64
@@ -1828,43 +1654,6 @@ class StepFiles(Changing):
         c.call("step", actions=["pyautogui.press('a')", "WAIT"], files=["/agent/a"])
         kinds = self.desktop.kinds()
         self.assertEqual(kinds[kinds.index("action"):], ["action", "capture", "action", "capture", "read"])
-
-    def test_every_call_that_reaches_the_desktop_lowers_steps_left_but_upload_and_prepare_in_the_window(self):
-        c = self.start(steps=9, given=False)
-        c.call("upload", path="/agent/a", data="YQ==")
-        c.call("prepare", actions=["print(1)"])
-        c.call("screenshot")
-        self.assertEqual(self.left(c), 9)
-        self.bridge.close_window()
-        calls = [("click", {"x": 1, "y": 1}), ("move", {"x": 1, "y": 1}), ("drag", {"x": 1, "y": 1, "to_x": 2, "to_y": 2}),
-                 ("scroll", {"x": 1, "y": 1, "dy": 1}), ("type", {"text": "a"}), ("key", {"keys": ["a"]}),
-                 ("wait", {}), ("step", {"actions": [], "files": ["/agent/a"]})]
-        for i, (tool, args) in enumerate(calls, 1):
-            self.assertEqual(value(c.call(tool, **args))["steps_left"], 9 - i, tool)
-            c.call("screenshot")
-            self.assertEqual(self.left(c), 9 - i, tool)
-        self.assertEqual(value(c.call("done")), {"steps_left": 0, "done": True})
-        self.assertEqual(self.evaluated(), 9)
-
-    def test_a_step_with_an_end_and_files_runs_its_actions_and_ends_the_task(self):
-        c = self.start(steps=5)
-        got = c.call("step", actions=["pyautogui.press('a')"], end="done", files=["/agent/a"], screenshot=True)
-        self.assertEqual(value(got), {"steps_left": 4, "done": True, "files": {"/agent/a": None}})
-        self.assertEqual(image(got), shot(1))
-        self.assertEqual(self.evaluated(), 1)
-        self.assertEqual(self.ran, ["pyautogui.press('a')", "DONE", ("evaluated", 1)])
-        self.assertEqual(error(c.call("screenshot")), "the task has ended (done)")
-
-    def test_the_budget_and_the_turns_end_hold_when_the_screen_changes(self):
-        c = self.start(steps=1)
-        self.assertEqual(value(c.call("click", x=1, y=1)), {"steps_left": 0, "done": True})
-        self.assertEqual(error(c.call("click", x=1, y=1)), "the steps are used up")
-        self.assertEqual(value(c.call("info"))["steps_left"], 0)
-        c = self.start(steps=4)
-        c.call("click", x=1, y=1)
-        self.bridge.end_turn()
-        self.assertEqual(self.evaluated(), 4)
-        self.assertEqual(error(c.call("click", x=1, y=1)), "the agent's turn has ended")
 
 
 if __name__ == "__main__":

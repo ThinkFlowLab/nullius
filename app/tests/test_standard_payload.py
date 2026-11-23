@@ -213,9 +213,7 @@ class Snapshot(unittest.TestCase):
         definition["upstream"] = {"repository": "https://example.org/repo"}
         self.write(entry / "standard.json", definition)
         self.assertEqual(set(payload._entry(entry)), {"standard.json", "driver.py"})
-
-    def test_downloaded_and_upstream_datasets_are_not_catalogue_resources(self):
-        entry = self.bench(self.catalogue)
+        # A dataset a run downloads, or its upstream holds, is no catalogue resource.
         for dataset, upstream in [({"id": "remote", "path": "missing.jsonl"},
                                    {"repository": "https://example.org/repo"}),
                                   ({"id": "download", "url": "https://example.org/tasks.jsonl"}, {})]:

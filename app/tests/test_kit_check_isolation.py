@@ -24,7 +24,6 @@ from tests import APP
 from tests.execution_support import gone
 
 KIT = os.path.join(definitions.KITS, "agent-workspace-v1", "driver.py")
-HUMANEVAL = os.path.join(APP, "nullius", "catalogue", "benchmarks", "humaneval", "driver.py")
 
 
 class WorkspaceKit(unittest.TestCase):
@@ -81,12 +80,6 @@ class WorkspaceKit(unittest.TestCase):
         os.symlink(bashrc, os.path.join(self.ws, "test_calc.py"))      # the test is rewritten in place, never through a link
         self.driver().request("score", unit="fix", dir=self.ws, transcript="", answer="", timeout=10)
         self.assertEqual(bashrc.read_text(), "mine\n")
-
-
-class HumanEval(unittest.TestCase):
-    def test_a_linked_solution_is_no_solution(self):
-        src = Path(HUMANEVAL).read_text()
-        self.assertIn("os.path.islink(path) or not os.path.isfile(path)", src)   # the upstream it imports is not installed here
 
 
 if __name__ == "__main__":

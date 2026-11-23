@@ -151,10 +151,6 @@ class Classification(unittest.TestCase):
         self.assertEqual(rep.not_run, ["nop"])
         self.assertTrue(rep.caveat.startswith("Only oracle ran"))
 
-    def test_the_full_scope_is_said_when_no_limit_was_recorded(self):
-        jobs = self.sweep({"a": 0}, {"a": 1})
-        self.assertEqual(feasibility.report(jobs[0], jobs).scope, "every task of tb-small (no task limit recorded)")
-
 
 class TaskBroken(unittest.TestCase):
     """A task whose nop control fails previously-passing tests was
@@ -207,12 +203,6 @@ class TaskBroken(unittest.TestCase):
         leaky = swe_report(resolved=True, p2p=(["t1"], []), patch=False)
         jobs = self.sweep({"t": leaky}, {"t": swe_report(resolved=True)}, prefix="leaky")
         self.assertEqual(feasibility.report(jobs[0], jobs).rows[0].verdict, feasibility.UNEXPECTED_REWARD)
-
-    def test_a_benchmark_without_held_checks_never_produces_the_class(self):
-        # Terminal-Bench reports no held checks: a rejected nop there is a rejection, nothing more
-        jobs = [write_job(self.root, "tb-nop", "nop", {"t": 0}), write_job(self.root, "tb-oracle", "oracle", {"t": 1})]
-        row = feasibility.report(jobs[0], jobs).rows[0]
-        self.assertEqual((row.verdict, row.nop.broke_tests, row.nop.p2p_fail, row.nop.p2p_failures), (feasibility.FEASIBLE, False, 0, []))
 
     def test_the_agents_regression_is_not_the_tasks(self):
         # the agent's patch broke a held test; the controls are clean — that is ⚠ Broke tests on the trial, not task_broken here

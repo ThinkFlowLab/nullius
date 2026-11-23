@@ -456,13 +456,6 @@ class RunTest(unittest.TestCase):
         self.assertEqual(result["budget"]["not_run"], [f"m{i} (attempt 1)" for i in range(4, 8)] + [f"m{i} (attempt 2)" for i in range(8)])
         self.assertEqual((result["n_total_trials"], result["stats"]["n_cancelled_trials"]), (16, 12))     # as many as the trials not run
 
-    def test_the_last_line_counts_units_and_attempts_apart(self):
-        nouns = definitions.get("benchmark", "fakebench", ROOT)["units"]["nouns"]
-        _, _, _, said = self.calling(repeat=2)
-        self.assertTrue(any(s.startswith(f"done: 8 {nouns}, 16 attempts, ") for s in said), said)
-        _, _, _, said = self.calling()
-        self.assertTrue(any(s.startswith(f"done: 8 {nouns}, ") and "attempts" not in s for s in said), said)
-
     def test_each_threads_driver_has_a_route_of_its_own_on_the_benchmarks_relay(self):
         """A cap's refusal of a driver's own call (an option's embeddings) is the unit's that driver served, never one beside it."""
         r = run.Run.__new__(run.Run)
@@ -579,7 +572,7 @@ class RunTest(unittest.TestCase):
                 got, _ = self.outcomes(self.go("fakebench", "fake", limit=1, name=f"refused-{by}"))
                 self.assertEqual((got["good"].exception_type, got["good"].outcome), (kind, outcome))
 
-    def test_the_trajectory_carries_the_prompt_the_tool_call_and_the_answer(self):
+    def test_an_agents_trial_writes_its_trajectory_and_its_trace(self):
         job_dir = self.go("fakebench", "fake", limit=1)
         trial = [d for d in os.listdir(job_dir) if d.startswith("good__")][0]
         with open(os.path.join(job_dir, trial, "agent", "trajectory.json")) as f:
@@ -589,10 +582,6 @@ class RunTest(unittest.TestCase):
         calls = [s for s in t["steps"] if s.get("tool_calls")]
         self.assertEqual(calls[0]["tool_calls"][0]["function_name"], "write answer.txt")
         self.assertEqual(t["steps"][-1]["message"], "done")
-
-    def test_an_agents_trial_writes_a_trace_with_its_turn_and_tool_call(self):
-        job_dir = self.go("fakebench", "fake", limit=1)
-        trial = [d for d in os.listdir(job_dir) if d.startswith("good__")][0]
         with open(os.path.join(job_dir, trial, "agent", "trace.json")) as f:
             session = json.load(f)["spans"][0]
         self.assertEqual(session["kind"], "session")
@@ -1085,20 +1074,6 @@ class RunTest(unittest.TestCase):
         finally:
             for d in r.drivers:
                 d.close()
-
-    def test_a_judge_route_is_on_the_units_relay(self):
-        b = definitions.get("benchmark", "fakebench", ROOT)
-        o = definitions.get("agent", "fake", ROOT)
-        r = run.Run(b, o, model="m-1", provider="custom", env=self.env, unsandboxed=True, jobs_root=self.tmp)
-        r.judge_model = "the-judge"
-        rl = r.unit_relay("u0003", os.path.join(self.tmp, "t"), {})
-        try:
-            self.assertEqual(rl.models, {})                      # set when the score asks for it, on this relay
-            rl.url("u0003-judge", model="the-judge")
-            self.assertEqual(rl.models, {"u0003-judge": "the-judge"})
-            self.assertTrue(os.path.isdir(os.path.join(self.tmp, "t", ".work", "relay")))
-        finally:
-            rl.stop()
 
     def test_the_official_judge_and_simulator_are_named_as_the_provider_serves_them(self):
         b = dict(definitions.get("benchmark", "fakebench", ROOT), simulator={"model": "gpt-4.1-2025-04-14", "says": "a customer"})

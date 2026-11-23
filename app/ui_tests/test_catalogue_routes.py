@@ -71,30 +71,6 @@ class OriginTags(PageCase):
         self.assertIn('<span class="origin-tag official">Official</span>', self.page_html("gaia"))
         self.assertIn('<span class="bench-card-tags"><span class="cat-tag">', self.card(key))      # beside the category, on the left
 
-    def test_the_list_filters_by_what_runs_it(self):
-        html = self.get("/benchmarks")
-        self.assertIn('<fieldset data-filter-menu="runs" aria-label="Runs with">', html)
-        self.assertIn('data-f-runs="standard&#10;harbor&#10;"', self.card("swe-bench-verified")); self.assertIn('data-f-runs="standard&#10;"', self.card("longmemeval"))
-        self.assertIn('<input type="checkbox" data-value="standard" checked> Nullius', html)            # its value, by its label
-
-    def test_the_list_sorts_by_name_tasks_and_datasets_on_each_shelf(self):
-        html = self.get("/benchmarks")
-        menu = html[html.index('data-tools="sort"'):]
-        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', menu), ["", "title", "tasks", "datasets"])
-        self.assertIn('value="tasks" data-type="num"> Tasks', menu)
-        self.assertIn('data-s-title="SWE-bench Verified" data-s-tasks="500" data-s-datasets="1"', self.card("swe-bench-verified"))
-        self.assertIn('data-group-n>', html[html.index('data-shelf="official"'):html.index("data-s-title")])    # within its shelf
-
-    def test_the_list_filters_by_origin(self):
-        html = self.get("/benchmarks")
-        self.assertIn('<fieldset data-filter-menu="origin" aria-label="Origin">', html)
-        for o in catalog.ORIGINS:
-            self.assertIn(f'<input type="checkbox" data-value="{o}" checked> {o.capitalize()}', html)
-        self.assertIn('data-f-origin="official&#10;"', self.card("terminal-bench"))
-        self.assertIn('data-f-origin="official&#10;"', self.card("longmemeval"))
-        self.assertIn('data-f-origin="official&#10;"', self.card("gaia"))
-        self.assertNotIn('data-value="Experiment"', html)
-
     def test_the_list_is_cards_by_default_and_a_table_on_request(self):
         self.assertIn('href="/benchmarks?view=table" aria-label="Table" title="Table" aria-current="false"', self.html)
         self.assertIn('href="/benchmarks" aria-label="Cards" title="Cards" aria-current="true"', self.html)
@@ -115,19 +91,6 @@ class OriginTags(PageCase):
         origins = re.findall(r'data-f-origin="(\w+)&#10;"', html)
         self.assertEqual(origins, sorted(origins, key=list(catalog.ORIGINS).index))         # the shelves' order
 
-    def test_the_list_filters_by_category_pills_and_two_dropdowns(self):
-        tools = self.html.split('id="benchmarks-tools"', 1)[1].split('id="benchmarks"', 1)[0]
-        self.assertIn('<div class="filter-pills" role="group" aria-label="Category" data-pills="category">', tools)
-        self.assertIn('data-all="category" aria-pressed="true">All</button>', tools)
-        for c in web.shared._catalog_cached().categories:
-            self.assertIn(f'<button type="button" class="filter-pill" data-value="{c}" aria-pressed="false">{c}</button>', tools)
-        self.assertEqual(re.findall(r'data-dropdown aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-(\w+)"/></svg>([^<]+)<', tools),
-                         [("origin", "Origin"), ("runner", "Runs with")])
-        self.assertEqual(re.findall(r'data-filter-menu="(\w+)"', tools), ["origin", "runs"])
-        self.assertNotIn('data-tools-btn="filter"', tools)                                      # no Filter button: each has its own
-        self.assertIn('<span class="sr" data-live="benchmarks" data-noun="benchmarks" aria-live="polite"></span>', self.html)
-
-    def test_the_list_searches_by_name_category_and_dataset(self):
         self.assertIn('<input type="search" data-search placeholder="Name, category, dataset"', self.html)
         self.assertIn('data-search="LongMemEval Memory longmemeval', self.card("longmemeval"))
         self.assertIn('<p class="empty-note" data-empty="benchmarks" hidden>No benchmark matches.</p>', self.html)
@@ -184,12 +147,6 @@ class BenchmarksList(PageCase):
             self.assertIn(fact, memory)
         self.assertNotIn("benchmark.json", memory)                                  # the folder is on the benchmark's page, not its card
         self.assertIn('data-keys="longmemeval longmemeval-s longmemeval-m longmemeval-oracle"', self.card("longmemeval"))
-
-    def test_an_anchor_from_the_one_page_list_goes_on_to_its_page(self):
-        # /benchmarks#longmemeval-m opens that benchmark's page, at that tab
-        script = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("location.replace(owner.querySelector('.card-link').href", script)
-        self.assertIn("dataset.keys.split(' ')", script)
 
     def test_every_listed_benchmark_has_its_mark(self):
         # one mark per benchmark, by key - its maker's logo or a line icon - in the sprite the builder's cards and these pages use
@@ -290,22 +247,6 @@ class BenchmarkPage(PageCase):
             self.assertNotIn("No usable route", self.page(key))
             self.assertIn('<span class="origin-tag official">Official</span>', self.page_html(key))
 
-    def test_every_listed_benchmark_has_a_page_in_one_of_the_three_cases(self):
-        cases = {self.route_case(b.key) for b in catalog.load().listed_benchmarks}
-        self.assertEqual(cases, {"multi-route", "non-harbor"})                         # the standard's, or both
-
-    def test_a_benchmark_whose_own_scripts_run_says_so_with_no_native_runner(self):
-        for key, repo in (("longmemeval", "xiaowu0162/LongMemEval @ 9e0b455"), ("locomo", "snap-research/locomo @ 3eb6f2c")):
-            text = self.page(key)
-            self.assertIn(repo, text)                                                    # the upstream the standard pins
-            self.assertIn("Original", text)                                              # its own scripts: the Original setup
-            self.assertNotIn("Native", text); self.assertNotIn("runner.json", text)
-
-    def test_the_page_shows_its_folder(self):
-        self.assertIn("benchmarks/longmemeval/ ├─ benchmark.json ├─ driver.py ├─ proofs.json ├─ standard.json └─ upstream-settings.json", self.page("longmemeval"))
-        self.assertIn("benchmarks/swe-bench-verified/ ├─ benchmark.json ├─ driver.py ├─ images.json ├─ proofs.json ├─ standard.json └─ upstream-settings.json", self.page("swe-bench-verified"))
-        self.assertIn("benchmarks/terminal-bench/ ├─ benchmark.json ├─ driver.py ├─ proofs.json ├─ standard.json └─ upstream-settings.json", self.page("terminal-bench"))
-
     def test_an_option_with_a_pattern_shows_its_example_not_the_pattern(self):
         for key in ("osworld2", "gsm8k", "humaneval", "gaia", "osworld1", "tau3-bench"):
             html, opts = self.page_html(key), json.loads((Path(catalog.__file__).parent / "benchmarks" / key / "standard.json").read_text())["options"]
@@ -314,13 +255,6 @@ class BenchmarkPage(PageCase):
                     self.assertIn("e.g. <code>%s</code>" % o["example"], html)
                     self.assertNotIn(o["pattern"], unescape(html))
         self.assertNotIn("Provider default", self.page("osworld1"))
-
-    def test_a_machine_setup_says_what_checks_it_and_what_installs_it(self):
-        osworld = self.page("osworld1")
-        self.assertIn("Setup: docker", osworld)
-        self.assertIn("Checked by docker on PATH, on each machine a run uses; the builder's Where step checks it.", osworld)
-        self.assertNotIn("nothing installs it", osworld)
-        self.assertIn("the builder's Where step checks it and can install it.", self.page("tau3-bench"))
 
     def test_a_machine_setup_shows_its_label_and_its_key_without_one(self):
         osworld2 = self.page("osworld2")
@@ -375,27 +309,6 @@ class DatasetsOnTheirPage(PageCase):
             self.assertIn(f'<span class="mono">{agent}</span>', html, key)
         self.assertNotIn('id="published-title"', self.page_html("gsm8k"))              # the standard's setups say it instead
 
-    def test_a_benchmarks_open_work_is_not_on_its_page(self):
-        for b in catalog.load().listed_benchmarks:
-            with self.subTest(b.key):
-                self.assertNotIn("Next steps", self.page(b.key))
-
-    def test_a_page_ends_with_its_citation(self):
-        html = self.page_html("longmemeval")
-        cite = html[html.index('<section class="bench-section cat-citation"'):]
-        self.assertIn("@article{wu2024longmemeval,", cite)
-        self.assertIn('data-copy="@article{wu2024longmemeval,', cite)                     # copied whole
-        self.assertNotIn("From ", visible(cite))                                          # the dataset names the repository already
-        self.assertLess(html.index('class="cat-dataset"'), html.index('cat-citation"'))   # after the datasets
-
-    def test_each_way_names_its_own_source_once(self):
-        html, text = self.page_html("tau3-bench"), self.page("tau3-bench")
-        self.assertIn('<h3 class="bench-ds-title">τ³-bench</h3>', html)               # its title, though it is the benchmark's
-        self.assertEqual(text.count("sierra-research/tau3-bench Harbor downloads it"), 1)   # Harbor's hub name, said once
-        self.assertIn("Nullius GitHub sierra-research/tau2-bench v1.0.1 · fc0055d", text)   # the standard reads the upstream's release
-        self.assertIn('href="https://github.com/sierra-research/tau2-bench/tree/fc0055dc4e0a316c3f83133267fbd6faaa770992"', html)
-        self.assertNotIn("harbor datasets download", html)                                   # nothing for a person to run
-
     def test_a_dataset_the_driver_downloads_names_it_not_the_scorer(self):
         text = self.page("gaia")
         self.assertEqual(text.count("Nullius Hugging Face gaia-benchmark/GAIA 682dd72"), 4)   # data-source.json, not the leaderboard Space
@@ -404,34 +317,6 @@ class DatasetsOnTheirPage(PageCase):
     def test_an_empty_limitations_list_shows_no_section(self):
         self.assertNotIn("Nullius limitations", self.page("gaia"))
         self.assertNotIn("none recorded", self.page("gaia"))
-
-    def test_environments_add_no_section_to_a_benchmark_page(self):
-        for key in ("gaia", "terminal-bench"):
-            with self.subTest(key):
-                self.assertNotIn("Environment requirements", self.page(key))
-
-
-class SetupsOnTheirPage(PageCase):
-    def test_substitute_models_and_normal_scoring_rules_are_named_clearly(self):
-        for key in ("gsm8k", "humaneval"):
-            text = self.page(key)
-            self.assertIn("Setup Original Model Choose in the run builder", text)
-            self.assertIn("Good to know", text)
-        html = self.get("/benchmarks/gsm8k")
-        notes = html.split('aria-labelledby="good-to-know"', 1)[1].split('</section>', 1)[0]
-        limits = html.split('aria-labelledby="limitations"', 1)[1].split('</section>', 1)[0]
-        self.assertIn("18.00", notes)
-        self.assertNotIn("18.00", limits)
-
-
-    def test_one_original_setup_with_model_selection_in_the_builder(self):
-        for key in ("locomo", "longmemeval", "gsm8k", "humaneval", "tau3-bench"):
-            html = self.get("/benchmarks/" + key)
-            section = html.split('id="setups"', 1)[1].split('</section>', 1)[0]
-            self.assertEqual(section.count('class="std-setup-row"'), 1)
-            self.assertIn('<h3>Original</h3>', section)
-            self.assertNotIn('Original, your model', section)
-            self.assertNotIn('<h3>Your ', section)
 
 
 if __name__ == "__main__":

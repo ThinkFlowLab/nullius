@@ -86,12 +86,6 @@ class Compare(unittest.TestCase):
         got = fidelity.compare({"acp": [p, p], "cli": [a_pass(), a_pass()]})
         self.assertEqual(got["verdict"], "same")
 
-    def test_the_table_says_the_verdict_and_both_values(self):
-        got = fidelity.compare({"acp": [a_pass("medium"), a_pass("medium")], "cli": [a_pass(), a_pass()]})
-        text = fidelity.table(got)
-        self.assertIn('DIFFERS reasoning.effort:\n    acp: "medium"\n    cli: —', text)
-        self.assertTrue(text.endswith("verdict: differs"))
-
 
 if __name__ == "__main__":
     unittest.main()

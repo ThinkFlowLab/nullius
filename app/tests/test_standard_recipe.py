@@ -148,14 +148,11 @@ class Compile(unittest.TestCase):
         self.assertEqual(steps, {recipe.STEP["model"], recipe.STEP["where"], recipe.STEP["limits"]})
         self.assertEqual(recipe.compile(a_recipe(benchmark="nope"), defs())["errors"][0]["step"], recipe.STEP["benchmark"])
 
-    def test_no_limit_is_every_unit_and_asked_first(self):
-        out = recipe.compile(a_recipe(limit=""), defs())
+    def test_no_limit_is_every_unit_asked_first_and_no_concurrency_is_one_at_a_time(self):
+        out = recipe.compile(a_recipe(limit="", concurrency=""), defs())
+        self.assertEqual(out["errors"], [])
         self.assertNotIn("--limit", out["script"])
         self.assertEqual(out["confirm"], "Run all 4 tasks of Fake bench with Fake agent?")
-
-    def test_no_concurrency_is_one_at_a_time(self):
-        out = recipe.compile(a_recipe(concurrency=""), defs())
-        self.assertEqual(out["errors"], [])
         self.assertIn("-j 1", out["script"])
         self.assertIn("1 at a time", [row[2] for row in out["review"] if row[1] == "Scope"][0])
 

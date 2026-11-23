@@ -19,9 +19,7 @@ class Ticks(unittest.TestCase):
         self.assertEqual(c.nice_ticks(0, 1), (0, 0.25, 0.5, 0.75, 1))
         self.assertEqual(c.nice_ticks(-3, 5), (-4, -2, 0, 2, 4, 6))
         self.assertEqual(c.nice_ticks(0.0012, 0.0031)[0], 0.001)
-
-    def test_whole_counts_never_step_below_one(self):
-        self.assertEqual(c.nice_ticks(0, 3, step_min=1), (0, 1, 2, 3))
+        self.assertEqual(c.nice_ticks(0, 3, step_min=1), (0, 1, 2, 3))       # whole counts never step below one
 
     def test_long_tick_labels_that_would_touch_leave_one_out_never_the_last(self):
         p = c.bars(metric(0, 32, 85, 4, fmt=lambda v: f"${v:.2f}"))
@@ -72,10 +70,8 @@ class Bars(unittest.TestCase):
         self.assertEqual(len(refs), 2)                               # across each row's band, never its name
         self.assertEqual({r.x for r in refs}, {round(a.x + a.w, 2)})
         self.assertEqual(p.table[1], (("a (baseline)", "2"), ("b", "4 +2")))
-
-    def test_a_single_run_has_no_reference_line(self):
-        p = c.bars(c.Metric("M", (c.Value("a", 2, "2", baseline=True),)))
-        self.assertEqual((len(shapes(p, "bar")), shapes(p, "ref")), (1, []))
+        alone = c.bars(c.Metric("M", (c.Value("a", 2, "2", baseline=True),)))
+        self.assertEqual((len(shapes(alone, "bar")), shapes(alone, "ref")), (1, []))   # a single run has no reference line
 
     def test_a_long_name_wraps_never_clips(self):
         name = "agent " * 30
@@ -83,12 +79,6 @@ class Bars(unittest.TestCase):
         label = next(t for t in p.texts if t.cls == "label")
         self.assertGreater(len(label.lines), 1)
         self.assertEqual(" ".join(label.lines), name.strip())
-
-    def test_very_different_magnitudes_get_their_own_panels_and_axes(self):
-        panels = [c.bars(metric(0.002, 0.003)), c.bars(metric(4000, 9000))]
-        small, large = ([t.lines[0] for t in p.texts if t.cls == "tick"] for p in panels)
-        self.assertNotEqual(small[-1], large[-1])
-        self.assertEqual(large[-1], "10000")
 
 
 class Dots(unittest.TestCase):

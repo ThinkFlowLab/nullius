@@ -25,24 +25,17 @@ class RunBatch(unittest.TestCase):
         done, failed = judge.run_batch(list(range(n)), ask, lambda i: f"t{i}")
         self.assertEqual((done, failed), (n - 1, ["t3: busy"]))
 
-    def test_a_refused_key_starts_no_further_call(self):
-        asked = []
+    def test_a_refused_key_or_a_judge_still_busy_starts_no_further_call(self):
+        for status, said in ((401, "refused"), (429, "busy")):
+            with self.subTest(status=status):
+                asked = []
 
-        def ask(i):
-            asked.append(i)
-            raise client.JudgeError(401, "refused")
-        done, failed = judge.run_batch(list(range(100)), ask, str)
-        self.assertEqual(done, 0)
-        self.assertLessEqual(len(asked), judge.CONCURRENCY)       # only those already started
-
-    def test_a_judge_still_busy_after_its_retries_stops_the_batch(self):
-        asked = []
-
-        def ask(i):
-            asked.append(i)
-            raise client.JudgeError(429, "busy")
-        judge.run_batch(list(range(100)), ask, str)
-        self.assertLessEqual(len(asked), judge.CONCURRENCY)
+                def ask(i):
+                    asked.append(i)
+                    raise client.JudgeError(status, said)
+                done, failed = judge.run_batch(list(range(100)), ask, str)
+                self.assertEqual(done, 0)
+                self.assertLessEqual(len(asked), judge.CONCURRENCY)       # only those already started
 
 
 if __name__ == "__main__":

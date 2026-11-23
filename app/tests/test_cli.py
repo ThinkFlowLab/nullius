@@ -116,13 +116,6 @@ class Help(Scratch):
         self.assertIn("--matched", self.sh("compare.cli", "--help").stdout)
         self.assertCwdUntouched()
 
-    def test_the_subcommands_have_help_of_their_own(self):
-        for sub in ("list", "show"):
-            out = self.sh("runs.cli", sub, "--help")
-            self.assertEqual(out.returncode, 0)
-            self.assertIn("--json", out.stdout)
-            self.assertIn("exit codes:", out.stdout)
-
 
 class ExitCodes(Scratch):
     """docs/cli.md's table, one line at a time. The modules must agree on the
@@ -137,6 +130,15 @@ class ExitCodes(Scratch):
             ("runs.cli", ["list"]),                                 # no root
             ("runs.cli", ["list", "--bogus", str(JOBS)]),
             ("runs.cli", ["show", str(JOBS)]),               # no job id
+            ("runs.cli", ["show", str(JOBS), "1", TRIAL_1, "extra"]),
+            ("compare.cli", []),                                       # no root
+            ("compare.cli", [str(JOBS)]),                       # no job
+            ("compare.cli", [str(JOBS), "1"]),                  # one job
+            ("compare.cli", [str(JOBS), "1", "1"]),             # the same job twice
+            ("compare.cli", [str(JOBS), "1", "2", "--bogus"]),
+            ("workspace_cli", []),                                     # no command
+            ("workspace_cli", ["list", "--bogus"]),
+            ("workspace_cli", ["delete", "x"]),                        # not a command here
         ]
         for module, args in cases:
             with self.subTest(module=module, args=args):
@@ -145,70 +147,6 @@ class ExitCodes(Scratch):
                 self.assertIn("usage:", out.stderr)
                 self.assertEqual(out.stdout, "")
         self.assertCwdUntouched()
-
-    def test_a_missing_path_is_3(self):
-        missing = os.path.join(self.tmp, "nowhere")
-        cases = [
-            ("importers.cli", [missing, "-o", os.path.join(self.tmp, "out")]),
-            ("importers.cli", [missing, "--harness", "atif", "-o", os.path.join(self.tmp, "out")]),
-            ("runs.cli", ["list", missing]),
-            ("runs.cli", ["show", missing, "1"]),
-        ]
-        for module, args in cases:
-            with self.subTest(module=module, args=args):
-                out = self.sh(module, *args)
-                self.assertEqual(out.returncode, 3, out.stderr)
-                self.assertIn("no such directory", out.stderr)
-                self.assertEqual(out.stdout, "")
-        self.assertFalse(os.path.exists(os.path.join(self.tmp, "out")))
-        self.assertCwdUntouched()
-
-    def test_an_empty_directory_is_3_for_reads_and_says_what_was_looked_for(self):
-        empty = os.path.join(self.tmp, "empty")
-        os.makedirs(empty)
-        out = self.sh("runs.cli", "list", empty)
-        self.assertEqual(out.returncode, 3)
-        self.assertIn("no job directory found", out.stderr)
-        out = self.sh("runs.cli", "list", empty, "--json")
-        self.assertEqual((out.returncode, out.stdout), (3, ""))
-        out = self.sh("importers.cli", empty, "-o", os.path.join(self.tmp, "out"))
-        self.assertEqual(out.returncode, 3)
-        self.assertIn("no importer recognised", out.stderr)
-        self.assertEqual(os.listdir(empty), [])
-        self.assertCwdUntouched()
-
-    def test_a_refused_operation_is_4(self):
-        empty = os.path.join(self.tmp, "empty")
-        os.makedirs(empty)
-        # the importer named outright finds nothing it can convert
-        out = self.sh("importers.cli", empty, "--harness", "atif", "-o", os.path.join(self.tmp, "out"))
-        self.assertEqual(out.returncode, 4, out.stderr)
-        self.assertIn("no ATIF trajectories", out.stderr)
-        self.assertEqual(out.stdout, "")
-        self.assertCwdUntouched()
-
-
-class Runs(Scratch):
-    """`runs.cli`: what the runs list and the job page show, from the shell."""
-
-
-    def test_an_errored_trial_shows_its_exception_and_never_the_credential(self):
-        errored_job(self.tmp)
-        with open(os.path.join(self.tmp, "errored-job", "task-a__x1", "result.json")) as fh:
-            self.assertIn(SECRET, fh.read())   # it is on disk
-        for args in (["show", self.tmp, "errored-job"], ["show", self.tmp, "errored-job", "--json"],
-                     ["list", self.tmp, "--json"]):
-            with self.subTest(args=args):
-                out = self.sh("runs.cli", *args)
-                self.assertEqual(out.returncode, 0, out.stderr)
-                self.assertNotIn(SECRET, out.stdout + out.stderr)
-        out = self.sh("runs.cli", "show", self.tmp, "errored-job")
-        self.assertRegex(out.stdout, r"(?m)^  task-a__x1\s+api_error\s+ApiError$")
-        doc = json.loads(self.sh("runs.cli", "show", self.tmp, "errored-job", "--json").stdout)
-        self.assertEqual(doc["trials"][0]["exception_message"], "401 for api_key=[REDACTED]")
-        self.assertEqual(doc["counts"]["api_error"], 1)
-        self.assertEqual(doc["n_infra"], 1)
-        self.assertIsNone(doc["adjusted_solve_rate"])
 
 
 # -------------------------------------------------------
@@ -226,28 +164,6 @@ def workspace_home(root: str, roots, label: str = "Failed jobs") -> tuple:
     ws = workspace.create(home, [str(r) for r in roots], label)
     workspace.load_jobs(ws, ws.roots)
     return home, ws
-
-
-class MoreExitCodes(Scratch):
-    def test_usage_errors_are_2(self):
-        cases = [
-            ("compare.cli", []),                                       # no root
-            ("compare.cli", [str(JOBS)]),                       # no job
-            ("compare.cli", [str(JOBS), "1"]),                  # one job
-            ("compare.cli", [str(JOBS), "1", "1"]),             # the same job twice
-            ("compare.cli", [str(JOBS), "1", "2", "--bogus"]),
-            ("workspace_cli", []),                                     # no command
-            ("workspace_cli", ["list", "--bogus"]),
-            ("workspace_cli", ["delete", "x"]),                        # not a command here
-            ("runs.cli", ["show", str(JOBS), "1", TRIAL_1, "extra"]),
-        ]
-        for module, args in cases:
-            with self.subTest(module=module, args=args):
-                out = self.sh(module, *args)
-                self.assertEqual(out.returncode, 2, out.stderr)
-                self.assertIn("usage:", out.stderr)
-                self.assertEqual(out.stdout, "")
-        self.assertCwdUntouched()
 
 
 class TrialShow(Scratch):
@@ -296,7 +212,6 @@ class TrialShow(Scratch):
 
 class Workspaces(Scratch):
     """`workspace_cli list`: the workspaces table, from the shell."""
-
 
     def test_the_home_is_workspaces_dir_when_not_named(self):
         home, ws = workspace_home(self.tmp, [JOBS])

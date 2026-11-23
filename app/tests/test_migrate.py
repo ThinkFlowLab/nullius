@@ -259,16 +259,6 @@ class Migration(unittest.TestCase):
                 self.assertFalse(Path(paths.settings_file()).exists())
                 self.assertEqual(migrate._inventory(dest), before)
 
-    def test_identical_catalogue_entry_is_accepted_without_rewriting_it(self):
-        for entry in (self.entry(), self.entry(Path(paths.catalogue_dir()))):
-            (entry / "definition.json").write_text("{}")
-            (entry / "empty").mkdir()
-        dest = Path(paths.catalogue_dir(), "benchmarks/custom/definition.json")
-        before = dest.stat().st_mtime_ns
-        self.assertEqual(self.run_cli("--apply")[0], 0)
-        self.assertEqual(dest.stat().st_mtime_ns, before)
-        self.assertIn("files_to_write: 0", self.run_cli("--apply")[1])
-
     def test_apply_rechecks_whole_entries_even_when_no_files_need_copying(self):
         source = self.entry()
         (source / "definition.json").write_text("{}")

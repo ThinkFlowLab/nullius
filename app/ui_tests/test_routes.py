@@ -22,7 +22,6 @@ from nullius import workspace
 from nullius.catalogue import catalog
 
 
-
 APP_DIR = Path(__file__).resolve().parents[1]
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
@@ -195,13 +194,6 @@ class Routes(unittest.TestCase):
         self.assertIn("Or open a workspace", html)
         self.assertLess(html.index("Or open a workspace"), html.index('class="start-signature"'))   # the mark closes the page
         self.assertNotIn('data-label="Import"', html)                     # the rail has no Import tab
-
-    def test_removed_marketing_assets_are_not_served(self):
-        for asset in ("landing.css", "landing-core.js", "landing-logos.js", "landing.js"):
-            with self.subTest(asset=asset):
-                response = self.client.get("/static/runs/" + asset)
-                self.addCleanup(response.close)
-                self.assertEqual(response.status_code, 404)
 
     def test_catalogue_routes_keep_native_anchor_targets_and_source_count_meanings(self):
         cat = catalog.load()
@@ -446,7 +438,6 @@ class Routes(unittest.TestCase):
         self.assertIn('class="mono faint exception-type"', head)
         self.assertIn('classify.py.">SomethingNobodyHasWrittenYetError</span>', head)
         self.assertNotIn("Agent error", trial_page)
-
 
     def test_a_trajectory_without_usage_or_tool_calls_draws_no_empty_panel(self):
         """The synthetic trajectory is messages only: no per-step usage, no

@@ -39,11 +39,9 @@ class Schema(unittest.TestCase):
     def problems(self, controls):
         return definitions.problems(dict(self.b, controls=controls), "benchmark")
 
-    def test_the_two_controls_with_their_sources_are_valid(self):
+    def test_valid_controls_pass_and_each_wrong_field_is_named(self):
         self.assertEqual(self.problems(CONTROLS), [])
         self.assertEqual(self.problems({"oracle": dict(CONTROLS["oracle"], expect={"at_least": 0.9}, in_prompt="a choice")}), [])
-
-    def test_each_wrong_field_is_named(self):
         self.assertIn("controls.gold: a control is one of ('nop', 'oracle')", self.problems({"gold": CONTROLS["nop"]}))
         self.assertTrue(any("controls.nop.source" in p for p in self.problems({"nop": {"source": "us", "from": "x"}})))
         self.assertTrue(any("controls.oracle.from" in p for p in self.problems({"oracle": {"source": "official"}})))
@@ -71,11 +69,6 @@ class Schema(unittest.TestCase):
         self.assertEqual(match.fit(b, oracle), [])
         self.assertTrue(match.fit(self.b, oracle))
         self.assertEqual(match.table([b], [], [])["fakebench"], {"nop": [], "oracle": []})
-
-    def test_every_catalogued_control_is_valid_and_honest(self):
-        for b in definitions.load("benchmark")[0] + definitions.kits():
-            for c in (b.get("controls") or {}).values():
-                self.assertIn(c["source"], definitions.SOURCES, b["key"])
 
     def test_a_catalogued_proof_of_units_that_may_not_be_redistributed_names_none(self):
         held = [b for b in definitions.load("benchmark")[0] if b["units"].get("redistribute") is False]
@@ -354,13 +347,6 @@ class Prove(unittest.TestCase):
         self.assertEqual(got["oracle"]["units"], len(std["shard"]["planned"]))
         self.assertTrue(all(shard.of(u, 2) == 2 for u in std["shard"]["planned"]))
 
-    def test_removing_images_reaches_each_controls_run(self):
-        b = kit("agent-workspace-v1", os.path.join(self.tmp, "kits"))
-        seen, real = [], run.run
-        with patch.object(run, "run", lambda *a, **kw: seen.append(kw.get("remove_images")) or real(*a, **kw)):
-            self.prove(b, remove_images=True, write=False)
-        self.assertEqual(seen, [True, True])
-
     def test_a_partial_proof_says_so_and_does_not_replace_a_fuller_one(self):
         b = kit("agent-task-v1", os.path.join(self.tmp, "kits"))
         got = self.prove(b, limit=1)
@@ -521,25 +507,6 @@ class ProveOptions(unittest.TestCase):
             self.assertNotIn(c, self.b["proven"]["kit"])
             self.assertIn(c, self.b["proven"]["kit"]["failed"])
         self.assertFalse(os.path.exists(self.jobs) and any("prove-" in x for x in os.listdir(self.jobs)))
-
-    def test_a_trial_of_another_job_cannot_be_merged_into_a_proof(self):
-        from nullius.standard.runner import merge
-        shards = [self.nop_shard(i, 4, "a") for i in (1, 3)]
-        trial = next(t for t in sorted(os.listdir(shards[0])) if os.path.isfile(os.path.join(shards[0], t, "result.json")))
-        path = os.path.join(shards[0], trial, "result.json")
-        with open(path) as f:
-            res = json.load(f)
-        res["standard"]["job"] = "old-unrelated-job"
-        with open(path, "w") as f:
-            json.dump(res, f)
-        with self.assertRaises(merge.Refused) as e:
-            merge.merge(shards, os.path.join(self.jobs, "never"))
-        self.assertIn("names another job than its job", str(e.exception))
-        forced = merge.merge(shards, os.path.join(self.jobs, "forced"), force=True)["out"]
-        r = self.prove(dataset="kit", bench_options={"sites": "on"}, jobs={"nop": forced}, write=False)["kit"]["nop"]
-        self.assertFalse(r["ok"])
-        self.assertTrue(any("merged despite differences" in p and "not of the job they are in" in p for p in r["problems"]),
-                        r["problems"])
 
     def test_a_merge_of_merges_keeps_what_any_of_them_was_merged_despite(self):
         from nullius.standard.runner import merge

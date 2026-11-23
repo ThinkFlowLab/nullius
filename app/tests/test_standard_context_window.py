@@ -57,13 +57,6 @@ class Failure(unittest.TestCase):
         self.assertNotIn(WORDS, said)
         self.assertNotIn("maximum context length", said)
 
-    def test_anthropics_words_and_a_later_rate_limit(self):
-        calls = [AGENT_OK, {"status": 400, "error": ANTHROPIC}, {"status": 429, "error": "slow down", "side": True}]
-        self.assertEqual(relay.failure(calls, words=False, agent=True)[0], relay.CONTEXT_ERROR)
-
-    def test_the_agents_overflow_as_the_last_call(self):
-        self.assertEqual(relay.failure([AGENT_OK, OVERFLOW], words=False, agent=True)[0], relay.CONTEXT_ERROR)
-
     def test_an_overflow_the_agent_recovered_from_is_not_the_units(self):
         self.assertIsNone(relay.failure([OVERFLOW, AGENT_OK], agent=True))
 

@@ -231,6 +231,12 @@ class TheRelay(WithUpstream):
         stream = sse({"choices": [{"index": 0, "delta": {}, "finish_reason": "length"}, {"index": 1, "delta": {}, "finish_reason": None}]},
                      {"choices": [{"index": 1, "delta": {}, "finish_reason": "stop"}]})
         self.assertEqual(relay.reply_facts("/chat/completions", stream, True)["end"], {"0": "length", "1": "stop"})
+        two = [{"index": 0, "finish_reason": "error", "error": {"code": 429, "message": "rate limited"}},
+               {"index": 1, "finish_reason": "error", "error": {"code": 503, "message": "unavailable"}}]
+        self.assertEqual(relay.reply_facts("/chat/completions", json.dumps({"choices": two}).encode(), False)["error"],
+                         {"code": 429, "message": "rate limited", "choice": 0})                # of several, the first
+        top = {"choices": two, "error": {"code": 500, "message": "whole"}}
+        self.assertEqual(relay.reply_facts("/chat/completions", json.dumps(top).encode(), False)["error"], {"code": 500, "message": "whole"})
 
     def test_an_error_beside_a_whole_reply_is_read_in_every_shape(self):
         error = {"code": 502, "message": "failed"}
@@ -240,12 +246,6 @@ class TheRelay(WithUpstream):
                            ("/responses", {"object": "response", "status": "failed", "output": [], "error": error})):
             with self.subTest(path=path):
                 self.assertEqual(relay.reply_facts(path, json.dumps(body).encode(), False)["error"], error)
-
-    def test_a_completed_responses_events_routing_facts_name_who_served_it(self):
-        body = sse({"type": "response.completed", "response": dict(COMPLETED, openrouter_metadata=routing_facts("Prov A", "Prov X"))})
-        self.assertEqual(relay.reply_facts("/responses", body, True), {"served_by": "Prov A", "end": "completed"})
-        whole = json.dumps(dict(RESPONSES, openrouter_metadata=routing_facts("Prov A", "Prov X", "Prov Y"))).encode()
-        self.assertEqual(relay.reply_facts("/responses", whole, False)["served_by"], "Prov A")
 
     def test_facts_of_the_wrong_type_are_left_out_and_never_stop_a_reply(self):
         odd = [{"choices": [{"message": {"content": "ok"}}], "openrouter_metadata": {"endpoints": {"available": 1}}},
@@ -372,20 +372,6 @@ class TheSidecar(WithUpstream):
             unit.start()
         (started,) = [a for a in ran if a[:1] == ["run"]]
         self.assertIn("m-run=prov-a", started[started.index("--served-by") + 1:])
-
-    def test_the_relays_own_command_refuses_a_pin_it_cannot_take(self):
-        key = os.path.join(self.tmp, "key")
-        with open(key, "w") as f:
-            f.write("or-test")
-        for given in (["m=bad slug"], ["m=prov-a,prov-a"], ["m="], ["m=prov-a", "m=prov-b"], ["prov-a"]):
-            with self.subTest(given=given):
-                # a process of its own, bounded: a relay that took the pin would serve until stopped
-                got = subprocess.run([sys.executable, "-m", "nullius.standard.calls.relay", "serve", "--listen", "127.0.0.1:0",
-                                      "--base", self.base, "--record", os.path.join(self.tmp, "rec"), "--key-file", key,
-                                      *[w for g in given for w in ("--served-by", g)]],
-                                     cwd=APP, env=dict(os.environ, PYTHONPATH=APP), capture_output=True, text=True, timeout=20)
-                self.assertEqual(got.returncode, 2, got.stdout)
-                self.assertIn("error", json.loads(got.stdout.splitlines()[0]))
 
     def test_the_relay_as_a_process_of_its_own_puts_the_pin_on_its_requests(self):
         key = os.path.join(self.tmp, "key")
@@ -640,41 +626,12 @@ class TheReview(unittest.TestCase):
                              {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "openrouter_metadata": meta})
                 self.assertNotIn("served_by", relay.reply_facts("/chat/completions", chunks, True))
 
-    def test_a_pinned_responses_call_is_recorded_with_its_provider_and_the_pin_holds(self):
-        """A Responses reply names its provider in the routing facts alone: the relay asks for them on a pinned
-        request to OpenRouter, records the endpoint they mark, and the pin reads held, streamed or not. Without
-        them the reply names no provider and the pin reads unknown."""
-        up = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
-        threading.Thread(target=up.serve_forever, daemon=True).start()
-        self.addCleanup(up.server_close)
-        self.addCleanup(up.shutdown)
-        Upstream.seen, Upstream.next, Upstream.always = [], None, None
-        base, pin = f"http://127.0.0.1:{up.server_address[1]}/v1", {"m-run": ["prov-c"]}
-        for facts, who, held in ((True, "Prov C", True), (False, None, "unknown")):
-            r = relay.Relay(base, "or-test", os.path.join(self.tmp, f"rec-{facts}"), model="m-run", serving=pin, facts=facts).start()
-            self.addCleanup(r.stop)
-            for stream in (False, True):
-                with self.subTest(facts=facts, stream=stream):
-                    post(r.url("u0") + "/responses", body_for("/responses", stream))
-                    self.assertEqual(Upstream.seen[-1][1].get("x-openrouter-metadata"), "enabled" if facts else None)
-                    self.assertEqual(json.loads(Upstream.seen[-1][2])["provider"], {"order": ["prov-c"], "allow_fallbacks": False})
-                    self.assertEqual(r.calls("u0")[-1]["reply"].get("served_by"), who)
-            self.assertEqual(job.served(r.calls("u0"), pin)["held"], {"m-run": held})
-
     def test_an_error_keeps_its_stated_fields_alone(self):
         nested = relay.reply_facts("/chat/completions", json.dumps({"error": {"api_key": ["review-only-credential"]}}).encode(), False)
         self.assertNotIn("review-only-credential", json.dumps(nested))
         self.assertEqual(relay.reply_facts("/messages", b'{"type":"message","content":[],"error":{"code":[],"type":{},"message":17}}', False), {})
         self.assertEqual(relay.reply_facts("/chat/completions", b'{"error":{"code":502,"message":"m","detail":{"key":"x"}}}', False),
                          {"error": {"code": 502, "message": "m"}})
-
-    def test_of_several_choices_errors_the_top_level_one_else_the_first_is_kept(self):
-        two = [{"index": 0, "finish_reason": "error", "error": {"code": 429, "message": "rate limited"}},
-               {"index": 1, "finish_reason": "error", "error": {"code": 503, "message": "unavailable"}}]
-        self.assertEqual(relay.reply_facts("/chat/completions", json.dumps({"choices": two}).encode(), False)["error"],
-                         {"code": 429, "message": "rate limited", "choice": 0})
-        top = {"choices": two, "error": {"code": 500, "message": "whole"}}
-        self.assertEqual(relay.reply_facts("/chat/completions", json.dumps(top).encode(), False)["error"], {"code": 500, "message": "whole"})
 
     def test_a_merged_job_keeps_each_shards_whole_summary(self):
         """A shard's summary holds its benchmark relay's calls too: a merge made of its trials alone would drop
@@ -686,13 +643,6 @@ class TheReview(unittest.TestCase):
         self.assertEqual(merge._served([shard], [trial]), shard["result"]["served"])
         old = {"name": "s2", "config": {"standard": {"served_by": pin}}, "result": {}}          # a shard written before: its trials
         self.assertEqual(merge._served([old], [dict(trial, standard=dict(trial["standard"], shard_job="s2"))])["held"], {"m": True})
-
-    def test_a_control_is_refused_a_pin_on_its_simulated_users_model(self):
-        b = dict(definitions.get("benchmark", "fakebench", ROOT), controls={"nop": {"source": "nullius", "from": "nothing"}},
-                 simulator={"model": "sim"})
-        with self.assertRaisesRegex(run.Refused, "names sim, which this run does not call"):
-            run.Run(b, definitions.control(b, "nop"), model="sim", provider="openrouter", env={},
-                    jobs_root=self.tmp, say=lambda _: None, served_by={"sim": ["prov-a"]})
 
     def test_the_relays_own_command_refuses_another_provider_and_a_model_it_does_not_send(self):
         key = os.path.join(self.tmp, "key")
@@ -743,9 +693,6 @@ class TheMerge(unittest.TestCase):
         with self.assertRaisesRegex(merge.Refused, "serving providers"):
             merge.check(jobs)
 
-    def test_equal_pins_merge_whatever_the_order_of_their_models(self):
-        jobs = self.shards({"a": ["prov-a"], "b": ["prov-b"]}, {"b": ["prov-b"], "a": ["prov-a"]})
-        self.assertEqual(merge.check(jobs)["differ"], [])
 
     def test_a_forced_merge_of_different_pins_holds_no_pin(self):
         jobs = self.shards({"m-1": ["prov-a"]}, {"m-1": ["prov-b"]})

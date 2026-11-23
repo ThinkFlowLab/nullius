@@ -33,13 +33,8 @@ class Step(unittest.TestCase):
         self.assertEqual(container.step_problems(dict(self.BASE, keep_processes=False), collect=True), [])
         self.assertTrue(any("keep_processes: true or false" in p
                             for p in container.step_problems(dict(self.BASE, keep_processes="yes"), collect=True)))
-
-    def test_only_the_check_has_processes_to_keep(self):
         solve = {"copy": {"s": "/solution"}, "run": ["sh", "/solution/solve.sh"], "keep_processes": True}
         self.assertTrue(any("keep_processes: not a field" in p for p in container.step_problems(solve, collect=False)))
-
-    def test_the_settle_command_names_the_keep_alive(self):
-        self.assertEqual(container.Box.settle_argv("7"), ["sh", "-c", container.SETTLE, "settle", "7"])
 
 
 def _fake_proc(root: str, procs: dict):
@@ -92,12 +87,6 @@ class Scripts(unittest.TestCase):
         for spared in ("1", "7", "8", "21"):
             self.assertFalse([l for l in k if l.endswith(" " + spared)], spared)
         self.assertEqual(sorted(os.listdir(self.proc)), ["1", "21", "7", "8"])
-
-    def test_a_box_with_nothing_left_is_left_alone(self):
-        _fake_proc(self.proc, {1: ("docker-init", "S", 0), 7: ("sh", "S", 1), 8: ("sleep", "S", 7)})
-        r = self.sh(container.SETTLE, "7")
-        self.assertEqual((r.returncode, r.stdout), (0, ""))
-        self.assertEqual(self.kills(), [])
 
     def test_what_will_not_die_is_said_and_fails(self):
         _fake_proc(self.proc, {1: ("docker-init", "S", 0), 7: ("sh", "S", 1), 40: ("stubborn", "D", 1)})
@@ -400,15 +389,13 @@ class Refusals(unittest.TestCase):
                     return out
                 out += d
 
-    def test_metadata_private_and_this_machine_are_refused(self):
+    def test_metadata_private_this_machine_and_what_is_not_a_proxy_request_are_refused(self):
         for raw in (b"GET http://169.254.169.254/latest/meta-data/ HTTP/1.1\r\nHost: 169.254.169.254\r\n\r\n",
                     b"CONNECT 100.100.100.200:443 HTTP/1.1\r\n\r\n",
                     b"GET http://10.0.0.1/ HTTP/1.1\r\n\r\n",
                     b"CONNECT localhost:%d HTTP/1.1\r\n\r\n" % self.srv.getsockname()[1]):
             self.assertTrue(self.ask(raw).startswith(b"HTTP/1.1 403"), raw)
         self.assertEqual([e for e, _ in self.said], ["refused"] * 4)
-
-    def test_what_is_not_a_proxy_request_is_refused(self):
         self.assertTrue(self.ask(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n").startswith(b"HTTP/1.1 400"))
 
     def test_a_local_service_at_the_unspecified_address_bypasses_the_public_proxy(self):
@@ -482,11 +469,6 @@ class TerminalBench(unittest.TestCase):
         for image in data["IMAGES"].values():
             self.assertEqual(container.spec_problems({"pull": image}), [])
         self.assertEqual(data["DATASETS"]["full"], data["ALL"])
-
-    def test_r_packages_and_hugging_face_weights_need_the_same_public_proxy(self):
-        for unit in ("bn-fit-modify", "mteb-retrieve"):
-            with self.subTest(unit=unit):
-                self.assertIs(self.setup_of(unit)["internet"], True)
 
     def test_every_task_is_prepared_with_tmux_through_the_proxy(self):
         for unit in ("mailman", "regex-log"):

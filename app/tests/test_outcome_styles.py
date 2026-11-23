@@ -16,18 +16,16 @@ STYLESHEET = Path(__file__).resolve().parents[1] / "static" / "style.css"
 
 class OutcomeStyles(unittest.TestCase):
     def test_every_outcome_is_styled_in_both_themes(self):
+        # An empty list would pass the loop vacuously, so the source of truth
+        # is asserted rather than assumed.
+        self.assertTrue(C.ORDER)
+        self.assertTrue(set(C.INFRA_OUTCOMES).issubset(set(C.ORDER)))
         css = STYLESHEET.read_text(encoding="utf-8")
         for outcome in C.ORDER:
             with self.subTest(outcome):
                 self.assertIn(f".oc-{outcome}", css, "no dot/segment/tag rule")
                 self.assertEqual(css.count(f"--{outcome}:"), 2,
                                  "expected one colour definition per theme")
-
-    def test_the_outcome_list_comes_from_the_classifier(self):
-        # If this ever reads an empty list the test above passes vacuously, so
-        # the source of truth is asserted rather than assumed.
-        self.assertTrue(C.ORDER)
-        self.assertTrue(set(C.INFRA_OUTCOMES).issubset(set(C.ORDER)))
 
 
 if __name__ == "__main__":

@@ -49,7 +49,7 @@ class UseBundled(unittest.TestCase):
                 self.assertIn(f'action="{endpoint}"'.encode(), response.data)
                 self.assertTrue(folder.exists(), "viewing the action must not remove anything")
                 self.assertEqual(self.client.get(endpoint).status_code, 405)
-                response = self.client.post(endpoint, data={"csrf": "restore-test"})
+                response = self.client.post(endpoint + "?v=custom-version", data={"csrf": "restore-test"})
                 self.assertEqual(response.status_code, 302)
                 self.assertEqual(response.location, page)
                 self.assertFalse(folder.exists())
@@ -71,9 +71,3 @@ class UseBundled(unittest.TestCase):
         self.assertEqual(self.client.post("/catalogue/benchmarks/custom/use-bundled", data={"csrf": "restore-test"}).status_code, 409)
         self.assertTrue(custom.exists())
         self.assertEqual(self.client.post("/catalogue/other/gsm8k/use-bundled", data={"csrf": "restore-test"}).status_code, 404)
-
-    def test_selected_user_version_is_dropped_when_restoring(self):
-        folder = Path(storage.writable_dir("agents", "codex", definitions.CATALOGUE))
-        response = self.client.post("/catalogue/agents/codex/use-bundled?v=custom-version", data={"csrf": "restore-test"})
-        self.assertEqual(response.location, "/agents/codex")
-        self.assertFalse(folder.exists())

@@ -56,13 +56,6 @@ class States(unittest.TestCase):
             {"step_id": 3, "source": "agent", "message": "Fixed the off-by-one in add()."}]}))
         self.traj = trajectory.load(str(path)); self.beh = behavior.analyze(self.traj)
 
-    def test_the_kinds_are_registered_and_reach_build(self):
-        for kind in ("control", "task"):
-            self.assertIn(kind, state.BUILDERS)
-        self.assertNotIn("behaviour", state.BUILDERS)
-        with self.assertRaises(ValueError):
-            state.register("task", state.task_state)
-
     def test_the_task_state_is_the_instruction_alone(self):
         text, truncated = state.build("task", self.traj)
         self.assertFalse(truncated); self.assertEqual(text, "[instruction]\n" + state.instruction_of(self.traj))

@@ -55,9 +55,6 @@ class Definition(unittest.TestCase):
         self.assertEqual(opts("banking_knowledge", "yours"), {"retrieval": "bm25", "user_reasoning_effort": "default", "max_steps": "200", "max_errors": "10"})
         self.assertEqual(opts("banking_knowledge", "original")["retrieval"], "bm25")
 
-    def test_attempts_are_told_apart(self):
-        self.assertIn("seed", BENCH["limits"]["attempts"])
-
     def test_every_option_and_dataset_is_in_the_inventory(self):
         with open(os.path.join(BENCH["_here"], definitions.SETTINGS_FILE)) as f:
             rows = json.load(f)

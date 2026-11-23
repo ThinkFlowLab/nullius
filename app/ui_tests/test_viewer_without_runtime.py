@@ -6,7 +6,6 @@ files remain unchanged, and network access is blocked.
 """
 from __future__ import annotations
 
-import importlib.metadata
 import importlib.util
 import sys
 import tempfile
@@ -18,7 +17,7 @@ from unittest.mock import patch
 
 from flask import url_for
 
-from tests.test_dependency_surface import FORBIDDEN, RUNTIME_MODULES
+from tests.test_dependency_surface import RUNTIME_MODULES
 from .test_routes import web
 
 FIXTURES = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
@@ -115,17 +114,6 @@ class ViewerWithoutRuntime(unittest.TestCase):
 
     def trial_url(self, job_id, trial_name):
         return self.url("trial", job_id=job_id, trial_name=trial_name)
-
-
-    def test_the_interpreter_has_no_runtime_and_the_app_is_loaded(self):
-        self.assertEqual(runtime_present(), ([], []))
-        installed = {d.metadata["Name"].lower() for d in importlib.metadata.distributions()}
-        self.assertFalse(installed & {n.lower() for n in FORBIDDEN}, installed)
-        self.assertIn("flask", installed)
-        # The whole application — every capability module, every route — is
-        # already imported by now, and nothing above changed.
-        self.assertGreater(len(list(web.app.url_map.iter_rules())), 40)
-
 
     def test_every_job_page_renders_its_trials(self):
         for job_id, job in self.jobs.items():

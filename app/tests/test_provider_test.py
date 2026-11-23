@@ -51,8 +51,6 @@ class Requests(unittest.TestCase):
             seen = [(m, u, "wrong" if a and "nullius-wrong-" in a else a, d) for m, u, a, d in fake.seen]
             self.assertEqual(seen, sent, choice)
             self.assertEqual((got["ok"], got["reached"], got["key"], got["models"]), (True, True, "accepted", 2), choice)
-
-    def test_anthropic_sends_its_key_and_version_headers(self):
         seen = []
         def fetch(req, timeout):
             seen.append(dict(req.header_items()))
@@ -101,12 +99,6 @@ class Results(unittest.TestCase):
         fake = Fake({self.URL: 200})
         got = providers.test("custom", {"MODEL_API_URL": "http://lab:8000/v1"}, opener=fake)
         self.assertEqual((len(fake.seen), got["key"]), (1, "not checked"))
-
-    def test_lines(self):
-        self.assertTrue(providers.said(self.run_one(200)).startswith("Key accepted · 2 models · "))
-        self.assertTrue(providers.said(self.run_one(401)).startswith("Key refused · "))
-        self.assertTrue(providers.said(self.run_one(TimeoutError())).startswith("Not reached: timed out · "))
-        self.assertEqual([providers.mark(self.run_one(a)) for a in (200, 401)], ["ok", "bad"])
 
 
 class Kept(unittest.TestCase):

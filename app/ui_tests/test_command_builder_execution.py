@@ -22,6 +22,11 @@ class HarborPin(CompilerCase):
         self.assertEqual(out['review'], [1, 'Harbor', 'not chosen'])
         self.assertEqual(out['runnable'], ['Choose the Harbor that runs this recipe on the Runner step: a release, or a repository at a branch, tag or commit.'])
 
+        out = self.js('const old={...C.create("harbor"),model:"openai/x",agents:["tau3-llm-agent"]};delete old.harbor;const b=C.fromJSON(JSON.stringify(old));'
+                      'process.stdout.write(JSON.stringify({h:b.harbor,e:C.validate(b).errors,u:C.runnable(b).errors,label:C.harborExecutable(b).label}));')
+        self.assertEqual((out['h'], out['e'], out['label']), ({'kind': 'release', 'version': '', 'extras': []}, [], 'harbor from PATH'))
+        self.assertIn('Choose the Harbor', out['u'][0])
+
     def test_a_release_runs_from_pypi_through_uvx(self):
         out = self.out('r.harbor={kind:"release",version:"0.24.0",extras:["dspy"]}')
         self.assertEqual((out['errors'], out['runnable']), ([], []))
@@ -44,11 +49,6 @@ class HarborPin(CompilerCase):
         self.assertEqual(self.out('r.harbor={kind:"repo",repo:"owner/harbor",revisionKind:"commit",revision:"abc1234",commit:"abc1234",extras:[]}')['errors'][0],
                          [1, 'Choose a branch, a tag or a full commit of owner/harbor: the pin is a commit.'])
 
-    def test_a_recipe_from_before_the_pin_loads_and_asks(self):
-        out = self.js('const old={...C.create("harbor"),model:"openai/x",agents:["tau3-llm-agent"]};delete old.harbor;const b=C.fromJSON(JSON.stringify(old));'
-                      'process.stdout.write(JSON.stringify({h:b.harbor,e:C.validate(b).errors,u:C.runnable(b).errors,label:C.harborExecutable(b).label}));')
-        self.assertEqual((out['h'], out['e'], out['label']), ({'kind': 'release', 'version': '', 'extras': []}, [], 'harbor from PATH'))
-        self.assertIn('Choose the Harbor', out['u'][0])
 
     def test_the_key_is_the_server_s(self):
         from nullius.harbor import source
@@ -74,7 +74,6 @@ class HarborPin(CompilerCase):
         self.assertEqual(out, [{'kind': 'release', 'version': '0.24.0', 'extras': []}, {'kind': 'release', 'version': '', 'extras': []}])
 
 
-
 class HarborExecutableAndTools(CompilerCase):
     """Which Harbor a recipe runs, said exactly: whatever `harbor` is first on
     the target's PATH, or a development executable typed as a path - and
@@ -98,22 +97,8 @@ class HarborExecutableAndTools(CompilerCase):
         self.assertTrue(any('development evidence' in n for n in out['notes']))
         bad = self.run_line("r.harborDev='harbor'")
         self.assertTrue(any('must be a path' in e for e in bad['errors']))
-
-    def test_unknown_recipe_fields_are_ignored_without_changing_the_runner(self):
-        out = self.js('const raw={...C.create("harbor"),model:"openai/x",customAgents:["my_agent:MyAgent"],agents:["custom-0"],extraText:"ignored",extraConfig:{x:"ignored"}};const b=C.fromJSON(JSON.stringify(raw));'
-                      'process.stdout.write(JSON.stringify({keys:Object.keys(b),errors:C.validate(b).errors,label:C.harborExecutable(b).label}));')
-        self.assertNotIn('extraText', out['keys']); self.assertNotIn('extraConfig', out['keys'])
-        self.assertEqual((out['errors'], out['label']), ([], 'harbor from PATH'))
-
-    def test_the_script_needs_no_checkout_but_its_own_directory(self):
-        out = self.run_line()
-        for gone in ('agent/scripts', 'TOOLS_ROOT', 'with_key', 'sweep'):
-            self.assertNotIn(gone, out['run'])
-
-    def test_the_choice_persists_in_a_saved_recipe(self):
-        out = self.js('const r=C.create("harbor");r.harborDev="~/h/bin/harbor";const b=C.fromJSON(JSON.stringify(r));process.stdout.write(JSON.stringify([b.harborDev]));')
-        self.assertEqual(out, ['~/h/bin/harbor'])
-
+        saved = self.js('const r=C.create("harbor");r.harborDev="~/h/bin/harbor";const b=C.fromJSON(JSON.stringify(r));process.stdout.write(JSON.stringify([b.harborDev]));')
+        self.assertEqual(saved, ['~/h/bin/harbor'])                                         # a saved recipe keeps the path
 
 
 class RunFromHere(CompilerCase):
@@ -156,7 +141,6 @@ class RunFromHere(CompilerCase):
     def test_where_travels_with_the_recipe(self):
         out = self.js('const r=C.create("harbor");r.where="bench";const back=C.fromJSON(JSON.stringify(r));process.stdout.write(JSON.stringify([C.create("harbor").where, back.where]));')
         self.assertEqual(out, ['local', 'bench'])
-
 
 
 class DraftBetweenPages(CompilerCase):

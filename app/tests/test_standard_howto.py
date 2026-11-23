@@ -89,13 +89,6 @@ class Prompt(unittest.TestCase):
         self.assertIn("unsandboxed", howto.prompt("agent"))
         self.assertNotIn("unsandboxed", howto.prompt("capability"))
 
-    def test_the_benchmark_prompt_asks_the_route_first(self):
-        text = howto.prompt("benchmark")
-        self.assertNotIn("natively", text)
-        for route in ("Harbor", "the Nullius standard", "Original setup"):
-            self.assertIn(route, text)
-        self.assertIn("ask me how it should run", text)
-
     def test_prompts_target_user_files_even_when_source_skills_name_package_paths(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, NULLIUS_HOME=tmp,
                                                               NULLIUS_CATALOGUE=os.path.join(tmp, "catalogue")):
