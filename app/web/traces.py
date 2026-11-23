@@ -289,7 +289,14 @@ def trial(job_id, trial_name):
         # an earlier try is evidence only: the job counts its last, and only that is judged
         judgement=_judgement_panel(j, t) if attempt is t else None,
         llm_judgement=_judgement_panel(j, t, "llm") if attempt is t else None, csrf=shared._csrf_token(),
+        # an earlier try is evidence only: labels and flags belong to the trials the job counts
+        failure=_failure_panel(j, t) if attempt is t else None,
     )
+
+
+def _failure_panel(j, t):
+    from . import failure          # here: failure imports this module
+    return failure.panel(j, t)
 
 
 @app.route("/trial/<job_id>/<trial_name>/attempts")
@@ -314,7 +321,8 @@ def _judgement_panel(job, trial, lane="decision"):
 def save_trace(job_id, trial_name):
     """Write the filtered view to a new trace file beside the trial's own.
 
-    The only route in this app that writes into a job directory. Three refusals
+    One of two routes that write into a job directory (the other is the Failure
+    analysis tab's, `failure.failure_route`, which writes only its own file). Three refusals
     keep that safe: the name must be a plain `*.json` filename, the destination
     must not exist, and it must not be the file being read — a producer's capture
     is not reproducible, so nothing here may overwrite one.

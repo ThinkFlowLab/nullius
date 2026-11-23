@@ -372,3 +372,21 @@
   box-shadow: var(--shadow); font: 12px/1.45 var(--sans); color: var(--text); pointer-events: none; }
 
 @media (prefers-reduced-motion: reduce) { .rp *, .rp *::before, .rp *::after { transition: none !important; } }
+/* the Filtered score under the adjusted rate: a switch per kind of flag, and the rate without those tasks */
+.rp .filtered { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: .5rem 18px 0; }
+.rp .filtered .lead { flex-basis: 100%; color: var(--text-faint); font-size: .75rem; }
+.rp .filtered .chip::before { display: none; }
+.rp .filtered p { margin: .15rem 0 0; flex-basis: 100%; color: var(--text-dim); font-size: 1rem; }
+.rp .filtered p b { color: var(--text); font-weight: 600; font-size: 1.4rem; margin-left: .2rem; }
+
+/* the trial table's marks: a task's flag and a trial's failure label; a task left out of the Filtered score fades */
+.rp .tt .w-fa { width: 7.5rem; }
+.rp .tt td.fa { white-space: nowrap; }
+.rp .tt .tflag + .tlabel { margin-left: .3rem; }
+.rp .tt .tflag, .rp .tt .tlabel { display: inline-block; padding: 0 .35rem; border-radius: 3px;
+  font-size: .72rem; line-height: 1.35; white-space: nowrap; vertical-align: middle; }
+.rp .tt .tflag { border: 1px solid var(--text-dim); color: var(--text-dim); }
+.rp .tt .tflag.tf-pending, .rp .tt .tflag.tf-other { border-style: dashed; color: var(--text-faint); border-color: var(--text-faint); }
+.rp .tt .tlabel { border: 1px solid var(--text-faint); color: var(--text); font-style: italic; }
+.rp .tt[data-leave-out~="flawed"] tr[data-task-flag="flawed"] > td,
+.rp .tt[data-leave-out~="ambiguous"] tr[data-task-flag="ambiguous"] > td { opacity: .45; }

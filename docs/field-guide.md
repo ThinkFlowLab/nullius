@@ -48,6 +48,12 @@ Here n is the attempt count and c the passed count per unit; results are average
 
 The job page and Compare show both for any run that tried every task at least twice, leaving out a task with an infra attempt; an agent error is a fail. A task's pass rate is its passes over the attempts that ran, infra apart.
 
+## User judge {#user-judge}
+
+A person records why a failed attempt failed (`agent`, `model`, `environment` or `evaluator`) and whether its task is `flawed` or `ambiguous`, in the job's `failure-analysis.json`, from the trial page's User judge tab or [`nullius flags`](cli/flags.md). A flag covers every attempt of its task and counts only for the task version it names. The Decision model judge and the LLM judge answer the same two questions, for comparison only.
+
+The job page and Compare offer a switch per kind, off by default. With one on, the filtered score leaves out the trials of flagged tasks, in every Compare column alike; the official scores are unchanged.
+
 ## Compare like with like {#compare}
 
 Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs; a task row disagrees when its pass rate or its attempts' outcomes differ.
@@ -135,6 +141,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | --- | --- | --- | --- |
 | `raw_solve_rate` | Resolved ÷ all trials: Harbor's headline, which counts infra failures as misses. | derived | any |
 | `adjusted_solve_rate` | Resolved ÷ non-infrastructure trials. Only rate limits, API errors, setup errors, spending caps and stopped runs leave the denominator; unknowns remain. Read alongside the raw rate and infrastructure count. | derived | any |
+| `filtered_score` | The adjusted solve rate without the trials of tasks with an accepted flag of the kinds switched on; shown only with a switch on. See [User judge](#user-judge). | derived | any |
 | `n_infra` | Trials removed from the adjusted denominator as infrastructure failures or run-imposed interruptions. | derived | any |
 | `mean_score` | The mean graded score, weighted by each trial's number of scored parts when present. When no trial passes or fails, it is the headline and the rates read —. | derived | mixed |
 | `score_by_group · parts_by` | The mean score per value of the field the benchmark breaks it down by (a question's category), from `verifier/parts.json`. | derived | mixed |

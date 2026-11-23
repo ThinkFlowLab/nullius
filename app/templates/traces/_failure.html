@@ -1,0 +1,53 @@
+{#- The User judge tab: the trial's label (failed trials only) and its task's flag. A person writes both. -#}
+{% set fp = failure %}{% set act = url_for('failure_route', job_id=job.job_id, trial_name=trial.trial_name) %}
+<div class="failure-analysis" id="failure-analysis">
+  {% if fp.error %}<p class="warn" id="failure-error">{{ fp.error }}</p>{% endif %}
+  {% if fp.failed %}
+  <section class="fa-part" id="fa-label">
+    <h3>{% if fp.attempt %}Why attempt {{ fp.attempt[0] }} failed{% else %}Why it failed{% endif %}</h3>
+    {% if fp.can_write %}
+    <form method="post" action="{{ act }}" class="fa-form"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="fa-choices" role="radiogroup" aria-label="Cause">
+        {% for key, name in fp.labels.items() %}
+        <label class="chip{{ ' active' if fp.label and fp.label.label == key }}"><input type="radio" name="label" value="{{ key }}" required{{ ' checked' if fp.label and fp.label.label == key }}> {{ name }}</label>
+        {% endfor %}
+      </div>
+      <input type="text" name="note" maxlength="300" placeholder="Note" aria-label="Note" value="{{ fp.label.note if fp.label else '' }}">
+      <button class="btn sm" type="submit" name="action" value="label">Save</button>
+      {% if fp.label %}<button class="btn sm ghost" type="submit" name="action" value="clear_label" formnovalidate>Clear</button>{% endif %}
+    </form>
+    {% elif fp.label %}
+    <p><b>{{ fp.labels[fp.label.label] }}</b>{% if fp.label.note %} · {{ fp.label.note }}{% endif %}</p>
+    {% endif %}
+    {% if fp.label %}<p class="small faint" id="fa-label-by"><span id="fa-label-value">{{ fp.labels[fp.label.label] }}</span> · {{ fp.label.by }} · {{ fp.label.at[:10] }}</p>{% endif %}
+    {% if fp.model_labels %}<p class="small faint" id="fa-model-labels">{% for m in fp.model_labels %}{{ ' · ' if not loop.first }}{{ m.name }}: <b>{{ fp.labels.get(m.label, m.label|capitalize) }}</b>{% if m.label_p is not none %} <span title="The probability the judge gave this answer">{{ '%.0f'|format(m.label_p * 100) }}%</span>{% endif %}{% endfor %}</p>
+    {% elif fp.suggests %}<p class="small faint" id="fa-suggestion">Judge suggests {% for k in fp.suggests %}{{ ' or ' if not loop.first }}{{ fp.labels[k] }}{% endfor %}</p>{% endif %}
+  </section>
+  {% endif %}
+  <section class="fa-part" id="fa-flag">
+    <h3>{% if fp.attempt %}Task flag · all {{ fp.attempt[1] }} attempts{% else %}Task flag{% endif %}</h3>
+    <p class="small faint" id="fa-flag-scope">One flag per task in this run{% if fp.attempt %}: it shows on every attempt{% endif %}.</p>
+    {% if fp.flag %}{% set fl = fp.flag %}
+    <p><b id="fa-flag-value">{{ fl.kind|capitalize }}</b> · {{ fl.category|replace('_', ' ') }}{% if fl.status == 'pending' %} <span class="chip-pending">pending</span>{% endif %}</p>
+    {% if fl.evidence %}<p class="small">{{ fl.evidence }}</p>{% endif %}
+    <p class="small faint">{{ fl.by }} · {{ fl.at[:10] }}{% if fl.accepted_by and fl.accepted_by != fl.by %} · accepted by {{ fl.accepted_by }}{% endif %}</p>
+    {% if fp.can_write %}
+    <form method="post" action="{{ act }}" class="fa-inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if fl.status == 'pending' %}<button class="btn sm" type="submit" name="action" value="accept">Accept</button>{% endif %}
+      <button class="btn sm ghost" type="submit" name="action" value="remove_flag">Remove</button>
+    </form>
+    {% endif %}
+    {% elif fp.can_write %}
+    <form method="post" action="{{ act }}" class="fa-form"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="fa-choices" role="radiogroup" aria-label="Kind">
+        {% for k in fp.kinds %}<label class="chip"><input type="radio" name="kind" value="{{ k }}" required> {{ k|capitalize }}</label>{% endfor %}
+      </div>
+      <input type="text" name="category" list="fa-categories" required placeholder="Category" aria-label="Category">
+      <datalist id="fa-categories">{% for c in fp.categories %}<option value="{{ c }}">{% endfor %}</datalist>
+      <input type="text" name="evidence" maxlength="300" placeholder="Evidence" aria-label="Evidence">
+      <button class="btn sm" type="submit" name="action" value="flag">Flag</button>
+    </form>
+    {% else %}<p class="small faint">Not flagged</p>{% endif %}
+    {% if fp.model_flags %}<p class="small faint" id="fa-model-flags">{% if fp.attempt %}On this attempt: {% endif %}{% for m in fp.model_flags %}{{ ' · ' if not loop.first }}{{ m.name }}: <b>{{ fp.flag_names.get(m.flag, m.flag) }}</b>{% if m.flag_p is not none %} <span title="The probability the judge gave this answer">{{ '%.0f'|format(m.flag_p * 100) }}%</span>{% endif %}{% endfor %}</p>{% endif %}
+  </section>
+</div>
