@@ -42,18 +42,16 @@ class JobLookup(unittest.TestCase):
         self.assertEqual(job.dir, os.path.join(self.roots[0], "job-x"))
         self.assertEqual(web.app.test_client().get("/job/job-x").status_code, 200)
 
-    def test_another_workspace_asked_for_reads_the_whole_of_it(self):
-        job, whole = self.lookup("job-x", f"?workspace={self.ws.name}")
-        self.assertTrue(whole); self.assertEqual(job.dir, os.path.join(self.roots[0], "job-x"))
-
-    def test_two_folders_of_that_name_read_the_whole_workspace_and_find_the_first(self):
-        shutil.copytree(JOB, os.path.join(self.roots[1], "job-x"))
-        job, whole = self.lookup("job-x")
-        self.assertTrue(whole); self.assertEqual(job.dir, os.path.join(self.roots[0], "job-x"))
-
-    def test_no_such_folder_reads_the_whole_workspace(self):
-        job, whole = self.lookup("job-z")
-        self.assertTrue(whole); self.assertIsNone(job)
+    def test_any_doubt_reads_the_whole_workspace(self):
+        first = os.path.join(self.roots[0], "job-x")
+        for doubt, job_id, query, found in (("another workspace asked for", "job-x", f"?workspace={self.ws.name}", first),
+                                            ("no such folder", "job-z", "", None),
+                                            ("two folders of that name", "job-x", "", first)):
+            with self.subTest(doubt):
+                if doubt == "two folders of that name":
+                    shutil.copytree(JOB, os.path.join(self.roots[1], "job-x"))
+                job, whole = self.lookup(job_id, query)
+                self.assertTrue(whole); self.assertEqual(job and job.dir, found)
 
 
 if __name__ == "__main__":

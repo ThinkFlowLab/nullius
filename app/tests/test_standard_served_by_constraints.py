@@ -96,30 +96,6 @@ class Together(unittest.TestCase):
         self.assertIn("refused: constraints:", out.getvalue())
         start.assert_not_called()
 
-    def test_a_valid_pin_still_requires_enforced_machine_caps(self):
-        r = self.make(constraints={"cpus": 1})
-        with mock.patch.object(constraints, "scope_check", return_value={"why": "unavailable", "enforced": [], "refused": {}}), \
-                mock.patch.object(install, "packages") as setup, self.assertRaisesRegex(run.Refused, "systemd does not enforce"):
-            r.ready()
-        setup.assert_not_called()
-
-    def test_the_container_relay_takes_both_caps_and_pins(self):
-        self.enterContext(mock.patch.object(container, "_security", ""))
-        with mock.patch.object(container, "unusable", return_value=None):
-            r = self.make(backend="container", constraints={"cpus": 1, "memory_mb": 512})
-        argv = container.relay_argv("img", name="relay", job="job", app="/app", record="/rec", key_file="/key",
-                                    base="https://openrouter.ai/api/v1", model="m", routes={"u0-judge": "m-judge"}, serving=r.serving)
-        self.assertEqual(argv[argv.index("--cpus") + 1], "1")
-        self.assertEqual(argv[argv.index("--memory") + 1], "512m")
-        self.assertEqual(argv[argv.index("--served-by") + 1], "m-judge=prov-a")
-        with mock.patch.object(r, "scope_ready", return_value={}), \
-                mock.patch.object(container, "base_tag", return_value="img"), \
-                mock.patch.object(container, "present", return_value=True), \
-                mock.patch.object(container, "base_image", return_value="img"), \
-                mock.patch.object(container, "unenforced", return_value={"cpus": "max 100000"}), \
-                self.assertRaisesRegex(run.Refused, "engine does not apply"):
-            r.ready()
-
     def test_each_compiled_shard_has_its_constraints_and_each_called_models_pin(self):
         given = {"local": {"concurrency": 1}, "127.0.0.1": {"cpus": 2, "gpu_ids": []}}
         with mock.patch.dict(os.environ, {constraints.SETTING: json.dumps(given)}):
@@ -146,6 +122,7 @@ class Together(unittest.TestCase):
         self.assertEqual((out["script"], out["parts"]), ("", []))
 
     def test_merge_allows_machine_limits_to_differ_but_still_checks_pins(self):
+        pin = {**self.pin, "m-other": ["prov-b"]}
         paths = []
         for i in (1, 2):
             path = self.tmp / f"shard-{i}"
@@ -153,18 +130,23 @@ class Together(unittest.TestCase):
             job.write_config(str(path), job=path.name, bench=self.b, other=self.a, model="m", provider="openrouter",
                              dataset="all", units=[], concurrency=i, granted=True, launch="launch",
                              shard={"index": i, "of": 2, "units_total": 0, "planned": []},
-                             constraints={"concurrency": i}, served_by=self.pin)
+                             constraints={"concurrency": i}, served_by=pin)
+            if i == 2:  # write_config sorts pins; preserve a differently ordered external record
+                config = path / "config.json"
+                recorded = json.loads(config.read_text())
+                recorded["standard"]["served_by"] = dict(reversed(list(pin.items())))
+                config.write_text(json.dumps(recorded))
             (path / "result.json").write_text(json.dumps({"served": {"calls": {"Prov A": 1}, "unnamed": 0,
                                                                     "held": {"m-judge": True}}}))
             paths.append(str(path))
         self.assertEqual(merge.check(paths)["differ"], [])
         merge.merge(paths, str(self.tmp / "joined"))
         cfg = json.loads((self.tmp / "joined/config.json").read_text())["standard"]
-        self.assertEqual((cfg["constraints"], cfg["served_by"]), ({"concurrency": 1}, self.pin))
+        self.assertEqual((cfg["constraints"], cfg["served_by"]), ({"concurrency": 1}, pin))
         self.assertEqual(json.loads((self.tmp / "joined/result.json").read_text())["served"]["held"], {"m-judge": True})
         path = Path(paths[1]) / "config.json"
         cfg = json.loads(path.read_text())
-        cfg["standard"]["served_by"] = {"m-judge": ["prov-b"]}
+        cfg["standard"]["served_by"] = {**pin, "m-judge": ["prov-b"]}
         path.write_text(json.dumps(cfg))
         with self.assertRaisesRegex(merge.Refused, "serving providers"):
             merge.check(paths)

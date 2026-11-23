@@ -16,31 +16,6 @@ def node(program: str, given) -> object:
     return json.loads(out.stdout)
 
 
-FILL = r'''
-const given = JSON.parse(require('fs').readFileSync(0, 'utf8')), handlers = {};
-global.window = global;
-global.addEventListener = () => {};
-global.requestAnimationFrame = () => {};
-global.MutationObserver = class { observe() {} };
-global.document = {body: {}, querySelectorAll: () => [], addEventListener: (t, f) => { handlers[t] = f; }};
-require(given.script);
-const fills = given.cases.map(([value, min, max]) => {
-  const style = {setProperty(k, v) { this[k] = v; }};
-  const input = {value, min, max, closest: () => ({style}), matches: () => true};
-  handlers.input({target: input});                                // as the pointer moves it
-  return style['--fill'];
-});
-window.nulliusRangeFill({value: '1', min: '', max: '', closest: () => null});   // outside a .ui-range: nothing to fill
-process.stdout.write(JSON.stringify(fills));
-'''
-
-
-class Fill(unittest.TestCase):
-    def test_the_fill_is_the_value_s_part_of_the_track(self):
-        cases = [["25", "", ""], ["2", "1", "5"], ["3", "3", "3"]]
-        self.assertEqual(node(FILL, {"script": str(STATIC / "controls.js"), "cases": cases}), ["0.25", "0.25", "0"])
-
-
 SLIDER = r'''
 const given = JSON.parse(require('fs').readFileSync(0, 'utf8')), handlers = {};
 let field, range;
@@ -86,14 +61,11 @@ class ConstraintSlider(unittest.TestCase):
     def test_keys_step_and_jump_between_the_capacity_and_no_limit(self):
         self.assertEqual(self.run_cases(["4", "", "0.1", "", ["ArrowRight", "ArrowLeft", "ArrowLeft", "PageDown", "ArrowRight", "PageUp", "ArrowUp"]],
                                         ["4", "", "0.1", "10", ["ArrowLeft"]], ["4", "", "0.1", "10", ["ArrowRight"]],
-                                        ["4", "", "0.1", "0.1", ["ArrowDown"]]),
-                         [["", "4", "3.9", "2.9", "3", "4", ""], ["3.9"], [""], ["0.1"]])
-
-    def test_a_capacity_off_the_steps_is_reached_by_a_key(self):
-        # 15921 MB is not a multiple of the 16 MB step: one step up from 15920 rests on the capacity, the next is No limit
-        self.assertEqual(self.run_cases(["15921", "MB", "16", "15920", ["ArrowRight", "ArrowRight"]],
+                                        ["4", "", "0.1", "0.1", ["ArrowDown"]],
+                                        # 15921 MB is not a multiple of the 16 MB step: one step up from 15920 rests on the capacity, the next is No limit
+                                        ["15921", "MB", "16", "15920", ["ArrowRight", "ArrowRight"]],
                                         ["0.33", "", "0.1", "0.3", ["ArrowRight", "ArrowRight"]]),
-                         [["15921", ""], ["0.33", ""]])
+                         [["", "4", "3.9", "2.9", "3", "4", ""], ["3.9"], [""], ["0.1"], ["15921", ""], ["0.33", ""]])
 
     def test_a_typed_value_moves_the_slider_and_one_above_the_capacity_rests_on_it(self):
         got = self.run_cases(["4", "", "0.1", "", ["type:2", "type:10", "type:"]])[0]

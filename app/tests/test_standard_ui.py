@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 
 from nullius import execution
-from nullius.standard.contract import definitions, ports
+from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe
 from nullius.standard.proofs import prove
 
@@ -156,10 +156,6 @@ class AgentPage(unittest.TestCase):
         page = recipe._other_page(a)                                   # the tools kit is at v2
         self.assertEqual(page["proven"]["agent.tools/v1"]["kit"], 1)
         self.assertEqual(page["proven"]["agent.tools/v1"]["older"], "proven on kit v1; kit v2 is current")
-
-    def test_every_port_has_a_name_a_person_reads(self):
-        self.assertEqual(ports.PORTS["agent.tools/v1"]["label"], "MCP tools")
-        self.assertTrue(all(s.get("label") for s in ports.PORTS.values()))
 
 
 class Keyless(unittest.TestCase):

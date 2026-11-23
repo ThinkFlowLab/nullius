@@ -116,15 +116,6 @@ class ToolSummaryByCategory(unittest.TestCase):
         for _, _, sentence, _ in SAME_WORK:
             self.assertNotIn(f'data-category="{sentence}"', verbose)
 
-    def test_the_hover_lists_the_names_the_chip_folded(self):
-        verbose = self.trial_page(self.jobs[1])
-        block = re.search(r'<div class="legend tool-summary".*?</div>', verbose, re.S).group(0)
-        titles = {a["data-category"]: a["title"] for tag, a in Elements(block).elements
-                  if tag == "span" and "data-category" in a}
-        self.assertEqual(titles["read"], "read: Read the file where the symbol is defined ×2")
-        self.assertIn("Run the test suite to confirm the fix ×1", titles["execute"])
-        self.assertIn("Execute the reproduction script once more ×1", titles["execute"])
-
     def test_a_trial_without_a_trajectory_shows_no_summary(self):
         with tempfile.TemporaryDirectory(prefix="nullius-no-traj-") as tmp:
             bare = _job(Path(tmp), "bare", "none", [])

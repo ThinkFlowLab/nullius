@@ -26,7 +26,7 @@ FORMAT = 1
 _KINDS = {"benchmarks": ("benchmark.json", "standard.json"),
           "agents": ("agent.json",), "capabilities": ("capability.json",)}
 _DOCUMENTS = {"feature.json", "benchmark.json", "standard.json", "agent.json", "capability.json",
-              "upstream-settings.json", "images.json", "data-source.json"}
+              "proofs.json", "upstream-settings.json", "images.json", "data-source.json"}
 _PRIVATE = {"credentials", "credentials.json", "secret", "secret.json", "secrets", "secrets.json", "settings.json",
             "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", "node_modules", "__pycache__"}
 _KEY = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
@@ -159,7 +159,7 @@ def _entry(root: Path, *, kit: bool = False) -> dict[str, tuple[bytes, int]]:
         if (root / name).exists():
             content = _read(root, name)
             d = json.loads(content[0])
-            if name in {"standard.json", "agent.json", "capability.json", "feature.json", "benchmark.json"} and not isinstance(d, dict):
+            if name in {"standard.json", "agent.json", "capability.json", "feature.json", "benchmark.json", "proofs.json"} and not isinstance(d, dict):
                 raise ValueError(f"{name}: expected a definition object")
             files[name] = content
             if name in {"standard.json", "agent.json", "capability.json", "feature.json"}:

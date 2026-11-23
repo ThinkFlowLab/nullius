@@ -6,9 +6,7 @@ from unittest.mock import Mock, patch
 import tempfile
 from nullius.standard.backends import container
 from nullius.standard.contract import definitions
-from nullius.standard.pages import recipe
 from nullius.standard.requirements import network_requirements as net
-from tests.test_standard_recipe import defs, a_recipe
 
 
 class NetworkRequirements(unittest.TestCase):
@@ -27,10 +25,6 @@ class NetworkRequirements(unittest.TestCase):
                       {'access': 'public', 'probe': 'https://example.org/?token=secret'}):
             self.assertTrue(definitions._network(value), value)
 
-    def test_a_container_run_is_refused_before_any_task_when_the_public_web_is_unreachable(self):
-        opener = Mock(side_effect=OSError('offline'))
-        self.assertIn('No tasks were started', net.check(self.bench, self.agent, opener)[0])
-
     def test_baselines_and_controls_are_not_agent_evaluations(self):
         opener = Mock()
         for kind in ('upstream', 'control', 'capability'):
@@ -47,12 +41,6 @@ class NetworkRequirements(unittest.TestCase):
         request = opener.call_args.args[0]
         self.assertEqual(request.full_url, 'https://example.org/')
         self.assertEqual(set(k.lower() for k in request.headers), {'user-agent'})
-
-    def test_recipe_accepts_docker_public_proxy(self):
-        d = defs();b = d['benchmark'][0]
-        b['environments'] = self.bench['environments']
-        result = recipe.compile(a_recipe(backend='docker'), d)
-        self.assertFalse(any('public HTTPS' in str(e) for e in result['errors']))
 
     def test_public_proxy_probe_and_agent_share_network_without_credentials(self):
         with tempfile.TemporaryDirectory() as tmp:

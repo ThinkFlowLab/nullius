@@ -87,21 +87,18 @@ class Evaluation(unittest.TestCase):
         self.assertEqual(self.score(reset, failed, done, logged, RESULT)["setup_errors"], 1)
         self.assertEqual(self.score(reset, failed, done, logged, STEP, RESULT)["setup_errors"], 2)
 
-    def test_a_sites_state_that_timed_out_is_the_scores_error_with_the_upstreams_value(self):
+    def test_a_sites_read_that_got_no_answer_is_the_scores_error_and_one_that_answered_leaves_the_score(self):
         said = self.unread(STEP, SITE + "Read timed out. (read timeout=30)", RESULT)
         self.assertEqual(said, "the evaluation could not read a site's state (timed out), and the upstream scored the "
                                "task 0.0 without it; see the unit's eval.log")
         self.assertIn("(no answer)", self.unread(STEP, SITE + "Max retries exceeded", RESULT))
         self.assertIn("a site's file (HTTP 502)", self.unread(
             STEP, SITE.replace("fetch state", "download file") + "502 Server Error: Bad Gateway", RESULT))
-
-    def test_a_site_that_answered_leaves_the_upstreams_score(self):
-        for said in ("404 Client Error: NOT FOUND for url", "500 Server Error: INTERNAL SERVER ERROR for url"):
-            self.assertEqual(self.score(STEP, SITE + said, RESULT)["reward"], 0.0)
-
-    def test_a_sites_read_that_failed_stands_though_a_later_read_succeeds(self):
         read = "[2026-11-10 22:09:39,000 INFO state/96-EnvProcess-1] [GET_STATE_WITH_COOKIE] Returning state JSON directly"
-        self.assertIn("a site's state (timed out)", self.unread(STEP, SITE + "Read timed out.", read, RESULT))
+        self.assertIn("a site's state (timed out)", self.unread(STEP, SITE + "Read timed out.", read, RESULT))   # a later read does not clear it
+        for answered in ("404 Client Error: NOT FOUND for url", "500 Server Error: INTERNAL SERVER ERROR for url"):
+            with self.subTest(answered=answered):
+                self.assertEqual(self.score(STEP, SITE + answered, RESULT)["reward"], 0.0)
 
     def test_a_vm_read_that_gave_up_on_a_broken_connection_is_the_scores_error(self):
         give_up = FILE.format("ERROR", "Failed to get file.")

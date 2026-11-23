@@ -55,20 +55,16 @@ class UnifiedCLI(unittest.TestCase):
         self.assertEqual(list(self.root.iterdir()), [])
 
     def test_version_uses_distribution_name_and_keeps_command_name(self):
-        output = io.StringIO()
-        with patch.object(cli.importlib.metadata, "version", return_value="0.1.0rc1") as version, \
-                contextlib.redirect_stdout(output):
-            self.assertEqual(cli.main(["--version"]), 0)
-        version.assert_called_once_with("nullius-eval")
-        self.assertEqual(output.getvalue(), "nullius 0.1.0rc1\n")
+        for missing, expected in ((False, "0.1.0rc1"), (True, "source checkout")):
+            with self.subTest(missing=missing):
+                output = io.StringIO()
+                with patch.object(cli.importlib.metadata, "version", return_value="0.1.0rc1",
+                                  side_effect=cli.importlib.metadata.PackageNotFoundError if missing else None) as version, \
+                        contextlib.redirect_stdout(output):
+                    self.assertEqual(cli.main(["--version"]), 0)
+                version.assert_called_once_with("nullius-eval")
+                self.assertEqual(output.getvalue(), f"nullius {expected}\n")
 
-    def test_version_without_installed_distribution_reports_source_checkout(self):
-        output = io.StringIO()
-        with patch.object(cli.importlib.metadata, "version",
-                          side_effect=cli.importlib.metadata.PackageNotFoundError), \
-                contextlib.redirect_stdout(output):
-            self.assertEqual(cli.main(["--version"]), 0)
-        self.assertEqual(output.getvalue(), "nullius source checkout\n")
 
     def test_existing_backend_commands_run_without_web_imports(self):
         script = """
@@ -164,7 +160,7 @@ class CatalogueCommands(unittest.TestCase):
         self.assertEqual(json.loads((self.entry / "agent.json").read_text()), self.original)
         self.assertEqual((path.parent / "agent.py").read_bytes(), (self.entry / "agent.py").read_bytes())
         self.assertEqual(json.loads(path.read_text())["versions"]["2"],
-                         {"install": {"pip": ["example==2"]}, "proven": {}})
+                         {"install": {"pip": ["example==2"]}})
         with self.assertRaisesRegex(SystemExit, "already"):
             standard_cli.new_version("example", "2")
 

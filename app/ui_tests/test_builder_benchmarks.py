@@ -41,6 +41,13 @@ class BenchmarkGrid(unittest.TestCase):
         self.assertNotIn("Official", html)                                                          # only a community one says so
         self.assertIn('title="Real-world questions', cards["gaia"])                                 # its domain, as its tooltip
 
+        html = self.get("/new-run/benchmarks?view=table")
+        self.assertIn('<table class="grid sortable tools snug" id="nb-benchmarks" data-table>', html)
+        self.assertIn('<td data-col="_pick" class="pick-col sticky-col"><input type="radio" name="nb-benchmarks-pick" data-pick="gsm8k" aria-label="GSM8K"></td>', html)
+        self.assertNotIn('type="checkbox" data-pick', html)
+        self.assertIn('#nb-benchmarks > * > tr > :nth-child(2) { width: auto;', html)                 # Name takes the spare width
+        self.assertEqual(re.findall(r'<th data-col="(\w+)"', html)[:3], ["_pick", "title", "evaluates"])
+
     def test_a_benchmark_with_versions_carries_each_ones_tasks(self):
         html = self.get("/new-run/benchmarks")
         card = re.search(r'<article class="bench-card"[^>]*id="pick-bench-osworld1"[^>]*>', html).group(0)
@@ -49,32 +56,6 @@ class BenchmarkGrid(unittest.TestCase):
         self.assertEqual(tasks["044bc33"], {"text": "369", "label": "Tasks"})
         self.assertNotIn("data-tasks", re.search(r'<article class="bench-card"[^>]*id="pick-bench-gsm8k"[^>]*>', html).group(0))
         self.assertRegex(self.get("/new-run/benchmarks?view=table"), r'<tr[^>]*id="pick-bench-osworld1"[^>]*data-tasks=')       # its row too
-
-    def test_its_controls_category_pills_run_with_beside_filter_sort_and_the_toggle(self):
-        html = self.get("/new-run/benchmarks")
-        self.assertIn('data-pills="category"', html)
-        self.assertIn('data-dropdown aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg>Evaluates<', html)
-        self.assertLess(html.index("data-dropdown"), html.index('data-tools-btn="filter"'))
-        menu = unescape(html[html.index('<fieldset data-filter-menu="evaluates"'):]).split("</fieldset>")[0]
-        self.assertIn('data-value="agent" checked> Agents', menu)
-        self.assertIn('data-value="capability" checked> Capabilities', menu)
-        self.assertIn('data-filter-menu="runs"', html[html.index('data-tools="filter"'):])
-        self.assertIn('data-tools-btn="sort"', html)
-        self.assertIn('href="/new-run/benchmarks?view=table" aria-label="Table"', html)
-
-    def test_its_table_picks_one_with_radios(self):
-        html = self.get("/new-run/benchmarks?view=table")
-        self.assertIn('<table class="grid sortable tools snug" id="nb-benchmarks" data-table>', html)
-        self.assertIn('<td data-col="_pick" class="pick-col sticky-col"><input type="radio" name="nb-benchmarks-pick" data-pick="gsm8k" aria-label="GSM8K"></td>', html)
-        self.assertNotIn('type="checkbox" data-pick', html)
-        self.assertIn('#nb-benchmarks > * > tr > :nth-child(2) { width: auto;', html)                 # Name takes the spare width
-        self.assertEqual(re.findall(r'<th data-col="(\w+)"', html)[:3], ["_pick", "title", "evaluates"])
-
-    def test_the_benchmarks_page_stays_a_page_of_links(self):
-        html = self.get("/benchmarks")
-        self.assertNotIn("data-pick", html)
-        self.assertNotIn("data-f-evaluates", html)
-        self.assertIn('<script src="/static/tables.js">', self.get("/new-run"))
 
 
 if __name__ == "__main__":

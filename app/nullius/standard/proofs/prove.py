@@ -1,7 +1,7 @@
 """A benchmark's proofs: its controls behave, its units are stable, nothing leaks.
 
 A benchmark proves itself, per dataset, by four checks - what ``cli prove`` runs and
-writes into the benchmark's ``proven``:
+writes into the benchmark version's ``proven`` in ``proofs.json``:
 
 - ``nop``, the null control: no agent, an empty answer, the workspace as
   setup left it. Nothing should pass - every score at the floor - up to the
@@ -379,8 +379,8 @@ def prove(bench: dict, *, dataset: Optional[str] = None, limit: Optional[int] = 
           bench_options: Optional[dict] = None, jobs: Optional[Dict[str, str]] = None,
           remove_images: bool = False) -> Dict[str, dict]:
     """Every check on every dataset (or ``dataset``); with ``write``, what
-    passed is recorded in the benchmark's ``proven``. ``shard`` (I, N): the
-    leak check and the controls cover that shard's units only (``shard``),
+    passed is recorded in the benchmark version's ``proofs.json`` evidence.
+    ``shard`` (I, N): the leak check and the controls cover that shard's units only,
     the units check all of them, and each record says which shard.
     ``remove_images``: each unit's own image is removed after it, so the
     oracle pulls it again (by default they stay). Returns
@@ -459,7 +459,7 @@ def _say(say, name, r):
 
 
 def record(bench: dict, got: Dict[str, dict]) -> None:
-    """Write what passed into ``bench``'s ``proven`` and save it: a check that
+    """Update ``bench``'s ``proven`` and its ``proofs.json``: a check that
     passed replaces its record unless that one covered more units; one that
     failed is taken back. The failure itself is kept under ``failed`` - what
     it reached, against what bound; the next pass of that check clears it.

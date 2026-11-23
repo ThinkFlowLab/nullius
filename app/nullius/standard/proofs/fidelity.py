@@ -16,7 +16,7 @@ the context the agent opens with). A few fields are left out by name
 (``IGNORED``): the vendor's request metadata and cache keys, which label a
 request and are not read by the model. The verdict is ``same`` when no other
 field differs, ``differs`` otherwise, and it is written into the version's
-``proven`` as ``fidelity``, beside the kits' records.
+``proven`` as ``fidelity`` in ``proofs.json``, beside the kits' records.
 """
 from __future__ import annotations
 
@@ -152,8 +152,8 @@ def check(agent: dict, *, model: str, provider: str, jobs_root: str = "jobs", pa
           stamp: Optional[str] = None) -> dict:
     """Run the workspace kit's units over ACP and through ``fidelity.command``,
     ``passes`` times each (alternating), compare, and with ``write`` record the
-    result in the version's ``proven`` as ``fidelity``. Returns the comparison
-    with ``job``, the folder holding ``fidelity.json`` and each pass's records."""
+    result in the version's ``proven.fidelity`` in ``proofs.json``. Returns the
+    comparison with ``job``, the folder holding ``fidelity.json`` and each pass's records."""
     if agent.get("_kind") != "agent" or "acp" not in (agent.get("start") or {}):
         raise run.Refused(f"{agent.get('label')}: fidelity compares an agent driven over ACP with its own command")
     cmd = (agent.get("fidelity") or {}).get("command")

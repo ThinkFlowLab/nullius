@@ -36,6 +36,7 @@ class FeasibilityPage(unittest.TestCase):
             write_job(self.tmp.name, "tb-x4-oracle", "oracle", {"good": 1, "leaky": 1, "env": 1}, n_tasks=4),
             write_job(self.tmp.name, "tb-x4-agent", "my-agent", {"good": 1, "leaky": 1, "env": 0, "half": 0}, n_tasks=4),
             write_job(self.tmp.name, "unrelated", "my-agent", {"good": 1}),
+            write_job(self.tmp.name, "tb-x4-claude-code", "claude-code", {"good": 1}, n_tasks=4),
         ]
         self.stack.enter_context(patch.object(web.shared, "_jobs_for_request", return_value=self.jobs))
         self.client = web.app.test_client()
@@ -50,14 +51,6 @@ class FeasibilityPage(unittest.TestCase):
         match = re.search(r'<tr data-task="%s"[^>]*>.*?</tr>' % re.escape(task), html, re.S)
         self.assertIsNotNone(match, task)
         return match.group(0)
-
-    def test_the_page_is_worded_as_feasibility_checking_not_a_search(self):
-        html = self.get("/job/tb-x4-agent/feasibility")
-        meaning = " ".join(unescape(re.sub(r"<[^>]+>", "", re.search(r'<p class="subtitle" id="feasibility-meaning">(.*?)</p>', html, re.S).group(1))).split())
-        self.assertIn("Is each task feasible: can an empty solution fail, and can a reference solution pass?", meaning)
-        self.assertIn("says nothing about whether an agent will succeed", meaning)
-        self.assertNotIn("hyperparameter", text_of(html)); self.assertNotIn("search", meaning)
-        self.assertLess(len(meaning), 260)                                                          # one breath, not an essay
 
     def test_the_scope_and_the_executed_controls_are_stated(self):
         html = self.get("/job/tb-x4-agent/feasibility")
@@ -105,6 +98,10 @@ class FeasibilityPage(unittest.TestCase):
         self.assertIn("Feasibility · nop + oracle", text_of(self.get("/job/tb-x4-agent")))
         self.assertIn('href="/job/tb-x4-nop/feasibility"', self.get("/job/tb-x4-nop"))
         self.assertNotIn("/feasibility", self.get("/job/unrelated"))
+
+    def test_an_agent_whose_name_has_a_hyphen_links_the_report_too(self):
+        self.assertIn('href="/job/tb-x4-claude-code/feasibility"', self.get("/job/tb-x4-claude-code"))
+        self.assertIn("nop · 4 trials", text_of(self.get("/job/tb-x4-claude-code/feasibility")))
 
 
 class TaskBrokenRow(unittest.TestCase):

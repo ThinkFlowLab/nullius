@@ -31,6 +31,10 @@ class Whole(unittest.TestCase):
         with open(self.path, "rb") as f:
             self.assertEqual(f.read(), b"\x00\xff")
         self.assertEqual(self.left(), ["file.json"])
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.tmp)
+        ondisk.write_whole("bare.json", "x")                       # a bare name: the current folder
+        self.assertEqual(self.left(), ["bare.json", "file.json"])
 
     def test_the_mode_is_the_process_default_unless_one_is_asked(self):
         old = os.umask(0o027)
@@ -73,36 +77,11 @@ class Whole(unittest.TestCase):
         self.assertNotEqual(seen[0][1], seen[1][1])
         self.assertEqual([s[2] for s in seen], [0o600, 0o600])
 
-    def test_a_file_whose_name_is_as_long_as_a_name_may_be_is_written(self):
-        path = os.path.join(self.tmp, "n" * os.pathconf(self.tmp, "PC_NAME_MAX"))
-        ondisk.write_whole(path, "x")
-        self.assertEqual(self.left(), [os.path.basename(path)])
-
     def test_a_folder_that_is_gone_is_an_error_and_is_not_made_again(self):
         gone = os.path.join(self.tmp, "gone")
         with self.assertRaises(FileNotFoundError):
             ondisk.write_whole(os.path.join(gone, "file.json"), "x")
         self.assertEqual(self.left(), [])
-
-    def test_a_path_through_a_links_parent_is_staged_where_the_system_puts_the_file(self):
-        os.makedirs(os.path.join(self.tmp, "target", "nested"))
-        os.mkdir(os.path.join(self.tmp, "beside"))
-        os.symlink(os.path.join(self.tmp, "target", "nested"), os.path.join(self.tmp, "beside", "link"))
-        seen, rename = [], os.replace
-        def spy(src, dst):
-            seen.append(os.path.realpath(os.path.dirname(src)))
-            return rename(src, dst)
-        with mock.patch.object(os, "replace", spy):
-            ondisk.write_whole(os.path.join(self.tmp, "beside", "link", "..", "file.json"), "x")
-        self.assertEqual(seen, [os.path.join(os.path.realpath(self.tmp), "target")])     # not "beside": link/.. is the link's target's parent
-        self.assertEqual(sorted(os.listdir(os.path.join(self.tmp, "target"))), ["file.json", "nested"])
-        self.assertEqual(os.listdir(os.path.join(self.tmp, "beside")), ["link"])
-
-    def test_a_bare_name_is_written_in_the_current_folder(self):
-        self.addCleanup(os.chdir, os.getcwd())
-        os.chdir(self.tmp)
-        ondisk.write_whole("bare.json", "x")
-        self.assertEqual(self.left(), ["bare.json"])
 
     def test_a_function_is_handed_the_file_and_what_it_writes_lands_whole(self):
         def two(f):

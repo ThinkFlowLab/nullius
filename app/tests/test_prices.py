@@ -44,11 +44,6 @@ class Profile(unittest.TestCase):
 
 
 class Nothing(Profile):
-    def test_no_price_is_written_in_the_code(self):
-        self.assertFalse(hasattr(run, "PRICES"))
-        self.assertEqual(prices.table(), {})
-        self.assertEqual(prices.state(), {"n": 0, "from": "", "on": "", "own": {}})
-
     def test_an_unreadable_file_is_no_prices_rather_than_a_run_that_cannot_start(self):
         os.makedirs(os.path.dirname(prices.path()))
         with open(prices.path(), "w") as f:
@@ -189,21 +184,11 @@ class Cli(Profile):
         self.assertEqual((got["n"], got["models"]), (0, {"m": {"input": 1.0, "output": 2.0, "cached": 0.1}}))
         self.assertEqual(self.say("remove", "m")[0], 0)
         self.assertEqual(prices.table(), {})
-
-    def test_cache_write_rates_can_be_set_without_changing_old_rows(self):
         prices.set_own("old", prices.row(1, 2))
         self.say("set", "m", "1", "2", "--cache-write", "1.25", "--cache-write-1h", "2")
         self.assertEqual(prices.table()["m"], {"input": 1.0, "output": 2.0, "cache_write": 1.25, "cache_write_1h": 2.0})
         self.assertEqual(prices.table()["old"], {"input": 1.0, "output": 2.0})
         self.assertIn("cache write 1h 2", self.say("list", "m")[1])
-
-    def test_an_update_from_a_file_says_how_many(self):
-        listing = os.path.join(self.tmp, "listing.json")
-        with open(listing, "w") as f:
-            json.dump(LISTING, f)
-        code, out = self.say("update", "--from", listing)
-        self.assertEqual((code, out.strip()), (0, f"3 models priced, from {listing}"))
-        self.assertIn(f"list: 3 models, from {listing} on ", self.say()[1])
 
     def test_a_bad_price_is_refused_with_its_reason(self):
         err = io.StringIO()

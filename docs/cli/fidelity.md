@@ -12,7 +12,7 @@ nullius standard fidelity <agent>[@version] --model M --unsandboxed [--passes N]
 | The command | `fidelity.command`, with `{prompt}` |
 | `--passes` | Runs of each way (default 2: the second shows the noise) |
 | Not recorded | `instructions`, tools, `input` as digests; `client_metadata`, `prompt_cache_key` out |
-| Verdict | `same` or `differs` (non-zero), in `proven` as `fidelity`; `conform` keeps it |
+| Verdict | `same` or `differs` (non-zero), in the version's `proven.fidelity` in [proofs.json](../standard.md#what-is-proven); `conform` keeps it |
 
 <div class="grid cards" markdown>
 

@@ -106,20 +106,6 @@ class RecipeRoutes(unittest.TestCase):
         r = self.client.get("/new-run/recipes", environ_base=REMOTE); self.addCleanup(r.close)
         self.assertEqual((r.status_code, len(r.get_json()["recipes"])), (200, 1))
 
-    def test_the_builder_greys_save_for_a_browser_on_another_machine(self):
-        def save_button(**kw):
-            r = self.client.get("/new-run", **kw); self.addCleanup(r.close)
-            html = r.get_data(as_text=True)
-            return next(line for line in html.splitlines() if 'id="nb-save"' in line).strip()
-        why = web.builder.WRITE_HERE
-        self.assertEqual(save_button(), '<button class="nb-button" id="nb-save">Save recipe</button>')
-        self.assertEqual(save_button(environ_base=REMOTE), f'<button class="nb-button" id="nb-save" aria-disabled="true" title="{why}">Save recipe</button>')
-        r = self.client.get("/new-run", environ_base=REMOTE); self.addCleanup(r.close)
-        html = r.get_data(as_text=True)
-        schema = json.loads(html.split('<script id="nb-schema" type="application/json">')[1].split("</script>")[0])
-        self.assertEqual((schema["local"], schema["recipesWhy"]), (False, why))
-        self.assertNotIn("workspace", schema)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -266,17 +266,44 @@ class Cache(unittest.TestCase):
         self.assertEqual([n for n in os.listdir(self.ws.jobs_dir) if n.endswith(".part")], [])
 
     def test_the_cache_is_written_a_piece_at_a_time(self):
-        job, rows = parse.parse_job(self.job_dir), {"rows": ["x" * 100] * 20000}       # about 2 MB as JSON
+        job = parse.parse_job(self.job_dir)
+        job.trials = [replace(job.trials[0], exception_message="x" * 1000) for _ in range(2000)]   # about 3 MB as JSON
         path = os.path.join(self.ws.jobs_dir, "large.json")
-        with patch.object(workspace, "job_to_dict", lambda job: rows):
-            tracemalloc.start()
-            try:
-                workspace._write_cache(self.ws, path, "sig", "head", job)
-                peak = tracemalloc.get_traced_memory()[1]
-            finally:
-                tracemalloc.stop()
+        tracemalloc.start()
+        try:
+            workspace._write_cache(self.ws, path, "sig", "head", job)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
         self.assertGreater(os.path.getsize(path), 2_000_000)
         self.assertLess(peak, os.path.getsize(path) / 2)                              # never the whole text in memory
+        self.assertEqual(workspace._read_cache(path, job.dir)[2], job)
+
+    def test_the_cache_of_every_fixture_reads_back_equal(self):
+        fixtures = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+        jobs = [parse.parse_job(d) for d in parse.find_job_dirs(
+            [os.path.join(fixtures, n) for n in sorted(os.listdir(fixtures)) if os.path.isdir(os.path.join(fixtures, n))])]
+        self.assertGreater(sum(len(j.trials) for j in jobs), 0)
+        for job in jobs:
+            self.assertEqual(workspace.job_from_dict(workspace.job_to_dict(job)), job)
+            path = workspace._cache_file(self.ws, job.dir)
+            with patch.object(workspace, "asdict", side_effect=AssertionError("asdict")):
+                workspace._write_cache(self.ws, path, "sig", "head", job)
+            self.assertEqual(workspace._read_cache(path, job.dir), ("sig", "head", job))
+
+    def test_a_cache_written_whole_by_asdict_is_read_by_its_head(self):
+        from dataclasses import asdict
+        self._end()
+        first, _ = workspace.load_job(self.ws, self.job_dir)
+        path = workspace._cache_file(self.ws, self.job_dir)
+        with open(path, encoding="utf-8") as fh:
+            old = json.load(fh)
+        with open(path, "w", encoding="utf-8") as fh:                # as the writer before this one left it
+            json.dump({**old, "job": asdict(first)}, fh, default=workspace._encode, ensure_ascii=False)
+        workspace._DECODED.clear()
+        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
+            again, from_cache = workspace.load_job(self.ws, self.job_dir)
+        self.assertTrue(from_cache); self.assertEqual(again, first)
 
     def test_load_jobs_matches_load_all(self):
         _job_dir(self.root, "job-b", n=1)
@@ -286,6 +313,33 @@ class Cache(unittest.TestCase):
         self.assertEqual(cached, plain)
         self.assertEqual(workspace.clear_cache(self.ws), 2)
         self.assertEqual(self.ws.n_cached, 0)
+
+    def test_a_load_looks_the_catalogue_up_once_not_once_per_trial(self):
+        from nullius.catalogue import catalog
+        _job_dir(self.root, "job-b", n=20)
+        with patch.object(catalog, "signature", wraps=catalog.signature) as sig:
+            jobs = workspace.load_jobs(self.ws, [self.root])
+        self.assertEqual(sum(len(j.trials) for j in jobs), 22)
+        self.assertEqual(sig.call_count, 1)
+
+    def test_a_catalogue_changed_between_two_loads_is_seen(self):
+        from types import SimpleNamespace
+        from nullius.catalogue import catalog
+        from nullius.runs import verifier
+        def cat(report):
+            return SimpleNamespace(benchmarks=[SimpleNamespace(key="b", report=report)])
+        first, second = {"sources": ["x"], "file": "one.json"}, {"sources": ["x"], "file": "two.json"}
+        with patch.dict(verifier._CACHE, clear=True), \
+                patch.object(catalog, "signature", side_effect=[(1,), (1,), (2,)]), \
+                patch.object(catalog, "load", side_effect=[cat(first), cat(second)]):
+            with verifier.held():
+                self.assertEqual(verifier.block_for("x"), ("b", first))
+                with verifier.held():
+                    self.assertEqual(verifier.block_for("X "), ("b", first))
+            with verifier.held():
+                self.assertEqual(verifier.block_for("x"), ("b", first))
+            with verifier.held():
+                self.assertEqual(verifier.block_for("x"), ("b", second))
 
     def test_an_unchanged_job_is_decoded_once_per_process(self):
         from unittest import mock
@@ -331,21 +385,55 @@ class Cache(unittest.TestCase):
             again, from_cache = workspace.load_job(self.ws, self.job_dir)
         self.assertTrue(from_cache); self.assertEqual(again, first)
 
-    def test_a_cache_from_before_the_head_learns_it_once(self):
+    def _cache_bytes(self):
+        path = workspace._cache_file(self.ws, self.job_dir)
+        with open(path, "rb") as fh:
+            return fh.read(), os.stat(path).st_mtime_ns
+
+    def test_a_moved_head_writes_no_job_cache_and_is_read_by_it_next(self):
+        self._end()
+        first = workspace.load_jobs(self.ws, [self.root])
+        before = self._cache_bytes()
+        st = os.stat(self.job_dir)
+        os.utime(self.job_dir, ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))       # an entry added or removed beside the trials
+        for process in ("next", "fresh"):
+            workspace._DECODED.clear()
+            with patch.object(workspace, "_write_cache", side_effect=AssertionError("cache written")):
+                self.assertEqual(workspace.load_jobs(self.ws, [self.root]), first)
+            self.assertEqual(self._cache_bytes(), before)
+        workspace._DECODED.clear()                       # the process after: the head in the index answers
+        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
+            self.assertEqual(workspace.load_jobs(self.ws, [self.root]), first)
+        self.assertEqual(self._cache_bytes(), before)
+        noted = workspace.job_index(self.ws)[self.job_dir]
+        self.assertEqual((noted["signature"], noted["head"]), (workspace.signature(self.job_dir), workspace._head(self.job_dir)))
+
+    def test_a_head_noted_with_another_signature_answers_nothing(self):
         self._end()
         workspace.load_job(self.ws, self.job_dir)
-        path = workspace._cache_file(self.ws, self.job_dir)
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        del data["head"]
-        _write_json(path, data)
+        st = os.stat(self.job_dir)
+        os.utime(self.job_dir, ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
         workspace._DECODED.clear()
-        _, from_cache = workspace.load_job(self.ws, self.job_dir)       # by its signature, the head written down
-        self.assertTrue(from_cache)
+        workspace.load_job(self.ws, self.job_dir)            # the head noted in the index
+        index = workspace.job_index(self.ws)
+        index[self.job_dir]["signature"] = "another"
+        workspace._write_index(self.ws, index)
         workspace._DECODED.clear()
-        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
+        with patch.object(workspace, "_signatures", wraps=workspace._signatures) as stated:
             _, from_cache = workspace.load_job(self.ws, self.job_dir)
-        self.assertTrue(from_cache)
+        self.assertTrue(from_cache); self.assertEqual(stated.call_count, 1)
+
+    def test_an_ended_job_that_changed_writes_its_cache_again(self):
+        self._end()
+        workspace.load_job(self.ws, self.job_dir)
+        time.sleep(0.01)
+        shutil.copytree(os.path.join(self.job_dir, "tau3-bench__t1__abc"), os.path.join(self.job_dir, "tau3-bench__t9__abc"))
+        workspace._DECODED.clear()
+        with patch.object(workspace, "_write_cache", wraps=workspace._write_cache) as written:
+            job, from_cache = workspace.load_job(self.ws, self.job_dir)
+        self.assertFalse(from_cache); self.assertEqual(written.call_count, 1)
+        workspace._DECODED.clear()
+        self.assertEqual(workspace.load_job(self.ws, self.job_dir), (job, True))
 
     def test_an_ended_job_a_resume_rewrites_is_parsed_again(self):
         self._end()
@@ -389,13 +477,6 @@ class Cache(unittest.TestCase):
             again, from_cache = workspace.load_job(self.ws, self.job_dir, runs=done)
         self.assertIs(again, job); self.assertTrue(from_cache)
 
-    def test_a_job_no_run_writes_is_read_by_its_head(self):
-        self._end()
-        first, _ = workspace.load_job(self.ws, self.job_dir, runs={"job-b": None})
-        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
-            again, from_cache = workspace.load_job(self.ws, self.job_dir, runs={"job-b": None})
-        self.assertIs(again, first); self.assertTrue(from_cache)
-
     def test_heads_move_with_a_job_added_removed_or_rewritten_not_with_a_trial(self):
         before = workspace.heads([self.root])
         _write_json(os.path.join(self.job_dir, "tau3-bench__t0__abc", "result.json"), {"rewritten": True})
@@ -409,6 +490,30 @@ class Cache(unittest.TestCase):
         self.assertNotEqual(workspace.heads([self.root]), rewritten)               # the root's own mtime moved
         gone = os.path.join(self.root, "gone")
         self.assertEqual(workspace.heads([gone]), ((gone, None),))
+
+    def test_stored_counts_answer_their_own_key_alone(self):
+        key = ((self.root,), (), workspace.heads([self.root]), (("r1", "done"),), ())
+        self.assertIsNone(workspace.stored_counts(self.ws, key))
+        workspace.load_job(self.ws, self.job_dir)
+        workspace.store_counts(self.ws, key, {"runs": 3, "checks": 1})
+        self.assertEqual(workspace.stored_counts(self.ws, key), {"runs": 3, "checks": 1})
+        self.assertEqual(self.ws.n_cached, 1)                                      # not a job's cache
+        self.assertIsNone(workspace.stored_counts(self.ws, key[:3] + ((("r1", "running"),), ())))
+        with patch.object(workspace, "COUNTS_VERSION", workspace.COUNTS_VERSION + 1):
+            self.assertIsNone(workspace.stored_counts(self.ws, key))
+        path = os.path.join(self.ws.jobs_dir, "counts.json")
+        for bad in ("[1]", "{", '{"version": 1, "key": "x"}',
+                    json.dumps({"version": 1, "key": workspace._key_digest(key), "counts": {"runs": "3"}})):
+            with self.subTest(bad=bad):
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(bad)
+                self.assertIsNone(workspace.stored_counts(self.ws, key))
+        workspace.store_counts(self.ws, key, {"runs": 3, "checks": 1})
+        workspace.store_counts(self.ws, key, None)
+        self.assertFalse(os.path.exists(path))
+        workspace.store_counts(self.ws, key, {"runs": 3, "checks": 1})
+        self.assertEqual(workspace.clear_cache(self.ws), 1)                        # Refresh drops them with the jobs
+        self.assertIsNone(workspace.stored_counts(self.ws, key))
 
     def test_index_lists_runs_without_a_parse(self):
         self.assertEqual(workspace.job_index(self.ws), {})

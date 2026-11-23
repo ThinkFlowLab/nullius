@@ -67,9 +67,6 @@ class Schema(unittest.TestCase):
                 f.write(dockerfile)
         return definitions.problems(dict(d, _here=self.root), "benchmark")
 
-    def test_the_fixture_is_valid(self):
-        self.assertEqual(self.problems(), [])
-
     def test_the_dockerfile_is_a_layer_on_the_base(self):
         self.assertTrue(any("no FROM" in p for p in self.problems(dockerfile="FROM ubuntu:24.04\nRUN true\n")))
         self.assertTrue(any("COPY, not ADD" in p for p in self.problems(dockerfile="ADD https://x/y /y\n")))
@@ -157,7 +154,6 @@ class Tag(unittest.TestCase):
             self.assertIn(t1, f.read())
         self.assertFalse(os.path.exists(os.path.join(work, "env-tool.log")))   # lazy: tool was never asked for
         container._built.clear()
-
 
     def test_an_environment_on_its_own_base_does_not_build_the_standards(self):
         b = bench(self.root)

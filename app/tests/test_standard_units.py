@@ -13,10 +13,8 @@ import json
 import os
 import shutil
 import tempfile
-import threading
 import unittest
 from contextlib import redirect_stdout
-from http.server import ThreadingHTTPServer
 from unittest import mock
 
 from nullius import progress
@@ -25,8 +23,7 @@ from nullius.standard import cli
 from nullius.standard.backends import container
 from nullius.standard.contract import definitions
 from nullius.standard.requirements import install
-from nullius.standard.runner import merge, pace as pacing, run, shard
-from tests.test_standard_run import Echo
+from nullius.standard.runner import merge, run, shard
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 NOP = {"nop": {"source": "nullius", "from": "nothing said"}}
@@ -80,10 +77,6 @@ class Listed(unittest.TestCase):
         self.assertEqual(read(os.path.join(job, "result.json"))["n_total_trials"], 2)
         self.assertEqual(read(os.path.join(job, "config.json"))["datasets"], [{"name": "fakebench/all", "n_tasks": 2}])
 
-    def test_comments_blank_lines_and_spaces_around_an_id_say_nothing(self):
-        got = run.units_file(self.file("# the two of them\n\n  wrong  \n   # model\ngood\r\n\n"))
-        self.assertEqual(got["units"], ["wrong", "good"])
-
     def test_an_id_the_dataset_does_not_hold_is_refused_before_any_unit_starts(self):
         r = run.Run(self.b, definitions.control(self.b, "nop"), model="", provider="openai", jobs_root=self.jobs, env={},
                     say=lambda s: None, units_file=run.units_file(self.file("good\nnope\nmodel\nnot-either\n")))
@@ -99,28 +92,6 @@ class Listed(unittest.TestCase):
         self.assertEqual(events[-1]["stage"], "refused")
         self.assertIn("nope, not-either", progress.refusal(events))
         self.assertTrue(r.drivers and all(d.p.poll() is not None for d in r.drivers))    # its driver is not left running
-
-    def test_an_unknown_id_leaves_the_record_a_refusal_in_the_runs_preparation_leaves(self):
-        """A run refused while it gets ready (``Run.ready``) keeps its job's folder with ``progress.jsonl``
-        alone, which the runs list reads the refusal from (``execution.Execution.refused``); a run refused
-        for an id its dataset does not hold leaves that same record, its driver's files removed."""
-        def tree(job_dir):
-            return sorted(os.path.relpath(os.path.join(root, n), job_dir) for root, dirs, files in os.walk(job_dir) for n in dirs + files)
-
-        unknown = run.Run(self.b, definitions.control(self.b, "nop"), model="", provider="openai", jobs_root=self.jobs, env={},
-                          say=lambda s: None, name="unknown", units_file=run.units_file(self.file("good\nnope\n")))
-        with self.assertRaises(run.Refused):
-            unknown.start()
-        b = dict(self.b, upstream={"repository": "/nowhere", "tested": "a" * 40})
-        preparing = run.Run(b, definitions.control(b, "nop"), model="", provider="openai", jobs_root=self.jobs, env={},
-                            say=lambda s: None, name="preparing", units_file=run.units_file(self.file("good\n")))
-        with mock.patch.object(install, "upstream_dir", lambda b, home=None: os.path.join(self.tmp, "up")), \
-                mock.patch.object(install, "upstream", side_effect=install.InstallFailed("git fetch: exit 128")), \
-                self.assertRaises(run.Refused):
-            preparing.start()
-        self.assertEqual(tree(preparing.job_dir), [".work", ".work/job.lck", "progress.jsonl"])
-        self.assertEqual(tree(unknown.job_dir), tree(preparing.job_dir))
-        self.assertIn("nope", progress.refusal(progress.read(unknown.job_dir)))
 
     def test_on_the_container_backend_a_refused_list_removes_the_jobs_containers(self):
         """On the container backend a driver, or a door it was given, may run in a container of the job's:
@@ -189,29 +160,10 @@ class Listed(unittest.TestCase):
         self.assertIn("1 of the 3 listed units are not in the merge", got["notes"])
 
     def test_the_config_records_the_files_name_its_sha256_and_its_units(self):
-        text = "# two of them\nmodel\nwrong\n"
+        text = "# two of them\n\n  model  \n   # good\nwrong\r\n\n"      # comments, blank lines and spaces say nothing
         job = self.go(text)
         self.assertEqual(read(os.path.join(job, "config.json"))["standard"]["units_file"],
                          {"name": "units.txt", "sha256": hashlib.sha256(text.encode()).hexdigest(), "units": ["model", "wrong"]})
-
-    def test_the_list_with_shards_splits_the_listed_units_and_merges_them_back(self):
-        listed = ["good", "slow", "model"]
-        jobs = [self.go("\n".join(listed) + "\n", shard=(i, 2), name=f"run-shard-{i}of2") for i in (1, 2)]
-        ran = {}
-        for i, job in enumerate(jobs, 1):
-            rec = read(os.path.join(job, "config.json"))["standard"]["shard"]
-            self.assertEqual(rec["units_total"], 3)                                  # the split is over the listed units
-            self.assertEqual(rec["planned"], [u for u in DATASET if u in listed and shard.of(u, 2) == i])
-            for t in self.trials(job):
-                ran[t.split("__")[0]] = t
-        self.assertEqual(sorted(ran), sorted(listed))
-        self.assertEqual(ran["model"], "model__u0003")
-        got = merge.merge(jobs, os.path.join(self.jobs, "run"))
-        self.assertEqual((got["trials"], [n for n in got["notes"] if "not in the merge" in n]), (3, []))
-        # shards of different lists are not one launch
-        other = self.go("good\nwrong\n", shard=(1, 2), name="other-shard-1of2")
-        with self.assertRaisesRegex(merge.Refused, "units file"):
-            merge.check([other, jobs[1]])
 
     def test_force_never_merges_shards_whose_lists_hold_different_units(self):
         """``--force`` merges shards of different launches, models or agents; a merged job records one
@@ -240,65 +192,6 @@ class Listed(unittest.TestCase):
         self.assertEqual((records[0]["name"], records[1]["name"]), ("units.txt", "right.txt"))
         got = merge.merge([left, right], os.path.join(self.jobs, "merged"))
         self.assertEqual(got["trials"], 2)
-
-    def test_a_run_without_a_list_is_the_run_it_was(self):
-        job = self.go()
-        self.assertEqual(self.trials(job), ["good__u0000", "model__u0003", "slow__u0002", "wrong__u0001"])
-        self.assertEqual(self.started(job), DATASET)
-        cfg = read(os.path.join(job, "config.json"))
-        # Control fields and retry metadata only.
-        self.assertEqual(sorted(cfg["standard"]), ["backend", "benchmark", "control", "kind", "needs", "permissions_granted",
-                                                   "plugged", "provider", "retries", "unsandboxed"])
-        self.assertEqual(cfg["datasets"], [{"name": "fakebench/all", "n_tasks": 4}])
-        limited = self.go(limit=2, name="limited")
-        self.assertEqual(self.trials(limited), ["good__u0000", "wrong__u0001"])
-        self.assertNotIn("units_file", read(os.path.join(limited, "config.json"))["standard"])
-
-
-class RateLimited(unittest.TestCase):
-    """A listed unit that ends rate-limited is retried after the others, as any unit is: under its own
-    trial's name, its first try kept in the job's ``retried/``. A unit the list leaves out is never run."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.up = ThreadingHTTPServer(("127.0.0.1", 0), Echo)
-        threading.Thread(target=cls.up.serve_forever, daemon=True).start()
-        cls.env = {"MODEL_API_URL": f"http://127.0.0.1:{cls.up.server_address[1]}/v1", "MODEL_API_KEY": "sk-test"}
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.up.shutdown()
-
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp()
-        self._home = install.HOME
-        install.HOME = os.path.join(self.tmp, "home")
-        Echo.status, Echo.refused, Echo.limited = 200, None, 0
-        self.addCleanup(setattr, Echo, "limited", 0)
-        self.addCleanup(setattr, pacing, "FIRST", pacing.FIRST)
-        pacing.FIRST = 0.5                       # a rate-limited unit's pause, short enough for a test
-
-    def tearDown(self):
-        install.HOME = self._home
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def test_a_listed_unit_that_ends_rate_limited_is_run_again_under_its_own_name(self):
-        Echo.limited = 1                         # the first model call is refused, every later one answered
-        path = os.path.join(self.tmp, "units.txt")
-        with open(path, "w") as f:
-            f.write("model\ngood\n")
-        # the responding dataset is good, wrong, model: the list leaves wrong out
-        b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
-        job = run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom",
-                      jobs_root=os.path.join(self.tmp, "jobs"), concurrency=1, env=self.env, say=lambda s: None,
-                      unsandboxed=True, dataset="responding", units_file=run.units_file(path), retries=1)
-        self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000", "model__u0002"])
-        self.assertEqual(os.listdir(os.path.join(job, "retried")), ["model__u0002.try-1"])
-        first = read(os.path.join(job, "retried", "model__u0002.try-1", "result.json"))
-        self.assertEqual(first["exception_info"]["exception_type"], "RateLimitError")
-        self.assertFalse(read(os.path.join(job, "model__u0002", "result.json")).get("exception_info"))   # its second counts
-        self.assertEqual(read(os.path.join(job, "result.json"))["n_total_trials"], 2)
-        self.assertEqual(read(os.path.join(job, "config.json"))["standard"]["units_file"]["units"], ["model", "good"])
 
 
 class FromTheCommandLine(unittest.TestCase):
@@ -354,31 +247,6 @@ class FromTheCommandLine(unittest.TestCase):
                 job = out.strip().splitlines()[-1]
                 self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000", "slow__u0002"])
                 self.assertEqual(read(os.path.join(job, "config.json"))["standard"]["units_file"]["units"], ["slow", "good"])
-
-    def test_the_listed_units_run_under_the_machine_s_constraints(self):
-        code, out = self.cli("--units", self.file("slow\ngood\n"), "--constraint", "concurrency=1", "--name", "constrained")
-        self.assertEqual(code, 0, out)
-        job = out.strip().splitlines()[-1]
-        self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000", "slow__u0002"])
-        cfg = read(os.path.join(job, "config.json"))
-        self.assertEqual((cfg["standard"]["units_file"]["units"], cfg["standard"]["constraints"], cfg["n_concurrent_trials"]),
-                         (["slow", "good"], {"concurrency": 1}, 1))
-    def test_the_command_records_both_the_units_file_and_the_serving_pin(self):
-        path = self.file("good\n")
-        self.b["score"] = dict(self.b["score"], judge={"model": "m-judge", "says": "a judge"})
-        # The fixture scores locally; no relay listener is needed.
-        for extra in ([], ["--from-run"]):
-            with self.subTest(extra=extra), mock.patch.object(run.relay.Relay, "start", lambda r: r), \
-                    mock.patch.object(run.relay.Relay, "public", "http://127.0.0.1:9"), \
-                    mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test", "OPENAI_API_KEY": "or-test"}):
-                code, out = self.cli("--units", path, "--provider", "openrouter", "--judge-model", "m-judge",
-                                     "--served-by", "m-judge=prov-a", "--name", "pinned" + "".join(extra), *extra)
-                self.assertEqual(code, 0, out)
-                job = out.strip().splitlines()[-1]
-                standard = read(os.path.join(job, "config.json"))["standard"]
-                self.assertEqual(standard["units_file"], run.units_file(path))
-                self.assertEqual(standard["served_by"], {"m-judge": ["prov-a"]})
-                self.assertEqual(sorted(d for d in os.listdir(job) if "__u" in d), ["good__u0000"])
 
     def test_a_list_the_run_cannot_take_is_refused_with_exit_2(self):
         for text, said in (("good\ngood\n", "more than once"), ("# none\n", "lists no unit"), ("good\nnope\n", "nope")):

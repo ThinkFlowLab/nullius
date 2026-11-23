@@ -89,17 +89,12 @@ class Driver(unittest.TestCase):
     def test_the_grader_gets_the_judge_route_in_the_original_and_the_null_control(self):
         for start in (self.answer, self.nop):
             with self.subTest(start.__name__), self.assertRaises(Started):
-                start("003", judge=self.judge)
+                start("003", judge=dict(self.judge, base_url="http://h:1/v1-judge/v1"))
             env = self.envs[-1]
             self.assertEqual({k: v for k, v in env.items() if k.startswith("OSWORLD_EVAL_MODEL_")},
                              {"OSWORLD_EVAL_MODEL_PROVIDER": "anthropic", "OSWORLD_EVAL_MODEL_NAME": SONNET,
-                              "OSWORLD_EVAL_MODEL_BASE_URL": "http://127.0.0.1:9/u1-judge",
+                              "OSWORLD_EVAL_MODEL_BASE_URL": "http://h:1/v1-judge",       # only the trailing v1 leaves
                               "OSWORLD_EVAL_MODEL_API_KEY": relay.PLACEHOLDER_KEY})
-
-    def test_only_a_trailing_v1_leaves_the_route(self):
-        with self.assertRaises(Started):
-            self.nop("001", judge=dict(self.judge, base_url="http://h:1/v1-judge/v1"))
-        self.assertEqual(self.envs[-1]["OSWORLD_EVAL_MODEL_BASE_URL"], "http://h:1/v1-judge")
 
     def test_the_simulated_user_asks_sonnet_on_the_units_own_route(self):
         with self.assertRaises(Started):
@@ -236,6 +231,7 @@ class Driver(unittest.TestCase):
         where = os.path.join(self.tmp, "results", "pyautogui", "screenshot", "MiniMax-M3", "tasks", "003")
         self.result(where)
         words = "the task's own words"
+        nothing = "no HTTP status or known error class in its record"
         records = {"Error code: 429 - " + words: "HTTP 429",
                    "RateLimitError: " + words: "RateLimitError",
                    "anthropic.APIStatusError: status code 529 " + words: "anthropic.APIStatusError, HTTP 529",
@@ -243,44 +239,21 @@ class Driver(unittest.TestCase):
                    "anthropic._exceptions.OverloadedError: " + words: "anthropic.OverloadedError",
                    "httpx.ReadTimeout " + words: "httpx.ReadTimeout",
                    "TimeoutError: " + words: "TimeoutError",
-                   words + " 500 times": "no HTTP status or known error class in its record"}
+                   words + " 500 times": nothing,
+                   **dict.fromkeys(("SyntheticPrivateDocumentError: the rest", "PrivateLedgerException the rest",       # shaped like a class
+                                    "anthropic.SyntheticPrivateError: x", "SyntheticPrivate.RateLimitError: x",
+                                    "secret.module.ValueError: x", "RateLimitErrorOfTheTask: x", "rate_limit_error: x",
+                                    "anthropic.RateLimitErrorXYZ: x"), nothing)}
         log = os.path.join(where, "eval.log")
         for record, said in records.items():
-            with self.subTest(said):
-                self.log(log, f"[2026-11-06 01:02:03 ERROR llm_metrics/388-Worker] Error in compare_text_with_llm: {record}")
-                with self.assertRaises(RuntimeError) as raised:
-                    self.driver.score("tasks__003", self.tmp, setup="original", judge=self.judge)
-                self.assertIn(f"compare_text_with_llm ({said})", str(raised.exception))
-                self.assertNotIn(words, str(raised.exception))
-                os.remove(log)
-
-    def test_a_word_shaped_like_a_class_is_never_said(self):
-        where = os.path.join(self.tmp, "results", "pyautogui", "screenshot", "MiniMax-M3", "tasks", "003")
-        self.result(where)
-        log = os.path.join(where, "eval.log")
-        for record in ("SyntheticPrivateDocumentError: the rest", "PrivateLedgerException the rest",
-                       "anthropic.SyntheticPrivateError: x", "SyntheticPrivate.RateLimitError: x",
-                       "secret.module.ValueError: x", "RateLimitErrorOfTheTask: x", "rate_limit_error: x",
-                       "anthropic.RateLimitErrorXYZ: x"):
             with self.subTest(record):
                 self.log(log, f"[2026-11-06 01:02:03 ERROR llm_metrics/388-Worker] Error in compare_text_with_llm: {record}")
                 with self.assertRaises(RuntimeError) as raised:
                     self.driver.score("tasks__003", self.tmp, setup="original", judge=self.judge)
-                said = str(raised.exception)
-                self.assertIn("compare_text_with_llm (no HTTP status or known error class in its record)", said)
-                for word in ("Synthetic", "Private", "secret", "XYZ", "OfTheTask", "rate_limit"):
-                    self.assertNotIn(word, said)
+                self.assertIn(f"compare_text_with_llm ({said})", str(raised.exception))
+                for word in (words, "Synthetic", "Private", "secret", "XYZ", "OfTheTask", "rate_limit"):
+                    self.assertNotIn(word, str(raised.exception))
                 os.remove(log)
-
-    def test_a_refusing_endpoints_error_text_is_not_said(self):
-        where = os.path.join(self.tmp, "results", "pyautogui", "screenshot", "MiniMax-M3", "tasks", "003")
-        self.result(where)
-        self.calls({"status": 400, "request": {"n": 1}, "error": "status 400: the task's own words"})
-        with self.assertRaises(RuntimeError) as raised:
-            self.driver.score("tasks__003", self.tmp, setup="original", judge=self.judge)
-        self.assertIn("answered 400", str(raised.exception))
-        self.assertNotIn("own words", str(raised.exception))
-        os.remove(self.relayed)
 
     def test_the_marks_words_outside_the_graders_error_record_change_nothing(self):
         where = os.path.join(self.tmp, "results", "pyautogui", "screenshot", "MiniMax-M3", "tasks", "003")

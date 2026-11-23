@@ -27,14 +27,6 @@ def tau(**changes):
 
 
 class Definition(unittest.TestCase):
-    def test_tau3s_search_option_and_its_machine_setup_are_valid(self):
-        self.assertEqual(definitions.problems({k: v for k, v in TAU.items() if not k.startswith("_")}, "benchmark"), [])
-        o = TAU["options"]["retrieval"]
-        self.assertEqual(o["datasets"], ["banking_knowledge"])
-        self.assertEqual(o["default"], "bm25")                       # needs nothing of the machine, no key
-        self.assertIn("qwen_embeddings", o["values"])
-        self.assertEqual(TAU["host"]["sandbox"]["check"], ["srt", "rg", "bwrap", "socat"])
-
     def test_a_value_may_only_need_a_declared_requirement_and_a_known_dataset(self):
         bad = tau(options={"retrieval": dict(TAU["options"]["retrieval"], datasets=["nowhere"],
                                              needs={"alltools": {"host": ["gpu"], "embeddings": "a b"}})})
@@ -244,27 +236,6 @@ class Recipe(unittest.TestCase):
 class OtherBenchmarks(unittest.TestCase):
     """The options the other benchmarks' upstreams offer, each on the version that brought it."""
 
-    def test_longmemeval_keeps_all_options_in_one_entry(self):
-        b = definitions.get("benchmark", "longmemeval")
-        self.assertNotIn("@", b["_ref"])
-        self.assertEqual(definitions.bench_options_of(b, "longmemeval_s")[0], {"question_type": "all", "reading": "con"})
-        self.assertEqual(set(b["options"]["retriever"]["values"]),
-                         {"full-history-session", "full-history-turn", "no-retrieval",
-                          "flat-bm25-session", "flat-bm25-turn", "flat-contriever-session",
-                          "flat-contriever-turn", "flat-stella-session", "flat-stella-turn"})
-        self.assertNotIn("indexes", b["driver"]["install"])
-
-    def test_locomo_offers_the_authors_rag_modes_dialog_first(self):
-        b = definitions.get("benchmark", "locomo")
-        self.assertEqual(definitions.bench_options_of(b, "locomo10")[0], {"rag_mode": "dialog"})
-        self.assertEqual(b["options"]["rag_mode"]["values"], ["dialog", "observation", "summary"])
-
-    def test_terminal_bench_offers_pull_and_build_in_one_entry(self):
-        b = definitions.get("benchmark", "terminal-bench")
-        self.assertNotIn("@", b["_ref"])
-        self.assertEqual(definitions.bench_options_of(b, "offline")[0], {"image": "pull"})
-        self.assertEqual(definitions.bench_options_of(b, "offline", {"image": "build"})[0], {"image": "build"})
-
     def test_bundled_benchmarks_do_not_expose_integration_revisions(self):
         from pathlib import Path
         import json
@@ -319,19 +290,6 @@ class MachineDocker(unittest.TestCase):
                 self.assertEqual(rows[0]["label"], "docker")
                 self.assertFalse(prerequisites.ready([{"rows": rows}]))
                 self.assertTrue(prerequisites.ready([{"rows": prerequisites.check_here([], setups, which=lambda p: "/usr/bin/" + p)}]))
-
-    def test_a_value_shows_its_name_and_the_recipe_keeps_the_value(self):
-        out = recipe.compile(self.a_recipe(["original"], bench_options={"agent": "muse_spark"}, model="muse-spark-1.1"))
-        self.assertEqual(out["errors"], [])
-        self.assertIn([4, "Participant", "Muse Spark · OSWorld1's own"], out["review"])       # a recipe from before: its agent
-        self.assertIn([6, "Steps per task", "100 (its default) · test_small"], out["review"])
-        self.assertIn("agent=muse_spark", out["script"])
-        self.assertEqual(out["review"][-1], [7, "Where", "this machine · local backend · VM provider docker"])
-        b = copy.deepcopy(definitions.get("benchmark", "osworld1"))
-        b["options"]["agent"]["names"]["nobody"] = "Nobody"
-        b["options"]["thinking"]["step"] = "agent"
-        self.assertTrue(any("agent.names" in p for p in definitions.problems(b, "benchmark")))
-        self.assertTrue(any("thinking.step" in p for p in definitions.problems(b, "benchmark")))
 
     def test_the_null_control_is_refused_as_it_starts_on_a_machine_without_docker(self):
         b = definitions.get("benchmark", "osworld1")

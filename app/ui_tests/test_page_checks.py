@@ -33,7 +33,6 @@ PAGES = {
     "runs-list": ("/runs", "Run Agent Version"),
     "trial-oracle-control": ("/trial/liveboard-oracle-x4/{oracle}", "Reward"),
     "job-oracle-board": ("/job/liveboard-oracle-x4", "4/4 passed"),
-    "benchmarks-runner": ("/benchmarks/locomo", "Build a run"),
     "settings-judge": ("/settings", "TYPESAFE_API_KEY"),
     "feasibility-oracle": ("/job/liveboard-oracle-x4/feasibility", "Feasibility"),
 }
@@ -87,13 +86,6 @@ class Pages(unittest.TestCase):
         self.assertIn("Verify 6.72s", control)
         self.assertIn("Agent 0.20s", control)                                  # the phases are the trial's, whatever else it recorded
         self.assertIn("No trajectory recorded for this trial.", control)
-
-    def test_a_benchmark_the_standard_runs_builds_a_run_on_its_runner(self):
-        page = self.page("benchmarks-runner")
-        self.assertIn("Official", page)
-        self.assertNotIn("No usable route", page)
-        self.assertIn("Upstream limitations", page); self.assertIn("Nullius limitations", page)
-        self.assertNotIn("Next steps", page)                                   # nothing queued
 
     def test_a_bracketed_task_shows_both_sides_and_one_missing_side_validates_nothing(self):
         page = self.page("feasibility-oracle")

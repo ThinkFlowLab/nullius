@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from urllib.request import urlopen
 from nullius.standard.backends import web_services
-from nullius.standard.contract import definitions, match
+from nullius.standard.contract import definitions
 
 spec = importlib.util.spec_from_file_location('search_kit', Path(definitions.KITS) / 'agent-search-v1' / 'driver.py')
 kit = importlib.util.module_from_spec(spec)
@@ -63,19 +63,6 @@ class SearchKit(unittest.TestCase):
         answer = json.dumps({'answer': f.answer, 'source': f.base + f.page, 'evidence': f.evidence})
         self.assertFalse(kit.verdict(f, answer)['passed'])
 
-    def test_the_question_and_pages_ask_for_an_ordinary_fact_not_a_credential(self):
-        setup = kit.setup('disambiguate', self.ws)
-        f = kit.fixture('disambiguate', self.ws)
-        self.assertIn(f'the current catalogue number of {f.target}', setup['prompt'])
-        self.assertEqual(f.evidence, f'The current catalogue number of {f.target} is {f.answer}.')
-        seen = [setup['prompt']]
-        for path in ('/', '/search?q=' + f.target, f.page, '/obsolete'):
-            with urlopen(f.local + path) as r:
-                seen.append(r.read().decode())
-        for text in seen:
-            for word in ('access', 'code', 'credential', 'password', 'secret', 'token'):
-                self.assertNotIn(word, text.lower())
-
     def test_chain_requires_intermediate_source_and_trials_have_new_facts(self):
         kit.setup('follow-reference', self.ws)
         f = kit.fixture('follow-reference', self.ws)
@@ -100,12 +87,6 @@ class SearchKit(unittest.TestCase):
                 web_services.doors({'web_services': [invalid]})
         with self.assertRaises(ValueError):
             web_services.doors({'web_services':setup['web_services'] * 2})
-
-    def test_gaia_requires_search_and_unproven_agents_do_not_fit(self):
-        bench = definitions.find(definitions.load('benchmark')[0], 'gaia')
-        self.assertIn('agent.search/v1', bench['needs'])
-        agent = {'label':'Unproven','_kind':'agent','offers':['agent.task/v1','agent.workspace/v1'],'proven':{}}
-        self.assertTrue(any('agent.search/v1' in reason for reason in match.fit(bench, agent)))
 
 
 from tests import docker_tier

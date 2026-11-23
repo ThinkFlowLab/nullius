@@ -233,27 +233,15 @@ class UnknownExceptionInTheRates(unittest.TestCase):
 class VerifierOutcomes(unittest.TestCase):
     """No exception: the outcome comes from the verifier report."""
 
-    def test_resolved(self):
-        self.assertEqual(_outcome(None, {"resolved": True}), C.RESOLVED)
-
-    def test_no_patch(self):
-        self.assertEqual(_outcome(None, {"resolved": False, "patch_exists": False}),
-                         C.NO_PATCH)
-
-    def test_patch_not_applied(self):
-        self.assertEqual(
-            _outcome(None, {"resolved": False, "patch_exists": True,
-                              "patch_successfully_applied": False}),
-            C.PATCH_NOT_APPLIED)
-
-    def test_patch_failed_tests(self):
-        self.assertEqual(
-            _outcome(None, {"resolved": False, "patch_exists": True,
-                              "patch_successfully_applied": True}),
-            C.PATCH_FAILED_TESTS)
-
-    def test_unknown_when_nothing_is_recorded(self):
-        self.assertEqual(_outcome(None, None), C.UNKNOWN)
+    def test_the_report_decides_the_outcome(self):
+        for report, outcome in (
+                ({"resolved": True}, C.RESOLVED),
+                ({"resolved": False, "patch_exists": False}, C.NO_PATCH),
+                ({"resolved": False, "patch_exists": True, "patch_successfully_applied": False}, C.PATCH_NOT_APPLIED),
+                ({"resolved": False, "patch_exists": True, "patch_successfully_applied": True}, C.PATCH_FAILED_TESTS),
+                (None, C.UNKNOWN)):
+            with self.subTest(outcome):
+                self.assertEqual(_outcome(None, report), outcome)
 
 
 class Presentation(unittest.TestCase):

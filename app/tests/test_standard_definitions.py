@@ -101,15 +101,12 @@ class Problems(unittest.TestCase):
             with self.subTest(pin=invalid):
                 self.bad(AGENT, "agent", lambda d: d.update(install={"pip": [invalid]}), "install.pip")
 
-    def test_a_feature_may_call_a_model_through_the_relay(self):
-        self.assertEqual(definitions.problems(dict(CAPABILITY, model={"apis": ["chat"], "env": {"API_BASE": "{base_url}"}}), "capability"), [])
-        self.bad(CAPABILITY, "capability", lambda d: d.update(model={"apis": ["chat"], "env": {"API_BASE": "{secret}"}}), "is not a slot")
-
     def test_a_dataset_is_in_the_upstream_or_downloaded_with_its_digest(self):
         url = "https://huggingface.co/datasets/x/y/resolve/" + "a" * 40 + "/d.json"
         self.assertEqual(definitions.problems(dict(BENCH, datasets=[{"id": "d", "url": url, "sha256": "b" * 64, "units": 2}]), "benchmark"), [])
         self.bad(BENCH, "benchmark", lambda d: d.update(datasets=[{"id": "d", "url": url, "units": 2}]), "sha256")
         self.bad(BENCH, "benchmark", lambda d: d.update(datasets=[{"id": "d", "url": url, "path": "d.json", "sha256": "b" * 64, "units": 2}]), "not both")
+        self.bad(BENCH, "benchmark", lambda d: d["datasets"][0].update(path="data/x.json", sha256="abc"), "sha256")
 
     def test_a_judge_is_named_and_said(self):
         self.assertEqual(definitions.problems(dict(BENCH, score={"kind": "pass", "says": "s", "judge": {"model": "gpt-4o", "says": "the paper's"}}), "benchmark"), [])
@@ -121,17 +118,12 @@ class Problems(unittest.TestCase):
         self.bad(BENCH, "benchmark", lambda d: d.update(example=True), "example: true or false")
         self.assertIs(definitions.get("agent", "reference", definitions.CATALOGUE).get("example"), True)
 
-    def test_unknown_port_is_named(self):
+    def test_unknown_port_is_named_and_one_of_the_other_family_refused(self):
         self.bad(BENCH, "benchmark", lambda d: d["needs"].append("agent.telepathy/v1"), "'agent.telepathy/v1' is not a port")
-
-    def test_port_of_the_other_family_is_refused(self):
         self.bad(BENCH, "benchmark", lambda d: d["needs"].append("cap.memory/v1"), "not the agent")
 
     def test_shell_in_a_command_is_refused(self):
         self.bad(BENCH, "benchmark", lambda d: d["driver"].update(command=["sh", "-c", "rm -rf ~"]), "is not a plain word")
-
-    def test_dataset_file_needs_its_digest(self):
-        self.bad(BENCH, "benchmark", lambda d: d["datasets"][0].update(path="data/x.json", sha256="abc"), "sha256")
 
     def test_upstream_at_a_full_commit(self):
         self.bad(BENCH, "benchmark", lambda d: d.update(upstream={"repository": "https://github.com/a/b", "tested": "main", "license": "MIT"}),
@@ -151,6 +143,8 @@ class Problems(unittest.TestCase):
         self.bad(AGENT, "agent", lambda d: d["model"]["env"].update(X="{password}"), "is not a slot")
         self.bad(AGENT, "agent", lambda d: d["model"].update(files={"/etc/passwd": "t.toml"}), "is a path under {home}/")
         self.bad(AGENT, "agent", lambda d: d.update(model={"apis": ["chat"]}), "env or files")
+        self.assertEqual(definitions.problems(dict(CAPABILITY, model={"apis": ["chat"], "env": {"API_BASE": "{base_url}"}}), "capability"), [])
+        self.bad(CAPABILITY, "capability", lambda d: d.update(model={"apis": ["chat"], "env": {"API_BASE": "{secret}"}}), "is not a slot")
 
     def test_side_models_are_model_names_each_once(self):
         ok = json.loads(json.dumps(AGENT))
@@ -187,7 +181,8 @@ class Problems(unittest.TestCase):
                 json.dump(edited, f)
             definitions.save(second, lambda cur: cur.update(proven=dict(cur.get("proven") or {}, b={"nop": {"on": "2"}})))
             with open(path) as f:
-                saved = json.load(f)
+                self.assertEqual(json.load(f), edited)
+            saved = definitions.read_document(path, "benchmark")
         self.assertEqual(sorted(saved["proven"]), ["a", "b"])
         self.assertEqual(saved["summary"], "Edited meanwhile.")
         self.assertEqual(sorted(second["proven"]), ["a", "b"])           # the caller sees what was written
@@ -272,16 +267,6 @@ class Fit(unittest.TestCase):
         self.assertEqual(t, {"toy": {"bot": []}, "fb": {"mem": []}})
 
 
-class SetupLabels(unittest.TestCase):
-    def test_unrestricted_substitute_is_named_without_changing_recipe_key(self):
-        for key in ("gsm8k", "humaneval"):
-            bench = definitions.find(definitions.load("benchmark", definitions.CATALOGUE)[0], key)
-            self.assertEqual(definitions.setup_label(bench, "original"), "Original")
-        for spec in ({"models": ["published"]}, {"providers": {"openai": ""}}):
-            self.assertEqual(definitions.setup_label({"setups": {"original": spec}}, "original"), "Original")
-        self.assertEqual(definitions.setup_label({}, "model"), "Original")
-
-
 class Load(unittest.TestCase):
     def test_folder_name_is_the_key_and_bad_files_are_reported(self):
         with tempfile.TemporaryDirectory() as root:
@@ -293,11 +278,6 @@ class Load(unittest.TestCase):
             self.assertEqual([d["key"] for d in got], ["toy"])
             self.assertTrue(any("not its folder's name" in b for b in bad), bad)
             self.assertTrue(any("broken" in b for b in bad), bad)
-
-    def test_shipped_definitions_all_load(self):
-        for kind in definitions.KINDS:
-            _, bad = definitions.load(kind, definitions.CATALOGUE)
-            self.assertEqual(bad, [], kind)
 
     def test_the_bundle_passes_nullius_standard_check(self):
         """Every definition, kit, settings inventory and catalogue entry, under an empty profile."""

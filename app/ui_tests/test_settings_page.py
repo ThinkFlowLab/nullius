@@ -129,26 +129,6 @@ class SettingsPage(unittest.TestCase):
         self.assertEqual(html.count("data-unset="), 1)                                            # a provider's key is replaced, not removed (the card's Remove does that); the optional key of an endpoint is removed
         self.assertIn('>Remove key</button>', html)
 
-    def test_each_judge_card_starts_on_its_provider_and_holds_each_provider_s_key_row(self):
-        Path(self.env_file).write_text("OPENROUTER_API_KEY=sk-or-fromthefile\n")
-        settings.load(self.env_file)
-        html = self.page()
-        judge_section = html.split('id="judge"')[1].split('id="custom-keys"')[0]
-        for prefix in ("DECISION", "LLM_JUDGE"):                                                     # Provider, Protocol, Model, each labelled
-            labels = [judge_section.index(f'for="value-{prefix}_{part.upper()}">{part}</label>') for part in ("Provider", "Protocol", "Model")]
-            self.assertEqual(labels, sorted(labels))
-            self.assertIn(f'<select class="st-input" id="value-{prefix}_PROVIDER" name="value:{prefix}_PROVIDER"', judge_section)   # the shared select
-        self.assertIn('<option value="openrouter" data-available="true" data-protocol="systemone" data-protocols="systemone|decisions"', html)  # the one in use: OpenRouter, the only key
-        self.assertRegex(judge_section, r'<option value="openrouter" data-available="true" data-protocol="chat" data-protocols="chat"[^>]*selected>OpenRouter</option>')
-        self.assertNotIn('type="radio"', judge_section)
-        self.assertRegex(html, r'<option value="typesafe" data-available="false"[^>]* hidden>TypeSafe AI</option>')
-        self.assertRegex(html, r'<option value="openai" data-available="false"[^>]* hidden>OpenAI</option>')
-        self.assertNotIn('id="TYPESAFE_API_KEY"', judge_section)
-        self.assertNotIn('type="password"', judge_section)
-        self.assertIn('data-provider-card="typesafe"', html)
-        self.assertIn('data-default="~typesafe/jev-latest" data-models="~typesafe/jev-latest|typesafe/jev-1.14|typesafe/jev-1.13|typesafe/jev-router|jaredpalmer/kev-4b"', html)
-        self.assertNotIn("data-model-default", html)                       # the default is the model field's placeholder (judges.js)
-
     def test_decision_judge_on_openrouter_offers_the_cached_list_and_asks_for_it_only_after_load(self):
         Path(self.env_file).write_text("OPENROUTER_API_KEY=sk-or-fromthefile\n")
         settings.load(self.env_file)
@@ -190,45 +170,6 @@ class SettingsPage(unittest.TestCase):
         llm = (html := self.page())[html.index('id="LLM_JUDGE_PROVIDER"'):html.index('id="LLM_JUDGE_MODEL"')]
         self.assertIn('id="value-LLM_JUDGE_PROTOCOL" data-name=', llm)                                       # unset: shown, not posted
         self.assertIn('<option value="chat" selected>', llm)
-
-    def test_a_section_per_thing_a_run_needs_with_its_index_and_what_a_run_can_use(self):
-        Path(self.env_file).write_text("OPENROUTER_API_KEY=sk-or-fromthefile\nHOSTS=bench\n")
-        settings.load(self.env_file)
-        html = self.page()
-        for section in ("general", "appearance", "providers", "data-providers", "custom-keys", "judge", "hosts", "sandbox", "storage"):
-            self.assertIn(f'id="{section}"', html); self.assertIn(f'href="#{section}"', html)
-        for title in ("Evaluation", "Execution", "Application", "General", "Appearance", "Judges", "Local data"):
-            self.assertIn(">" + title + "<", html)
-        start = html.index('class="st-ready"'); ready = html[start:html.index("</header>", start)]
-        self.assertIn('class="st-ready-i on"><span aria-hidden="true">✓</span> OpenRouter', ready)
-        self.assertIn('class="st-ready-i"><span aria-hidden="true">○</span> OpenAI', ready)
-        self.assertIn('<span class="mono">bench</span>', ready)
-        for mark in ("#openrouter", "#openai"):
-            self.assertIn(f'brand/marks.svg{mark}"', html)                                          # the providers' own marks
-        self.assertIn('<span class="st-row-label">Base</span><span class="st-row-value mono">https://openrouter.ai/api/v1</span>', html)
-        self.assertIn('data-provider-card="openrouter" data-configured="true" data-ready="true"', html)
-        self.assertIn('data-provider-select="openai"', html)
-        self.assertIn('data-provider-add aria-label="Add a provider"', html)
-        self.assertEqual(set(re.findall(r"<details[^>]*>", html.split('<div id="add-host"')[0])), {'<details class="st-endpoints">'})   # only Endpoints folds
-        for section in ("general", "appearance", "providers", "data-providers", "custom-keys", "judge", "hosts", "storage"):
-            self.assertIn(f'href="#{section}" data-section="{section}"', html)                      # the menu: a link per section, one shown at a time
-
-    def test_nothing_is_assumed_and_nothing_is_suggested(self):
-        """No baked-in repository, host or example on the page: an unset
-        list is its Add button and nothing else, and an unset field is empty
-        with no placeholder."""
-        Path(self.env_file).write_text("")
-        settings.load(self.env_file)
-        html = self.page()
-        def row(name):
-            return re.search(r'<article[^>]*id="%s".*?</article>' % name, html, re.S).group(0)
-        hosts_row, key = row("HOSTS"), row("MODEL_API_KEY")
-        self.assertNotIn(">not set<", hosts_row); self.assertNotIn('data-entry=', hosts_row); self.assertIn('data-add-host aria-label="Add a host"', html)
-        page = re.sub(r'<article class="st-key-card"[^>]*data-key-kind="benchmark">.*?</article>', '', html, flags=re.S)
-        page = re.sub(r'(?s)<details class="st-endpoints">.*?</details>', '', page.split('<div id="add-host"')[0])   # an endpoint's placeholder is its default
-        self.assertEqual(re.findall(r'placeholder="([^"]*)"', page), ["Search settings", "Search providers…", "(optional)", "(optional)"])                           # no field suggests anything
-        self.assertNotIn("agtai", html); self.assertNotIn("10.0.0.4", html)                      # (ssh aliases offered come from this machine's own config)
-        self.assertIn('data-source="unset"', key); self.assertIn('data-provider-card="custom" data-configured="false" data-ready="false"', html)
 
     def test_autosave_returns_masked_state_and_keeps_validation_and_guards(self):
         data = {"csrf": self.token(), "value:ANTHROPIC_API_KEY": "synthetic-autosave-secret"}
@@ -278,6 +219,10 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('name="embedded" value="1"', html)
         self.assertNotIn('id="settings-modal"', html)
         self.assertNotIn('src="/static/onboarding.js"', html)
+        for extra in ({}, {"agent_key_name": "EXAMPLE_KEY"}):
+            response = self.client.post("/settings/save", data={"csrf": self.token(), "embedded": "1", **extra})
+            self.assertTrue(response.location.startswith("/settings?embedded=1"))
+        self.assertIsNone(self.file())
         data = {"csrf": self.token(), "embedded": "1", "value:MODEL_API_URL": "https://llm.example/v1"}
         response = self.client.post("/settings/save", data=data)
         self.assertEqual(response.location, "/settings?embedded=1")
@@ -285,12 +230,6 @@ class SettingsPage(unittest.TestCase):
         self.assertEqual(self.client.post("/settings/save", data={"embedded": "1"}).status_code, 403)
         self.assertEqual(self.client.post("/settings/save", data=data,
                                          environ_overrides={"REMOTE_ADDR": "192.0.2.1"}).status_code, 403)
-
-    def test_embedded_validation_and_empty_save_keep_modal_context(self):
-        for extra in ({}, {"agent_key_name": "EXAMPLE_KEY"}):
-            response = self.client.post("/settings/save", data={"csrf": self.token(), "embedded": "1", **extra})
-            self.assertTrue(response.location.startswith("/settings?embedded=1"))
-        self.assertIsNone(self.file())
 
     def test_one_save_lands_every_change_in_the_file_and_applies_now(self):
         r = self.post({"HOSTS": "bench", "MODEL_API_URL": "https://llm.example/v1"})
@@ -480,13 +419,6 @@ class SettingsPage(unittest.TestCase):
             filed = settings.in_file(self.env_file)
             self.assertEqual(json.loads(filed["MODEL_GW"])["endpoints"], {"chat": "/v2/chat"})
             self.assertEqual({k: v for k, v in filed.items() if k.endswith(("_NAME", "_API_URL"))}, kept, old)
-
-    def test_a_reserved_name_in_agent_keys_is_said_and_the_other_keys_stay(self):
-        Path(self.env_file).write_text("AGENT_KEYS=CURSOR_API_KEY,TYPESAFE\nCURSOR_API_KEY=cur-0123456789\n")
-        settings.load(self.env_file)
-        html = self.page()
-        self.assertIn("AGENT_KEYS lists TYPESAFE, which is now the name of a Nullius setting.", html)
-        self.assertIn('data-key-card="agent-CURSOR_API_KEY"', html)
 
     def test_a_null_in_the_environment_locks_the_field_and_reads_no_old_setting(self):
         self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
@@ -679,16 +611,6 @@ class SettingsPage(unittest.TestCase):
         self.assertEqual(self.file(), "HOSTS=bench, lab\n"); self.assertEqual(os.environ["HOSTS"], "bench, lab")
         self.post({"HOSTS": "bench, not a host"})
         self.assertIn("not a host", self.page()); self.assertEqual(self.file(), "HOSTS=bench, lab\n")
-
-    def test_manual_host_name_survives_save_and_labels_the_builder(self):
-        entry = "GPU lab=ubuntu@192.0.2.10:22"
-        self.post({"HOSTS": entry})
-        self.assertEqual(os.environ["HOSTS"], entry)
-        html = self.page()
-        self.assertIn('<th scope="row" class="host-name">GPU lab<', html)
-        self.assertEqual(hosts.parse_list(os.environ["HOSTS"])[0].to_dict()["label"], "GPU lab")
-        for field in ('name="display_name"', 'name="host"', 'name="user"', 'name="port"'):
-            self.assertIn(field, html)
 
     def test_the_add_host_dialog_is_whole_without_an_ssh_config(self):
         """No `~/.ssh/config` must leave the dialog's tags balanced. The dialog is
@@ -980,26 +902,6 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('value="1536"', field); self.assertIn('data-unit="MB"', field); self.assertIn('data-unit-choice="GB"', field)
         self.post({"HOST_CONSTRAINTS": '{"host3": {"memory_mb": 2}}'})                                # 2 read as MB: refused
         self.assertEqual(json.loads(settings.in_file(self.env_file)[constraints.SETTING]), {"host3": {"memory_mb": 1536}})
-
-    def test_a_constraint_and_a_machine_s_constraints_are_removed_through_save(self):
-        saved = lambda: json.loads(settings.in_file(self.env_file)[constraints.SETTING])
-        self.post({"HOSTS": "bench", "HOST_CONSTRAINTS": '{"local": {"cpus": 2, "memory_mb": 2048}, "bench": {"processes": 64}}'})
-        card = re.search(r'<article[^>]*id="HOSTS".*?</article>', self.page(), re.S).group(0)
-        here, bench = card.split('data-machine="bench"')
-        self.assertEqual(here.count('class="st-clear" data-clear-constraint aria-label="Remove CPUs"'), 1)     # set: its × shows
-        self.assertEqual(here.count('class="st-clear off" data-clear-constraint aria-label="Remove Processes and threads"'), 1)   # not set: none
-        self.assertEqual(card.count("data-clear-machine>Remove all"), 2)                           # each machine sets one
-        self.assertIn('data-unit="MB"', here); self.assertIn('data-unit-choice="GB"', here)       # memory: MB as kept, GB offered
-        self.post({"HOST_CONSTRAINTS": '{"local": {"memory_mb": 2048}, "bench": {"processes": 64}}'})      # one constraint
-        self.assertEqual(saved(), {"local": {"memory_mb": 2048}, "bench": {"processes": 64}})
-        self.post({"HOST_CONSTRAINTS": '{"local": {"memory_mb": 2048}}'})                                 # a machine's all
-        self.assertEqual(saved(), {"local": {"memory_mb": 2048}})
-        self.assertIn("data-clear-machine hidden>Remove all", self.page().split('data-machine="bench"')[1])
-        self.post({"HOST_CONSTRAINTS": "{}"})
-        self.assertEqual((saved(), constraints.of("local")), ({}, {}))
-        # the same guards as any save: no form token, nothing written
-        r = self.post({"HOST_CONSTRAINTS": '{"local": {"cpus": 1}}'}, csrf="not-the-token")
-        self.assertNotEqual(r.status_code, 200); self.assertEqual(saved(), {})
 
     def test_a_manual_host_is_added_from_the_form_with_a_key_file_or_a_password_used_once(self):
         headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}

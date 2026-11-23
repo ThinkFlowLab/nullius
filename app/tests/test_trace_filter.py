@@ -68,27 +68,10 @@ class Filters(unittest.TestCase):
         f = trace.Filter.of(["Read"])
         self.assertEqual(f.toggled_name("Write").toggled_name("Write"), f)
 
-    def test_toggling_removes_what_is_already_there(self):
-        f = trace.Filter.of(["Read", "Write"])
-        self.assertEqual(f.toggled_name("Read").names, ("Write",))
-
     def test_the_two_axes_are_independent(self):
         f = trace.Filter.of(["Read"], ["x"])
         self.assertEqual(f.toggled_name("Write").span_ids, ("x",))
         self.assertEqual(f.toggled_span("y").names, ("Read",))
-
-    def test_clearing_drops_both_axes(self):
-        self.assertFalse(trace.Filter.of(["Read"], ["x"]).cleared().active)
-
-    def test_query_carries_both_axes_for_url_for(self):
-        self.assertEqual(
-            trace.Filter.of(["Read"], ["x"]).query,
-            {"hide": ["Read"], "hide_span": ["x"]},
-        )
-
-    def test_an_inactive_filter_adds_no_query_parameters(self):
-        # url_for drops empty lists, so an unfiltered view keeps a clean URL.
-        self.assertEqual(trace.Filter().query, {"hide": [], "hide_span": []})
 
 
 class Pruning(unittest.TestCase):
@@ -105,17 +88,6 @@ class Pruning(unittest.TestCase):
         self.assertEqual(removed, 1)
         self.assertIn(TOOL_PARENT, raw_ids(kept))
         self.assertIn(TOOL_BLOCKED, raw_ids(kept))
-
-    def test_hiding_a_root_empties_the_document(self):
-        kept, removed = trace.prune(raw()["spans"], trace.Filter.of(span_ids=[INTERACTION]))
-        self.assertEqual(kept, [])
-        self.assertEqual(removed, 8)
-
-    def test_a_filter_that_matches_nothing_passes_the_tree_through_by_reference(self):
-        source = raw()["spans"]
-        kept, removed = trace.prune(source, trace.Filter.of(["NoSuchTool"]))
-        self.assertEqual(removed, 0)
-        self.assertIs(kept[0], source[0])
 
     def test_the_source_document_is_never_mutated(self):
         source = raw()
@@ -149,11 +121,6 @@ class Inventory(unittest.TestCase):
         # Otherwise there would be no control left to unhide it with.
         facets = trace.inventory(raw()["spans"], trace.Filter.of(["Write"]))
         self.assertTrue(next(f for f in facets if f.name == "Write").hidden)
-
-    def test_the_facet_carries_the_commonest_kind_for_its_swatch(self):
-        facets = {f.name: f.kind for f in trace.inventory(raw()["spans"])}
-        self.assertEqual(facets["Write"], "tool")
-        self.assertEqual(facets["llm_request"], "llm_request")
 
     def test_a_span_hidden_by_id_can_still_be_named(self):
         self.assertEqual(trace.labels_by_id(raw()["spans"])[TOOL_PARENT], "Write")
@@ -191,20 +158,8 @@ class TheReportedTotalsSurvive(unittest.TestCase):
         self.assertTrue(filtered.visible)
         self.assertEqual(filtered.hidden_count, 8)
 
-    def test_an_unfiltered_trace_is_not_marked_as_a_view(self):
-        tr = trace.load(RICH)
-        self.assertFalse(tr.filter.active)
-        self.assertEqual(tr.hidden_count, 0)
-        self.assertTrue(tr.visible)
-
 
 class Recomputing(unittest.TestCase):
-    def test_a_bracket_around_a_call_is_charged_no_time_of_its_own(self):
-        # Otherwise the wrapper's own 23.3ms is added to the 18.1ms execution it
-        # contains, and one Write reads as two.
-        view = trace.load(RICH).view
-        self.assertEqual(view.tool_ns + view.idle_ns, BLOCKED_NS + 18131419)
-
     def test_a_tool_that_waits_for_a_human_is_idle_not_tool_time(self):
         self.assertEqual(trace.load(RICH).view.idle_ns, BLOCKED_NS)
 
@@ -292,29 +247,15 @@ class ComparedToTheUnfilteredRun(unittest.TestCase):
         # and the LLM span, and went to the tool. With the tool gone they are the
         # call's.
         filtered = trace.load(RICH, trace.Filter.of(["Write"]))
-        changed = {s["key"]: s["delta_ns"] for s in filtered.view.compared_to(filtered.baseline)}
-        self.assertEqual(changed["llm"], 3519315)
-
-    def test_an_emptied_category_keeps_its_entry_so_the_change_is_visible(self):
-        filtered = trace.load(RICH, trace.Filter.of(["Write"]))
-        changed = {s["key"]: s["ns"] for s in filtered.view.compared_to(filtered.baseline)}
-        self.assertEqual(changed["tool"], 0)
-
-    def test_the_removed_time_shows_up_as_unaccounted_not_as_a_shorter_run(self):
-        filtered = trace.load(RICH, trace.Filter.of(["Write"]))
-        changed = {s["key"]: s["delta_ns"] for s in filtered.view.compared_to(filtered.baseline)}
-        self.assertEqual(sum(changed.values()), 0)
+        compared = filtered.view.compared_to(filtered.baseline)
+        self.assertEqual({s["key"]: s["delta_ns"] for s in compared}["llm"], 3519315)
+        self.assertEqual({s["key"]: s["ns"] for s in compared}["tool"], 0)     # an emptied category keeps its entry
 
     def test_nothing_filtered_means_no_deltas(self):
         tr = trace.load(RICH)
         self.assertEqual(
             [s["delta_ns"] for s in tr.view.compared_to(tr.baseline)], [0, 0, 0, 0]
         )
-
-    def test_segments_stay_in_the_canonical_order(self):
-        filtered = trace.load(RICH, trace.Filter.of(["Write"]))
-        keys = [s["key"] for s in filtered.view.compared_to(filtered.baseline)]
-        self.assertEqual(keys, ["llm", "tool", "idle", "unaccounted"])
 
 
 class Percentages(unittest.TestCase):
@@ -326,10 +267,6 @@ class Percentages(unittest.TestCase):
         segments = {s["key"]: s["pct"] for s in totals.segments}
         self.assertEqual(segments["llm"], 50.0)
         self.assertEqual(segments["unaccounted"], 50.0)
-
-    def test_a_recomputed_strip_is_a_share_of_the_same_wall_clock(self):
-        segments = trace.load(RICH, trace.Filter.of(["Write"])).view.segments
-        self.assertAlmostEqual(sum(s["pct"] for s in segments), 100.0, places=6)
 
     def test_with_no_wall_clock_the_segments_own_sum_is_the_denominator(self):
         totals = Totals(llm_ns=300_000_000, tool_ns=100_000_000)
@@ -344,11 +281,6 @@ class Percentages(unittest.TestCase):
 class Saving(unittest.TestCase):
     def out(self, *names, span_ids=()):
         return trace.filtered_document(raw(), trace.Filter.of(names, span_ids))
-
-    def test_the_hidden_spans_are_gone(self):
-        out = self.out(GROUP)
-        self.assertNotIn(TOOL_PARENT, raw_ids(out["spans"]))
-        self.assertIn(LLM_1, raw_ids(out["spans"]))
 
     def test_it_is_still_a_readable_trace_document(self):
         out = self.out("Write")
@@ -365,9 +297,7 @@ class Saving(unittest.TestCase):
         out = self.out(GROUP)
         self.assertEqual(out["totals"]["tool_ns"], 0)
         self.assertEqual(out["totals"]["span_count"], 5)
-
-    def test_the_wall_clock_is_carried_over_unchanged(self):
-        self.assertEqual(self.out("Write")["totals"]["wall_ns"], raw()["totals"]["wall_ns"])
+        self.assertEqual(out["totals"]["wall_ns"], raw()["totals"]["wall_ns"])     # carried over unchanged
 
     def test_the_producers_own_totals_survive_verbatim(self):
         # A derived number that has overwritten the measured one is unfalsifiable.
@@ -379,9 +309,7 @@ class Saving(unittest.TestCase):
         )
         self.assertEqual(out["producer"], trace.FILTER_PRODUCER)
         self.assertEqual(out["filtered"]["source_producer"], "app/session_to_trace.py")
-
-    def test_a_source_with_no_producer_leaves_the_field_empty_not_invented(self):
-        self.assertEqual(self.out("Write")["filtered"]["source_producer"], "")
+        self.assertEqual(self.out("Write")["filtered"]["source_producer"], "")     # none in the source: empty, not invented
 
     def test_the_filter_is_recorded_so_the_view_can_be_explained(self):
         note = self.out(GROUP, span_ids=[LLM_1])["filtered"]

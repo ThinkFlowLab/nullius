@@ -1,6 +1,6 @@
 # Prove a benchmark
 
-Two controls and two driver checks per dataset, written into the definition.
+Two controls and two driver checks per dataset, recorded in the benchmark's proofs.
 
 ```bash title="Prove"
 nullius standard prove <benchmark>[@version] [--dataset D] [--limit N] [-j N] \
@@ -24,7 +24,7 @@ nullius standard prove <benchmark>[@version] [--dataset D] [--limit N] [-j N] \
 | `--remove-images` | Remove each image the proof pulls or builds after its unit, so the oracle pulls it again; by default they stay |
 | `--from-run` | Started by Nullius: `OPENAI_API_KEY` only, saved settings unread |
 
-Passes go under `proven.<dataset>` in `standard.json`, fails under `proven.<dataset>.failed`. `prove KEY@NAME` proves a version; `run KEY nop` runs one control ([Run a benchmark](run.md)).
+Passes go under the version's `proven.<dataset>` in [proofs.json](../standard.md#what-is-proven), fails under `proven.<dataset>.failed`. `prove KEY@NAME` proves a version; `run KEY nop` runs one control ([Run a benchmark](run.md)).
 
 <div class="grid cards" markdown>
 

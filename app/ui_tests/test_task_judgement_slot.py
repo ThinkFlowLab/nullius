@@ -42,6 +42,11 @@ class TaskSlot(unittest.TestCase):
         self.assertEqual(web.judge.tasks_todo(job), [trial],
                          "still scored: " + str(web.judge.task_quality_of(job, trial)))
 
+        job, trial = self.job("legacy-run", "tasks", "/x/bench-a/tasks")
+        store.save(web.judge.ws_dir(), web.judge.task_key(job), "fix-bug", dict(SCORED))     # as kept before the digest
+        self.assertIsNone(web.judge.task_quality_of(job, trial))
+        self.assertEqual(web.judge.tasks_todo(job), [trial])
+
     def test_two_datasets_with_one_folder_name_are_judged_apart(self):
         a, ta = self.job("bench-a", "tasks", "/x/bench-a/tasks")      # parse.py keeps the basename as the dataset
         b, tb = self.job("bench-b", "tasks", "/y/bench-b/tasks")
@@ -55,12 +60,6 @@ class TaskSlot(unittest.TestCase):
         b, tb = self.job("run-2", "")
         web.judge.judge_task(a, ta, None)
         self.assertIsNone(web.judge.task_quality_of(b, tb))
-
-    def test_a_score_kept_without_its_instruction_is_not_shown(self):
-        job, trial = self.job("run-1", "tasks", "/x/bench-a/tasks")
-        store.save(web.judge.ws_dir(), web.judge.task_key(job), "fix-bug", dict(SCORED))     # as kept before the digest
-        self.assertIsNone(web.judge.task_quality_of(job, trial))
-        self.assertEqual(web.judge.tasks_todo(job), [trial])
 
 
 if __name__ == "__main__":

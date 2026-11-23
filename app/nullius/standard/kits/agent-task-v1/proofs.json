@@ -1,0 +1,40 @@
+{
+  "schema": "nullius.proofs/v1",
+  "kind": "benchmark",
+  "key": "agent-task-v1",
+  "versions": {
+    "": {
+      "proven": {
+        "kit": {
+          "units": {
+            "units": 3,
+            "passed": "3 ids, the same twice, unique"
+          },
+          "leak": {
+            "units": 3,
+            "looked_for": 0,
+            "short": 3,
+            "passed": "3/3",
+            "note": "3 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
+          },
+          "nop": {
+            "passed": "0/3",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 3
+          },
+          "oracle": {
+            "passed": "3/3",
+            "value": 1.0,
+            "expect": {
+              "at_least": 1.0
+            },
+            "units": 3
+          }
+        }
+      }
+    }
+  }
+}

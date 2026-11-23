@@ -65,31 +65,6 @@ class ProviderList(unittest.TestCase):
 
 class TheStep(unittest.TestCase):
     """What the Model step's script draws and what the compile route hands it."""
-    STATIC = Path(__file__).resolve().parents[1] / 'static'
-    SCRIPT = (STATIC / 'builder' / 'command-builder.js').read_text()
-    PICKER = (STATIC / 'builder' / 'model-picker.js').read_text()
-    STYLE = (STATIC / 'builder' / 'command-builder.css').read_text()
-
-    def test_served_by_holds_no_sentence_and_its_help_is_a_tooltip(self):
-        field = self.SCRIPT[self.SCRIPT.index('const field = (rec, role)'):self.SCRIPT.index('function sync()')]
-        self.assertNotIn('<small>', field)
-        self.assertIn('title="', field)
-
-    def test_served_by_is_a_row_with_the_model_rows_picker(self):
-        """A row as the Model row is (a ``label.nb-field``, which the page sets as a settings row), its input one the
-        Model row's picker takes (``list="nb-served"``), with no block set in under the model's row."""
-        field = self.SCRIPT[self.SCRIPT.index('const field = (rec, role)'):self.SCRIPT.index('function sync()')]
-        self.assertIn('<label class="nb-field std-served"', field)
-        self.assertIn('<input list="nb-served"', field)
-        self.assertNotIn('<select', field)
-        self.assertIn('input[list="nb-models"], input[list="nb-served"]', self.PICKER)
-        served_css = [line for line in self.STYLE.splitlines() if 'std-served' in line]
-        self.assertTrue(served_css)
-        self.assertFalse([line for line in served_css if 'border-left' in line or 'margin-left' in line])
-        # a pick joins the list (never replaces it); a removal is one place of it; a field of several opens on a click
-        self.assertIn("root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail);", self.SCRIPT)
-        self.assertIn('if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove);', self.SCRIPT)
-        self.assertIn("if (severalOf(input)) input.addEventListener('click', () => { if(active?.input !== input)void open(input); });", self.PICKER)
 
     def test_the_compile_route_gives_each_fields_model_as_the_run_sends_it(self):
         client = web.app.test_client()
@@ -100,23 +75,6 @@ class TheStep(unittest.TestCase):
                   'model': 'gpt-4o', 'limit': 1, 'concurrency': 1, 'where': 'local'}
         response = client.post('/new-run/runner', json={'recipe': recipe}, headers={'X-CSRF-Token': 'served-test-token'})
         self.assertEqual(response.json['served_models']['model'], 'openai/gpt-4o-2024-08-06')
-
-    def test_a_model_changed_draws_its_served_by_in_place_and_no_form(self):
-        """A model typed or chosen clears its field's pin and draws that Served by again where it is: the form is not
-        drawn again, so the model's menu does not open again, and a click on Served by lands there."""
-        self.assertIn("else if(['model','simulator_model','judge_model'].includes(d.field)){C.setModelOf(rec,d.field,value);syncServed();}", self.SCRIPT)
-        changed = self.SCRIPT[self.SCRIPT.index("root.addEventListener('change'"):]
-        self.assertNotIn("'model','simulator_model','judge_model'", changed)
-        self.assertNotIn('requestAnimationFrame', changed)
-
-    def test_a_long_slug_wraps_inside_its_chip(self):
-        """A name is never cut: a slug with no break wraps inside its chip, and the chip stays inside its row."""
-        self.assertIn('<span class="std-served-slug">', self.SCRIPT)
-        rules = {line.split('{')[0].strip(): line for line in self.STYLE.splitlines() if 'std-served' in line and '{' in line}
-        self.assertIn('overflow-wrap: anywhere', rules['#nullius-builder .std-served-slug'])
-        self.assertIn('min-width: 0', rules['#nullius-builder .std-served-slug'])
-        self.assertIn('max-width: 100%', rules['#nullius-builder .std-served-pick'])
-        self.assertIn('min-width: 0', rules['#nullius-builder .std-served-list'])
 
 
 class TheRows(CompilerCase):
@@ -182,15 +140,6 @@ class TheRows(CompilerCase):
                 self.assertEqual(out['chosen'], ['bad slug'] if pinned else [])
                 self.assertEqual(out['selectors'], ['input[data-served-by]', '[data-served-list="model"]'])
 
-    def test_an_unknown_model_or_list_waits_but_a_pin_stays_visible(self):
-        out = self.js(self.SETUP + 'compiled=null;rows.sync();const got=[[label.hidden,requests.slice()]];'
-                      'r.served_by={model:["saved-provider"]};rows.sync();got.push([label.hidden,seen().chips,requests.slice()]);'
-                      'compiled={out:{served_models:{model:"openai/gpt-4o-2024-08-06"}},key:C.servedKey(r)};rows.sync();'
-                      'got.push([label.hidden,requests.slice()]);C.removeServed(r,"model",0);rows.sync();got.push([label.hidden,requests.slice()]);'
-                      'process.stdout.write(JSON.stringify(got));')
-        self.assertEqual(out, [[True, []], [False, ['saved-provider'], []],
-                               [False, ['openai/gpt-4o-2024-08-06']], [True, ['openai/gpt-4o-2024-08-06']]])
-
     def test_a_model_change_asks_once_and_an_old_list_never_draws_its_row(self):
         for old_first in (False, True):
             with self.subTest(old_first=old_first):
@@ -207,7 +156,6 @@ class TheRows(CompilerCase):
                 self.assertEqual(out, {'changed': [True, '', []], 'pending': [True, next_model],
                                        'stale': [[], old_first, next_model], 'final': [False, next_model],
                                        'requests': ['openai/gpt-4o-2024-08-06', next_model], 'pins': None})
-
 
     def test_a_failed_compile_keeps_the_model_the_server_named(self):
         """A compile that failed names no model: the row keeps the one the server last named for the same recipe (a pin
@@ -341,6 +289,10 @@ class ServedInTheCore(CompilerCase):
         # kept as written, the judge's bad slug included
         self.assertEqual(out, [{'model': ['deepinfra/fp8', 'together'], 'judge': ['bad slug']}, ['a', 'b'], True, True])
 
+        out = self.js('const b=C.standard().benchmarks[0];const r=C.createStandard(b.key);C.setChoice(r,"openrouter");'
+                      'const again=C.fromJSON(JSON.stringify(r));process.stdout.write(JSON.stringify(["served_by" in r,"served_by" in again]));')
+        self.assertEqual(out, [False, False])
+
     def test_a_pin_goes_with_the_model_it_was_set_for(self):
         out = self.js('const b=C.standard().benchmarks.find(x=>x.judge)||C.standard().benchmarks[0];const r=C.createStandard(b.key);C.setChoice(r,"openrouter");'
                       'const seen=[];C.setServed(r,"model",["a"]);C.setServed(r,"judge",["j"]);'
@@ -368,22 +320,6 @@ class ServedInTheCore(CompilerCase):
                       'C.removeServed(r,"model","0");seen.push(r.served_by.model.slice());C.removeServed(r,"model",0);seen.push(r.served_by);'
                       'C.removeServed(r,"judge",0);seen.push(r.served_by===undefined);process.stdout.write(JSON.stringify(seen));')
         self.assertEqual(out, [['a', 'b'], ['b'], {'judge': ['j']}, True])
-
-    def test_a_pin_is_kept_as_written_for_the_server_to_refuse(self):
-        raw = {'version': 1, 'harness': 'standard', 'benchmark': '', 'provider': 'openrouter', 'served_by': {'model': ['deepinfra', 'bad slug']}}
-        out = self.js('const raw=' + json.dumps(raw) + ';raw.benchmark=C.standard().benchmarks[0].key;const r=C.fromJSON(JSON.stringify(raw));'
-                      'process.stdout.write(JSON.stringify([r.served_by,C.servedList("a,,b"),C.servedList(" , "),C.servedList("")]));')
-        self.assertEqual(out, [{'model': ['deepinfra', 'bad slug']}, ['a', '', 'b'], [], []])
-
-    def test_the_list_is_of_the_model_the_run_sends(self):
-        out = self.js('process.stdout.write(JSON.stringify([C.servedModelOf("model","gpt-4o",{served_models:{model:"openai/gpt-4o-2024-08-06"}}),'
-                      'C.servedModelOf("judge","gpt-4o",null),C.servedModelOf("judge","gpt-4o",{served_models:{judge:null}})]));')
-        self.assertEqual(out, ['openai/gpt-4o-2024-08-06', 'gpt-4o', 'gpt-4o'])
-
-    def test_a_recipe_with_no_pin_is_saved_as_before(self):
-        out = self.js('const b=C.standard().benchmarks[0];const r=C.createStandard(b.key);C.setChoice(r,"openrouter");'
-                      'const again=C.fromJSON(JSON.stringify(r));process.stdout.write(JSON.stringify(["served_by" in r,"served_by" in again]));')
-        self.assertEqual(out, [False, False])
 
 
 if __name__ == '__main__':

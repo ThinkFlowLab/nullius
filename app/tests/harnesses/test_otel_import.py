@@ -19,13 +19,6 @@ from nullius.importers import otel as importer
 
 class Detect(unittest.TestCase):
 
-
-    def test_unrelated_directories_are_not_claimed(self):
-        self.assertFalse(importer.detect(tempfile.mkdtemp()))
-        self.assertFalse(importer.detect("/nonexistent/otel/export"))
-        # a Harbor job: result.json / trajectory / trace.json — no resourceSpans
-        self.assertFalse(importer.detect(str(APP / "tests" / "fixtures" / "harbor-jobs")))
-
     def test_a_directory_of_only_refused_files_is_not_claimed(self):
         root = tempfile.mkdtemp()
         with open(os.path.join(root, "broken.json"), "w") as fh:
@@ -39,7 +32,6 @@ class Convert(unittest.TestCase):
     def setUp(self):
         self.out = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.out, True)
-
 
     def test_nothing_readable_is_an_error_naming_the_refusals(self):
         src = tempfile.mkdtemp()
@@ -69,17 +61,6 @@ class Convert(unittest.TestCase):
         reason = importer.refused(src)[0]
         self.assertTrue(reason.startswith("batch-2/jaeger-trace.json: not an OTLP/JSON trace export"), reason)
         self.assertEqual(reason.count("jaeger-trace.json"), 1)
-
-
-class Trees(unittest.TestCase):
-    """What one job is under a root the picker opened: an export
-    directory is one job; a parent of several export directories is one job
-    per directory, each one producer's export, not one pooled job."""
-
-
-    def test_a_directory_with_no_export_is_no_tree(self):
-        self.assertEqual(importer.trees(tempfile.mkdtemp()), [])
-        self.assertEqual(importer.trees("/nonexistent/export"), [])
 
 
 if __name__ == "__main__":

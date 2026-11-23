@@ -44,7 +44,7 @@ class PreparedInstallTests(unittest.TestCase):
             file.parent.mkdir(parents=True, exist_ok=True)
             file.touch()
 
-    def test_runtime_must_be_installed_before_a_process_starts(self):
+    def test_runtime_and_product_launcher_must_be_installed_before_a_process_starts(self):
         with patch.object(adapter.subprocess, "Popen") as launch:
             with self.assertRaisesRegex(RuntimeError, "missing its runtime"):
                 adapter.run(self.install, "question")
@@ -52,12 +52,8 @@ class PreparedInstallTests(unittest.TestCase):
             (self.install / "runtime/bin/python").unlink()
             with self.assertRaisesRegex(RuntimeError, "missing its runtime"):
                 adapter.run(self.install, "question")
-            launch.assert_not_called()
-
-    def test_product_entry_points_must_exist(self):
-        self.prepare()
-        (self.install / "src/harness/personal-agent/services/agent_bridge/src/server_engine/workswarm_launcher.py").unlink()
-        with patch.object(adapter.subprocess, "Popen") as launch:
+            self.prepare()
+            (self.install / "src/harness/personal-agent/services/agent_bridge/src/server_engine/workswarm_launcher.py").unlink()
             with self.assertRaisesRegex(RuntimeError, "product launcher"):
                 adapter.run(self.install, "question")
             launch.assert_not_called()
@@ -170,6 +166,24 @@ class ProcessCleanupTests(unittest.TestCase):
         with patch.object(adapter.os, "killpg", side_effect=[None, ProcessLookupError]):
             adapter.stop(service)
         service.wait.assert_any_call()
+
+
+class VersionTests(unittest.TestCase):
+    def test_the_fixed_version_names_its_fork_and_the_upstream_changes_it_carries(self):
+        from nullius.standard.contract import definitions
+        release = definitions.get("agent", "digitalmate")
+        self.assertEqual(release["upstream"]["tag"], "v0.1.13")
+        self.assertEqual(release["offers"], ["agent.task/v1", "agent.search/v1"])
+        fixed = definitions.get("agent", "digitalmate@0.1.13-fixes")
+        self.assertEqual(fixed["upstream"]["repository"], "https://github.com/aitianshi/DigitalMate")
+        self.assertEqual(fixed["upstream"]["branch"], "nullius/v0.1.13")
+        fixes = " ".join(fixed["upstream"]["fixes"])
+        for reference in ("#699", "#2483", "#2484"):
+            self.assertIn(reference, fixes)
+        self.assertEqual(fixed["offers"], ["agent.task/v1", "agent.workspace/v1", "agent.tools/v1",
+                                           "agent.conversation/v1", "agent.search/v1"])
+        self.assertIn("acp", fixed["start"])
+        self.assertIn("command", release["start"])
 
 
 if __name__ == "__main__":

@@ -28,10 +28,6 @@ class Tries(unittest.TestCase):
         self.assertEqual(first["answers"]["q"]["choice"], "first try")
         self.assertEqual(store.for_job(self.ws, "job", {"t1": self.S1})["t1"]["answers"]["q"]["choice"], "first try")
         self.assertEqual(store.for_job(self.ws, "job", {"t1": self.S2})["t1"]["answers"]["q"]["choice"], "retry")
-
-    def test_judging_an_earlier_try_again_merges_into_its_own_record(self):
-        store.save(self.ws, "job", "t1", rec("first try"), started=self.S1)
-        store.save(self.ws, "job", "t1", rec("retry"), started=self.S2)
         store.save(self.ws, "job", "t1", rec("later", q="r"), started=self.S1)
         self.assertEqual(sorted(store.load(self.ws, "job", "t1", started=self.S1)["answers"]), ["q", "r"])
         self.assertEqual(store.load(self.ws, "job", "t1", started=self.S2)["answers"], {"q": {"choice": "retry"}})

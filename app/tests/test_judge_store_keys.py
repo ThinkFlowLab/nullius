@@ -21,20 +21,14 @@ class StoreKeys(unittest.TestCase):
         self.ws = tempfile.mkdtemp(prefix="nullius-judge-keys-")
         self.addCleanup(shutil.rmtree, self.ws, True)
 
-    def test_two_task_names_keep_two_records(self):
-        store.save(self.ws, "task:ds", "task:abc", rec("first"))
-        store.save(self.ws, "task:ds", "task_abc", rec("second"))
-        self.assertEqual(store.load(self.ws, "task:ds", "task:abc")["answers"]["q"]["choice"], "first")
-        self.assertEqual(store.load(self.ws, "task:ds", "task_abc")["answers"]["q"]["choice"], "second")
-
-    def test_a_split_agent_view_and_a_job_of_the_lookalike_name_keep_two_records(self):
-        store.save(self.ws, "job~a-b", "t1", rec("view"))      # parse.py names an agent's view <job>~<label>
-        store.save(self.ws, "job_a-b", "t1", rec("job"))
-        self.assertEqual(store.load(self.ws, "job~a-b", "t1")["answers"]["q"]["choice"], "view")
-
-    def test_a_safe_name_keeps_its_file_name(self):
-        store.save(self.ws, "job-a", "task__x1", rec("x"))
-        self.assertTrue(os.path.isfile(os.path.join(self.ws, "judgements", "job-a", "task__x1.json")))
+    def test_two_lookalike_job_or_task_names_keep_two_records(self):
+        for (job, task), (job2, task2) in ((("task:ds", "task:abc"), ("task:ds", "task_abc")),
+                                           (("job~a-b", "t1"), ("job_a-b", "t1"))):      # parse.py names an agent's view <job>~<label>
+            with self.subTest(job=job2, task=task2):
+                store.save(self.ws, job, task, rec("first"))
+                store.save(self.ws, job2, task2, rec("second"))
+                self.assertEqual(store.load(self.ws, job, task)["answers"]["q"]["choice"], "first")
+                self.assertEqual(store.load(self.ws, job2, task2)["answers"]["q"]["choice"], "second")
 
     def test_a_record_kept_under_the_older_name_is_read_and_merged_into(self):
         older = os.path.join(self.ws, "judgements", "job_a-b", "t_1.json")         # job~a-b, t:1 as the store spelled them before

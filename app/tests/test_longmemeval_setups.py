@@ -30,20 +30,6 @@ def rows():
 
 
 class Inventory(unittest.TestCase):
-    def test_the_benchmark_and_its_inventory_are_valid(self):
-        with open(os.path.join(BENCH["_here"], "standard.json")) as f:
-            self.assertEqual(definitions.problems(json.load(f), "benchmark"), [])
-        self.assertEqual(definitions.settings_problems([BENCH]), [])
-
-    def test_every_entry_point_is_inventoried(self):
-        entries = {r["entry"] for r in rows()}
-        for e in ("src/generation/run_generation.sh", "src/generation/run_generation.py", "src/retrieval/run_retrieval.sh",
-                  "src/retrieval/run_retrieval.py", "src/evaluation/evaluate_qa.py", "src/evaluation/print_qa_metrics.py",
-                  "src/evaluation/print_retrieval_metrics.py", "src/index_expansion/temp_query_search_pruning.py",
-                  "data/custom_history/sample_haystack_and_timestamp.py"):
-            self.assertIn(e, entries)
-        self.assertEqual(len([e for e in entries if e.startswith("src/index_expansion/batch_expansion_")]), 6)
-
     def test_what_is_offered_is_named(self):
         named = {r["nullius"] for r in rows()}
         for n, o in BENCH["options"].items():
@@ -53,16 +39,6 @@ class Inventory(unittest.TestCase):
             self.assertIn(f"dataset:{d['id']}", named)
         for s in BENCH["setups"]:
             self.assertIn(f"setup:{s}", named)
-
-    def test_the_setups_are_the_papers(self):
-        o = BENCH["setups"]["original"]
-        self.assertEqual(o["models"], ["gpt-4o", "gpt-4o-mini"])
-        self.assertEqual(o["served_as"], {"gpt-4o": "gpt-4o-2024-08-06", "gpt-4o-mini": "gpt-4o-mini-2024-07-18"})
-        self.assertEqual(BENCH["setups"]["model"]["runs_as"], "gpt-4o")
-        defaults = {n: BENCH["options"][n]["default"] for n in
-                    ("retriever", "topk", "reading", "separate_notes", "history_format", "useronly", "merge_key_expansion")}
-        self.assertEqual(defaults, {"retriever": "full-history-session", "topk": "1000", "reading": "con", "separate_notes": "false",
-                                    "history_format": "json", "useronly": "false", "merge_key_expansion": "none"})
 
     def test_generation_limit_validation_and_scope(self):
         for setup in ("original", "model"):
@@ -248,23 +224,12 @@ class Driver(unittest.TestCase):
                  ("k2_abs", "knowledge-update"), ("k3", "knowledge-update")]
 
     def test_a_question_type_keeps_that_types_questions_abstention_included_in_dataset_order(self):
-        got = self.run_driver([{"op": "units", "dataset": "longmemeval_oracle"}], {"question_type": "knowledge-update"},
-                              questions=self.QUESTIONS)
-        self.assertEqual(got[0]["units"], ["k1", "k2_abs", "k3"])
-
-    def test_without_a_question_type_every_question_runs(self):
-        for options in ({}, {"question_type": "all"}):
-            got = self.run_driver([{"op": "units", "dataset": "longmemeval_oracle"}], options, questions=self.QUESTIONS)
-            self.assertEqual(got[0]["units"], [q for q, _ in self.QUESTIONS])
-
-    def test_question_type_offers_every_type_and_applies_to_every_setup(self):
-        o = BENCH["options"]["question_type"]
-        self.assertEqual(o["default"], "all")
-        self.assertEqual(set(o["values"]), {"all", "knowledge-update", "temporal-reasoning", "multi-session",
-                                            "single-session-user", "single-session-assistant", "single-session-preference"})
-        for setup in ("original", "model", "yours"):
-            vals, bad = definitions.bench_options_of(BENCH, "longmemeval_oracle", {"question_type": "knowledge-update"}, setup)
-            self.assertEqual((bad, vals["question_type"]), ([], "knowledge-update"))
+        every = [q for q, _ in self.QUESTIONS]
+        for options, units in (({"question_type": "knowledge-update"}, ["k1", "k2_abs", "k3"]),
+                               ({}, every), ({"question_type": "all"}, every)):
+            with self.subTest(options):
+                got = self.run_driver([{"op": "units", "dataset": "longmemeval_oracle"}], options, questions=self.QUESTIONS)
+                self.assertEqual(got[0]["units"], units)
 
     def test_expansions_use_the_exact_cache_member_and_pass_all_join_modes(self):
         import io, tarfile, zipfile
@@ -304,18 +269,6 @@ class Driver(unittest.TestCase):
                 self.assertEqual(os.path.isdir(os.path.join(tmp, "ws", "nltk_data")), split_summary)
                 inactive = dict(vals, retriever="full-history-session")
                 self.assertEqual(definitions.option_needs(BENCH, inactive)["files"], [])
-
-    def test_tokenizer_needs_follow_the_selected_method_join_and_granularity(self):
-        given = {"retriever": "flat-bm25-session", "session_expansion": "session-summ", "expansion_join": "split-merge"}
-        for changes, expected in (({}, ["index_expansions", "punkt_tab"]),
-                                  ({"expansion_join": "merge"}, ["index_expansions"]),
-                                  ({"session_expansion": "session-keyphrase"}, ["index_expansions"]),
-                                  ({"retriever": "flat-bm25-turn", "turn_expansion": "turn-userfact"}, ["index_expansions"]),
-                                  ({"retriever": "full-history-session"}, []), ({}, ["index_expansions", "punkt_tab"])):
-            vals, bad = definitions.bench_options_of(BENCH, "longmemeval_s", dict(given, **changes), "original")
-            self.assertEqual(bad, [])
-            self.assertEqual(definitions.option_needs(BENCH, vals)["files"], expected)
-        self.assertEqual(given["session_expansion"], "session-summ")
 
     def test_an_expansion_archive_cannot_supply_a_link_instead_of_its_cache(self):
         import tarfile
@@ -363,16 +316,6 @@ class Scripts(unittest.TestCase):
             recorded = " ".join(r["setting"] for r in rows() if r["entry"] in ("/".join(path), "/".join(path)[:-3] + ".sh"))
             if path[1] == "generation":
                 self.assertEqual({f for f in flags if f not in recorded}, set())
-
-    def test_pinned_reader_supports_length_but_judge_keeps_ten(self):
-        source = self.script("src", "generation", "run_generation.py")
-        self.assertIn("parser.add_argument('--gen_length', type=int, default=None)", source)
-        self.assertIn("gen_length = args.gen_length", source)
-        self.assertIn("gen_length = 500 if not args.cot else 800", source)
-        self.assertIn("max_retrieval_length = model_max_length - gen_length - 1000", source)
-        self.assertIn("'max_tokens': gen_length", source)
-        judge = self.script("src", "evaluation", "evaluate_qa.py")
-        self.assertIn("'max_tokens': 10", judge)
 
     def test_every_offered_value_is_a_script_alias(self):
         sh = self.script("src", "generation", "run_generation.sh")

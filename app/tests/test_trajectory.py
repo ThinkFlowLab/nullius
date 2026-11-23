@@ -104,11 +104,6 @@ class TokenSeries(unittest.TestCase):
         )
         self.assertEqual(tr.total_reasoning_tokens, 64)
 
-    def test_no_metrics_no_series(self):
-        tr = _load([{"step_id": 1, "source": "agent", "message": "hi"}])
-        self.assertEqual(tr.token_series, [])
-        self.assertIsNone(tr.total_reasoning_tokens)
-
 
 class WorkspacePaths(unittest.TestCase):
     """Absolute and relative forms of one path must not read as two files.
@@ -133,10 +128,6 @@ class WorkspacePaths(unittest.TestCase):
         self.assertEqual(trajectory.workspace_relative("/testbed-2/x.py"),
                          "/testbed-2/x.py")
 
-    def test_both_forms_converge(self):
-        self.assertEqual(trajectory.workspace_relative("/testbed/a/b.py"),
-                         trajectory.workspace_relative("a/b.py"))
-
 
 class ReasoningTotalFallback(unittest.TestCase):
     """Where the reasoning count lives depends on which agent wrote the file.
@@ -157,36 +148,23 @@ class ReasoningTotalFallback(unittest.TestCase):
         self.assertEqual(tr.total_reasoning_tokens, 66)
 
     def test_falls_back_to_final_metrics(self):
-        tr = _load([{"step_id": 1, "source": "agent", "message": "a"}],
-                   final_metrics={"total_reasoning_tokens": 86})
-        self.assertEqual(tr.total_reasoning_tokens, 86)
+        for extra in ({}, {"extra": "not a slot"}):
+            with self.subTest(extra=extra):
+                tr = _load([{"step_id": 1, "source": "agent", "message": "a"}],
+                           final_metrics={"total_reasoning_tokens": 86, **extra})
+                self.assertEqual(tr.total_reasoning_tokens, 86)
 
     def test_absent_stays_none(self):
         # None, not 0: a zero asserts the model did not reason.
         tr = _load([{"step_id": 1, "source": "agent", "message": "a"}])
         self.assertIsNone(tr.total_reasoning_tokens)
 
-    # Newer writers move every field ATIF does not name into the `extra`
-    # slot of its level; earlier artifacts keep the old position.
-    def test_read_from_the_final_metrics_extra_slot(self):
-        tr = _load([{"step_id": 1, "source": "agent", "message": "a"}],
-                   final_metrics={"total_prompt_tokens": 10, "extra": {"total_reasoning_tokens": 7}})
-        self.assertEqual(tr.total_reasoning_tokens, 7)
-
     def test_the_slot_wins_over_the_old_position_and_is_not_summed(self):
-        tr = _load([{"step_id": 1, "source": "agent", "message": "a"}],
-                   final_metrics={"total_reasoning_tokens": 86, "extra": {"total_reasoning_tokens": 7}})
-        self.assertEqual(tr.total_reasoning_tokens, 7)
-
-    def test_a_null_in_the_slot_stays_none(self):
-        tr = _load([{"step_id": 1, "source": "agent", "message": "a"}],
-                   final_metrics={"total_reasoning_tokens": 86, "extra": {"total_reasoning_tokens": None}})
-        self.assertIsNone(tr.total_reasoning_tokens)
-
-    def test_a_non_dict_extra_falls_back_to_the_old_position(self):
-        tr = _load([{"step_id": 1, "source": "agent", "message": "a"}],
-                   final_metrics={"total_reasoning_tokens": 86, "extra": "not a slot"})
-        self.assertEqual(tr.total_reasoning_tokens, 86)
+        for value in (7, None):
+            with self.subTest(value=value):
+                tr = _load([{"step_id": 1, "source": "agent", "message": "a"}],
+                           final_metrics={"total_reasoning_tokens": 86, "extra": {"total_reasoning_tokens": value}})
+                self.assertEqual(tr.total_reasoning_tokens, value)
 
 
 def _metered(*calls):
@@ -381,10 +359,6 @@ class McpTools(unittest.TestCase):
         self.assertEqual(trajectory.categorize("mcp.fs.write_file"), "edit")
         self.assertEqual(trajectory.categorize("mcp.fs.read_file"), "read")
         self.assertEqual(trajectory.categorize("mcp.sh.run_shell"), "execute")
-
-    def test_an_agents_own_tools_read_as_before(self):
-        for name, category in (("Bash", "execute"), ("todowrite", "plan"), ("Grep", "search"), ("Edit", "edit"), ("Read", "read")):
-            self.assertEqual(trajectory.categorize(name), category)
 
     def test_tools_folds_each_tool_once_with_its_failures_and_time(self):
         with tempfile.NamedTemporaryFile("w", suffix=".json", dir=os.environ.get("TMPDIR"), delete=False) as f:

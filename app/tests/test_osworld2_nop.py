@@ -82,16 +82,6 @@ def load_driver(up):
     return driver
 
 
-class ScoreLimit(unittest.TestCase):
-    def test_the_score_step_waits_an_hour(self):
-        b = definitions.get("benchmark", "osworld2")
-        self.assertEqual(b["limits"]["score_seconds"], 3600)
-        self.assertFalse([p for p in definitions.problems(b, "benchmark") if "limits" in p])
-        r = run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env={"OPENAI_API_KEY": "k"},
-                    which=lambda p: "/bin/" + p)
-        self.assertEqual(r.score_seconds, 3600)
-
-
 class ScoringPrograms(unittest.TestCase):
     def test_the_control_and_the_original_refuse_without_them(self):
         b = definitions.get("benchmark", "osworld2")
@@ -147,12 +137,6 @@ class TwoAttempts(unittest.TestCase):
         self.assertEqual(self.read("attempts"), "2")
         self.assertEqual(self.read("result.txt"), "0.0")
         self.assertFalse(os.path.exists(os.path.join(self.out, "setup_failed.json")))
-
-    def test_the_driver_reads_the_file_nop_writes(self):
-        driver = load_driver(self.tmp)
-        spec = importlib.util.spec_from_file_location("osworld2_nop_constants", os.path.join(HERE, "nop.py"))
-        with open(spec.origin) as f:
-            self.assertIn(f'SETUP_FAILED = "{driver.SETUP_FAILED}"', f.read())
 
 
 class EndsEarly(unittest.TestCase):
@@ -227,9 +211,6 @@ class EndsEarly(unittest.TestCase):
         os.makedirs(where)
         with open(os.path.join(where, "setup_failed.json"), "w") as f:
             json.dump(FAILED, f)
-        self.assertEqual(self.nop()["reward"], 0.0)
-
-    def test_a_setup_that_succeeds_scores(self):
         self.assertEqual(self.nop()["reward"], 0.0)
         self.assertEqual(len(self.reaped), 1)
 

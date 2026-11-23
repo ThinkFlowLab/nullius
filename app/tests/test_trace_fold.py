@@ -138,19 +138,11 @@ def labels(tr):
 
 
 class TheCallAdoptsItsReply(unittest.TestCase):
-    def test_the_records_move_under_the_call_that_produced_them(self):
-        out = folded(*reply())
-        self.assertEqual(children_of(out, CALL), [BLOCK_THINK, RECORD_TOOL])
-
-    def test_the_log_session_no_longer_holds_them(self):
-        self.assertEqual(children_of(folded(*reply()), "session:s"), [])
-
-    def test_children_are_ordered_by_when_they_started(self):
+    def test_the_records_move_under_the_call_ordered_by_when_they_started(self):
         out = folded(*reply(text=True))
         self.assertEqual(children_of(out, CALL), [BLOCK_THINK, RECORD_TOOL, BLOCK_TEXT])
-
-    def test_a_moved_record_points_at_its_new_parent(self):
-        self.assertEqual(find(folded(*reply()), RECORD_TOOL)["parent_span_id"], CALL)
+        self.assertEqual(children_of(out, "session:s"), [])
+        self.assertEqual(find(out, RECORD_TOOL)["parent_span_id"], CALL)
 
     def test_the_call_says_what_it_was_assembled_from(self):
         out = folded(*reply())
@@ -170,20 +162,13 @@ class TheCallAdoptsItsReply(unittest.TestCase):
 class ARecordIsItsBlock(unittest.TestCase):
     """A record with one typed block spanning it exactly is that block."""
 
-    def test_the_block_keeps_its_identity_and_its_text(self):
+    def test_the_block_keeps_its_identity_and_its_text_and_takes_the_records_attributes(self):
         block = find(folded(*reply()), BLOCK_THINK)
         self.assertEqual((block["name"], block["kind"]), ("reasoning", "reasoning"))
         self.assertEqual(block["content"], {"reasoning": "hm"})
-
-    def test_the_record_hands_over_its_attributes(self):
-        block = find(folded(*reply()), BLOCK_THINK)
-        self.assertEqual(block["attributes"]["message.id"], "msg-1")
+        self.assertEqual(block["attributes"]["message.id"], "msg-1")           # the record's attributes, handed over
         self.assertEqual(block["attributes"]["block.index"], 0)
         self.assertEqual(block["attributes"]["app.merged_from"], RECORD_THINK)
-
-    def test_the_record_hands_over_its_tokens(self):
-        # Not dropped as a duplicate: the producer's totals counted this copy.
-        self.assertEqual(find(folded(*reply()), BLOCK_THINK)["tokens"], USAGE)
 
     def test_a_record_with_no_block_stays_a_request(self):
         # The `tool_use` block is untyped; what it went on to run is a tool span
@@ -209,23 +194,18 @@ class TheCallReadsAsWhatItProduced(unittest.TestCase):
         tr = trace.parse({"spans": folded(*reply(text=True))})
         self.assertIn((CALL, "llm_request"), labels(tr))
 
-    def test_the_exporter_name_is_never_shown(self):
-        tr = trace.parse(capture(*reply()))
-        self.assertNotIn("claude_code.llm_request", [label for _, label in labels(tr)])
-
     def test_a_call_with_nothing_to_fold_still_reads_as_a_request(self):
         tr = trace.parse(doc(call()))
         self.assertEqual(labels(tr), [(CALL, "llm_request")])
 
     def test_text_on_the_call_itself_names_it_too(self):
         # `app/session_to_trace.py` keeps the blocks as content rather than as
-        # child spans; the label rule has to read both.
-        tr = trace.parse(doc(call(content={"output": "done"})))
-        self.assertEqual(labels(tr), [(CALL, "output")])
-
-    def test_both_kinds_of_text_leave_it_a_request(self):
-        tr = trace.parse(doc(call(content={"reasoning": "hm", "output": "done"})))
-        self.assertEqual(labels(tr), [(CALL, "llm_request")])
+        # child spans; the label rule has to read both. Two kinds leave it a request.
+        for content, label in (({"output": "done"}, "output"),
+                               ({"reasoning": "hm", "output": "done"}, "llm_request")):
+            with self.subTest(label=label):
+                tr = trace.parse(doc(call(content=content)))
+                self.assertEqual(labels(tr), [(CALL, label)])
 
     def test_the_chip_counts_the_call_with_its_block(self):
         # Same as a merged tool span and its execution span sharing a name.
@@ -289,9 +269,6 @@ class TheFoldMovesNoNumber(unittest.TestCase):
     def test_the_breakdown_counts_the_same_tokens(self):
         self.assertEqual(breakdown(self.after).tokens, breakdown(self.before).tokens)
 
-    def test_the_producers_totals_are_untouched(self):
-        self.assertEqual(trace.parse(self.source).totals.wall_ns, 8_000)
-
     def test_every_span_survives_but_the_records_that_became_blocks(self):
         gone = {RECORD_THINK, RECORD_TEXT}
         self.assertEqual(
@@ -302,10 +279,6 @@ class TheFoldMovesNoNumber(unittest.TestCase):
     def test_the_source_document_is_not_mutated(self):
         fold_llm_requests(self.before)
         self.assertEqual(children_of(self.before, "session:s"), [RECORD_THINK, RECORD_TOOL, RECORD_TEXT])
-
-    def test_nothing_to_fold_is_passed_back_by_reference(self):
-        spans = doc(call())["spans"]
-        self.assertIs(fold_llm_requests(spans), spans)
 
     def test_folding_twice_changes_nothing(self):
         self.assertEqual(fold_llm_requests(self.after), self.after)

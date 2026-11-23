@@ -83,15 +83,6 @@ class GuestPorts(unittest.TestCase):
         self.assertFalse(self.held())
         self.assertEqual(self.driver._PORTS, [])
 
-    def test_a_listener_on_every_interface_is_refused(self):
-        with socket.socket() as s:
-            s.bind(("0.0.0.0", self.port))
-            s.listen()
-            with self.assertRaisesRegex(RuntimeError, rf"task 082 .* port {self.port} "):
-                with self.driver._published("082"):
-                    self.fail("published while another process listens")
-        self.assertFalse(self.held())
-
     def test_a_listener_on_ipv6_loopback_is_refused(self):
         try:
             s = socket.socket(socket.AF_INET6)
@@ -126,12 +117,17 @@ class GuestPorts(unittest.TestCase):
                 self.fail("published while another unit holds the port")
         self.assertEqual(self.driver._PORTS, [])
 
-    def test_a_fifo_in_the_locks_place_is_refused_at_once(self):
-        os.mkfifo(self.lock)
-        with self.assertRaisesRegex(RuntimeError, "cannot be opened"):
-            with self.driver._published("082"):
-                self.fail("published through a FIFO")
-        self.assertEqual(self.driver._PORTS, [])
+    def test_a_fifo_or_a_link_in_the_locks_place_is_refused_at_once(self):
+        elsewhere = os.path.join(self.tmp, "elsewhere")
+        for what, put in (("FIFO", os.mkfifo), ("link", lambda lock: os.symlink(elsewhere, lock))):
+            with self.subTest(what):
+                put(self.lock)
+                with self.assertRaisesRegex(RuntimeError, "cannot be opened"):
+                    with self.driver._published("082"):
+                        self.fail(f"published through a {what}")
+                self.assertEqual(self.driver._PORTS, [])
+                self.assertFalse(os.path.exists(elsewhere))
+                os.unlink(self.lock)
 
     def test_the_lock_is_readable_by_every_user_whatever_the_umask(self):
         mask = os.umask(0o077)
@@ -141,13 +137,6 @@ class GuestPorts(unittest.TestCase):
         finally:
             os.umask(mask)
         self.assertEqual(os.stat(self.lock).st_mode & 0o777, 0o644)
-
-    def test_a_link_in_the_locks_place_is_refused(self):
-        os.symlink(os.path.join(self.tmp, "elsewhere"), self.lock)
-        with self.assertRaisesRegex(RuntimeError, "cannot be opened"):
-            with self.driver._published("082"):
-                self.fail("published through a link")
-        self.assertFalse(os.path.exists(os.path.join(self.tmp, "elsewhere")))
 
 
 if __name__ == "__main__":

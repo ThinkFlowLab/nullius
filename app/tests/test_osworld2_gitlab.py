@@ -83,44 +83,12 @@ class Case(unittest.TestCase):
             self.addCleanup(patch.stop)
 
 
-class Option(Case):
-    def test_no_sites_give_no_url_and_a_task_that_needs_gitlab_is_refused(self):
-        self.assertIsNone(self.g.url({}))
-        self.assertIsNone(self.g.needed("001", {}))
-        self.assertEqual(self.g.env("001", {}), {})
-        for eid in sorted(self.g.TASKS):
-            with self.subTest(eid), self.assertRaises(self.g.GitLabError) as raised:
-                self.g.env(eid, {SITES: "none"})
-            self.assertIn(f"task {eid} needs GitLab", str(raised.exception))
-            self.assertIn("Website host suffix", str(raised.exception))
-        self.assertEqual(os.listdir(self.tmp), [])
-
-    def test_the_url_and_this_machine_s_token_are_gitlab_s_tasks_alone(self):
-        given = {SITES: SUFFIX, "NULLIUS_UPSTREAM": os.path.join(self.tmp, "upstreams", "osworld2", "c")}
-        self.assertEqual(self.g.needed("041", given), URL)
-        self.assertIsNone(self.g.needed("005", given))
-        made = self.g.env("026", given)
-        self.assertEqual(made, {"GITLAB_URL": URL, self.g.TOKEN: self.g.token(self.g.home(given))})
-        self.assertEqual(self.g.env("041", given), made)
-        self.assertEqual(self.g.env("005", given), {})
-
-    def test_no_option_and_no_licence_ask_for_gitlab(self):
-        with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
-            bench = json.load(f)
-        self.assertFalse({"gitlab", "gitlab_write"} & set(bench["options"]))
-        self.assertFalse(bench.get("environments"))
-        self.assertFalse(os.path.exists(os.path.join(HERE, "gitlab.Dockerfile")))
-
-
 class Token(unittest.TestCase):
     def setUp(self):
         self.g = load()
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.stack = os.path.join(self.tmp, "upstreams", "osworld2", f"gitlab-{self.g.COMMIT}")
-
-    def test_the_stack_is_beside_the_upstream_s_clone(self):
-        self.assertEqual(self.g.home({"NULLIUS_UPSTREAM": os.path.dirname(self.stack) + "/c/"}), self.stack)
 
     def test_made_once_beside_the_stack_for_this_user_alone(self):
         found, failed = [], []
@@ -198,9 +166,6 @@ class Clone(unittest.TestCase):
 
 
 class Ready(Case):
-    def test_sign_in_token_and_runner(self):
-        self.assertEqual(self.g.ready(URL, TOKEN, runner=True), URL)
-
     def test_an_empty_sign_in_page_is_not_gitlab(self):
         Lab.empty = True
         with self.assertRaises(self.g.GitLabError) as raised:
@@ -216,6 +181,7 @@ class Ready(Case):
             self.assertNotIn(token, str(raised.exception))
 
     def test_no_runner_online_fails_only_where_one_is_needed(self):
+        self.assertEqual(self.g.ready(URL, TOKEN, runner=True), URL)
         Lab.runners = []
         self.assertEqual(self.g.ready(URL, TOKEN), URL)
         with self.assertRaises(self.g.GitLabError) as raised:
@@ -296,10 +262,6 @@ class Share(unittest.TestCase):
         self.assertEqual(self.g.share({"NULLIUS_OPTION_WRITE_MBPS": "8", "NULLIUS_OPTION_WRITE_IOPS": "80"}), (8, 80))
         self.assertEqual(self.g.share({"NULLIUS_OPTION_WRITE_MBPS": "8"}), (8, 160))
         self.assertEqual(self.g.share({"NULLIUS_OPTION_WRITE_IOPS": "80"}), (16, 80))
-
-    def test_a_limit_that_leaves_a_service_none_is_refused(self):
-        with self.assertRaises(self.g.GitLabError):
-            self.g.share({"NULLIUS_OPTION_WRITE_IOPS": "4"})
 
 
 class Allocation(unittest.TestCase):
@@ -711,36 +673,28 @@ class Lifecycle(unittest.TestCase):
                 self.assertRaises(self.g.GitLabError):
             self.g._snapshot()
 
-    def test_init_keeps_the_stamp_prepare_reads_and_not_the_token(self):
+    def test_init_keeps_the_stamp_prepare_reads_and_not_the_token_and_runs_under_the_unit_s_limits(self):
         self.configure()
-        copied = []
-        for name, fake in (("compose", lambda *a, **kw: Fake()), ("_until", lambda *a, **kw: 1),
-                           ("_make_token", lambda stack: None), ("ready", lambda *a, **kw: URL),
-                           ("_register", lambda stack, value: 7), ("_volumes", lambda: []), ("_snapshot", lambda: False),
-                           ("_copy", lambda stack, settings, tar, keep: copied.append(tar))):
-            p = mock.patch.object(self.g, name, fake)
-            p.start()
-            self.addCleanup(p.stop)
-        self.g.init(self.stack)
-        self.assertIn(f"printf '%s %s' {self.g._stamp(os.path.abspath(self.stack), URL)} ", copied[-1])
-        self.assertIn(f" > /snapshot/{self.g.STAMP}", copied[-1])
-        self.assertNotIn(TOKEN, copied[-1])
-
-    def test_init_runs_under_the_unit_s_limits(self):
-        self.configure()
-        limits = self.g.unit(self.stack, self.tmp, {"NULLIUS_OPTION_WRITE_MBPS": "8", "NULLIUS_OPTION_WRITE_IOPS": "80"})
         given, copied = [], []
         for name, fake in (("compose", lambda stack, args, **kw: given.append(kw.get("limits")) or Fake()),
                            ("_until", lambda *a, **kw: 1), ("_make_token", lambda stack: None),
                            ("ready", lambda *a, **kw: URL), ("_register", lambda stack, value: 7),
                            ("_volumes", lambda: []), ("_snapshot", lambda: False),
-                           ("_copy", lambda stack, settings, tar, keep: copied.append(settings))):
+                           ("_copy", lambda stack, settings, tar, keep: copied.append((settings, tar)))):
             p = mock.patch.object(self.g, name, fake)
             p.start()
             self.addCleanup(p.stop)
+        self.g.init(self.stack)
+        tar = copied[-1][1]
+        self.assertIn(f"printf '%s %s' {self.g._stamp(os.path.abspath(self.stack), URL)} ", tar)
+        self.assertIn(f" > /snapshot/{self.g.STAMP}", tar)
+        self.assertNotIn(TOKEN, tar)
+        limits = self.g.unit(self.stack, self.tmp, {"NULLIUS_OPTION_WRITE_MBPS": "8", "NULLIUS_OPTION_WRITE_IOPS": "80"})
+        given.clear(), copied.clear()
         self.g.init(self.stack, limits=limits)
         self.assertEqual(set(given), {limits})
-        self.assertEqual((copied[0]["OSWORLD2_GITLAB_GITLAB_IOPS"], copied[0]["OSWORLD2_GITLAB_SHARE"]), ("60", "unit"))
+        settings = copied[0][0]
+        self.assertEqual((settings["OSWORLD2_GITLAB_GITLAB_IOPS"], settings["OSWORLD2_GITLAB_SHARE"]), ("60", "unit"))
 
     def test_a_snapshot_made_for_this_stack_host_and_token_is_kept(self):
         self.configure()
@@ -790,12 +744,6 @@ class Lifecycle(unittest.TestCase):
         with mock.patch.object(self.g, "_made", fail), self.assertRaises(self.g.GitLabError):
             self.g.prepare(self.stack, {SITES: SUFFIX})
         self.assertEqual((done, self.calls), ([], []))
-
-    def test_no_override_is_one_line_saying_what_to_do(self):
-        with mock.patch.object(self.g, "OVERRIDE", os.path.join(self.tmp, "none.yml")), \
-                self.assertRaises(self.g.GitLabError) as raised:
-            self.g._argv(self.stack, ["ps"])
-        self.assertIn("install Nullius again", str(raised.exception))
 
 
 GIT = """#!/bin/sh

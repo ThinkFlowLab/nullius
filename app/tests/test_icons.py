@@ -76,7 +76,10 @@ class Icons(unittest.TestCase):
             for name in re.findall(r"""['"](?:filter_)?icon['"]\s*:\s*['"]([a-z0-9-]+)['"]|\b(?:filter_)?icon=['"]([a-z0-9-]+)['"]""", text(path)):
                 self.assertKnown(next(n for n in name if n), str(path.relative_to(APP)))
 
-    def test_symbols_take_their_style_from_the_page(self):
+    def test_symbols_are_unique_and_take_their_style_from_the_page(self):
+        ids = [s.get("id") for s in symbols()]
+        self.assertEqual(sorted(i for i in set(ids) if ids.count(i) > 1), [])
+        self.assertTrue(all(i and i.startswith("i-") for i in ids), ids)
         for symbol in symbols():
             name = symbol.get("id")
             if name in STYLE_EXCEPTIONS:
@@ -84,11 +87,6 @@ class Icons(unittest.TestCase):
             self.assertEqual(symbol.get("viewBox"), "0 0 24 24", name)
             for part in symbol.iter():
                 self.assertFalse({"stroke", "stroke-width", "fill"} & set(part.attrib), f"{name}: {part.attrib}")
-
-    def test_symbol_ids_are_unique(self):
-        ids = [s.get("id") for s in symbols()]
-        self.assertEqual(sorted(i for i in set(ids) if ids.count(i) > 1), [])
-        self.assertTrue(all(i and i.startswith("i-") for i in ids), ids)
 
 
 if __name__ == "__main__":

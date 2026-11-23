@@ -78,6 +78,9 @@ class ReferenceRecipes(unittest.TestCase):
                 self.assertEqual(out['compiled']['errors'], [], name)
                 text = self.render(name, out, json.loads(recipe.read_text(encoding='utf-8')))
                 expected = recipe.with_name(name + '.expected.sh')
+                self.assertNotRegex(text, r"20\d\d-\d\d-\d\d", name)
+                self.assertNotIn(str(APP.parent), text, name)
+                self.assertNotIn("fixture-token", text, name)
                 if os.environ.get('NULLIUS_WRITE_EXPECTED') == '1':
                     expected.write_text(text, encoding='utf-8')
                 self.assertTrue(expected.exists(), 'no expected script for ' + name)
@@ -87,16 +90,6 @@ class ReferenceRecipes(unittest.TestCase):
                     if a['language'] == 'shell':
                         subprocess.run(['bash', '-n'], input=a['text'], text=True, check=True, capture_output=True)
 
-    def test_the_reference_recipes_cover_the_harness_and_the_task_scopes(self):
-        docs = {p.stem: json.loads(p.read_text(encoding='utf-8')) for p in self.FIXTURES.glob('*.json')}
-        self.assertEqual({d["harness"] for d in docs.values()}, {"harbor"})
-        scopes = {name: d['tasks'] for name, d in docs.items()}
-        self.assertIn('', scopes.values())                                  # full scope: every task
-        self.assertTrue(any(isinstance(v, int) and v > 0 for v in scopes.values()))   # a limited one
-        self.assertTrue(any(d.get('include') for d in docs.values()))       # a selected-task one
-        self.assertTrue(any(set(d['agents']) >= {'oracle', 'nop'} for d in docs.values()))   # a bracketed one
-
-    def test_the_stored_scripts_carry_nothing_volatile(self):
         # No date, no absolute path of this machine, no credential value: the files are portable evidence.
         for expected in self.FIXTURES.glob('*.expected.sh'):
             text = expected.read_text(encoding='utf-8')

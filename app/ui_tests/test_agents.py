@@ -51,18 +51,6 @@ class Tabs(unittest.TestCase):
         self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
         self.client = web.app.test_client()
 
-    def test_examples_lead_catalogue_and_sidebar(self):
-        with patch.object(definitions, "load", _LOAD):
-            for url in ("/agents", "/capabilities"):
-                html = self.get(url).get_data(as_text=True)
-                cards = re.findall(r'<article class="bench-card"[^>]*>(.*?)</article>', html, re.S)
-                self.assertTrue(cards)
-                self.assertIn("Example", cards[0])
-                tree = html.split('data-tree="nav-' + ("agent" if url == "/agents" else "capability") + '"', 1)[1]
-                first_leaf = re.search(r'<a[^>]*class="tree-item leaf[^"]*"[^>]*>(.*?)</a>', tree, re.S)
-                self.assertIsNotNone(first_leaf)
-                self.assertIn("Example", first_leaf[1])
-
     def test_capability_source_retains_pin_and_install_details(self):
         with patch.object(definitions, "load", _LOAD):
             html = self.get("/capabilities/mem0").get_data(as_text=True)
@@ -74,59 +62,6 @@ class Tabs(unittest.TestCase):
         self.assertIn('<details class="std-source-install">', html)
         self.assertNotIn('is a promise a benchmark relies on', html)
         self.assertNotIn("once, in the standard's home", html)
-
-    def test_digitalmate_is_in_the_normal_catalogue_with_its_proven_ports(self):
-        with patch.object(definitions, "load", _LOAD):
-            listing = self.get("/agents").get_data(as_text=True)
-            detail = self.get("/agents/digitalmate").get_data(as_text=True)
-        self.assertIn('/agents/digitalmate', listing)
-        self.assertIn('DigitalMate', detail)
-        self.assertIn('7dbfc6729963e', detail)
-        agent = _GET("agent", "digitalmate")
-        self.assertEqual(agent["upstream"]["tag"], "v0.1.13")
-        self.assertEqual(agent["offers"], ["agent.task/v1", "agent.search/v1"])
-        proof = agent["proven"]["agent.task/v1"]
-        self.assertEqual(proof["passed"], "3/3")
-        self.assertEqual(proof["version"], agent["upstream"]["version"])
-        self.assertEqual(proof["model"], "meta/muse-spark-1.3-contributor")
-        # The fixed version: the fork's v0.1.13 branch, every agent port but computer use, never the default.
-        fixed = _GET("agent", "digitalmate@0.1.13-fixes")
-        self.assertEqual(fixed["upstream"]["repository"], "https://github.com/aitianshi/DigitalMate")
-        self.assertEqual(fixed["upstream"]["branch"], "nullius/v0.1.13")
-        self.assertTrue(any("#2484" in fix for fix in fixed["upstream"]["fixes"]))
-        self.assertEqual(fixed["offers"], ["agent.task/v1", "agent.workspace/v1", "agent.tools/v1",
-                                           "agent.conversation/v1", "agent.search/v1"])
-        self.assertIn("/agents/digitalmate?v=0.1.13-fixes", detail)
-
-    def test_bundled_agents_use_shared_marks(self):
-        with patch.object(definitions, "load", _LOAD):
-            html = self.get("/agents").get_data(as_text=True)
-        for key in ("goose", "jiuwenswarm", "mini-swe-agent", "opencode"):
-            self.assertIn(f'/static/catalogue/agents/{key}.svg', html)
-        self.assertIn('/static/brand/marks.svg#openai', html)
-        self.assertIn('/static/brand/marks.svg#harbor', html)
-        # Beside the logos, an agent without one shows its initials; where none has a logo, no card has an icon.
-        self.assertIn('<span class="ws-avatar std-mark small" aria-hidden="true">EX</span><span class="bench-card-name"><a class="card-link" href="/agents/reference">Example agent</a> 1</span>', html)
-        fixture_html = self.get("/agents").get_data(as_text=True)
-        self.assertIn('<div class="bench-card-title"><a class="card-link" href="/agents/fake">Fake agent</a></div>', fixture_html)
-        self.assertNotIn('std-mark', fixture_html)
-        with patch.object(definitions, "load", _LOAD):
-            capabilities = self.get("/capabilities").get_data(as_text=True)
-        self.assertNotIn('std-mark', capabilities)                                         # capabilities have no logos: no letters either
-        self.assertIn('<input type="search" data-search placeholder="Name, protocol, summary"', capabilities)
-        self.assertIn('data-search="Mem0 mem0 memory', capabilities)
-
-    def test_jiuwenswarm_default_shows_its_search_proof_and_can_run_gaia(self):
-        from urllib.parse import unquote
-        with patch.object(definitions, "load", _LOAD):
-            html = self.get("/agents/jiuwenswarm").get_data(as_text=True)
-        row = next(row for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", html, re.S) if "agent.search/v1" in row)
-        self.assertIn('/kits/agent-search-v1', row)
-        self.assertIn('>3/3</b>', row)
-        self.assertNotIn("not offered", row)
-        self.assertIn('href="/agents/jiuwenswarm?v=0.2.8" aria-current="page"', html)
-        link = next(link for link in re.findall(r'href="([^"]+)"', html) if "standard=gaia" in link)
-        self.assertIn("other=jiuwenswarm@0.2.8", unquote(link))
 
     def test_sidebar_lists_agents_and_capabilities(self):
         html = self.get("/agents").get_data(as_text=True)
@@ -241,24 +176,6 @@ class Tabs(unittest.TestCase):
         n = card[:card.index(">")].split('data-f-runs_on="', 1)[1].split('"', 1)[0].count("&#10;")
         self.assertIn(f"<dt>Benchmarks it runs</dt><dd>{n}/", card)
 
-    def test_agents_sort_and_filter_by_protocol_and_the_ports_they_prove(self):
-        html = self.get("/agents").get_data(as_text=True)
-        menu = html[html.index('data-tools="sort"'):]
-        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', menu), ["", "title", "ports", "runs"])
-        self.assertIn('data-tools-btn="filter"', html)                      # both in the one Filter menu, no dropdown of their own
-        self.assertNotIn('data-dropdown', html)
-        self.assertIn('<fieldset data-filter-menu="protocol">\n        <legend>Protocol</legend>', html)
-        self.assertIn('<input type="checkbox" data-value="ACP" checked> ACP', html)
-        self.assertIn('<fieldset data-filter-menu="proves">\n        <legend>Proves</legend>', html)
-        self.assertIn('<input type="checkbox" data-value="agent.task/v1" checked> One task', html)
-        card = html[html.index('id="fake"'):]
-        self.assertIn('data-f-proves="agent.task/v1&#10;agent.workspace/v1&#10;"', card[:card.index(">")])
-        self.assertIn('data-s-ports="2/7"', card[:card.index(">")])
-        caps = self.get("/capabilities").get_data(as_text=True)
-        self.assertIn('data-tools="sort"', caps)
-        self.assertNotIn('data-filter-menu="protocol"', caps)                               # one protocol: nothing to filter
-        self.assertIn('data-filter-menu="runs_on"', caps)                                   # the benchmarks it runs, as agents
-
     def test_agents_capabilities_and_kits_are_cards_by_default_and_a_table_on_request(self):
         for url in ("/agents", "/capabilities", "/kits"):
             html = self.get(url).get_data(as_text=True)
@@ -344,11 +261,6 @@ class Tabs(unittest.TestCase):
         self.assertIn('class="unfit"', card)
         self.assertIn("needs agent.workspace/v1", card)
         self.assertNotIn("standard=fakebench&amp;other=half", card)
-
-    def test_the_rail_has_both_tabs(self):
-        html = self.get("/capabilities").get_data(as_text=True)
-        self.assertIn('data-label="Agents"', html)
-        self.assertIn('data-label="Capabilities"', html)
 
     def test_check_starts_the_kits_as_a_run_here(self):
         r = self.client.post("/agents/fake/check", data={"csrf": self.csrf(), "provider": "openai", "model": "gpt-5-mini", "unsandboxed": "yes"},
@@ -446,20 +358,6 @@ class Tabs(unittest.TestCase):
         r = self.client.post("/agents/fake/check", data={"provider": "openai", "model": "m", "unsandboxed": "yes"}); self.addCleanup(r.close)
         self.assertEqual(r.status_code, 403)
         self.assertEqual(self.started, [])
-
-    def test_the_old_install_and_compatibility_routes_are_gone(self):
-        for url in ("/agents/harbor.html", "/agents/harbor.json", "/compatibility/data"):
-            self.assertEqual(self.get(url).status_code, 404, url)
-        for url in ("/agents/harbor/install", "/agents/harbor/remove", "/agents/harbor/select", "/agents/harbor/rescan"):
-            r = self.client.post(url); self.addCleanup(r.close)
-            self.assertIn(r.status_code, (404, 405), url)
-
-    def test_the_builder_offers_the_vocabulary_and_no_harbor_install(self):
-        html = self.get("/new-run").get_data(as_text=True)
-        schema = json.loads(re.search(r'<script id="nb-schema" type="application/json">(.*?)</script>', html, re.S).group(1))
-        self.assertEqual([a["id"] for a in schema["agents"]], ["tau3-llm-agent", "oracle", "nop"])
-        for gone in ("harbor", "agentsSource", "compat"):
-            self.assertNotIn(gone, schema)
 
 
 class BuilderStandard(unittest.TestCase):

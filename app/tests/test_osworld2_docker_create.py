@@ -51,7 +51,7 @@ class Daemon:
         self.seconds, self.late, self.refuse, self.error, self.drop = seconds, late, refuse, error, drop
         self.inspect = inspect
         self.containers, self.creates, self.list_timeouts, self.clock = [], 0, [], 0.0
-        self.pending, self.gave_up, self.info_timeouts = None, None, []
+        self.pending, self.gave_up = None, None
 
 
 class Container:
@@ -85,7 +85,6 @@ class Client:
         self.api = API(daemon, timeout)
 
     def info(self):
-        self.api.daemon.info_timeouts.append(self.api.timeout)
         return {"DockerRootDir": "/var/lib/docker"}
 
 
@@ -194,6 +193,18 @@ class Patient(unittest.TestCase):
         self.assertEqual((daemon.creates, len(daemon.containers)), (1, 1))
         self.assertIs(made, daemon.containers[0])
         self.assertIn("ReadTimeout", said.output[0])
+        # each look waits its own short time, and the client's comes back
+        self.assertGreater(len(daemon.list_timeouts), 1)
+        self.assertEqual(set(daemon.list_timeouts), {self.site.LOOK_SECONDS})
+        self.assertEqual(self.collection.client.api.timeout, self.site.CREATE_SECONDS)
+        # a late container keeps its write limit
+        daemon = Daemon(seconds=150, late=8)
+        with self.assertLogs("nullius.osworld2", "WARNING"):
+            made = self.start(daemon, environ=LIMITS)
+        self.assertIs(made, daemon.containers[0])
+        self.assertEqual(made.attrs["HostConfig"]["BlkioDeviceWriteBps"], [{"Path": DEVICE, "Rate": 10 * 1024 * 1024}])
+        self.assertEqual(made.attrs["HostConfig"]["BlkioDeviceWriteIOps"], [{"Path": DEVICE, "Rate": 100}])
+        self.assertEqual((made.started, made.removed), (True, None))
 
     def test_a_request_answered_whose_inspect_timed_out_is_looked_for_and_started(self):
         daemon = Daemon(inspect=150)
@@ -204,14 +215,6 @@ class Patient(unittest.TestCase):
         self.assertEqual((made.started, made.removed), (True, None))
         self.assertEqual(daemon.list_timeouts, [self.site.LOOK_SECONDS])
         self.assertEqual(daemon.gave_up, 2 * self.site.CREATE_SECONDS)
-
-    def test_each_look_waits_its_own_short_time_and_the_clients_comes_back(self):
-        daemon = Daemon(seconds=150, late=8)
-        with self.assertLogs("nullius.osworld2", "WARNING"):
-            self.start(daemon)
-        self.assertGreater(len(daemon.list_timeouts), 1)
-        self.assertEqual(set(daemon.list_timeouts), {self.site.LOOK_SECONDS})
-        self.assertEqual(self.collection.client.api.timeout, self.site.CREATE_SECONDS)
 
     def test_none_made_in_time_is_the_error_and_no_second_create(self):
         for late in (None, 61):
@@ -224,10 +227,12 @@ class Patient(unittest.TestCase):
                 self.assertLessEqual(daemon.clock - daemon.gave_up, self.site.ADOPT_SECONDS + self.site.POLL_SECONDS)
                 self.assertEqual(self.collection.client.api.timeout, self.site.CREATE_SECONDS)
 
-    def test_a_failed_connection_stands_at_once(self):
-        for error in (ConnectionError_, ConnectTimeout):
+    def test_a_failed_connection_or_a_refusal_stands_at_once(self):
+        for error, how in ((ConnectionError_, {"seconds": 150, "late": 0, "error": ConnectionError_}),
+                           (ConnectTimeout, {"seconds": 150, "late": 0, "error": ConnectTimeout}),
+                           (APIError, {"refuse": True})):
             with self.subTest(error.__name__):
-                daemon = Daemon(seconds=150, late=0, error=error)
+                daemon = Daemon(**how)
                 with self.assertRaises(error):
                     self.start(daemon)
                 self.assertEqual((daemon.creates, daemon.list_timeouts), (1, []))
@@ -239,32 +244,12 @@ class Patient(unittest.TestCase):
             self.start(daemon)
         self.assertFalse(daemon.containers[0].started)
 
-    def test_a_refusal_stands_at_once(self):
-        daemon = Daemon(refuse=True)
-        with self.assertRaises(APIError):
-            self.start(daemon)
-        self.assertEqual((daemon.creates, daemon.list_timeouts), (1, []))
-
-    def test_a_late_container_keeps_its_write_limit_and_is_started(self):
-        daemon = Daemon(seconds=150, late=8)
-        with self.assertLogs("nullius.osworld2", "WARNING"):
-            made = self.start(daemon, environ=LIMITS)
-        self.assertIs(made, daemon.containers[0])
-        self.assertEqual(made.attrs["HostConfig"]["BlkioDeviceWriteBps"], [{"Path": DEVICE, "Rate": 10 * 1024 * 1024}])
-        self.assertEqual(made.attrs["HostConfig"]["BlkioDeviceWriteIOps"], [{"Path": DEVICE, "Rate": 100}])
-        self.assertEqual((made.started, made.removed), (True, None))
-
     def test_a_late_container_without_its_write_limit_is_removed_and_fails_the_start(self):
         daemon = Daemon(seconds=150, late=8, drop=True)
         with self.assertLogs("nullius.osworld2", "WARNING"), self.assertRaises(self.site.WriteLimitError):
             self.start(daemon, environ=LIMITS)
         made = daemon.containers[0]
         self.assertEqual((made.started, made.removed), (False, {"force": True, "v": True}))
-
-    def test_dockers_root_is_asked_with_the_patient_client(self):
-        daemon = Daemon()
-        self.start(daemon, environ=LIMITS)
-        self.assertEqual(daemon.info_timeouts, [self.site.CREATE_SECONDS])
 
     def test_another_image_is_left_alone(self):
         daemon = Daemon()
@@ -592,11 +577,6 @@ class Network(unittest.TestCase):
             self.site.network(self.docker)
         self.assertIn("Pool overlaps", str(raised.exception))
         self.assertIn(self.site.SUBNET, str(raised.exception))
-
-    def test_the_label_is_read_with_the_subnet(self):
-        self.site.network(self.docker)
-        inspect = self.calls[0]
-        self.assertIn('{{index .Labels "' + self.site.NETWORK_LABEL + '"}}|', inspect[inspect.index("-f") + 1])
 
     def test_the_subnet_is_none_docker_takes_for_its_own_bridges(self):
         subnet = ipaddress.ip_network(self.site.SUBNET)

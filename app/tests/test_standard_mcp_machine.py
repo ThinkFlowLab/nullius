@@ -169,19 +169,15 @@ class Locked(unittest.TestCase):
                               {"repository": "r", "tested": "c"}, src=proj)
         return proj, ran
 
-    def test_the_lock_is_installed_from_the_project_so_its_local_paths_are_the_projects(self):
-        proj, ran = self._install_with_lock(["-e ./sub/held", "numpy==1.26.4"], made=["sub/held"])
-        self.assertEqual(next(c for c, _ in ran if "-r" in c)[:3], ["uv", "--directory", proj])
-        self.assertFalse(any("submodule" in c for c, _ in ran))                     # a local package the clone holds
-
     def test_a_local_package_the_clone_leaves_empty_is_its_submodule_fetched_at_its_pin(self):
-        proj, ran = self._install_with_lock(["-e ./sub/empty", "./sub/held", "numpy==1.26.4"], made=["sub/held"])
+        proj, ran = self._install_with_lock(["-e ./sub/empty", "./sub/held", "-e ./sub/held", "numpy==1.26.4"], made=["sub/held"])
         sub = [(c, cwd) for c, cwd in ran if "submodule" in c]
-        self.assertEqual(len(sub), 1)
+        self.assertEqual(len(sub), 1)                                               # a held one, editable or not, is not fetched
         self.assertEqual(sub[0][0][-6:], ["update", "--init", "--depth", "1", "--", "./sub/empty"])
         self.assertIn("url.https://github.com/.insteadOf=git@github.com:", sub[0][0])
         self.assertEqual(sub[0][1], proj)
         self.assertLess(ran.index(sub[0]), next(i for i, (c, _) in enumerate(ran) if "-r" in c))   # before the lock's install
+        self.assertEqual(next(c for c, _ in ran if "-r" in c)[:3], ["uv", "--directory", proj])    # from the project: its local paths
 
     def test_in_the_base_image_the_submodule_is_fetched_here_and_the_lock_installed_from_the_clone_in_the_install(self):
         where, boxed, ran = os.path.join(self.tmp, "w"), [], []

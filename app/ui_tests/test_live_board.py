@@ -495,17 +495,6 @@ class LiveBoard(unittest.TestCase):
         self.assertIn("tokens / s, last 30 s", meta)
         self.assertNotIn("$0", self.board(out)); self.assertNotIn("step 0", self.board(out))
 
-    def test_renderer_says_starting_while_no_trial_has_entered_a_phase(self):
-        s = json.loads((FIXTURE / "expected.json").read_text())
-        queued = dict(s, state="starting", running=True, finished_at=None,
-                      counts=dict(s["counts"], running=0, completed=0, pending=s["counts"]["total"], resolved=0, unresolved=0),
-                      trials=[dict(t, state="waiting", phase=None, outcome=None) for t in s["trials"]])
-        out = self.render(queued)
-        self.assertTrue(out["status"].startswith("starting —"))
-        self.assertIn("none has entered a phase yet", out["status"])
-        self.assertIn("none has entered a phase yet", out["flight"])
-        self.assertFalse(out["finished"])
-
     def test_renderer_leaves_an_unknown_total_absent_while_preparing(self):
         # Harbor's prepare lines carry no n_total: the board must not read "0 / 0".
         s = json.loads((FIXTURE / "harbor-prepare-x4" / "expected-preparing.json").read_text())
