@@ -90,6 +90,26 @@
 </div>
 {% endif %}
 
+{#- the benchmark's own detail of the trial, as its driver wrote it in its score: its plain values, then each object of
+   flags one level down, a flag held or not, any other value as written. A long value is cut, its whole text a click
+   away. A trial whose score has no detail has no panel. #}
+{% if detail %}
+<div class="panel" id="trial-detail">
+  <h3 style="margin-top:0">The benchmark's detail</h3>
+  {% if detail.fields %}<table class="grid compact" style="width:auto"><tbody>
+    {% for f in detail.fields %}<tr><td class="muted">{{ f.name }}</td><td style="overflow-wrap:anywhere">{% if f.cut %}<details><summary>{{ f.cut }}…</summary>{{ f.text }}</details>{% else %}{{ f.text }}{% endif %}</td></tr>
+    {% endfor %}
+  </tbody></table>{% endif %}
+  {% for g in detail.groups %}
+  <h3>{{ g.name }}</h3>
+  <ul class="files" style="list-style:none;padding-left:0">
+    {% for x in g.flags %}<li style="overflow-wrap:anywhere">{% if x.held is sameas true %}<span class="ok">✓</span>{% elif x.held is sameas false %}<span class="bad">×</span>{% else %}<span class="faint">·</span>{% endif %} {{ x.name }}{% if x.text %}: {% if x.cut %}<details class="faint"><summary>{{ x.cut }}…</summary>{{ x.text }}</details>{% else %}<span class="faint">{{ x.text }}</span>{% endif %}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if trial.exception_type %}
 <div class="panel err">
   <h3 style="margin-top:0">{{ trial.exception_type }}</h3>

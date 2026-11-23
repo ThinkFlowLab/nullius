@@ -8,9 +8,12 @@ and redact on the way in.
 from __future__ import annotations
 
 import functools
+import json
 import os
 import re
 import shlex
+import stat
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
@@ -70,6 +73,78 @@ def _retries_of(res: dict) -> int:
     std = res.get("standard") if isinstance(res.get("standard"), dict) else {}
     n = std.get("retries")
     return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
+
+
+SCORE_BYTES = 1024 * 1024
+
+
+def _read_score(trial_dir: str):
+    """Read at most SCORE_BYTES from a regular score file without following links inside the trial."""
+    try:
+        with ExitStack() as opened:
+            flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+            trial = os.open(trial_dir, flags)
+            opened.callback(os.close, trial)
+            folder = os.open("verifier", flags, dir_fd=trial)
+            opened.callback(os.close, folder)
+            fd = os.open("score.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=folder)
+            opened.callback(os.close, fd)
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_size > SCORE_BYTES:
+                return None
+            raw = os.read(fd, SCORE_BYTES + 1)
+        return json.loads(raw) if 0 < len(raw) <= SCORE_BYTES else None
+    except (OSError, ValueError):
+        return None
+
+
+# A value of a score's detail longer than this is cut on the trial's page, its whole text a click away
+DETAIL_CELL = 200
+
+
+def _plain(value) -> bool:
+    return value is None or isinstance(value, (str, int, float, bool))
+
+
+def _shown(value) -> str:
+    """A value of a score's detail as the page writes it: text as written, a boolean as yes or no, none for null or
+    empty text, a list of plain values joined, anything deeper as its JSON."""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if value is None or value == "":
+        return "none"
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    if isinstance(value, list) and all(_plain(x) for x in value):
+        return ", ".join(_shown(x) for x in value) if value else "none"
+    return json.dumps(value, ensure_ascii=False)
+
+
+def score_detail(trial_dir: str, leave_out=()) -> dict | None:
+    """The detail of a standard trial's score (``verifier/score.json``), as its benchmark's driver wrote it, for the
+    trial's page: ``fields``, each plain value (a list of plain values too, anything deeper as its JSON) with its
+    name, its text and, past ``DETAIL_CELL`` characters, the text cut; ``groups``, each object of plain values one
+    level down (flags) by its name, each flag ``held`` True or False when it is a boolean, else its text. Names
+    and order are the driver's; ``leave_out``, the names the page already shows elsewhere. Every text is redacted.
+    None when the score has no detail, or nothing of it is left to show."""
+    said = _read_score(trial_dir)
+    detail = said.get("detail") if isinstance(said, dict) else None
+    if not isinstance(detail, dict):
+        return None
+    fields, groups = [], []
+    for name, value in _options(detail).items():
+        if name in leave_out:
+            continue
+        if isinstance(value, dict) and value and all(_plain(x) for x in value.values()):
+            groups.append({"name": redact(str(name)), "flags": [
+                {"name": redact(str(k)), "held": x if isinstance(x, bool) else None,
+                 "text": (text := "" if isinstance(x, bool) else redact(_shown(x))),
+                 **({"cut": text[:DETAIL_CELL]} if len(text) > DETAIL_CELL else {})} for k, x in value.items()]})
+            continue
+        text = redact(_shown(value))
+        fields.append({"name": redact(str(name)), "text": text,
+                       "cut": text[:DETAIL_CELL] if len(text) > DETAIL_CELL else ""})
+    return {"fields": fields, "groups": groups} if fields or groups else None
 
 
 def count_rate_limits(path: str) -> int | None:

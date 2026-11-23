@@ -264,6 +264,7 @@ def trial(job_id, trial_name):
                 bench_parts["shows"] = list(dict.fromkeys(k for x in bench_parts["parts"] if isinstance(x.get("shows"), dict) for k in x["shows"]))
         except (OSError, ValueError):
             pass
+    detail = parse.score_detail(t.dir) if j.runner else None
     loc = _gold_localization(j, t, traj) if ok else None
 
     # `trace` opens a
@@ -282,7 +283,7 @@ def trial(job_id, trial_name):
         record["download"] = url_for("artifact_download", job_id=job_id, trial_name=trial_name,
                                      key=record["key"], workspace=request.args.get("workspace"))
     return render_template(
-        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts,
+        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts, detail=detail,
         trace=tr, charts=ch, viewing=viewing, imported_from=_imported_from(j),
         chart_filter=cfilt, default_save_name=SAVED_TRACE_DEFAULT,
         artifacts=records, attempt=attempt, attempts=task_attempts.of(j, attempt), tries=_tries(attempt),
