@@ -130,6 +130,94 @@ class CappedJobPage(unittest.TestCase):
         self.assertNotIn("No record of its call", html)
 
 
+class RunFactsOnTheJobPage(unittest.TestCase):
+    """What identifies a run, as the job page shows it: one block for a standard job, read from the job as a run
+    writes it, the names its definitions give; nothing for a job that records none; and beside the mean score
+    over the trials scored, the mean over every trial planned."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.test_parse import BENCH as VERSIONED, NOP, SCORED, standard_job
+        cls.temp = tempfile.TemporaryDirectory(prefix="nullius-run-facts-")
+        tmp = Path(cls.temp.name)
+        jobs = tmp / "jobs"
+        jobs.mkdir()
+        standard_job(str(jobs), "facts", [1.0, 0.0, None], budget={"max_usd": 0.5, "spent_usd": 0.1, "stopped": False, "cut_off": [], "not_run": []})
+        standard_job(str(jobs), "named", [1.0], bench={k: v for k, v in VERSIONED.items() if k != "_version"} | {"key": "locomo", "_ref": "locomo"},
+                     bench_options={"rag_mode": "dialog"}, options={}, served_by=None, timeouts=None, max_turns=None, max_calls=None, retries=0)
+        standard_job(str(jobs), "scored", [1.0, 0.5, 0.0, None], bench=SCORED)
+        standard_job(str(jobs), "constrained", [1], constraints={"cpus": 2, "memory_mb": 512, "processes": 128,
+                                                                  "cpu_set": "0-1", "gpu_ids": [], "concurrency": 2})
+        standard_job(str(jobs), "nop", [0.0], other=NOP, model="", options={}, served_by=None)
+        harbor = jobs / "harbor"
+        (harbor / "t__1").mkdir(parents=True)
+        (harbor / "config.json").write_text('{"agents": [{"name": "claude-code", "model_name": "m-1"}], "datasets": [{"path": "../swe"}]}')
+        (harbor / "result.json").write_text('{"stats": {}}')
+        (harbor / "t__1" / "result.json").write_text('{"task_name": "swe/t", "trial_name": "t__1", "verifier_result": {"rewards": {"reward": 1}}}')
+        cls.stack = ExitStack()
+        cls.stack.enter_context(patch.object(web.shared, "WS_HOME", str(tmp / "ws")))
+        cls.stack.enter_context(patch.dict(web.app.config, TESTING=True))
+        cls.stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}))
+        cls.ws = workspace.create(str(tmp / "ws"), [str(jobs)], label="facts")
+        web.shared.open_workspace(cls.ws)
+        cls.client = web.app.test_client()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.stack.close()
+        cls.temp.cleanup()
+
+    page = CappedJobPage.page
+    text = CappedJobPage.text
+
+    def rows(self, html):
+        """The block's rows, (name, value) as text."""
+        block = re.search(r'<dl class="run-facts" id="run-facts".*?</dl>', html, re.S)
+        self.assertIsNotNone(block)
+        return [(self.text(dt, r".*"), self.text(dd, r".*")) for dt, dd in re.findall(r"<dt>(.*?)</dt><dd[^>]*>(.*?)</dd>", block[0], re.S)]
+
+    def test_a_standard_job_shows_what_identifies_it_in_one_block_and_no_credential(self):
+        from tests.test_parse import SECRET
+        html = self.page("facts")
+        self.assertEqual(self.rows(html), [
+            ("Benchmark", "fakebench 2 · Temperature 0.2"),
+            ("Agent options", "Reasoning effort high · Max tokens 4096 · Api key [REDACTED] · Note from [REDACTED]"),
+            ("Provider", "OpenRouter"),
+            ("Served by", "deepinfra/fp8, together"),
+            ("Answered by", "DeepInfra 3"),
+            ("Limits", "Agent 10.00m · 30 turns · 100 model calls · 2 retries · 3 at a time")])
+        self.assertNotIn(SECRET, html)
+        self.assertEqual(self.text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap $0.50")    # the cap stays under Run totals
+        self.assertIn("fake", self.text(html, r'<div class="run-meta".*?</div>'))                             # the agent and the model, above it
+        self.assertIn("m-1", self.text(html, r'<div class="run-meta".*?</div>'))
+
+    def test_names_come_from_the_definitions_and_a_fact_not_recorded_has_no_row(self):
+        self.assertEqual(self.rows(self.page("named")), [("Benchmark", "LoCoMo · RAG mode dialog"), ("Provider", "OpenRouter"),
+                                                         ("Answered by", "DeepInfra 1"), ("Limits", "0 retries · 3 at a time")])
+        self.assertEqual([name for name, _ in self.rows(self.page("nop"))], ["Benchmark", "Limits"])     # a control asks no model
+        self.assertNotIn('id="run-facts"', self.page("harbor"))
+        self.assertIn(("Resources", "CPUs 2 · Memory (MB) 512 · Processes and threads 128 · CPUs Nullius may use 0-1 · GPUs Nullius may use none · Concurrent units 2"),
+                      self.rows(self.page("constrained")))
+
+    def test_the_mean_over_every_trial_planned_stands_beside_the_mean_over_the_trials_scored(self):
+        html = self.page("scored")
+        self.assertEqual(self.text(html, r'<div class="kv"[^>]*><span class="k">Mean score</span>.*?</div>'), "Mean score 0.50")
+        self.assertEqual(self.text(html, r'<div class="kv" id="planned-mean-total".*?</div>'), "Mean over planned 0.38")
+        self.assertEqual(self.text(html, r'<dd id="planned-mean".*?</dd>'), "0.38")
+        self.assertEqual(self.text(html, r'<div class="hero[^"]*" id="adjusted-rate">.*?</div>'), "0.50")
+        for passed in ("facts", "harbor"):                                                               # a pass or fail benchmark: unchanged
+            self.assertNotIn("planned-mean", self.page(passed))
+
+    def test_both_runs_list_views_show_the_planned_mean(self):
+        response = self.client.get("/runs")
+        self.addCleanup(response.close)
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertEqual(re.findall(r'<small class="mean-planned faint">(.*?)</small>', html), ["0.38 planned", "0.38 planned"])
+        self.assertRegex(html, r'<div class="la-rate la-score"[^>]*><b>0\.50</b>')
+        self.assertRegex(html, r'<td data-col="adjusted" data-sort="0\.5"[^>]*>0\.50')
+
+
 class BuilderKeepsTheCap(CompilerCase):
     def test_a_saved_recipe_keeps_an_amount_above_zero_and_nothing_else(self):
         out = self.js('const back=v=>C.fromJSON(JSON.stringify({...C.createStandard("gsm8k"),max_usd:v})).max_usd;'

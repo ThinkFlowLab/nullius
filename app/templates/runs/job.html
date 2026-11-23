@@ -47,6 +47,28 @@
     {% if job.harbor_command %}<button class="btn sm ghost" type="button" data-copy="{{ job.harbor_command }}"
       title="{{ job.harbor_command }}">Copy command</button>{% endif %}{% endset %}
 {{ page_head(job.job_id, sub=meta, actions=actions) }}
+  {#- what tells this run from another, as its records say it; the agent, its version and the model are the line above, the caps under Run totals -#}
+  {%- macro fact_value(v) -%}{% if v is sameas true %}yes{% elif v is sameas false %}no{% elif v is mapping %}{{ v|tojson }}{% elif v is string or v is number %}{{ v }}{% else %}{{ v|join(', ') }}{% endif %}{%- endmacro %}
+  {% set facts = job.identity %}
+  {% if facts %}
+  {%- set lim = facts.limits or {} %}
+  {%- set limits = [] %}
+  {%- for phase, s in (lim.timeouts or {}).items() %}{% set _ = limits.append(phase|capitalize ~ ' ' ~ s|secs) %}{% endfor %}
+  {%- if lim.max_turns %}{% set _ = limits.append(lim.max_turns ~ (' turn' if lim.max_turns == 1 else ' turns')) %}{% endif %}
+  {%- if lim.max_calls %}{% set _ = limits.append(lim.max_calls ~ (' model call' if lim.max_calls == 1 else ' model calls')) %}{% endif %}
+  {%- if lim.repeat %}{% set _ = limits.append(lim.repeat ~ ' attempts each') %}{% endif %}
+  {%- if 'retries' in lim %}{% set _ = limits.append(lim.retries ~ (' retry' if lim.retries == 1 else ' retries')) %}{% endif %}
+  {%- if lim.concurrency %}{% set _ = limits.append(lim.concurrency ~ ' at a time') %}{% endif %}
+  <dl class="run-facts" id="run-facts" aria-label="What identifies this run">
+    {% if names.benchmark %}<div><dt>Benchmark</dt><dd>{{ names.benchmark }}{% for k, v in (facts.benchmark_options or {}).items() if v is not none %} <span class="faint">·</span> {{ names.benchmark_options[k] }} <span class="mono">{{ fact_value(v) }}</span>{% endfor %}</dd></div>{% endif %}
+    {% if facts.agent_options %}<div><dt>Agent options</dt><dd>{% for k, v in facts.agent_options.items() if v is not none %}{% if not loop.first %} <span class="faint">·</span> {% endif %}{{ names.agent_options[k] }} <span class="mono">{{ fact_value(v) }}</span>{% endfor %}</dd></div>{% endif %}
+    {% if facts.provider %}<div><dt>Provider</dt><dd>{{ facts.provider|provider }}</dd></div>{% endif %}
+    {% if facts.served_by %}<div><dt>Served by</dt><dd class="mono">{% for m, slugs in facts.served_by.items() %}{% if not loop.first %} <span class="faint">·</span> {% endif %}{% if facts.served_by|length > 1 %}{{ m }}: {% endif %}{{ slugs|join(', ') }}{% endfor %}</dd></div>{% endif %}
+    {% if facts.served and (facts.served.calls or facts.served.unnamed) %}<div><dt>Answered by</dt><dd>{% for name, n in facts.served.calls.items() %}{% if not loop.first %} <span class="faint">·</span> {% endif %}{{ name }} {{ n }}{% endfor %}{% if facts.served.unnamed %}{% if facts.served.calls %} <span class="faint">·</span> {% endif %}unnamed {{ facts.served.unnamed }}{% endif %}</dd></div>{% endif %}
+    {% if limits %}<div><dt>Limits</dt><dd>{{ limits|join(' · ') }}</dd></div>{% endif %}
+    {% if lim.constraints %}<div><dt>Resources</dt><dd>{% for k, v in lim.constraints.items() %}{% if not loop.first %} <span class="faint">·</span> {% endif %}{{ names.constraints.get(k, k|replace('_', ' ')|capitalize) }} <span class="mono">{{ 'none' if v == [] else fact_value(v) }}</span>{% endfor %}</dd></div>{% endif %}
+  </dl>
+  {% endif %}
 
 {% set board_ready = live_board and live_board.initial and live_board.initial.state != 'unknown' %}
 {% if job.is_preparing and not live_board and not ended %}
@@ -159,6 +181,7 @@
     <div class="hk" aria-label="Health">
       <dl>
         <dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="No pass or fail in this benchmark: no rate">—</dd>
+        {% if job.mean_score_planned is not none %}<dt>planned</dt><dd id="planned-mean" data-tip="The mean over all {{ [job.n_planned, job.trials|length]|max }} planned, a trial with no score counting 0">{{ '%.2f'|format(job.mean_score_planned) }}</dd>{% endif %}
         <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors, setup failures and spending caps">{{ job.n_infra }}</dd>
       </dl>
     </div>
@@ -329,6 +352,7 @@
     {% if job.budget.over_unit %}<div class="sp"><details class="pop"><summary aria-label="The units that reached it"><span class="tw"></span>{{ job.budget.over_unit|length }} reached it</summary>
       <div class="popm cap-units" role="group" aria-label="The units that reached it">{% for u in job.budget.over_unit %}<span>{{ u }}</span>{% endfor %}</div></details></div>{% endif %}{% endif %}
     {% if job.mean_score is not none %}<div class="kv" data-tip="{% if job.n_scored_parts %}The mean score over every one of the {{ job.n_scored_parts }} scored, whichever trial it is under{% else %}The mean of each item's graded score (an F1, partial credit){% endif %}{% if not job.scored_only %}; the rates count an item resolved at its benchmark's pass mark{% endif %}"><span class="k">Mean score</span><span class="v">{{ '%.2f'|format(job.mean_score) }}</span></div>{% endif %}
+    {% if job.mean_score_planned is not none %}<div class="kv" id="planned-mean-total" data-tip="The mean over all {{ [job.n_planned, job.trials|length]|max }} planned, a trial with no score counting 0"><span class="k">Mean over planned</span><span class="v">{{ '%.2f'|format(job.mean_score_planned) }}</span></div>{% endif %}
     {% for g in job.score_by_group %}<div class="kv by-group" data-tip="The mean score of the {{ g.n }} scored with {{ job.parts_by }} {{ g.group }}"><span class="k">{{ job.parts_by|capitalize }} {{ g.group }}</span><span class="v">{{ '%.2f'|format(g.mean) }} <small class="faint">{{ g.n }}</small></span></div>{% endfor %}
     {% if job.duration_min %}<div class="kv" data-tip="Start to finish, the whole run"><span class="k">Duration</span><span class="v">{{ job.duration_min|runtime }}</span></div>{% endif %}
   </div>

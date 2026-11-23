@@ -160,6 +160,12 @@ def summary_rows(jobs, baseline=True):
             [j.mean_score for j in jobs], "higher",
             "The mean of the benchmark's own score, over every part scored when a trial is scored on its parts", unit=SCORE),
     ] if any(j.mean_score is not None for j in jobs) else []
+    if any(j.mean_score_planned is not None for j in jobs):
+        scored.append(row("mean_score_planned", "Mean over planned",
+                          ["" if j.mean_score_planned is None else f"{j.mean_score_planned:.2f}" for j in jobs],
+                          [j.mean_score_planned for j in jobs], "higher",
+                          "The mean of each trial's score over all planned trials, with an unscored trial counting 0",
+                          unit=SCORE))
     # and by the field the benchmark breaks it down by (a question's category), a row a value
     by = next((j.parts_by for j in jobs if j.parts_by), "")
     groups = {}
@@ -417,10 +423,10 @@ def compare():
     ]
     tasks_view = _view()
     summary = summary_rows(chosen, baseline=columns[0]["i"] == 0) if tasks_view != "tasks" and (view.cohort == "whole" or view.shared_tasks) else []
-    # There is no truthful wall-clock interval for a subset of parallel trials.
+    # A matched cohort has no recorded planned trial count or wall-clock interval.
     # Whole-run intervals are ranked, labelled as such.
     if view.cohort == "matched":
-        summary = [row for row in summary if row["label"] != "Wall time"]
+        summary = [row for row in summary if row["label"] not in {"Wall time", "Mean over planned"}]
     else:
         for row in summary:
             if row["label"] == "Wall time":
