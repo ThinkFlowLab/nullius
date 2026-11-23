@@ -52,6 +52,10 @@ class FilteredScore(unittest.TestCase):
         (e / fa.FILE).write_text("{not json")
         f = plain_job(tmp / "jobs", "run-f", {"t1__1": ("t1", 1)})
         fa.update(str(f), lambda x: x.set_flag("t1", "ambiguous", "two readings", by="ann"))
+        g = plain_job(tmp / "jobs", "run-g", {"t1__1": ("t1", 1)})
+        result = g / "t1__1" / "result.json"
+        body = json.loads(result.read_text()); body["task_checksum"] = "v2"; result.write_text(json.dumps(body))
+        fa.update(str(g), lambda x: x.set_flag("t1", "flawed", "x", by="ann", task_version="v1"))
         a = fa.Analysis()
         a.set_flag("t2", "flawed", "unreachable", by="ann")
         a.set_flag("t3", "ambiguous", "two_readings", by="ann")
@@ -81,14 +85,23 @@ class FilteredScore(unittest.TestCase):
 
     def test_a_job_with_no_accepted_flag_or_an_unreadable_file_shows_no_switch(self):
         for run in ("run-b", "run-d", "run-e"):
-            self.assertNotIn('id="filtered-score"', self.page(f"/job/{run}"), run)
+            html = self.page(f"/job/{run}")
+            self.assertNotIn('id="filtered-score"', html, run)
+            self.assertNotIn('>Exclude:</span>', html, run)
+        stale = self.page("/job/run-g")
+        self.assertIn('id="filter-other-version"', stale)
+        self.assertNotIn('>Exclude:</span>', stale)
+        self.assertNotIn('class="filter-choice"', stale)
 
     def test_the_switches_are_off_by_default_and_the_adjusted_rate_is_unchanged(self):
         html = self.page("/job/run-a")
         self.assertIn('id="filter-flawed"', html)
         self.assertIn('id="filter-ambiguous"', html)
-        self.assertIn('Exclude 1 flawed task', html)
-        self.assertIn('Exclude 1 ambiguous task', html)
+        self.assertIn('>Exclude:</span>', html)
+        self.assertIn('> Flawed</label>', html)
+        self.assertIn('> Ambiguous</label>', html)
+        self.assertIn('aria-label="Exclude 1 flawed task"', html)
+        self.assertIn('aria-label="Exclude 1 ambiguous task"', html)
         self.assertIsNone(self.filtered_rate(html))
         self.assertIn('id="adjusted-rate">40%', html)
 

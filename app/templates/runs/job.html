@@ -204,9 +204,10 @@
     {% endif %}
     {% if filtered %}{% set fv = filtered.view %}
     <form method="get" class="filtered" id="filtered-score" aria-label="Exclude flagged tasks">
+      {% if fv.flagged.flawed or fv.flagged.ambiguous %}<span class="filter-heading">Exclude:</span>{% endif %}
       {% for key, value in request.args.items() if key not in ('flawed', 'ambiguous') %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
       {% for k in ('flawed', 'ambiguous') %}{% if fv.flagged[k] %}
-      <label class="filter-choice"><input type="checkbox" id="filter-{{ k }}" name="{{ k }}" value="1" data-kind="{{ k }}"{{ ' checked' if k in fv.kinds }}> Exclude {{ fv.flagged[k] }} {{ k }} task{{ '' if fv.flagged[k] == 1 else 's' }}</label>
+      <label class="filter-choice"><input type="checkbox" aria-label="Exclude {{ fv.flagged[k] }} {{ k }} task{{ '' if fv.flagged[k] == 1 else 's' }}" id="filter-{{ k }}" name="{{ k }}" value="1" data-kind="{{ k }}"{{ ' checked' if k in fv.kinds }}> {{ k|capitalize }}</label>
       {% endif %}{% endfor %}
       {% if fv.other_version %}<span class="small faint" id="filter-other-version" data-tip="Flags set on another version of their task; they do not count">{{ fv.other_version }} on another version</span>{% endif %}
       <span class="sr" id="filtered-live" aria-live="polite"></span>
@@ -214,7 +215,7 @@
       {% for v in filtered.views %}
       <p class="filtered-rate"{% if v.kinds == fv.kinds %} id="filtered-rate"{% else %} hidden{% endif %} data-kinds="{{ v.kinds|join(',') }}" data-tip="The adjusted rate without the tasks left out">Filtered score <b>{{ v.filtered_score|pct }}</b> <span class="faint">{{ v.solved }}/{{ v.ran }}</span></p>
       {% endfor %}
-      <noscript><button type="submit" class="btn sm">Apply</button></noscript>
+      {% if fv.flagged.flawed or fv.flagged.ambiguous %}<noscript><button type="submit" class="btn sm">Apply</button></noscript>{% endif %}
     </form>
     {% endif %}
     <div class="hk" aria-label="Health">
