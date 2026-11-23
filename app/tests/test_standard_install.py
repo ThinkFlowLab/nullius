@@ -266,6 +266,24 @@ class WheelsTest(unittest.TestCase):
         self.assertEqual(open(wheel, "rb").read(), self.body)
         self.assertEqual(runs[-1][-2:], ["lib==1.0", wheel])          # one resolution: the wheel's dependencies are pip's
 
+    def test_install_commands_run_last_in_the_install_folder(self):
+        runs = []
+        d = {"key": "a", "_kind": "agent", "install": {"pip": ["lib==1.0"], "commands": [["{install}/.venv/bin/python", "{install}/setup.py"]]}}
+        with mock.patch.object(install, "_run", side_effect=lambda cmd, *a, **k: runs.append(cmd)):
+            where = install.packages(d, self.home)
+        self.assertEqual(runs[-1], [os.path.join(where, ".venv/bin/python"), os.path.join(where, "setup.py")])
+        self.assertIn(["uv", "pip", "install", "--quiet", "--python", os.path.join(where, ".venv", "bin", "python"), "lib==1.0"], runs[:-1])
+        self.assertTrue(os.path.exists(os.path.join(where, install.MARK)))
+
+    def test_a_failed_install_command_leaves_no_marker(self):
+        d = {"key": "a", "_kind": "agent", "install": {"commands": [["{install}/missing"]]}}
+        def run(cmd, *a, **k):
+            raise install.InstallFailed("missing: exit 1")
+        with mock.patch.object(install, "_run", side_effect=run):
+            with self.assertRaises(install.InstallFailed):
+                install.packages(d, self.home)
+        self.assertFalse(os.path.exists(os.path.join(install.packages_dir(d, self.home), install.MARK)))
+
     def test_a_wheel_whose_digest_differs_is_refused_and_not_kept(self):
         with mock.patch.object(install, "_run"):
             with self.assertRaisesRegex(install.InstallFailed, "wheel .*sha256"):

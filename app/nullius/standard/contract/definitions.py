@@ -115,6 +115,8 @@ KINDS = {
 SLOTS = {"here", "install", "prompt"}
 _WORD = re.compile(r"^(?:[A-Za-z0-9_./:=@+-]|\{[a-z]+\})+$")
 _SLOT = re.compile(r"\{([a-z]+)\}")
+# An install command's word may also name a package's extras (path[extra,other]).
+_INSTALL_WORD = re.compile(r"^(?:[A-Za-z0-9_./:=@+,\[\]-]|\{[a-z]+\})+$")
 _KEY = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _TAG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+/-]{0,127}$")
@@ -344,7 +346,9 @@ def _install(d: dict, where: str = "install") -> List[str]:
     ``locked``, the project's own lock file (``uv.lock``) installed as its
     pins, ``pip`` resolved beside them, rather than its loose requirements;
     ``virtual``, with ``locked``, those pins without the project itself, as
-    ``uv sync`` installs a project that declares no build system.
+    ``uv sync`` installs a project that declares no build system;
+    ``commands``, the upstream's own install steps, run in the folder once its
+    packages are in (``{install}`` names it).
     A benchmark's driver has the same block, ``driver.install`` (:func:`driver_install`):
     ``where`` is the name its problems are said under."""
     inst = d.get("install") or {}
@@ -403,6 +407,12 @@ def _install_block(d: dict, inst: dict) -> List[str]:
             bad.append(f"install.prefetch: {m!r} is not a hub model id (owner/name)")
     if inst.get("prefetch") and not (inst.get("pip") or inst.get("project") or inst.get("indexes") or inst.get("wheels")):
         bad.append("install: prefetch goes with pip, project or indexes, the environment it is installed in")
+    if "commands" in inst:
+        if not isinstance(inst["commands"], list) or not inst["commands"]:
+            bad.append("install.commands: a list of commands")
+        else:
+            for i, cmd in enumerate(inst["commands"]):
+                bad += _command(f"install.commands[{i}]", cmd, {"install"}, _INSTALL_WORD)
     return bad
 
 
@@ -695,12 +705,12 @@ def options_of(d: dict, given: Optional[dict] = None) -> Tuple[dict, List[str]]:
     return {n: given.get(n, o.get("default")) for n, o in opts.items()}, bad
 
 
-def _command(where: str, cmd, slots=SLOTS) -> List[str]:
+def _command(where: str, cmd, slots=SLOTS, word=_WORD) -> List[str]:
     if not isinstance(cmd, list) or not cmd or not all(isinstance(w, str) for w in cmd):
         return [f"{where}: a list of words"]
     bad = []
     for w in cmd:
-        if not _WORD.match(w):
+        if not word.match(w):
             bad.append(f"{where}: {w!r} is not a plain word")
         for s in _SLOT.findall(w):
             if s not in slots:

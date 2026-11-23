@@ -478,6 +478,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `project` | The upstream itself, from its clone; `locked: true` installs it at its own lock file's pins (`uv export --frozen`), `pip` resolved beside them |
 | `virtual` | With `locked`: the lock's pins without the project itself; the driver imports the upstream from its clone |
 | `extras`, `prefetch` | The project's extras; what to download ahead |
+| `commands` | The upstream's own install steps, run last in the install folder (`{install}`) |
 
 #### Benchmark options
 
