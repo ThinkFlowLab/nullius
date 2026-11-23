@@ -102,6 +102,26 @@ class InterfaceContrast(unittest.TestCase):
                     f"{scope} button text is {ratio:.2f}:1 on --{background}")
 
 
+class ChosenPick(unittest.TestCase):
+    """A chosen card or a chosen row's cells take --accent-soft as background; a category tag
+    filled with it, and a tag outlined with --border, must still show on it (catalogue.css)."""
+
+    def test_tags_stand_out_on_a_chosen_card_and_a_chosen_row(self):
+        css = (palette.STYLESHEET.parent / "catalogue" / "catalogue.css").read_text(encoding="utf-8")
+        rule = re.search(r":is\(([^{]+)\)\s*\{\s*--pick-fill: color-mix\(in srgb, var\(--accent\) (\d+)%, var\(--accent-soft\)\); "
+                         r"--pick-line: color-mix\(in srgb, var\(--accent\) (\d+)%, var\(--border\)\); \}", css)
+        self.assertIsNotNone(rule, "the chosen pick's --pick-fill and --pick-line rule")
+        self.assertIn(".bench-card:has(> .bench-card-title [data-pick][aria-pressed=\"true\"])", rule[1])
+        self.assertIn(".table-wrap .grid tbody tr:has([data-pick]:checked) > td", rule[1])
+        self.assertIn(f":is({rule[1]}) > * {{\n  --accent-soft: var(--pick-fill); --border: var(--pick-line); }}", css)
+        mix = lambda share, a, b: tuple(share * x + (1 - share) * y for x, y in zip(a, b))   # color-mix in srgb
+        for scope, tokens in scopes().items():
+            accent, soft, border = (palette.to_rgb(tokens[t]) for t in ("accent", "accent-soft", "border"))
+            fill, line = mix(int(rule[2]) / 100, accent, soft), mix(int(rule[3]) / 100, accent, border)
+            self.assertGreater(palette.contrast(fill, soft), 1.2, f"{scope} category tag on a chosen pick")
+            self.assertGreaterEqual(palette.contrast(line, soft), MIN_CONTRAST, f"{scope} tag outline on a chosen pick")
+
+
 class Separation(unittest.TestCase):
     """All-pairs, not adjacent-pairs: any two kinds can end up stacked."""
 
