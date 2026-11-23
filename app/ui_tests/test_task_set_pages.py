@@ -208,9 +208,9 @@ class TheTasksPagesData(Case):
 
 
 class TheTaskRows(unittest.TestCase):
-    """A task is one line: its title cut to the width; its whole text in the row's tooltip and, while its box has the
-    keyboard's focus, in place; its id beside it on hover or focus. A click anywhere on the row ticks it; its box, a
-    link or a button keeps its own action."""
+    """A task is one line: its title cut to the width; its whole text in the row's tooltip and, while its box (its
+    text in a read-only list, where the box is disabled) has the keyboard's focus, in place; its id beside it on
+    hover or focus. A click anywhere on the row ticks it; its box, a link or a button keeps its own action."""
 
     def test_a_row_is_one_line_ticked_by_a_click_with_its_whole_text_on_hover_and_its_id_beside_it(self):
         node = shutil.which("node")
@@ -227,7 +227,8 @@ function element(id) {
   });
   return elements.get(id);
 }
-element('tasks-page').dataset = {writable: 'true', listing: '/listing', rows: '/rows'};
+const writable = process.argv[2] === 'true';
+element('tasks-page').dataset = {writable: process.argv[2], listing: '/listing', rows: '/rows'};
 const long = 'Open the report and ' + 'make the second table match the first one, '.repeat(6);
 const tasks = [{id: 'os__a', title: long.slice(0, 99) + '…', text: long, categories: {}}, {id: 'b', title: '', text: '', categories: {}}];
 const request = async () => ({json: async () => ({ok: true, ready: true, total: 2, of: 2, pages: 1, page: 1, categories: {}, described: true, tasks})});
@@ -241,24 +242,33 @@ require('node:vm').runInNewContext(require('node:fs').readFileSync(process.argv[
   for (let n = 0; n < 20; n++) await Promise.resolve();
   const rows = element('tasks-rows').innerHTML;
   assert.ok(rows.includes(`<tr data-id="os__a" title="${long}"><td class="tasks-tick">`), rows);
-  assert.ok(rows.includes(`<span class="tasks-row"><span class="tasks-title">${long.slice(0, 99)}…</span>`), rows);
+  // the text takes the keyboard's focus only where the box cannot
+  const text = writable ? '<span class="tasks-row">' : '<span class="tasks-row" tabindex="0">';
+  assert.ok(rows.includes(`${text}<span class="tasks-title">${long.slice(0, 99)}…</span>`), rows);
   assert.ok(rows.includes(`<span class="tasks-whole">${long}</span><small class="tasks-id mono faint">os__a</small></span>`), rows);
   // an id alone is its own title, with nothing beside it
   assert.ok(rows.includes('<tr data-id="b" title="b">'), rows);
   assert.ok(rows.includes('<span class="tasks-title">b</span><span class="tasks-whole">b</span></span>'), rows);
-  // the row's box clicked, as the browser does: it turns and says so
+  // the generated row's box, looked up and clicked as the browser does: an enabled checkbox turns and says so
+  const input = (rows.match(/<tr data-id="os__a"[\s\S]*?<\/tr>/) || [''])[0].match(/<input\b[^>]*>/)?.[0] || '';
+  const checkbox = /\stype="checkbox"/.test(input), enabled = checkbox && !/\sdisabled\b/.test(input);
+  assert.ok(checkbox && enabled === writable, input);
   const box = {checked: false, closest: () => ({dataset: {id: 'os__a'}}),
-    click() { this.checked = !this.checked; element('tasks-rows').listeners.change({target: {closest: () => box}}); }};
-  const tr = {querySelector: s => s === 'input[type=checkbox]' ? box : null};
+    click() { if (!enabled) return; this.checked = !this.checked; element('tasks-rows').listeners.change({target: {closest: () => box}}); }};
+  const tr = {querySelector: s => s === 'input[type=checkbox]' && checkbox ? box : null};
   const click = own => element('tasks-rows').listeners.click({target: {closest: s => s === 'input, a, button' ? own : s === 'tr[data-id]' ? tr : null}});
+  if (!writable) { click(null); assert.equal(box.checked, false); return; }        // read-only: a click ticks nothing
   click(null); assert.equal(element('tasks-chosen').textContent, '1 chosen');
   click({}); assert.equal(element('tasks-chosen').textContent, '1 chosen');          // the box, a link or a button: its own action alone
   selected = 'the second table'; click(null); assert.equal(element('tasks-chosen').textContent, '1 chosen');   // words selected
   selected = ''; click(null); assert.equal(element('tasks-chosen').textContent, '0 chosen');
 })().catch(error => { console.error(error); process.exitCode = 1; });
 """
-        got = subprocess.run([node, "-e", program, str(script)], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10)
-        self.assertEqual(got.returncode, 0, got.stderr)
+        for writable in ("true", "false"):
+            with self.subTest(writable=writable):
+                got = subprocess.run([node, "-e", program, str(script), writable], stdin=subprocess.DEVNULL, capture_output=True,
+                                     text=True, timeout=10)
+                self.assertEqual(got.returncode, 0, got.stderr)
         css = (Path(__file__).resolve().parents[1] / "static/catalogue/catalogue.css").read_text(encoding="utf-8")
         self.assertIn(".tasks-row .tasks-title { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }", css)
         self.assertIn(".tasks-table tr:hover .tasks-id, .tasks-table tr:focus-within .tasks-id { display: inline; }", css)

@@ -25,13 +25,14 @@
     if ($('tasks-bar-chosen')) $('tasks-bar-chosen').textContent = $('tasks-chosen').textContent;
     $('tasks-show').disabled = !chosen.size && !st.showing;
   }
-  // a task on one line: its title cut to the width, the whole text in the row's tooltip and, while its box has the
-  // keyboard's focus, in place; its id beside it on hover or focus. A click anywhere on the row ticks it.
+  // a task on one line: its title cut to the width, the whole text in the row's tooltip and, while its box (its text
+  // where the box is disabled) has the keyboard's focus, in place; its id beside it on hover or focus. A click
+  // anywhere on the row ticks it.
   function row(t) {
     const tags = Object.values(t.categories || {}).map(v => `<span class="cat-tag">${esc(v)}</span>`).join(' ');
     const whole = t.text || t.title || t.id;
     return `<tr data-id="${esc(t.id)}" title="${esc(whole)}"><td class="tasks-tick"><input type="checkbox" aria-label="Choose ${esc(t.id)}"${chosen.has(t.id) ? ' checked' : ''}${writable ? '' : ' disabled'}></td>`
-      + `<td class="tasks-text"><span class="tasks-row"><span class="tasks-title">${esc(t.title || t.id)}</span>`
+      + `<td class="tasks-text"><span class="tasks-row"${writable ? '' : ' tabindex="0"'}><span class="tasks-title">${esc(t.title || t.id)}</span>`
       + `<span class="tasks-whole">${esc(whole)}</span>${t.title ? `<small class="tasks-id mono faint">${esc(t.id)}</small>` : ''}</span>`
       + `${t.unknown ? '<small class="warn">not in the listing</small>' : ''}`
       + (tags ? `<span class="tasks-tags">${tags}</span>` : '') + `</td><td class="tasks-catcol">${tags}</td></tr>`;

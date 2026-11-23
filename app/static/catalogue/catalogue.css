@@ -474,7 +474,8 @@ a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underli
 .tasks-row .tasks-whole { display: none; flex: 1 1 100%; white-space: pre-wrap; line-height: 1.45; }
 .tasks-table .tasks-id { display: none; flex: none; margin: 0; }
 .tasks-table tr:hover .tasks-id, .tasks-table tr:focus-within .tasks-id { display: inline; }
-/* the row's tooltip shows on hover alone: while its box has the keyboard's focus, the whole text is in place */
+/* the row's tooltip shows on hover alone: while its box, or its text where the box is disabled, has the keyboard's
+   focus, the whole text is in place */
 .tasks-table tr:has(:focus-visible) .tasks-row { flex-wrap: wrap; }
 .tasks-table tr:has(:focus-visible) .tasks-title { display: none; }
 .tasks-table tr:has(:focus-visible) .tasks-whole { display: block; }
