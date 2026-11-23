@@ -115,7 +115,7 @@ Every check also fails when a pointer or key event came outside an acting call: 
 
 | Piece | Where |
 | --- | --- |
-| The desktop | A container of the kit's image, `desktop.Dockerfile` on Debian slim, built the first time a unit needs it, with a display at 1920 by 1080. The agent's actions run as its user; the kit's fixture runs as another, its log out of that user's reach |
+| The desktop | A container of the kit's image, `desktop.Dockerfile` on Debian slim, built the first time a unit needs it, with a display at 1920 by 1080. The agent's actions run as its user; the kit's fixture runs as another, its log out of that user's reach. The fixture's window names its process and its machine (`_NET_WM_PID`, `WM_CLIENT_MACHINE`), as an application's window does |
 | The controls | The null control passes no check; the reference passes all nine |
 
 A machine that runs the kit needs Docker, or Podman 4.7 or later, as the container backend does. The first unit builds the image.
