@@ -127,7 +127,7 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
     repeat = max(1, int(repeat or 1))
     kits = [(p, definitions.kit(p)) for p in which or candidates(other)]
     if fixture_image:
-        from . import container
+        from ..backends import container
         import copy
         if backend not in ("container", "docker") or which != ["agent.workspace/v1"]:
             raise run.Refused("fixture_image requires the container backend and only agent.workspace/v1")

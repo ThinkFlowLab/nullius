@@ -4,7 +4,10 @@ import tempfile
 import unittest
 from unittest import mock
 
-from nullius.standard import container, definitions, run, conform
+from nullius.standard.backends import container
+from nullius.standard.contract import definitions
+from nullius.standard.runner import run
+from nullius.standard.proofs import conform
 from tests.test_standard_check_safety import FakeBox
 
 
@@ -71,7 +74,7 @@ class WorkspaceFixture(unittest.TestCase):
         from pathlib import Path
         driver = Path(__file__).parents[1] / 'nullius/standard/kits/agent-workspace-v1/driver.py'
         image = 'fixture@sha256:' + 'a' * 64
-        with mock.patch('nullius.standard.jsonl.serve'), mock.patch('sys.argv', [str(driver), '--fixture-image', image]):
+        with mock.patch('nullius.standard.protocols.jsonl.serve'), mock.patch('sys.argv', [str(driver), '--fixture-image', image]):
             kit = runpy.run_path(str(driver))
             with tempfile.TemporaryDirectory() as folder:
                 setup = kit['setup']('fix', folder)
