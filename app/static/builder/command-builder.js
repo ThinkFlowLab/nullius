@@ -725,17 +725,67 @@
       + (C.leaderboard(rec) ? tile({attr:'model-choice',key:'leaderboard',title:'Like the leaderboard',on:on==='leaderboard'}) : '')
       + `${tile({attr:'model-choice',key:'any',title:'Any of your choice',on:on==='any'})}</div>`;
   }
+  // A chosen dataset's tasks: all of them, or one of its task sets (its name, its number of tasks), small cards, a
+  // select past five; and the page of its tasks, where a set is made. A recipe from before sets were frozen may name
+  // one NAME@N: it is that set.
+  function taskSetChoice(rec, b, x, u) {
+    const on = (rec.task_sets || {})[x.id] || '', sets = x.sets || [], ref = s => s.name;
+    const all = 'All ' + (x.units ? x.units + ' ' : '') + u.nouns;
+    const page = `/benchmarks/${encodeURIComponent(b.key)}/tasks/${encodeURIComponent(x.id)}`;
+    const picked = sets.find(s => on === s.name || on.split('@')[0] === s.name);
+    // a set made at another version of the benchmark says which: the run refuses a task that version lacks
+    const made = s => s.version && b.version && s.version !== b.version ? ' · made at ' + s.version_label : '';
+    const choice = sets.length + 1 > 5
+      ? `<label class="nb-field">Tasks of ${esc(x.label)}<select data-std-taskset-select="${esc(x.id)}"><option value="">${esc(all)}</option>`
+        + sets.map(s => `<option value="${esc(ref(s))}" ${s === picked ? 'selected' : ''}>${esc(s.label)} · ${s.units} ${esc(u.nouns)}${esc(made(s))}</option>`).join('')
+        + (on && !picked ? `<option value="${esc(on)}" selected>${esc(on)}</option>` : '') + '</select></label>'
+      : `<div class="nb-pick-grid std-optgrid">` + [tile({attr: 'std-taskset', key: '', data: ` data-of="${esc(x.id)}"`, on: !on, title: all}),
+          ...sets.map(s => tile({attr: 'std-taskset', key: ref(s), data: ` data-of="${esc(x.id)}"`, on: s === picked, title: s.label, tip: s.description || '',
+            meta: `${s.units} ${s.units === 1 ? u.noun : u.nouns}${made(s)}`})),
+          ...(on && !picked ? [tile({attr: 'std-taskset', key: on, data: ` data-of="${esc(x.id)}"`, on: true, title: on})] : [])].join('') + '</div>';
+    // the dataset's name only where several are chosen: one chosen is the one above
+    const head = C.datasetsOf(rec).length > 1 ? esc(x.label) + ': which tasks?' : 'Which tasks?';
+    return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="nb-inlinebutton" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.name) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>` + choice;
+  }
+  // a dataset's proofs as its card shows them: its controls, then whether its ids are stable and nothing leaks
+  const datasetChecks = (b, x) => (x.controls || []).map(c => controlChip(c)).join('') + checkChip('stable', (x.proofs || {}).units, (x.failed || {}).units, 'the same ids twice, each unique')
+    + ((b.controls || []).some(c => c.key === 'oracle') ? checkChip('no leak', (x.proofs || {}).leak, (x.failed || {}).leak, 'nothing of the reference shows before the run') : '');
+  // Which tasks? of a benchmark whose lists are cut from one (subset_of): all of it, the benchmark's own sets (its
+  // lists cut from it), then the user's sets of any of them. A choice names the list the run runs (data-was: the
+  // one chosen before) and, for a user's set, the set
+  function familyChoice(rec, b, x, u) {
+    const whole = b.datasets.find(d => d.id === C.wholeOf(b, x.id)) || x, cuts = b.datasets.filter(d => d.subset_of === whole.id);
+    const on = (rec.task_sets || {})[x.id] || '', many = n => n + ' ' + (n === 1 ? u.noun : u.nouns), was = ` data-was="${esc(x.id)}"`;
+    const mine = [whole, ...cuts].flatMap(d => (d.sets || []).map(s => ({...s, of: d})));
+    const picked = mine.find(s => s.of.id === x.id && s.name === on.split('@')[0]);
+    const made = s => s.version && b.version && s.version !== b.version ? ' · made at ' + s.version_label : '';
+    const own = [tile({attr: 'std-family', key: whole.id, data: was, on: x.id === whole.id && !on, title: 'All of it', meta: whole.units ? many(whole.units) : ''}),
+      ...cuts.map(d => tile({attr: 'std-family', key: d.id, data: was, on: x.id === d.id && !on, title: d.label, tip: d.summary || '',
+        meta: d.units ? many(d.units) : '', foot: datasetChecks(b, d)}))];
+    const yours = [...mine.map(s => tile({attr: 'std-family-set', key: s.name, data: was + ` data-in="${esc(s.of.id)}"`, on: s === picked, title: s.label,
+        tip: s.description || '', meta: many(s.units) + made(s)})),
+      ...(on && !picked ? [tile({attr: 'std-family-set', key: on, data: was + ` data-in="${esc(x.id)}"`, on: true, title: on})] : [])];
+    const page = `/benchmarks/${encodeURIComponent(b.key)}/tasks/${encodeURIComponent(picked ? picked.of.id : whole.id)}`;
+    const head = C.datasetsOf(rec).length > 1 ? esc(whole.label) + ': which tasks?' : 'Which tasks?';
+    return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="nb-inlinebutton" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.label) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>`
+      + `<div class="nb-pick-grid std-optgrid">${own.join('')}</div>` + (yours.length ? `<div class="nb-pick-grid std-optgrid std-yoursets" aria-label="Your task sets">${yours.join('')}</div>` : '');
+  }
   function standardForm(rec) {
     const st = C.standard(), b = C.standardBench(rec);
     if (!b) return note('Choose a benchmark first', button('Benchmark step', `data-step="${S.benchmark}"`, 'nb-inlinebutton'));
     const u = unitsOf(rec);
-    if (step === S.dataset)
+    if (step === S.dataset) {
+      // a benchmark whose lists name the one they are cut from: one dataset each list cut from none, its cuts drawn
+      // under Which tasks? as its own task sets (familyChoice); the recipe still names the list a run runs
+      const nested = C.nestedDatasets(b), chosen = C.datasetsOf(rec);
+      const shown = nested ? b.datasets.filter(x => !x.subset_of) : b.datasets;
+      const on = x => nested ? chosen.some(id => C.wholeOf(b, id) === x.id) : chosen.includes(x.id);
       return `<div class="nb-sectionhead"><h2>Which datasets?</h2></div>`
-        + `<div class="nb-pick-grid std-optgrid">${b.datasets.map(x => tile({attr: 'std-dataset', key: x.id, on: C.datasetsOf(rec).includes(x.id), title: x.label,
-          tip: x.summary || '', meta: x.units ? x.units + ' ' + u.nouns : '',
-          foot: (x.controls || []).map(c => controlChip(c)).join('') + checkChip('stable', (x.proofs || {}).units, (x.failed || {}).units, 'the same ids twice, each unique')
-            + ((b.controls || []).some(c => c.key === 'oracle') ? checkChip('no leak', (x.proofs || {}).leak, (x.failed || {}).leak, 'nothing of the reference shows before the run') : '')})).join('')}</div>`
-        + benchOptions(rec, b, 'dataset') + credentialWarnings(b, b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)));
+        + `<div class="nb-pick-grid std-optgrid">${shown.map(x => tile({attr: 'std-dataset', key: x.id, on: on(x), title: x.label,
+          tip: x.summary || '', meta: x.units ? x.units + ' ' + u.nouns : '', foot: datasetChecks(b, x)})).join('')}</div>`
+        + b.datasets.filter(x => chosen.includes(x.id)).map(x => nested ? familyChoice(rec, b, x, u) : taskSetChoice(rec, b, x, u)).join('')
+        + benchOptions(rec, b, 'dataset') + credentialWarnings(b, b.datasets.filter(x => chosen.includes(x.id)));
+    }
     if (step === S.agent) {
       const agent = b.family === 'agent', all = C.standardOthers(rec), others = all.filter(o => !o.control && (!o.setup || o.own));
       const setups = all.filter(o => o.setup && !o.own), controls = all.filter(o => o.control);
@@ -785,9 +835,12 @@
     if (step === S.limits) {
       const sets = b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)), per = sets.length > 1 ? ' of each dataset' : '';
       // empty is the default, shown as the placeholder: every unit, one at a time, one attempt
-      const ds = sets.length === 1 ? sets[0] : null, all = ds && ds.units ? String(ds.units) : 'all';
+      const ds = sets.length === 1 ? sets[0] : null, mine = ds && (ds.sets || []).find(s => s.name === ((rec.task_sets || {})[ds.id] || '').split('@')[0]);
+      const all = mine ? String(mine.units) : ds && ds.units ? String(ds.units) : 'all', most = /^\d+$/.test(all) ? all : '';
+      // the field takes that many at most: more would be all of them
       return '<div class="nb-sectionhead"><h2>Scope</h2></div><div class="nb-two">'
-        + field('Number of ' + u.nouns, 'limit', rec.limit, {type: 'number', min: 1, placeholder: all, hint: 'The first ones' + per + ', in its order.'})
+        + field('Number of ' + u.nouns, 'limit', rec.limit, {type: 'number', min: 1, max: most, placeholder: all,
+            hint: 'Empty: all' + (most ? ' ' + most : '') + per + '. Else the first ones, in order.'})
         + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: rec.backend === 'boat' ? String((schema.standardHere || {}).boatSlots || 'Boat\'s limit') : '1'}) + '</div>'
         + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
         + field('Retries per attempt', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0'}) + '</div>'
@@ -873,6 +926,8 @@
       refreshPlan();
     }, 120);
   }
+  // the number of units a run takes, as typed: a number past the most the field takes is that most
+  const atMost = (el, value) => el.max !== '' && value !== '' && Number(value) > Number(el.max) ? Number(el.max) : value;
   const field = (label,key,value,{type='text',hint='',list='',min='',max='',placeholder='',declared=false}={}) => `<label class="nb-field">${label}<input${declared?' class="nb-declared"':''} aria-label="${esc(label)}" data-field="${key}" type="${type}" value="${esc(value)}" ${list?`list="${list}"`:''} ${min!==''?`min="${min}"`:''} ${max!==''?`max="${max}"`:''} ${type==='number'?'step="any"':''} placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false">${hint?`<small>${hint}</small>`:''}</label>`;
   const select = (label,key,value,options) => `<label class="nb-field">${label}<select data-field="${key}">${options.map(([v,t])=>`<option value="${esc(v)}" ${v===value?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
   const fixed = (label,value,whose='official') => `<label class="nb-field ui-field-row"><span class="ui-field-copy">${esc(label)}</span><span class="nb-fixed">${esc(value)} (${whose})</span></label>`;
@@ -1135,7 +1190,10 @@
     else if(d.runner){toRunner(d.runner,C.benchKey(r()));}
     else if(d.stdBench){C.setStandardBenchmark(r(),d.stdBench);}
     else if(d.stdOther){const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(d.stdOther)?c.filter(k=>k!==d.stdOther):[...c,d.stdOther];delete rec.other;if(rec.options)delete rec.options[d.stdOther];}   // a check
-    else if(d.stdDataset){const rec=r(),c=C.datasetsOf(rec);rec.datasets=c.includes(d.stdDataset)?(c.length>1?c.filter(k=>k!==d.stdDataset):c):[...c,d.stdDataset];delete rec.dataset;}
+    else if(d.stdDataset){const rec=r(),c=C.datasetsOf(rec),b=C.standardBench(rec),mine=c.filter(k=>C.wholeOf(b,k)===d.stdDataset);rec.datasets=mine.length?(c.length>mine.length?c.filter(k=>!mine.includes(k)):c):[...c,d.stdDataset];delete rec.dataset;C.keepTaskSets(rec);}
+    else if(d.stdFamily!==undefined){C.swapDataset(r(),d.was,d.stdFamily);}
+    else if(d.stdFamilySet!==undefined){C.swapDataset(r(),d.was,d.in);C.setTaskSet(r(),d.in,d.stdFamilySet);}
+    else if(d.stdTaskset!==undefined){C.setTaskSet(r(),d.of,d.stdTaskset);}
     // the standard's machines: each a toggle, one at least; several split the run into shards
     else if(d.stdWhere){const rec=r(),list=C.whereList(rec),on=list.includes(d.stdWhere),next=on?list.filter(w=>w!==d.stdWhere):[...list,d.stdWhere];if(!next.length)return;rec.where=next.length>1?next:next[0];}
     // hosts or Boat sandboxes: a sandbox run starts from this machine alone
@@ -1184,7 +1242,7 @@
     if(d.servedBy!==undefined)return;   // what is typed in a Served by filters its menu: a pick, or Enter, adds it (nb-pick)
     if(d.providerModel && rec.modelFormat !== 'provider-id'){for(const key of ['model','userModel','evalModel'])if(typeof rec[key]==='string')rec[key]=C.bareModel(rec[key]);rec.modelFormat='provider-id';}
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
-      const value=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;
+      const typed=el.type==='number'?(el.value===''?'':Number(el.value)):el.value,value=d.field==='limit'?atMost(el,typed):typed;
       if(p)rec.params[p.key]=p.type==='optional-boolean'?(value==='__default__'?null:value==='true'):value;
       else if(d.field==='timeoutMultiplier'){rec.timeoutMultiplier=value;rec.agentMinutes='';}
       else if(d.field.startsWith('adapterPath:')){const id=d.field.slice(12);if(String(value).trim())rec.adapterPaths[id]=String(value).trim();else delete rec.adapterPaths[id];}
@@ -1209,6 +1267,7 @@
   root.addEventListener('focusout',event=>{
     const el=event.target;
     if(el.type==='number'&&(el.dataset.field||el.dataset.stdMinutes||el.dataset.benchOptSelect)&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
+    else if(el.dataset.field==='limit'&&el.value!==''&&atMost(el,Number(el.value))!==Number(el.value)){el.value=el.max;window.nulliusNotify?.(`${el.getAttribute('aria-label')}: at most ${el.max}, all of them.`,{key:'at-most'});}
   });
   // a provider picked in a Served by, or slugs typed there and Enter: they join its list, after the ones there
   root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail);syncServed();refreshPlan();});
@@ -1218,6 +1277,7 @@
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
     else if(d.stdVersion!==undefined){   // in place: only the card's count changes on this step, so nothing else is drawn again
       C.setStandardBenchmark(r(),el.value);benchTasks();render(false,false);}
+    else if(d.stdTasksetSelect!==undefined){C.setTaskSet(r(),d.stdTasksetSelect,el.value);renderForm();refreshPlan();}
     // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
     // the options that apply under it (`when`): the step is drawn again and the focus goes back to the select, or to the
     // menu button controls.js puts after it once this change is handled; a typed value is left as it is

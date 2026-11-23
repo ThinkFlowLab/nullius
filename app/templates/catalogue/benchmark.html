@@ -206,6 +206,38 @@
       </section>
       {% endif %}
 
+      {% if std %}
+      {#- The benchmark's own task sets, its lists cut from another (subset_of), as the builder draws them; then the user's
+          task sets of it (standard/runner/sets.py), each with the version it was made at; and each dataset's tasks to choose from. -#}
+      {% set cuts = std.datasets|selectattr('subset_of')|list %}{% set wholes = std.datasets|rejectattr('subset_of')|list %}
+      <section class="bench-section" id="task-sets" aria-labelledby="task-sets-title">
+        <div class="bench-section-head"><h2 id="task-sets-title">Task sets{% if task_sets or cuts %} <span class="bench-n">{{ task_sets|length + cuts|length }}</span>{% endif %}</h2>
+          {#- a new set is made on the page of the tasks it is cut from: one dataset's at once, else a choice of them #}
+          {% if local %}{% if wholes|length == 1 %}<a class="btn sm" href="{{ url_for('benchmark_tasks', key=b.key, dataset=wholes[0].id) }}">New task set</a>
+          {% else %}<details class="bench-newset pop"><summary class="btn sm" aria-haspopup="true">New task set</summary>
+            <div class="bench-newset-menu" role="group" aria-label="The dataset it is cut from">{% for d in wholes %}<a href="{{ url_for('benchmark_tasks', key=b.key, dataset=d.id) }}">{{ d.label }}{% if d.units %}<small>{{ d.units }} {{ std.units.nouns }}</small>{% endif %}</a>{% endfor %}</div>
+          </details>{% endif %}{% endif %}
+        </div>
+        {% if cuts %}
+        <h3 class="bench-sets-group">From {{ b.title }}</h3>
+        <div class="bench-setlinks bench-ownsets">{% for d in cuts %}<a class="btn ghost sm" href="{{ url_for('benchmark_tasks', key=b.key, dataset=d.id) }}" title="{{ d.summary }}">{{ d.label }}{% if d.units %} · {{ d.units }} {{ std.units.nouns }}{% endif %} <span aria-hidden="true">→</span></a>{% endfor %}</div>
+        {% if task_sets %}<h3 class="bench-sets-group">Yours</h3>{% endif %}
+        {% endif %}
+        {% if task_sets %}
+        <div class="tasks-scroll"><table class="grid bench-sets">
+          {% set made = task_sets|selectattr('version_label')|list %}
+          <thead><tr><th scope="col">Name</th><th scope="col">Dataset</th><th scope="col" class="num">{{ std.units.nouns|capitalize }}</th>{% if made %}<th scope="col">Made at</th>{% endif %}<th scope="col">Date</th></tr></thead>
+          <tbody>{% for s in task_sets %}
+            <tr><td><a href="{{ url_for('benchmark_tasks', key=b.key, dataset=s.dataset, set=s.name) }}">{{ s.label }}</a>{% if s.description %}<small>{{ s.description }}</small>{% endif %}</td>
+              <td>{{ (std.datasets|selectattr('id', 'equalto', s.dataset)|map(attribute='label')|first) or s.dataset }}</td>
+              <td class="num">{{ s.units }}</td>{% if made %}<td>{{ s.version_label }}</td>{% endif %}<td>{{ s.date[:10] }}</td></tr>
+          {% endfor %}</tbody>
+        </table></div>
+        {% endif %}
+        <div class="bench-setlinks">{% for d in (wholes if cuts else std.datasets) %}<a class="btn ghost sm" href="{{ url_for('benchmark_tasks', key=b.key, dataset=d.id) }}">{{ d.label }}{% if d.units %} · {{ d.units }} {{ std.units.nouns }}{% endif %} <span aria-hidden="true">→</span></a>{% endfor %}</div>
+      </section>
+      {% endif %}
+
       {% for y in views %}{% set sfx = '' if y.default else '-' ~ y.version %}
       <div{{ vattr(y) }}>
       {% if y.b.good_to_know %}

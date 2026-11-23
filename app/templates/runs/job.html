@@ -22,6 +22,7 @@
       {% if benchmark %}<div><span class="k">Benchmark</span><span class="v">{{ benchmark }}</span></div><span class="run-identity-sep" aria-hidden="true"></span>{% endif %}
       <div><span class="k">Dataset</span><span class="v" title="{{ job.dataset }}">{{ job.dataset|dsname }}</span></div>
     </div>{% endif %}
+    {% if job.task_set %}<span class="run-set" title="The task set this run ran: {{ job.task_set.units }} {{ 'task' if job.task_set.units == 1 else 'tasks' }}">task set {% if set_link.link %}<a href="{{ set_link.link }}">{{ set_link.name }}</a>{% else %}<b>{{ set_link.name }}</b>{% endif %}</span>{% endif %}
     {% if job.agent_label or job.model_name %}
     <div class="run-identity-card">
       {% if job.agent_label %}<span class="run-identity-mark" aria-hidden="true">{{ agent_mark('agent', job.agent_name, job.agent_label) }}</span>{% endif %}
@@ -45,7 +46,17 @@
       title="Open the run builder with what this run recorded: its agents and their parameters, model, dataset and task filter, limits, timeouts and Harbor; anything a recipe cannot say is named there">New run like this</a>{% endif %}
     {% set controls = feasibility_controls(job) %}{% if controls %}<a class="btn sm ghost" href="{{ url_for('feasibility_page', job_id=job.job_id) }}" title="What the {{ controls|join(' and ') }} control{{ 's' if controls|length > 1 else '' }} said about each task: can an empty solution fail and a reference solution pass">Feasibility · {{ controls|join(' + ') }}</a>{% endif %}
     {% if job.harbor_command %}<button class="btn sm ghost" type="button" data-copy="{{ job.harbor_command }}"
-      title="{{ job.harbor_command }}">Copy command</button>{% endif %}{% endset %}
+      title="{{ job.harbor_command }}">Copy command</button>{% endif %}
+    {% if set_saving %}<details class="run-saveset">
+      <summary class="btn sm ghost" title="Keep the tasks of the trials shown, by their outcome filter, as a task set">Save as task set</summary>
+      <form class="run-saveset-form" method="post" action="{{ url_for('job_task_set', job_id=job.job_id) }}"
+        onsubmit="this.elements.namedItem('outcome').value = new URLSearchParams(location.search).get('outcome') || ''">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="outcome" value="">
+        <label>Name<input name="name" maxlength="80" required autocomplete="off"></label>
+        <label>Description<input name="description" maxlength="300" autocomplete="off"></label>
+        <button class="btn sm" type="submit">Save the tasks shown</button>
+      </form>
+    </details>{% endif %}{% endset %}
 {{ page_head(job.job_id, sub=meta, actions=actions) }}
 
 {% set board_ready = live_board and live_board.initial and live_board.initial.state != 'unknown' %}
