@@ -469,20 +469,19 @@ a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underli
 .tasks-table th, .tasks-table td { padding: .6rem .7rem; }
 .tasks-table td:nth-child(2) { overflow-wrap: anywhere; }
 .tasks-table td.tasks-text { width: 100%; max-width: 0; }
-.tasks-row { display: flex; align-items: baseline; gap: 10px; width: 100%; min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit;
-  font: inherit; text-align: left; cursor: pointer; }
-.tasks-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.tasks-row { display: flex; align-items: baseline; gap: 10px; width: 100%; min-width: 0; }
 .tasks-row .tasks-title { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tasks-row .tasks-whole { display: none; flex: 1 1 100%; white-space: pre-wrap; line-height: 1.45; }
 .tasks-table .tasks-id { display: none; flex: none; margin: 0; }
 .tasks-table tr:hover .tasks-id, .tasks-table tr:focus-within .tasks-id { display: inline; }
-.tasks-open .tasks-row { flex-wrap: wrap; }
-.tasks-open .tasks-row .tasks-title { display: none; }
-.tasks-open .tasks-row .tasks-whole, .tasks-table .tasks-open .tasks-id { display: block; }
+/* the row's tooltip shows on hover alone: while its box has the keyboard's focus, the whole text is in place */
+.tasks-table tr:has(:focus-visible) .tasks-row { flex-wrap: wrap; }
+.tasks-table tr:has(:focus-visible) .tasks-title { display: none; }
+.tasks-table tr:has(:focus-visible) .tasks-whole { display: block; }
 .tasks-tick { width: 1%; }
 .tasks-tick input { width: 18px; height: 18px; margin: 0; }
 .tasks-title { display: block; line-height: 1.45; }
-.tasks-table tr[data-id] { cursor: pointer; }
+.tasks-table tr[data-id]:has(input:enabled) { cursor: pointer; }
 .tasks-table small { display: block; margin-top: 2px; font-size: 12px; }
 .tasks-tags { display: none; }
 .tasks-pages { display: flex; align-items: center; gap: 12px; margin-top: 14px; font-size: 13px; color: var(--text-dim); }

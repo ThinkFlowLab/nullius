@@ -25,14 +25,14 @@
     if ($('tasks-bar-chosen')) $('tasks-bar-chosen').textContent = $('tasks-chosen').textContent;
     $('tasks-show').disabled = !chosen.size && !st.showing;
   }
-  // a task on one line: its title cut to the width, the whole text in its tooltip and, on a click of the row (or Enter
-  // on it), in place; its id beside it on hover or focus, and once open
+  // a task on one line: its title cut to the width, the whole text in the row's tooltip and, while its box has the
+  // keyboard's focus, in place; its id beside it on hover or focus. A click anywhere on the row ticks it.
   function row(t) {
     const tags = Object.values(t.categories || {}).map(v => `<span class="cat-tag">${esc(v)}</span>`).join(' ');
     const whole = t.text || t.title || t.id;
-    return `<tr data-id="${esc(t.id)}"><td class="tasks-tick"><input type="checkbox" aria-label="Choose ${esc(t.id)}"${chosen.has(t.id) ? ' checked' : ''}${writable ? '' : ' disabled'}></td>`
-      + `<td class="tasks-text"><button type="button" class="tasks-row" aria-expanded="false" title="${esc(whole)}"><span class="tasks-title">${esc(t.title || t.id)}</span>`
-      + `<span class="tasks-whole">${esc(whole)}</span>${t.title ? `<small class="tasks-id mono faint">${esc(t.id)}</small>` : ''}</button>`
+    return `<tr data-id="${esc(t.id)}" title="${esc(whole)}"><td class="tasks-tick"><input type="checkbox" aria-label="Choose ${esc(t.id)}"${chosen.has(t.id) ? ' checked' : ''}${writable ? '' : ' disabled'}></td>`
+      + `<td class="tasks-text"><span class="tasks-row"><span class="tasks-title">${esc(t.title || t.id)}</span>`
+      + `<span class="tasks-whole">${esc(whole)}</span>${t.title ? `<small class="tasks-id mono faint">${esc(t.id)}</small>` : ''}</span>`
       + `${t.unknown ? '<small class="warn">not in the listing</small>' : ''}`
       + (tags ? `<span class="tasks-tags">${tags}</span>` : '') + `</td><td class="tasks-catcol">${tags}</td></tr>`;
   }
@@ -120,10 +120,11 @@
     if (!st.cats[f].length) delete st.cats[f];
     setShowing(false); st.page = 1; load();
   });
+  // a click anywhere on a row ticks it, as its box would; the box, a link or a button keeps its own action, and a
+  // drag that selects words is no click
   $('tasks-rows').addEventListener('click', e => {
-    if (e.target.closest('input, a')) return;                  // a tick is a tick
-    const tr = e.target.closest('tr[data-id]'), b = tr && tr.querySelector('.tasks-row'); if (!b) return;
-    b.setAttribute('aria-expanded', String(tr.classList.toggle('tasks-open')));
+    if (e.target.closest('input, a, button') || String(globalThis.getSelection?.() || '')) return;
+    e.target.closest('tr[data-id]')?.querySelector('input[type=checkbox]')?.click();
   });
   $('tasks-rows').addEventListener('change', e => {
     const box = e.target.closest('input[type=checkbox]'); if (!box) return;

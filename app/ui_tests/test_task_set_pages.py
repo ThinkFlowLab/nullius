@@ -208,10 +208,11 @@ class TheTasksPagesData(Case):
 
 
 class TheTaskRows(unittest.TestCase):
-    """A task is one line: its title cut to the width; its whole text in the row's tooltip and, on a click of the row or
-    Enter on it, in place; its id beside it on hover or focus. A click on its tick only ticks it."""
+    """A task is one line: its title cut to the width; its whole text in the row's tooltip and, while its box has the
+    keyboard's focus, in place; its id beside it on hover or focus. A click anywhere on the row ticks it; its box, a
+    link or a button keeps its own action."""
 
-    def test_a_row_is_one_line_with_its_whole_text_on_hover_and_click_and_its_id_beside_it(self):
+    def test_a_row_is_one_line_ticked_by_a_click_with_its_whole_text_on_hover_and_its_id_beside_it(self):
         node = shutil.which("node")
         if not node:
             self.skipTest("Node is required for the task rows")
@@ -230,23 +231,30 @@ element('tasks-page').dataset = {writable: 'true', listing: '/listing', rows: '/
 const long = 'Open the report and ' + 'make the second table match the first one, '.repeat(6);
 const tasks = [{id: 'os__a', title: long.slice(0, 99) + '…', text: long, categories: {}}, {id: 'b', title: '', text: '', categories: {}}];
 const request = async () => ({json: async () => ({ok: true, ready: true, total: 2, of: 2, pages: 1, page: 1, categories: {}, described: true, tasks})});
+let selected = '';
 require('node:vm').runInNewContext(require('node:fs').readFileSync(process.argv[1], 'utf8'), {
   document: {getElementById: element, querySelectorAll: () => [], querySelector: () => null},
-  URLSearchParams, nulliusFetch: request, setTimeout: callback => { callback(); return 1; }, clearTimeout() {}
+  URLSearchParams, nulliusFetch: request, setTimeout: callback => { callback(); return 1; }, clearTimeout() {},
+  getSelection: () => ({toString: () => selected})
 });
 (async () => {
   for (let n = 0; n < 20; n++) await Promise.resolve();
   const rows = element('tasks-rows').innerHTML;
-  assert.ok(rows.includes(`<button type="button" class="tasks-row" aria-expanded="false" title="${long}"><span class="tasks-title">${long.slice(0, 99)}…</span>`), rows);
-  assert.ok(rows.includes(`<span class="tasks-whole">${long}</span><small class="tasks-id mono faint">os__a</small></button>`), rows);
+  assert.ok(rows.includes(`<tr data-id="os__a" title="${long}"><td class="tasks-tick">`), rows);
+  assert.ok(rows.includes(`<span class="tasks-row"><span class="tasks-title">${long.slice(0, 99)}…</span>`), rows);
+  assert.ok(rows.includes(`<span class="tasks-whole">${long}</span><small class="tasks-id mono faint">os__a</small></span>`), rows);
   // an id alone is its own title, with nothing beside it
-  assert.ok(rows.includes('<span class="tasks-title">b</span><span class="tasks-whole">b</span></button>'), rows);
-  const said = {}, open = new Set(), button = {setAttribute: (k, v) => { said[k] = v; }};
-  const tr = {classList: {toggle: c => open.has(c) ? !open.delete(c) : !!open.add(c)}, querySelector: () => button};
-  const click = tick => element('tasks-rows').listeners.click({target: {closest: s => s === 'input, a' ? (tick ? {} : null) : tr}});
-  click(false); assert.equal(said['aria-expanded'], 'true'); assert.ok(open.has('tasks-open'));
-  click(true); assert.equal(said['aria-expanded'], 'true');           // the tick leaves it as it is
-  click(false); assert.equal(said['aria-expanded'], 'false'); assert.ok(!open.has('tasks-open'));
+  assert.ok(rows.includes('<tr data-id="b" title="b">'), rows);
+  assert.ok(rows.includes('<span class="tasks-title">b</span><span class="tasks-whole">b</span></span>'), rows);
+  // the row's box clicked, as the browser does: it turns and says so
+  const box = {checked: false, closest: () => ({dataset: {id: 'os__a'}}),
+    click() { this.checked = !this.checked; element('tasks-rows').listeners.change({target: {closest: () => box}}); }};
+  const tr = {querySelector: s => s === 'input[type=checkbox]' ? box : null};
+  const click = own => element('tasks-rows').listeners.click({target: {closest: s => s === 'input, a, button' ? own : s === 'tr[data-id]' ? tr : null}});
+  click(null); assert.equal(element('tasks-chosen').textContent, '1 chosen');
+  click({}); assert.equal(element('tasks-chosen').textContent, '1 chosen');          // the box, a link or a button: its own action alone
+  selected = 'the second table'; click(null); assert.equal(element('tasks-chosen').textContent, '1 chosen');   // words selected
+  selected = ''; click(null); assert.equal(element('tasks-chosen').textContent, '0 chosen');
 })().catch(error => { console.error(error); process.exitCode = 1; });
 """
         got = subprocess.run([node, "-e", program, str(script)], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10)
@@ -254,6 +262,7 @@ require('node:vm').runInNewContext(require('node:fs').readFileSync(process.argv[
         css = (Path(__file__).resolve().parents[1] / "static/catalogue/catalogue.css").read_text(encoding="utf-8")
         self.assertIn(".tasks-row .tasks-title { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }", css)
         self.assertIn(".tasks-table tr:hover .tasks-id, .tasks-table tr:focus-within .tasks-id { display: inline; }", css)
+        self.assertIn(".tasks-table tr:has(:focus-visible) .tasks-whole { display: block; }", css)
 
 
 class AFirstListing(Case):
