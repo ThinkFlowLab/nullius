@@ -21,7 +21,17 @@ The subsequent single instance needs its own allocation. A cap refusal is
 not a passing proof. Tool dependencies use pip's supported constraints file;
 the upstream install scripts remain unchanged.
 
-Zero-cost validation on the pinned Django SWE-bench image currently stops in
-SWE-ReX 1.2.1's shell startup (`pexpect.exceptions.TIMEOUT`, waiting for
-`SHELLPS1PREFIX`), before tool installation. This is a failed startup check,
-not a model failure. No upstream workaround or patch is included.
+Zero-cost validation on the pinned Django `django-10097` image reaches
+upstream tool installation with SWE-ReX 1.2.1 and 1.4.0, but cannot complete:
+the task uses Python 3.5.6; the default editor requires
+[tree-sitter 0.21.3](https://pypi.org/project/tree-sitter/0.21.3/) (Python ≥3.8).
+Nullius now refuses that incompatible task interpreter before startup.
+This is an upstream tool/task-runtime incompatibility, exposed by our local
+deployment configuration; it is not a benchmark or model failure.
+
+The earlier intermittent shell-startup timeout is not established as a
+SWE-ReX version defect. Neither a dependency upgrade nor a conda prompt
+setting is proven necessary; the 1.2.1 pin remains. Full preparation and its
+offline repeat remain unproven. Supporting this image needs a supported way
+to separate tool and task interpreters without changing upstream tools or
+the benchmark environment.

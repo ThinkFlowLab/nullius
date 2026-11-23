@@ -137,3 +137,23 @@ class PreparationInDocker(unittest.TestCase):
                 self.assertEqual(box.run(['test', '-f', '/tmp/prepared'], 30)['exit'], 0)
             finally:
                 box.stop()
+
+
+class SweAgentToolCompatibility(unittest.TestCase):
+    def test_task_python_is_checked_without_loading_agent_or_changing_path(self):
+        import runpy
+        from pathlib import Path
+        from types import SimpleNamespace
+        wrapper = Path(__file__).parents[1] / 'nullius/catalogue/agents/swe-agent/run.py'
+        check = runpy.run_path(str(wrapper))['check_tool_python']
+        with mock.patch.dict(os.environ, {'PATH': '/task/bin:/usr/bin'}):
+            for version in ('[3, 5, 6]', '[3, 7, 17]'):
+                with self.subTest(version=version), mock.patch('subprocess.run', return_value=SimpleNamespace(stdout=version)) as called:
+                    with self.assertRaisesRegex(RuntimeError, "tree-sitter==0.21.3"):
+                        check()
+                    self.assertEqual(called.call_args.args[0][0], 'python')
+                    self.assertNotIn('env', called.call_args.kwargs)
+                    self.assertEqual(os.environ['PATH'], '/task/bin:/usr/bin')
+            for version in ('[3, 8, 0]', '[3, 12, 15]'):
+                with self.subTest(version=version), mock.patch('subprocess.run', return_value=SimpleNamespace(stdout=version)):
+                    check()

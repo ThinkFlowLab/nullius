@@ -7,9 +7,27 @@ import os
 import importlib.util
 from pathlib import Path
 import sys
+import subprocess
+import json
+
+
+def check_tool_python():
+    """Refuse an incompatible task interpreter without replacing its environment."""
+    result = subprocess.run(
+        ["python", "-c", "import json, sys; print(json.dumps(list(sys.version_info[:3])))"],
+        check=True, capture_output=True, text=True, timeout=30,
+    )
+    version = json.loads(result.stdout)
+    if tuple(version) < (3, 8):
+        raise RuntimeError(
+            "SWE-agent's default editor requires tree-sitter==0.21.3 (Python >=3.8); "
+            "the task PATH selects Python " + ".".join(map(str, version)) + ". "
+            "Nullius will not replace the benchmark's Python environment."
+        )
 
 
 def main():
+    check_tool_python()
     os.environ["PIP_CONSTRAINT"] = str(Path(__file__).with_name("tools.constraints.txt"))
     # The pinned checkout is mounted read-only and owned by the host user.
     # Permit GitPython's provenance lookup for this one path, process-locally.
