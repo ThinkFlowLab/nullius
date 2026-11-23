@@ -6,9 +6,12 @@ import json
 import os
 import re
 import threading
+import unicodedata
 from collections import OrderedDict
+from urllib.parse import quote
 from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 from markupsafe import Markup, escape
+from werkzeug.http import quote_header_value
 from nullius.traces import behavior, charts, conversation, trace, trajectory
 from nullius.runs import artifacts, attempts as task_attempts, parse
 from nullius import importers as harnesses
@@ -192,13 +195,17 @@ def artifact_download(job_id, trial_name, key):
         text, truncated = artifacts.whole(trial.dir, key, declared)
     except (LookupError, OSError):
         abort(404)
-    name = os.path.basename(artifacts.describe(key, declared)[1])
+    name = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", os.path.basename(artifacts.describe(key, declared)[1]))
     if truncated:
         stem, ext = os.path.splitext(name)
         name = f"{stem}.partial{ext}"
     response = app.response_class(text, mimetype="application/json" if name.endswith(".json") else "text/plain")
     if not request.args.get("inline"):
-        response.headers["Content-Disposition"] = f'attachment; filename="{name}"'
+        fallback = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+        disposition = f'attachment; filename={quote_header_value(fallback, allow_token=False)}'
+        if not name.isascii():
+            disposition += "; filename*=UTF-8''" + quote(name, safe="")
+        response.headers["Content-Disposition"] = disposition
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"      # a run's own text, shown as text whatever it holds
     return response
