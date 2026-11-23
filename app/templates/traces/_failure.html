@@ -14,7 +14,7 @@
       </div>
       <input type="text" name="note" maxlength="300" placeholder="Note" aria-label="Note" value="{{ fp.label.note if fp.label else '' }}">
       <button class="btn sm" type="submit" name="action" value="label">Save</button>
-      {% if fp.label %}<button class="btn sm ghost" type="submit" name="action" value="clear_label" formnovalidate>Clear</button>{% endif %}
+      {% if fp.label %}<button class="btn sm ghost" type="submit" name="action" value="clear_label" formnovalidate>Remove</button>{% endif %}
     </form>
     {% elif fp.label %}
     <p><b>{{ fp.labels[fp.label.label] }}</b>{% if fp.label.note %} · {{ fp.label.note }}{% endif %}</p>

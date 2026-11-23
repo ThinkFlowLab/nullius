@@ -103,7 +103,7 @@
 .rp .meter .bar1 span.x { background: none; box-shadow: inset 0 0 0 1.5px var(--track-res); }
 .rp .meter b { font: 500 13px/1 var(--sans); color: var(--text); white-space: nowrap; }
 .rp .board.pv .meter i.lit { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text); }
-.rp .hk { margin: 14px 18px 0; font-size: 12px; line-height: 22px; }
+.rp .hk { margin: 24px 18px 0; font-size: 12px; line-height: 22px; }
 .rp .hk p { margin: 0; color: var(--text-faint); white-space: nowrap; }
 .rp .hk dl { display: grid; grid-template-columns: auto auto; justify-content: start; column-gap: 6px; margin: 0; }
 .rp .hk dt { color: var(--text-faint); white-space: nowrap; }
@@ -373,10 +373,10 @@
 
 @media (prefers-reduced-motion: reduce) { .rp *, .rp *::before, .rp *::after { transition: none !important; } }
 /* the Filtered score under the adjusted rate: a switch per kind of flag, and the rate without those tasks */
-.rp .filtered { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: .5rem 18px 0; }
+.rp .filtered { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; margin: 1rem 18px 0; }
 .rp .filtered .lead { flex-basis: 100%; color: var(--text-faint); font-size: .75rem; }
 .rp .filtered .chip::before { display: none; }
-.rp .filtered p { margin: .15rem 0 0; flex-basis: 100%; color: var(--text-dim); font-size: 1rem; }
+.rp .filtered p { margin: .5rem 0 0; flex-basis: 100%; color: var(--text-dim); font-size: 1rem; }
 .rp .filtered p b { color: var(--text); font-weight: 600; font-size: 1.4rem; margin-left: .2rem; }
 
 /* the trial table's marks: a task's flag and a trial's failure label; a task left out of the Filtered score fades */
