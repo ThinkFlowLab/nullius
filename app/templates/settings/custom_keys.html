@@ -1,6 +1,6 @@
 {% macro key_summary(name, state, editor) %}
 <div class="st-key-summary">
-  <span class="st-key-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="4"/><path d="m11 12 8 8 3-3-2-2-2 2-2-2 2-2-3-3"/></svg></span>
+  <span class="st-key-icon" aria-hidden="true"><svg class="ic"><use href="#i-key"/></svg></span>
   <div class="st-key-copy"><h3>{{ name }}</h3></div>
   <span class="st-key-state" data-key-state="{{ state }}">{{ {'saved': 'Saved', 'missing': 'Not set', 'expired': 'Expired'}[state] }}</span>
   <button type="button" class="btn sm ghost st-key-edit" data-key-edit data-key-label="{{ 'View' if not writable else 'Set up' if state == 'missing' else 'Edit' }}" aria-expanded="true" aria-controls="{{ editor }}" hidden>{{ 'View' if not writable else 'Set up' if state == 'missing' else 'Edit' }}</button>

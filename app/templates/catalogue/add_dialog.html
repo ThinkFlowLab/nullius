@@ -3,7 +3,7 @@
     hand: what the caller puts in. docs/standard.md, "Import by hand" and "With an assistant". -#}
 {% macro add_dialog(a, prompts, kind) -%}
 <dialog class="std-how" id="std-how" aria-labelledby="std-how-h">
-  <div class="std-how-head"><h2 id="std-how-h">Add to catalogue</h2><button type="button" class="std-how-x" id="std-how-close" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button></div>
+  <div class="std-how-head"><h2 id="std-how-h">Add to catalogue</h2><button type="button" class="std-how-x" id="std-how-close" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
   <div class="std-how-tabs" role="tablist" aria-label="How to add {{ a }}">
     <button type="button" role="tab" id="std-tab-assist" aria-controls="std-pane-assist" aria-selected="true">With an assistant</button>
     <button type="button" role="tab" id="std-tab-hand" aria-controls="std-pane-hand" aria-selected="false" tabindex="-1">By hand</button>
