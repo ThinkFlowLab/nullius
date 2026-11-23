@@ -38,7 +38,7 @@ class Models(unittest.TestCase):
                 providers.list_models('openrouter', {}, opener=fetch, include_embeddings=True)
 
     def test_run_preflight_accepts_embeddings_but_still_refuses_unknown_models(self):
-        from nullius.standard.run import Run, Refused
+        from nullius.standard.runner.run import Run, Refused
         r = SimpleNamespace(base='https://openrouter.ai/api/v1', provider='openrouter', provider_env={},
                             embed_model='qwen/embedding', models_called=lambda: ['chat', 'qwen/embedding'])
         def get(url, headers, opener=None):
