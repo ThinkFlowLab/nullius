@@ -34,7 +34,7 @@ import time
 import urllib.request
 from typing import Callable, Dict, Iterable, Optional, Tuple
 
-from nullius import paths
+from nullius import ondisk, paths
 
 SOURCE = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 RATES = ("input", "output", "cached", "cache_write", "cache_write_1h")   # USD per million tokens
@@ -79,11 +79,7 @@ def save(doc: dict, env=None) -> None:
     """Written whole beside the file, then renamed: a reader never finds half a list."""
     out = path(env)
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
-    part = f"{out}.{os.getpid()}.part"
-    with open(part, "w", encoding="utf-8") as f:
-        json.dump(doc, f, indent=1, sort_keys=True)
-        f.write("\n")
-    os.replace(part, out)
+    ondisk.write_whole(out, json.dumps(doc, indent=1, sort_keys=True) + "\n")
 
 
 def table(env=None) -> Dict[str, dict]:

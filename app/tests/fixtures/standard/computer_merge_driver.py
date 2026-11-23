@@ -10,7 +10,7 @@ import tempfile
 import threading
 import time
 
-from nullius.standard import computer_port as port, jsonl
+from nullius.standard.protocols import computer_port as port, jsonl
 
 
 class Desktop:

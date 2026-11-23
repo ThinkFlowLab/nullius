@@ -18,7 +18,7 @@ call, a JSON line each way.
 
 ``TAU_DOMAIN`` names the domain (``airline``, ``retail``, ...), ``TAU_RETRIEVAL`` a knowledge domain's retrieval config. It runs on the
 machine in the driver's environment, never in the agent's container
-(``mcp_servers`` in ``standard.json``; ``nullius.standard.mcp_machine``).
+(``mcp_servers`` in ``standard.json``; ``nullius.standard.backends.mcp_machine``).
 """
 import contextlib
 import copy

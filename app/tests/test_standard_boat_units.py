@@ -12,7 +12,11 @@ from unittest.mock import patch
 import unittest
 
 from nullius import secrets
-from nullius.standard import boat_units, cli, definitions, recipe, run, container
+from nullius.standard import cli
+from nullius.standard.backends import container
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.runner import boat_units, run
 
 OSWORLD1 = definitions.get("benchmark", "osworld1")
 

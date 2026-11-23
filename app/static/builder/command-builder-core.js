@@ -1,6 +1,6 @@
 /* Pure recipe compiler for Harbor recipes. It prints shell; it has no DOM, storage, or execution API.
    This file also creates, loads and saves Nullius standard recipes; the server compiles those
-   (POST /new-run/runner, standard/recipe.py). Other harnesses are rejected. */
+   (POST /new-run/runner, standard/pages/recipe.py). Other harnesses are rejected. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory;
   else root.NulliusRecipe = factory;

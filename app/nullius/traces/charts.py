@@ -31,7 +31,7 @@ Two more things are load-bearing:
   every headline.
 
 Geometry is computed here, in SVG user units against :data:`BOX`, for the same
-reason :func:`trace.place` computes the waterfall's: the arithmetic runs on
+reason :func:`waterfall.place` computes the waterfall's: the arithmetic runs on
 nanosecond magnitudes that overflow a JS double, and staying in Python int/float
 keeps it exact. Values that need formatting leave as integer nanoseconds and get
 ``|nsdur`` in the template — this module emits numbers, not presentation.
@@ -66,7 +66,7 @@ from dataclasses import dataclass, replace
 
 from nullius.traces.trace import clean as _clean
 from nullius.traces.trace import toggled as _toggled
-from nullius.traces.trace import KIND_ORDER, all_spans, is_instant
+from nullius.traces.spans import KIND_ORDER, all_spans, is_instant
 
 # The SVG coordinate system every chart is drawn in. One viewBox for all four so
 # they line up visually across the grid, with room on the left for value labels
@@ -790,7 +790,7 @@ def charts_of(samples: tuple, total: int, excluded: int,
               filt: "ChartFilter | None" = None) -> Charts:
     """The same four charts over an already-extracted population.
 
-    :func:`trace.all_spans` deduplicates by
+    :func:`spans.all_spans` deduplicates by
     span id to guard against a parent cycle — right within one document, and
     quietly wrong across several, where two traces reusing an id would lose the
     duplicates without saying so. Extract each trace's samples on its own, then

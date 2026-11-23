@@ -8,11 +8,11 @@ import time
 from flask import abort, jsonify, request, url_for
 from nullius import execution, hosts, prerequisites, prices, providers, settings
 from nullius.harbor import source as harbor_source
-from nullius.standard import boat, recipe as standard_recipe
+from nullius.standard.backends import boat
+from nullius.standard.pages import recipe as standard_recipe
 
 from .core import app
 from . import shared
-from . import settings as settings_web
 
 
 @app.route("/run", methods=["POST"])
@@ -22,7 +22,7 @@ def run_start():
     as every mutation: form token, same origin, and a loopback client -
     running is writing to a machine."""
     shared._require_csrf()
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403, description="Runs are started from a browser on the application host only.")
     body = request.get_json(silent=True) or {}
     recipe = body.get("recipe") if isinstance(body.get("recipe"), dict) else {}
@@ -139,16 +139,9 @@ def _start_standard(recipe: dict):
         return jsonify(ok=False, error=problem), 400
     if len(plans) == 1:
         return _start(plans[0])
-    for plan in plans:
-        problem = plan.check()
-        if problem:
-            return jsonify(ok=False, error=problem), 400
-        if any(e.plan.name == plan.name for e in execution.active()):
-            return jsonify(ok=False, error=f"{plan.name} is running already"), 409
-        if os.path.exists(os.path.join(execution.runs_root(), plan.name)):
-            return jsonify(ok=False, error=execution.name_taken(plan.name)), 409
-    started = [execution.start(plan) for plan in plans]
-    shared.adopt_runs(started)
+    started, problem, status = begin(plans)
+    if problem:
+        return jsonify(ok=False, error=problem), status
     return jsonify(ok=True, open=url_for("index", view="launch"), runs=[ex.summary() for ex in started],
                    **started[0].summary())
 
@@ -197,19 +190,29 @@ def docker_problem():
     return prerequisites.docker_here()
 
 
-def _start(plan: execution.Plan):
-    problem = plan.check()
-    if problem:
-        return jsonify(ok=False, error=problem), 400
-    if any(e.plan.name == plan.name for e in execution.active()):
-        return jsonify(ok=False, error=f"{plan.name} is running already"), 409
-    if os.path.exists(os.path.join(execution.runs_root(), plan.name)):
-        return jsonify(ok=False, error=execution.name_taken(plan.name)), 409
-    ex = execution.start(plan)
+def begin(plans: list) -> tuple:
+    """Start ``plans``, each checked before any starts: (the runs, "", 200), or
+    ([], why not, its status) and nothing started."""
+    for plan in plans:
+        problem = plan.check()
+        if problem:
+            return [], problem, 400
+        if any(e.plan.name == plan.name for e in execution.active()):
+            return [], f"{plan.name} is running already", 409
+        if os.path.exists(os.path.join(execution.runs_root(), plan.name)):
+            return [], execution.name_taken(plan.name), 409
+    started = [execution.start(plan) for plan in plans]
     # The job lands (or is mirrored) under runs/<name>/jobs: the workspace
     # reads it from now on.
-    shared.adopt_runs([ex])
-    return jsonify(ok=True, open=url_for("index", view="launch"), **ex.summary())
+    shared.adopt_runs(started)
+    return started, "", 200
+
+
+def _start(plan: execution.Plan):
+    started, problem, status = begin([plan])
+    if problem:
+        return jsonify(ok=False, error=problem), status
+    return jsonify(ok=True, open=url_for("index", view="launch"), **started[0].summary())
 
 
 @app.route("/run/<run_id>")
@@ -226,7 +229,7 @@ def run_status(run_id):
 def run_continue(run_id):
     """The answer to a pause: go on with the next agent."""
     shared._require_csrf()
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403)
     ex = execution.EXECUTIONS.get(run_id)
     if ex is None:
@@ -238,7 +241,7 @@ def run_continue(run_id):
 @app.route("/run/<run_id>/stop", methods=["POST"])
 def run_stop(run_id):
     shared._require_csrf()
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403)
     ex = execution.EXECUTIONS.get(run_id)
     if ex is None:

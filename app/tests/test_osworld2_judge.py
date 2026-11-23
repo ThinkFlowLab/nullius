@@ -21,7 +21,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 from nullius import providers
-from nullius.standard import definitions, relay, run
+from nullius.standard.calls import relay
+from nullius.standard.contract import definitions
+from nullius.standard.runner import run
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2")

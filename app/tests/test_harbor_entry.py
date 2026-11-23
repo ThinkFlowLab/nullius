@@ -97,6 +97,7 @@ class Entry(unittest.TestCase):
     def test_saved_it_loads_and_passes_the_catalogue_checks(self):
         path = h.save(h.build(form()), self.root)
         self.assertEqual(path, os.path.join(self.root, "benchmarks", "code-bench", "benchmark.json"))
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
         cat = catalog.load(self.root)
         self.assertEqual(catalog.validate(cat), [])
         self.assertIn("code-bench", [b.key for b in cat.listed_benchmarks])

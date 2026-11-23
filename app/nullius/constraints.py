@@ -36,7 +36,7 @@ the path from where the work lands up to the root, and the CPUs a process
 there may run on (``WALK``). Local processes land in the user's cgroup (a scope's, else
 the probe's own); containers land where the engine puts them, which a probe
 container in the host's cgroup namespace reads. A run checks again on its own
-engine and its own systemd before its first unit (``standard/run.py``).
+engine and its own systemd before its first unit (``standard/runner/run.py``).
 """
 from __future__ import annotations
 
@@ -48,14 +48,13 @@ import re
 import shlex
 import stat
 import subprocess
-import tempfile
 import textwrap
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from nullius import paths
+from nullius import ondisk, paths
 
 SETTING = "HOST_CONSTRAINTS"
 LOCAL = "local"                       # this machine, as a recipe's Where names it
@@ -616,14 +615,7 @@ def _write(doc: dict, env=None) -> None:
     """The store, written whole to a file of its own, then renamed."""
     out = store_path(env)
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    fd, part = tempfile.mkstemp(dir=os.path.dirname(out), prefix="capacity.json.", suffix=".part")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(doc, f, indent=1, sort_keys=True)
-        os.replace(part, out)
-    except BaseException:
-        os.unlink(part)
-        raise
+    ondisk.write_whole(out, json.dumps(doc, indent=1, sort_keys=True), mode=0o600)
 
 
 def engine_less(found: Optional[dict]) -> bool:

@@ -1,4 +1,4 @@
-"""The computer port's shared code (``nullius.standard.computer_port``): the MCP server ``computer`` and its bridge to a
+"""The computer port's shared code (``nullius.standard.protocols.computer_port``): the MCP server ``computer`` and its bridge to a
 benchmark's loop, on a fake desktop, with a scripted MCP client over the server's socket; the runner's ready file,
 lifeline and one stop. Once the agent is given its task, the desktop is reached through acting calls alone: one
 observation for each step, fixed as the step ends, which screenshot returns without a new picture; upload and prepare
@@ -25,7 +25,7 @@ import time
 import unittest
 from unittest import mock
 
-from nullius.standard import computer_port as cp
+from nullius.standard.protocols import computer_port as cp
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -612,7 +612,7 @@ class CallLog(Port):
 RUNNER_CHILD = """
 import os, signal, sys, threading, time
 sys.path.insert(0, sys.argv[1])
-from nullius.standard import computer_port as cp
+from nullius.standard.protocols import computer_port as cp
 mode = sys.argv[2]
 stop = cp.Stop(float(sys.argv[3]), last=lambda: print("last resort", flush=True))
 stop.install()
@@ -1228,7 +1228,7 @@ WHY = ("OSWORLD_DIR does not name a checkout of the upstream" if not all(os.path
        else "")
 UPSTREAM_CHILD = """
 import argparse, os, sys, tempfile, threading
-from nullius.standard import computer_port as cp
+from nullius.standard.protocols import computer_port as cp
 import lib_run_single
 from desktop_env.desktop_env import DesktopEnv
 

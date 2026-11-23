@@ -47,12 +47,13 @@ holding it lets it go.
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import json
 import math
 import os
 import uuid
 from typing import Optional, Tuple
+
+from nullius import ondisk
 
 OUTPUT = 4096                       # output tokens booked for a call before the run has had a reply from its model
 ERROR = "SpendingCapError"          # what a unit the cap ended carries: its own outcome outside the rate, never a miss (runs.classify)
@@ -130,12 +131,8 @@ class Ledger:
     @contextlib.contextmanager
     def _locked(self):
         try:
-            with open(self.path + ".lock", "a") as f:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                try:
-                    yield self._read()
-                finally:
-                    fcntl.flock(f, fcntl.LOCK_UN)
+            with ondisk.locked(self.path + ".lock"):
+                yield self._read()
         except (OSError, ValueError, KeyError, TypeError) as e:
             raise Unavailable(f"the spending cap's ledger could not be used: {type(e).__name__}: {e}")
 
@@ -148,10 +145,7 @@ class Ledger:
 
     def _write(self, doc: dict) -> None:
         """Written whole beside the file, then renamed: a reader that takes no lock never finds half of it."""
-        part = f"{self.path}.{os.getpid()}.{uuid.uuid4().hex[:8]}.part"
-        with open(part, "w", encoding="utf-8") as f:
-            json.dump(doc, f)
-        os.replace(part, self.path)
+        ondisk.write_whole(self.path, json.dumps(doc))
 
     def reserve(self, amount, unit: Optional[str] = None, model: Optional[str] = None, wait: bool = False,
                 least: Optional[float] = None) -> Tuple[Optional[str], dict]:

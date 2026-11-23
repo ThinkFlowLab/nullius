@@ -6,6 +6,8 @@ import unittest
 from collections import Counter
 
 from nullius.traces import trace, trajectory
+from nullius.traces.spans import Span
+from nullius.traces.waterfall import Row
 from nullius.traces import conversation
 
 
@@ -112,11 +114,11 @@ class ConversationPages(unittest.TestCase):
 
 class SpanWindows(unittest.TestCase):
     def setUp(self):
-        self.span = trace.Span(span_id="block:opaque:0", name="Bash", label="Bash", kind="tool",
+        self.span = Span(span_id="block:opaque:0", name="Bash", label="Bash", kind="tool",
             timing_quality="inferred", source="log", start_ns=20, duration_ns=30,
             content=[("Output", "x" * 40000 + " sk-secret123456789")],
             attributes=[("original", "z" * 30000)], tokens={"input": 50})
-        self.trace = trace.Trace(rows=[trace.Row(self.span, offset_ns=-10)])
+        self.trace = trace.Trace(rows=[Row(self.span, offset_ns=-10)])
 
     def test_on_demand_selected_content_is_bounded_and_metadata_is_faithful(self):
         data = conversation.span_detail(self.trace, "block:opaque:0")

@@ -21,7 +21,7 @@ from unittest.mock import patch
 
 from nullius import execution, hosts, workspace
 from nullius.runs import parse
-from nullius.standard import merge
+from nullius.standard.runner import merge
 from tests.test_standard_shard import write_shard
 from .test_controls_apart import text_of
 from .test_routes import web

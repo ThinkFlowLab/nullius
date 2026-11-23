@@ -8,7 +8,7 @@ import tempfile
 import time
 import unittest
 
-from nullius.standard import acp
+from nullius.standard.protocols import acp
 
 FAKE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "fake_acp_agent.py")
 
@@ -112,7 +112,7 @@ class ClientTest(unittest.TestCase):
 
     def test_an_adapters_warning_comes_as_a_notice_not_in_the_answer(self):
         # the client takes notices, so an adapter's warning is never text in front of the answer
-        from nullius.standard import job
+        from nullius.standard.runner import job
         sid = self.c.new_session(self.ws)
         t = self.c.prompt(sid, "warn", timeout=20)
         self.assertEqual(t.text, "ok")

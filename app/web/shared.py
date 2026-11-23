@@ -561,6 +561,13 @@ class StaleFormToken(Forbidden):
         return [*super().get_headers(environ, scope), ("X-Nullius-Reason", "stale-form-token")]
 
 
+def _local_client() -> bool:
+    """Only a browser on this machine may write settings or start a run: the request comes
+    from a loopback address and nothing says it was forwarded."""
+    forwarded = any(h in request.headers for h in ("X-Forwarded-For", "X-Real-Ip", "Forwarded"))
+    return request.remote_addr in ("127.0.0.1", "::1") and not forwarded
+
+
 def _require_csrf():
     """The one guard every mutation of the environments takes: the session's
     token, sent back by the form, and a same-origin request."""

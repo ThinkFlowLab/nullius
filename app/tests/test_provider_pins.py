@@ -8,7 +8,10 @@ from contextlib import redirect_stdout
 from unittest.mock import Mock, patch
 
 from nullius import providers
-from nullius.standard import cli, recipe, relay, run
+from nullius.standard import cli
+from nullius.standard.calls import relay
+from nullius.standard.pages import recipe
+from nullius.standard.runner import run
 from tests import test_standard_recipe_served_by as recipes
 from tests import test_standard_served_by as calls
 

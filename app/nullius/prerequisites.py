@@ -35,7 +35,8 @@ import time
 from typing import Callable, Dict, List, Optional
 
 from nullius import constraints, hosts
-from nullius.standard import container, hostreq
+from nullius.standard.backends import container
+from nullius.standard.requirements import hostreq
 
 LABEL = {"engine": "Docker or Podman", "docker": "Docker", "uv": "uv", "harbor": "Harbor on PATH", "python3": "python3", "git": "git"}
 

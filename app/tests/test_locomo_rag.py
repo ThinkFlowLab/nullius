@@ -15,7 +15,7 @@ import tempfile
 import textwrap
 import unittest
 
-from nullius.standard import definitions
+from nullius.standard.contract import definitions
 
 BENCH = definitions.get("benchmark", "locomo")
 DRIVER = os.path.join(BENCH["_here"], "driver.py")

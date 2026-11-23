@@ -77,7 +77,7 @@ attributes, verbatim, and they are not read as usage: reading them would count
 every call twice. A count the span does not carry is absent, never zero.
 
 ``totals`` is computed once, here, by the trial page's own partition
-(:func:`trace.breakdown`): every instant charged to one category at priority
+(:func:`breakdown`): every instant charged to one category at priority
 idle > tool > reasoning > llm, so nested and concurrent spans never sum past
 the clock. ``wall_ns`` is the trace's own window — first start to last end. Spans are
 ``timing_quality: measured``: these are the producer's clocks, not this
@@ -104,7 +104,8 @@ import os
 import re
 
 from nullius.redact import redact
-from nullius.traces import trace
+from nullius.traces.breakdown import breakdown
+from nullius.traces.spans import NS_PER_MS, raw_spans_of
 
 DEFAULT_MAX_CONTENT = 2000
 
@@ -417,7 +418,7 @@ def _span_of(rec: dict, is_root: bool, present: set, limit: int) -> dict:
     start_ns = _int_or_none(wire.get("startTimeUnixNano")) or 0
     if events:
         attributes["otel.events"] = "; ".join(
-            f"{ev['name']} +{(ev['time_ns'] - start_ns) // trace.NS_PER_MS}ms"
+            f"{ev['name']} +{(ev['time_ns'] - start_ns) // NS_PER_MS}ms"
             if ev["time_ns"] is not None else ev["name"] for ev in events)
         exc = next((ev for ev in events if ev["name"] == "exception"), None)
         if exc:
@@ -520,7 +521,7 @@ def build(trace_id: str, records: list, limit: int = DEFAULT_MAX_CONTENT,
             span["attributes"]["otel.orphan"] = True
             notes.append(f"span {sid} sits in a parent cycle; kept as a root")
             roots.append(span)
-            reached.update(s["span_id"] for s in trace.raw_spans_of([span]))
+            reached.update(s["span_id"] for s in raw_spans_of([span]))
     for span in by_id.values():
         span["children"] = _order(span["children"])
     roots = _order(roots)
@@ -551,7 +552,7 @@ def build(trace_id: str, records: list, limit: int = DEFAULT_MAX_CONTENT,
             "note": "wall_ns is the trace's own window, first start to last end",
         },
         "spans": roots,
-        "totals": trace.breakdown(roots, wall_ns).as_totals(),
+        "totals": breakdown(roots, wall_ns).as_totals(),
         "import": {
             "format": FORMAT,
             "conventions": CONVENTIONS,
@@ -564,7 +565,7 @@ def build(trace_id: str, records: list, limit: int = DEFAULT_MAX_CONTENT,
 
 def model_of(document: dict) -> str:
     """The first LLM span's model name, or ""."""
-    for raw in trace.raw_spans_of(document.get("spans") or []):
+    for raw in raw_spans_of(document.get("spans") or []):
         if raw.get("kind") != "llm_request":
             continue
         attrs = raw.get("attributes") or {}

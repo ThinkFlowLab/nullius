@@ -55,7 +55,8 @@ Python command below. Read module files, never edit an installed module:
 "$NULLIUS_PY" - <<'PY'
 from nullius import paths, settings
 settings.load(paths.settings_file())
-from nullius.standard import definitions, howto, ports
+from nullius.standard.contract import definitions, ports
+from nullius.standard.pages import howto
 from nullius.catalogue import catalog
 for module in (definitions, howto, ports, catalog):
     print(module.__name__, module.__file__)
@@ -144,7 +145,7 @@ never a second key. Preserve both routes when it already runs through Harbor.
   Only the final message matters: `agent.task/v1`. A port too many shuts out
   agents for nothing; a port too few makes runs fail instead of being refused.
 - **A port that does not exist yet is a generic change, not a special case.**
-  Propose it as a new port with a kit (`app/nullius/standard/ports.py` and
+  Propose it as a new port with a kit (`app/nullius/standard/contract/ports.py` and
   `standard/kits/<name>/`), worded for every benchmark of its kind; never
   shape it after the one at hand. Ask before adding it. This is a source contribution.
 - **An agent or a capability never writes `offers` by hand.** `cli conform` does.

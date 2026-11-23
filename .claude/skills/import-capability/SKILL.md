@@ -39,7 +39,8 @@ command below from the checkout root:
 "$NULLIUS_PY" - <<'PY'
 from nullius import paths, settings
 settings.load(paths.settings_file())
-from nullius.standard import definitions, howto, ports
+from nullius.standard.contract import definitions, ports
+from nullius.standard.pages import howto
 for module in (definitions, howto, ports):
     print(module.__name__, module.__file__)
 print("catalogue:", paths.catalogue_dir())
@@ -76,7 +77,7 @@ below. CLI mutations protect bundled resources in source checkouts too.
   why, and what it changes about what is measured; ask with the question
   tool and write nothing of it before the yes. Without a way to ask (a
   subagent), report it as an open question and leave it unwritten.
-- **A kind with no port yet** (see `app/nullius/standard/ports.py`) is a generic change: a new port with a
+- **A kind with no port yet** (see `app/nullius/standard/contract/ports.py`) is a generic change: a new port with a
   kit, worded for every capability of its kind. Ask before adding it; this is a source contribution.
 
 ## 1. Read the input (minutes, no install)
@@ -134,7 +135,7 @@ See `docs/standard.md`, "Native capabilities and composition".
    user catalogue, and a `capability.py` that already speaks `cap.memory/v1`.
    Use the writable paths the command prints.
 2. **Wrap** in `capability.py` (the shape `FEATURE_PY` in
-   `app/nullius/standard/howto.py` shows): `add` gets a session `{id, date,
+   `app/nullius/standard/pages/howto.py` shows): `add` gets a session `{id, date,
    turns, text}` and stores it with the library's own call, replying `{}`;
    `recall` gets the question and replies `{"memory": <text>}` from the
    library's own search; an error replies `{"error": ...}`. Send the

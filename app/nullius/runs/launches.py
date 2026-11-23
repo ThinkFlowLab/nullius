@@ -31,7 +31,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
 from nullius.runs.parse import _budget, _iso
-from nullius.standard import merge
+from nullius.standard.runner import merge
 
 WINDOW_SEC = 30 * 60
 

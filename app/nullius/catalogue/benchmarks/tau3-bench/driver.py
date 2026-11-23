@@ -118,7 +118,7 @@ from tau2.runner.build import _build_env_kwargs
 from tau2.runner.progress import run_with_retry
 from tau2.utils import load_file
 
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 from search_relay import route_qwen
 
 route_qwen(os.environ.get("NULLIUS_OPTION_RETRIEVAL"))

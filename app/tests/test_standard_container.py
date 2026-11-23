@@ -19,7 +19,8 @@ import urllib.error
 import urllib.request
 from unittest import mock
 
-from nullius.standard import container, install
+from nullius.standard.backends import container
+from nullius.standard.requirements import install
 from tests import docker_tier
 
 

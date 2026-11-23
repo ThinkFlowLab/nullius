@@ -19,10 +19,9 @@ import base64
 import json
 import os
 import re
-import tempfile
 import time
 from typing import Dict, Optional, Tuple, Union
-from nullius import paths
+from nullius import ondisk, paths
 
 KINDS = ("value", "file", "server")
 INDEX = "index.json"
@@ -63,18 +62,7 @@ def _name(name: str) -> str:
 def _write(path: str, data: bytes) -> None:
     """Written whole under a temporary name beside it, 0600 from its first
     byte, then renamed over the old one."""
-    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=os.path.dirname(path))
-    try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "wb") as f:
-            f.write(data)
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    ondisk.write_whole(path, data, mode=0o600)
 
 
 def _index(bench: str) -> Dict[str, dict]:

@@ -10,7 +10,9 @@ import tempfile
 import unittest
 
 from nullius.runs import parse
-from nullius.standard import definitions, job, match, recipe
+from nullius.standard.contract import definitions, match
+from nullius.standard.pages import recipe
+from nullius.standard.runner import job
 
 BENCHES = os.path.join(definitions.CATALOGUE, "benchmarks")
 

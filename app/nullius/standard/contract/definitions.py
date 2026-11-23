@@ -29,7 +29,7 @@ is run as the other side of a pair (:func:`control`), with no agent, no
 capability and no model of its own; ``nop`` and ``oracle`` are the words Harbor
 calls its controls by, so the runs pages read the jobs as controls. A
 benchmark's ``proven`` is what ``cli prove`` found, per dataset
-(``standard/prove.py``).
+(``standard/proofs/prove.py``).
 
 A benchmark's **setups** are driver methods behind one Original procedure.
 ``original`` uses the upstream's model selection; ``model`` substitutes the
@@ -92,15 +92,16 @@ import json
 import os
 import re
 from typing import Callable, Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
-from nullius.standard import ports
-from nullius import paths
+from nullius.standard.contract import ports
+from nullius import ondisk, paths
 from nullius.catalogue import storage
 from . import names
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-CATALOGUE = os.path.join(os.path.dirname(HERE), "catalogue")
-KITS = os.path.join(HERE, "kits")
+STANDARD = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))      # the standard's folder, which holds this one
+CATALOGUE = os.path.join(os.path.dirname(STANDARD), "catalogue")
+KITS = os.path.join(STANDARD, "kits")
 
 KINDS = {
     "benchmark": {"schema": "nullius.benchmark/v1", "dir": "benchmarks", "file": "standard.json"},
@@ -979,8 +980,7 @@ def _environments(envs, here: Optional[str]) -> List[str]:
         if "local_ok" in e and not isinstance(e["local_ok"], bool):
             bad.append(f"{w}.local_ok: true or false")
         if "network" in e:
-            from . import network_requirements
-            bad += [f"{w}.{message}" for message in network_requirements.problems(e["network"])]
+            bad += [f"{w}.{message}" for message in _network(e["network"])]
         bad += _secrets(w, e.get("needs_secrets"), bool(e.get("local_ok")), settings)
     kinds: Dict[str, set] = {}
     sources: Dict[str, set] = {}
@@ -994,6 +994,20 @@ def _environments(envs, here: Optional[str]) -> List[str]:
     bad += [f"environments: {n} comes from {' and from '.join(sorted(k))} - one name, one source, in every environment"
             for n, k in sources.items() if len(k) > 1]
     return bad
+
+
+def _network(value) -> List[str]:
+    """An environment's ``network``, which ``requirements.network_requirements`` asks before a run's first unit."""
+    if not isinstance(value, dict) or set(value) != {"access", "probe"}:
+        return ["network: {access: public, probe: an HTTPS URL}"]
+    try:
+        u = urlsplit(value["probe"])
+        valid = (value["access"] == "public" and u.scheme == "https" and u.hostname
+                 and not u.username and not u.password and not u.query and not u.fragment
+                 and u.port in (None, 443))
+    except (TypeError, ValueError, AttributeError):
+        valid = False
+    return [] if valid else ["network: public access with an HTTPS probe URL without credentials, query or fragment"]
 
 
 def _secrets(w: str, secrets, local_ok: bool, settings) -> List[str]:
@@ -1838,15 +1852,10 @@ def path_of(d: dict) -> str:
 @contextlib.contextmanager
 def _locked(path: str):
     """One writer of a definition file at a time, across processes."""
-    import fcntl
     where = os.path.join(paths.cache_dir(), "locks")
     os.makedirs(where, exist_ok=True)
-    with open(os.path.join(where, hashlib.sha256(os.path.realpath(path).encode()).hexdigest()[:24]), "w") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+    with ondisk.locked(os.path.join(where, hashlib.sha256(os.path.realpath(path).encode()).hexdigest()[:24])):
+        yield
 
 
 def save(d: dict, change: Optional[Callable[[dict], None]] = None) -> None:
@@ -1892,7 +1901,4 @@ def save(d: dict, change: Optional[Callable[[dict], None]] = None) -> None:
                         d[k] = clean[k]
         else:
             clean = {k: v for k, v in d.items() if not k.startswith("_")}
-        with open(path + ".part", "w") as f:
-            json.dump(clean, f, indent=2)
-            f.write("\n")
-        os.replace(path + ".part", path)
+        ondisk.write_whole(path, json.dumps(clean, indent=2) + "\n")

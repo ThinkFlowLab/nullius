@@ -76,7 +76,7 @@ class TheSurfaceIsDeclared(unittest.TestCase):
 
     def test_every_file_a_bundled_definition_runs_is_shipped(self):
         """Every file a host's snapshot takes of a bundled entry is package data too."""
-        from nullius.standard import payload
+        from nullius.standard.runner import payload
         shipped = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["setuptools"]["package-data"]
 
         def covered(package, relative):

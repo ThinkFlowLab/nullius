@@ -18,7 +18,12 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
-from nullius.standard import container, definitions, job, jsonl, recipe, relay, run
+from nullius.standard.backends import container
+from nullius.standard.calls import relay
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.protocols import jsonl
+from nullius.standard.runner import job, run
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERE = os.path.join(APP, "nullius", "catalogue", "benchmarks", "osworld2")

@@ -4,8 +4,10 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 import tempfile
-from nullius.standard import container
-from nullius.standard import network_requirements as net, recipe, definitions
+from nullius.standard.backends import container
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.requirements import network_requirements as net
 from tests.test_standard_recipe import defs, a_recipe
 
 
@@ -18,12 +20,12 @@ class NetworkRequirements(unittest.TestCase):
         self.agent = {'_kind': 'agent'}
 
     def test_schema_rejects_missing_unknown_and_credential_fields(self):
-        self.assertEqual(net.problems(self.bench['environments']['web']['network']), [])
+        self.assertEqual(definitions._network(self.bench['environments']['web']['network']), [])
         for value in ('public', {}, {'access': 'private', 'probe': 'https://example.org/'},
                       {'access': 'public', 'probe': 'http://example.org/'},
                       {'access': 'public', 'probe': 'https://user:secret@example.org/'},
                       {'access': 'public', 'probe': 'https://example.org/?token=secret'}):
-            self.assertTrue(net.problems(value), value)
+            self.assertTrue(definitions._network(value), value)
 
     def test_a_container_run_is_refused_before_any_task_when_the_public_web_is_unreachable(self):
         opener = Mock(side_effect=OSError('offline'))
@@ -85,7 +87,7 @@ class NetworkRequirements(unittest.TestCase):
                 unit._online()
             self.assertEqual(unit.network_env['HTTPS_PROXY'], 'http://egress:3128')         # its proxy, still
             self.assertNotIn(unit.names['agent'] + '-network-check', str(docker.call_args_list))
-        from nullius.standard import run
+        from nullius.standard.runner import run
         r = run.Run.__new__(run.Run)
         self.assertEqual([r.first_probe() for _ in range(3)], [True, False, False])
 

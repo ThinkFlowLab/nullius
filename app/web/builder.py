@@ -9,14 +9,16 @@ import subprocess
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from flask import abort, jsonify, render_template, request
-from nullius.standard import ports
+from nullius.standard.contract import ports
 from nullius import constraints, settings, execution, gitrefs, hosts, prerequisites, providers
 from nullius.harbor import source as harbor_source
 from nullius.catalogue import catalog
 from nullius.recipes import launch as command_builder
 from nullius.recipes import store as recipe_store
-from nullius.standard import boat, definitions, hostreq
-from nullius.standard import recipe as standard_recipe
+from nullius.standard.backends import boat
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import hostreq
+from nullius.standard.pages import recipe as standard_recipe
 
 from .core import app
 from .filters import agent_mark_url
@@ -200,7 +202,7 @@ def _builder_data() -> dict:
                                            "why": types.get(k)} for k, z in boat.SIZES.items() if not types or k in types],
                             "boatSlots": account.get("slots"), "boatKey": bool(boat.key()), "licences": _licence_states(), "host": host}
     data["csrf"] = shared._csrf_token()
-    data["local"] = shared_local_client()
+    data["local"] = shared._local_client()
     data["recipesWhy"] = WRITE_HERE
     return data
 
@@ -236,7 +238,7 @@ def new_run_prerequisites():
     label, rows}], ready, notes}.
     A host is asked over ssh, so this is never asked on a page load."""
     shared._require_csrf()
-    if not shared_local_client():
+    if not shared._local_client():
         abort(403, description="Machines are checked from a browser on the application host only.")
     body = request.get_json(silent=True) or {}
     recipe = body.get("recipe") if isinstance(body.get("recipe"), dict) else {}
@@ -311,7 +313,7 @@ def new_run_harbor_refs():
     """A repository's branches and tags, each at its commit, for a Harbor
     pinned from a repository - a private fork included: git ls-remote with
     this machine's own credentials, for a browser on this machine only."""
-    if not shared_local_client():
+    if not shared._local_client():
         abort(403, description="Repositories are listed for a browser on the application host only.")
     url = gitrefs.url_of(request.args.get("repo", ""))
     if not url:
@@ -332,7 +334,7 @@ def new_run_harbor_agents():
     repository, installs it in a throwaway environment and asks it, once."""
     if request.method == "POST":
         shared._require_csrf()
-        if not shared_local_client():
+        if not shared._local_client():
             abort(403, description="A Harbor is built from a browser on the application host only.")
         raw = (request.get_json(silent=True) or {}).get("harbor")
     else:
@@ -348,7 +350,7 @@ def _licence_states() -> dict:
     benchmark whose environments need licences: what is held of each name
     they declare, a data provider's token in that provider's store."""
     from nullius import secrets
-    from nullius.standard import definitions
+    from nullius.standard.contract import definitions
     out: dict = {}
     for b in definitions.load("benchmark", every=True)[0]:
         for s in definitions.secrets_of(b):
@@ -366,7 +368,7 @@ WRITE_HERE = "Saved recipes change from a browser on the application host only."
 
 def _recipe_write():
     shared._require_csrf()
-    if not shared_local_client():
+    if not shared._local_client():
         abort(403, description=WRITE_HERE)
     if request.content_length and request.content_length > 10 * recipe_store.MAX_BYTES:
         abort(413)
@@ -415,15 +417,10 @@ def _kept_recipe(job_id: str) -> bool:
     return bool(ex and ex.plan.recipe)
 
 
-def shared_local_client() -> bool:
-    from . import settings
-    return settings._local_client()
-
-
 def _host_target():
     """The benchmark and its requirements a host check or install is about, and where: 'local' or a host of Settings."""
     shared._require_csrf()
-    if not shared_local_client():
+    if not shared._local_client():
         abort(403, description="Machines are checked and set up from a browser on the application host only.")
     b = definitions.get("benchmark", request.form.get("benchmark", ""))
     if b is None:
@@ -574,7 +571,7 @@ def new_run_endpoints():
     """The serving providers OpenRouter lists for one model, for the Model step's Served by; asked as the
     model list is, with the key kept on this machine."""
     shared._require_csrf()
-    if not shared_local_client():
+    if not shared._local_client():
         abort(403)
     body = request.get_json(silent=True)
     provider = body.get("provider") if isinstance(body, dict) else None
@@ -591,7 +588,7 @@ def new_run_endpoints():
 def new_run_models():
     """Return the selected provider's catalogue, keeping its key on this machine."""
     shared._require_csrf()
-    if not shared_local_client():
+    if not shared._local_client():
         abort(403)
     body = request.get_json(silent=True)
     provider = body.get("provider") if isinstance(body, dict) else None

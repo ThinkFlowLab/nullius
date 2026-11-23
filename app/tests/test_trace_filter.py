@@ -21,6 +21,9 @@ import json
 import unittest
 
 from nullius.traces import trace
+from nullius.traces.breakdown import Breakdown, breakdown, Totals
+from nullius.traces.spans import find_span, raw_spans_of
+from nullius.traces.waterfall import extent_of
 
 from .test_trace import RICH, doc, raw, span
 
@@ -47,7 +50,7 @@ def ids(tr):
 
 
 def raw_ids(spans):
-    return [str(s.get("span_id")) for s in trace.raw_spans_of(spans)]
+    return [str(s.get("span_id")) for s in raw_spans_of(spans)]
 
 
 class Filters(unittest.TestCase):
@@ -208,7 +211,7 @@ class Recomputing(unittest.TestCase):
     def test_the_blocked_marker_is_read_from_an_attribute_too(self):
         # Harbor names the span; session_to_trace.py sets an attribute instead.
         spans = [span("t", 0, 100, kind="tool", attributes={"blocked_on_user": True})]
-        view = trace.breakdown(spans, wall_ns=100)
+        view = breakdown(spans, wall_ns=100)
         self.assertEqual((view.idle_ns, view.tool_ns), (100, 0))
 
     def test_it_disagrees_with_the_producer_by_exactly_the_nested_tool_call(self):
@@ -223,7 +226,7 @@ class Recomputing(unittest.TestCase):
         # A session or subagent span brackets its children; charging it would
         # claim their work twice.
         for kind in ("session", "subagent", "output", "user_message", "compaction"):
-            view = trace.breakdown([span("s", 0, 100, kind=kind)], wall_ns=100)
+            view = breakdown([span("s", 0, 100, kind=kind)], wall_ns=100)
             self.assertEqual(view.attributed_ns, 0, kind)
 
     def test_a_subagent_running_in_parallel_cannot_exceed_the_wall_clock(self):
@@ -232,12 +235,12 @@ class Recomputing(unittest.TestCase):
             span("b", 0, 100, kind="llm_request"),
             span("c", 50, 150, kind="tool"),
         ]
-        view = trace.breakdown(spans, wall_ns=150)
+        view = breakdown(spans, wall_ns=150)
         self.assertEqual(view.attributed_ns, 150)
         self.assertEqual((view.llm_ns, view.tool_ns), (50, 100))
 
     def test_a_span_with_no_end_contributes_no_time_but_is_still_counted(self):
-        view = trace.breakdown([span("a", 1000, None, kind="tool")], wall_ns=5000)
+        view = breakdown([span("a", 1000, None, kind="tool")], wall_ns=5000)
         self.assertEqual(view.attributed_ns, 0)
         self.assertEqual(view.span_count, 1)
 
@@ -319,7 +322,7 @@ class Percentages(unittest.TestCase):
         # Categories that do not close must not be rescaled to fill the bar.
         # Real magnitudes: a residual under a millisecond reads as float noise
         # from the producer's arithmetic and is clamped away instead.
-        totals = trace.Totals(wall_ns=1_000_000_000, llm_ns=500_000_000)
+        totals = Totals(wall_ns=1_000_000_000, llm_ns=500_000_000)
         segments = {s["key"]: s["pct"] for s in totals.segments}
         self.assertEqual(segments["llm"], 50.0)
         self.assertEqual(segments["unaccounted"], 50.0)
@@ -329,13 +332,13 @@ class Percentages(unittest.TestCase):
         self.assertAlmostEqual(sum(s["pct"] for s in segments), 100.0, places=6)
 
     def test_with_no_wall_clock_the_segments_own_sum_is_the_denominator(self):
-        totals = trace.Totals(llm_ns=300_000_000, tool_ns=100_000_000)
+        totals = Totals(llm_ns=300_000_000, tool_ns=100_000_000)
         segments = {s["key"]: s["pct"] for s in totals.segments}
         self.assertEqual(segments, {"llm": 75.0, "tool": 25.0})
 
     def test_nothing_measured_divides_by_nothing(self):
-        self.assertEqual(trace.Totals().segments, [])
-        self.assertEqual(trace.Breakdown().segments, [])
+        self.assertEqual(Totals().segments, [])
+        self.assertEqual(Breakdown().segments, [])
 
 
 class Saving(unittest.TestCase):
@@ -391,7 +394,7 @@ class Saving(unittest.TestCase):
         # The file on disk is exactly as sensitive as its source; the app redacts
         # at render, and a saved view must not be a lossy copy.
         out = trace.filtered_document(raw(), trace.Filter.of(["output"]))
-        write = next(s for s in trace.raw_spans_of(out["spans"]) if s["span_id"] == TOOL_WRITE)
+        write = next(s for s in raw_spans_of(out["spans"]) if s["span_id"] == TOOL_WRITE)
         self.assertEqual(write["content"]["arguments"]["content"], "Hello, world!")
 
     def test_filtering_a_saved_view_keeps_the_first_filters_provenance(self):
@@ -421,8 +424,8 @@ class Zooming(unittest.TestCase):
     def test_the_axis_is_the_subtrees_own_extent(self):
         full = trace.load(RICH)
         zoomed = trace.load(RICH, trace.Filter.of(zoom=TOOL_PARENT))
-        group = trace.find_span(full.roots, TOOL_PARENT)
-        self.assertEqual(zoomed.axis, trace.extent_of([group]))
+        group = find_span(full.roots, TOOL_PARENT)
+        self.assertEqual(zoomed.axis, extent_of([group]))
         # 850µs wider than the bracket itself: the Write inside it ends after it.
         self.assertEqual(zoomed.axis.span_ns, 24131419)
         # The subtree's extent is the same walk the global axis uses, so a child

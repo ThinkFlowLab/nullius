@@ -23,10 +23,11 @@ from __future__ import annotations
 import json
 import os
 import re
-import tempfile
 import tomllib
 from dataclasses import replace
 from urllib import error, parse, request
+
+from nullius import ondisk
 
 from . import catalog, storage
 
@@ -209,17 +210,7 @@ def problems(entry: dict, root: str | None = None, replacing: str = "", dataset:
 
 
 def _write(path: str, entry: dict) -> None:
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=os.path.dirname(path),
-                                         prefix=".entry-", delete=False) as fh:
-            temporary = fh.name
-            json.dump(entry, fh, indent=2, ensure_ascii=False)
-            fh.write("\n")
-        os.replace(temporary, path)
-    finally:
-        if temporary is not None and os.path.exists(temporary):
-            os.unlink(temporary)
+    ondisk.write_whole(path, json.dumps(entry, indent=2, ensure_ascii=False) + "\n", mode=0o600)
 
 
 def save(entry: dict, root: str | None = None) -> str:

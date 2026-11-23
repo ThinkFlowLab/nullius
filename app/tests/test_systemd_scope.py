@@ -27,7 +27,7 @@ ASKED = {"cpus": 1.5, "memory_mb": 256, "processes": 64, "cpu_set": "0"}
 AS_USER = """
 import json, os, subprocess, time
 from nullius import constraints
-from nullius.standard import run
+from nullius.standard.runner import run
 asked = json.loads(os.environ["ASKED"])
 out = {"check": constraints.scope_check(asked), "given": [os.environ.get(k) for k in ("XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")]}
 plain = {"PATH": os.environ["PATH"]}

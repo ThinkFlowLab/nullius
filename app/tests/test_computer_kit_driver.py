@@ -28,8 +28,9 @@ import unittest
 import zlib
 from unittest import mock
 
-from nullius.standard import computer_port as port, computer_pipe
-from nullius.standard import container, definitions, ports
+from nullius.standard.protocols import computer_port as port, computer_pipe
+from nullius.standard.backends import container
+from nullius.standard.contract import definitions, ports
 from tests import docker_tier
 
 KIT = os.path.join(definitions.KITS, "agent-computer-v1")
@@ -159,7 +160,7 @@ class Definition(unittest.TestCase):
                                                              summary=kit["environments"]["desktop"]["summary"]))
         self.assertEqual(kit["mcp_servers"]["computer"]["command"], ["python3", "{here}/pipe.py"])     # a file of its folder
         pipe = _module("computer_kit_pipe_under_test", "pipe.py").PIPE
-        self.assertEqual(pipe, os.path.join(os.path.dirname(os.path.dirname(KIT)), "computer_pipe.py"))
+        self.assertEqual(pipe, os.path.join(os.path.dirname(os.path.dirname(KIT)), "protocols", "computer_pipe.py"))
         self.assertTrue(os.path.isfile(pipe))
 
     def test_the_pipe_from_the_kits_folder_joins_stdio_to_the_socket(self):

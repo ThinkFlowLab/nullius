@@ -15,7 +15,12 @@ from contextlib import redirect_stdout
 from unittest import mock
 
 from nullius import constraints, progress
-from nullius.standard import cli, container, definitions, install, job, merge, recipe, run
+from nullius.standard import cli
+from nullius.standard.backends import container
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.requirements import install
+from nullius.standard.runner import job, merge, run
 from tests import test_standard_recipe_served_by as recipes
 
 

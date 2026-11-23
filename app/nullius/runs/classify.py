@@ -25,7 +25,7 @@ RATE_LIMITED = "rate_limited"
 API_ERROR = "api_error"
 SETUP_ERROR = "setup_error"
 # The run's own spending cap refused a model call the unit needed (the
-# standard's relay, ``standard.ledger``): the unit was cut off. Nothing
+# standard's relay, ``standard.calls.ledger``): the unit was cut off. Nothing
 # failed, and no attempt was had: the money ran out, by the user's own word.
 SPENDING_CAP = "spending_cap"
 CANCELLED = "cancelled"
@@ -65,7 +65,7 @@ _INFRA_EXCEPTIONS = {
     "networkconnectionerror",     # DNS, refused connection, TLS — transport, not skill
     "unknownapierror",            # Harbor's own "some provider error"; an ApiError without the prefix
 }
-# What a unit the run's spending cap cut off carries (``standard.ledger.ERROR``): recorded by the relay that
+# What a unit the run's spending cap cut off carries (``standard.calls.ledger.ERROR``): recorded by the relay that
 # refused the call, never inferred.
 _CAP_EXCEPTION = "spendingcaperror"
 

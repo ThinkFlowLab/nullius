@@ -11,7 +11,8 @@ import unittest
 from unittest import mock
 
 from nullius import settings
-from nullius.standard import install, run
+from nullius.standard.requirements import install
+from nullius.standard.runner import run
 
 
 class Endpoint(unittest.TestCase):

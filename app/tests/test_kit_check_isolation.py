@@ -17,7 +17,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nullius.standard import container, definitions, jsonl
+from nullius.standard.backends import container
+from nullius.standard.contract import definitions
+from nullius.standard.protocols import jsonl
 from tests import APP
 from tests.execution_support import gone
 
@@ -98,7 +100,8 @@ class AcpFiles(unittest.TestCase):
 
     def client_fs(self, backend):
         from unittest import mock
-        from nullius.standard import acp, run
+        from nullius.standard.protocols import acp
+        from nullius.standard.runner import run
         seen = {}
         class Stop(Exception):
             pass
@@ -140,7 +143,7 @@ class PlantedLinks(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in v.rglob("*")), ["kept.txt", "sub"])
 
     def test_a_trial_is_never_written_through_a_link(self):
-        from nullius.standard import job
+        from nullius.standard.runner import job
         trial = self.tmp / "unit__1"; (trial / "verifier").mkdir(parents=True); (trial / "agent").mkdir()
         (trial / "verifier" / "score.json").symlink_to(self.victim)
         (trial / "verifier" / "reward.txt").symlink_to(self.victim)
@@ -163,14 +166,14 @@ class CommandAgentGroup(unittest.TestCase):
         return pidfile, ["sh", "-c", f"sleep 60 & echo $! > {pidfile}; {then}"]
 
     def test_a_normal_end_ends_what_it_left_running(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         pidfile, cmd = self.background("echo done")
         r = run.run_group(cmd, 10, stdout=subprocess.PIPE, text=True)
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "done"))
         self.assertTrue(gone(int(Path(pidfile).read_text())))
 
     def test_a_timeout_ends_the_whole_group(self):
-        from nullius.standard import run
+        from nullius.standard.runner import run
         pidfile, cmd = self.background("sleep 30")
         with self.assertRaises(subprocess.TimeoutExpired):
             run.run_group(cmd, 2, stdout=subprocess.PIPE, text=True)             # time for sh to write the pid first

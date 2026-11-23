@@ -13,10 +13,10 @@ import unittest
 from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from nullius import execution
-from nullius.standard import definitions
+from nullius.standard.contract import definitions
 from .test_routes import web
 
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tests", "fixtures", "standard", "catalogue")
@@ -140,7 +140,7 @@ class Tabs(unittest.TestCase):
                 self.assertTrue(block[1].startswith('>'))
 
     def test_kits_catalogue_and_proof_links(self):
-        from nullius.standard import ports
+        from nullius.standard.contract import ports
         from html import unescape
         page = self.get("/kits").get_data(as_text=True)
         self.assertIn('<input type="search" data-search placeholder="Name, port, check"', page)       # the search and the family filter
@@ -347,11 +347,19 @@ class Tabs(unittest.TestCase):
                              headers={"Origin": "http://localhost"})
         self.addCleanup(r.close)
         self.assertEqual(r.status_code, 302)
-        plan = self.started[0]
+        (plan,) = self.started
         self.assertEqual((plan.runner, plan.host, plan.key_var), ("standard", None, "OPENAI_API_KEY"))
         self.assertIn("conform fake --model gpt-5-mini --provider openai --stamp ", plan.script)
         self.assertNotIn("sk-test", plan.script)
         self.assertTrue(r.headers["Location"].endswith("/job/" + plan.jobs[0]["name"]))
+        going = SimpleNamespace(plan=SimpleNamespace(name=ANY), state="running")          # a run of that very name, still going
+        with patch.dict(execution.EXECUTIONS, {"going": going}):
+            r = self.client.post("/agents/fake/check", data={"csrf": self.csrf(), "provider": "openai", "model": "gpt-5-mini", "unsandboxed": "yes"},
+                                 headers={"Origin": "http://localhost"})
+        self.addCleanup(r.close)
+        self.assertEqual((r.status_code, r.headers["Location"], len(self.started)), (302, "/agents/fake", 1))
+        with self.client.session_transaction() as s:
+            self.assertTrue(any(kind == "error" and said.endswith(" is running already") for kind, said in s["_flashes"]), s["_flashes"])
 
     def test_container_checks_require_an_engine_and_record_the_backend(self):
         from web import execute
@@ -613,7 +621,7 @@ class StandardPieces(unittest.TestCase):
         self.assertIn('<span class="nb-tick no" title="chooses the right tool among similar ones">decoys ✗</span>', card[:card.index("</article>")])
 
     def test_the_builder_is_given_the_controls_their_proofs_and_whether_docker_runs_here(self):
-        from nullius.standard import boat
+        from nullius.standard.backends import boat
         self.fixture()
         with patch.object(boat, "unusable", lambda here=True: "no Boat API key: set it in Settings → Sandbox"):
             html = self.get("/new-run").get_data(as_text=True)
@@ -630,7 +638,7 @@ class StandardPieces(unittest.TestCase):
                                                   "boatSizes": sizes, "boatSlots": None, "boatKey": False, "licences": {}, "host": {}})
 
     def test_the_builder_offers_the_boat_sizes_and_vms_at_once_its_account_says(self):
-        from nullius.standard import boat
+        from nullius.standard.backends import boat
         self.fixture()
         account = {"types": {"small": None, "default": None, "large": "not during the free trial"}, "slots": 2}
         with patch.object(boat, "unusable", lambda here=True: None), patch.object(web.execute, "boat_account", lambda: account):
@@ -713,6 +721,13 @@ class StandardPieces(unittest.TestCase):
         r = self.client.post("/benchmarks/gsm8k/prove", data={"dataset": "test"}); self.addCleanup(r.close)
         self.assertEqual(r.status_code, 403)                                             # no form token
         self.assertEqual(len(self.started), 1)
+        going = SimpleNamespace(plan=SimpleNamespace(name=ANY), state="running")          # a run of that very name, still going
+        with patch.dict(execution.EXECUTIONS, {"going": going}):
+            r = self.client.post("/benchmarks/gsm8k/prove", data={"csrf": csrf, "dataset": "test", "limit": "2"}, headers={"Origin": "http://localhost"})
+        self.addCleanup(r.close)
+        self.assertEqual((r.status_code, r.headers["Location"], len(self.started)), (302, "/benchmarks/gsm8k#standard", 1))
+        with self.client.session_transaction() as s:
+            self.assertTrue(any(kind == "error" and said.endswith(" is running already") for kind, said in s["_flashes"]), s["_flashes"])
 
 
 if __name__ == "__main__":

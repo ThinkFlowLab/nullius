@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from nullius import execution
-from nullius.standard import job
+from nullius.standard.runner import job
 
 
 class SharedStep(unittest.TestCase):

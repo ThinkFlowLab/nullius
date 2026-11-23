@@ -25,10 +25,11 @@ from __future__ import annotations
 import os
 import json
 import re
-import tempfile
 import urllib.parse
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
+
+from nullius import ondisk
 
 _PATH_OK = re.compile(r"^[^\x00-\x1f]{1,400}$")
 _URL_OK = re.compile(r"^https?://[^\s/?#]+(?:[/?#]\S*)?$")
@@ -532,26 +533,14 @@ def agent_variable(name: str) -> Variable:
 
 def _write_lines(path: str, lines: List[str]) -> None:
     """Atomically replace one owner-only settings file; never print values."""
-    directory = os.path.dirname(os.path.abspath(path))
-    os.makedirs(directory, mode=0o700, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".settings-", dir=directory)
-    try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            if str(path).endswith(".json"):
-                values = {line.partition("=")[0]: line.partition("=")[2]
-                          for line in lines if "=" in line and not line.lstrip().startswith("#")}
-                json.dump(values, fh, indent=2, ensure_ascii=False)
-                fh.write("\n")
-            else:
-                fh.write("\n".join(lines) + ("\n" if lines else ""))
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    os.makedirs(os.path.dirname(os.path.abspath(path)), mode=0o700, exist_ok=True)
+    if str(path).endswith(".json"):
+        values = {line.partition("=")[0]: line.partition("=")[2]
+                  for line in lines if "=" in line and not line.lstrip().startswith("#")}
+        text = json.dumps(values, indent=2, ensure_ascii=False) + "\n"
+    else:
+        text = "\n".join(lines) + ("\n" if lines else "")
+    ondisk.write_whole(path, text, mode=0o600)
 
 
 def take(path: str, name: str) -> Optional[str]:

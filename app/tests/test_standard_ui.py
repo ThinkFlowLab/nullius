@@ -12,7 +12,9 @@ import unittest
 from unittest.mock import patch
 
 from nullius import execution
-from nullius.standard import definitions, ports, prove, recipe
+from nullius.standard.contract import definitions, ports
+from nullius.standard.pages import recipe
+from nullius.standard.proofs import prove
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 CONTROLS = {"nop": {"source": "nullius", "from": "Nothing runs; the answer is empty."},

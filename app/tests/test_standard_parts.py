@@ -14,7 +14,7 @@ import tempfile
 import unittest
 
 from nullius.runs import parse
-from nullius.standard import job
+from nullius.standard.runner import job
 
 BENCH = {"key": "locomo", "family": "capability", "needs": [], "score": {"kind": "score", "says": "mean token F1"}}
 

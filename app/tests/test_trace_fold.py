@@ -32,6 +32,10 @@ disk.
 import unittest
 
 from nullius.traces import trace
+from nullius.traces.breakdown import breakdown
+from nullius.traces.fold import fold_llm_requests
+from nullius.traces.spans import raw_spans_of
+from nullius.traces.waterfall import raw_extent
 
 from .test_trace import doc, span
 
@@ -118,11 +122,11 @@ def reply(think=True, text=False, tool=True, message="msg-1"):
 
 
 def folded(*records, **kwargs):
-    return trace.fold_llm_requests(capture(*records, **kwargs)["spans"])
+    return fold_llm_requests(capture(*records, **kwargs)["spans"])
 
 
 def find(spans, span_id):
-    return next(s for s in trace.raw_spans_of(spans) if s.get("span_id") == span_id)
+    return next(s for s in raw_spans_of(spans) if s.get("span_id") == span_id)
 
 
 def children_of(spans, span_id):
@@ -270,20 +274,20 @@ class TheFoldMovesNoNumber(unittest.TestCase):
     def setUp(self):
         self.source = capture(*reply(text=True))
         self.before = self.source["spans"]
-        self.after = trace.fold_llm_requests(self.before)
+        self.after = fold_llm_requests(self.before)
 
     def test_the_axis_is_where_it_was(self):
-        self.assertEqual(trace.raw_extent(self.after), trace.raw_extent(self.before))
+        self.assertEqual(raw_extent(self.after), raw_extent(self.before))
 
     def test_the_breakdown_charges_the_same_time(self):
-        before, after = trace.breakdown(self.before), trace.breakdown(self.after)
+        before, after = breakdown(self.before), breakdown(self.after)
         self.assertEqual(
             (before.llm_ns, before.tool_ns, before.reasoning_ns, before.idle_ns),
             (after.llm_ns, after.tool_ns, after.reasoning_ns, after.idle_ns),
         )
 
     def test_the_breakdown_counts_the_same_tokens(self):
-        self.assertEqual(trace.breakdown(self.after).tokens, trace.breakdown(self.before).tokens)
+        self.assertEqual(breakdown(self.after).tokens, breakdown(self.before).tokens)
 
     def test_the_producers_totals_are_untouched(self):
         self.assertEqual(trace.parse(self.source).totals.wall_ns, 8_000)
@@ -291,20 +295,20 @@ class TheFoldMovesNoNumber(unittest.TestCase):
     def test_every_span_survives_but_the_records_that_became_blocks(self):
         gone = {RECORD_THINK, RECORD_TEXT}
         self.assertEqual(
-            {str(s.get("span_id")) for s in trace.raw_spans_of(self.after)},
-            {str(s.get("span_id")) for s in trace.raw_spans_of(self.before)} - gone,
+            {str(s.get("span_id")) for s in raw_spans_of(self.after)},
+            {str(s.get("span_id")) for s in raw_spans_of(self.before)} - gone,
         )
 
     def test_the_source_document_is_not_mutated(self):
-        trace.fold_llm_requests(self.before)
+        fold_llm_requests(self.before)
         self.assertEqual(children_of(self.before, "session:s"), [RECORD_THINK, RECORD_TOOL, RECORD_TEXT])
 
     def test_nothing_to_fold_is_passed_back_by_reference(self):
         spans = doc(call())["spans"]
-        self.assertIs(trace.fold_llm_requests(spans), spans)
+        self.assertIs(fold_llm_requests(spans), spans)
 
     def test_folding_twice_changes_nothing(self):
-        self.assertEqual(trace.fold_llm_requests(self.after), self.after)
+        self.assertEqual(fold_llm_requests(self.after), self.after)
 
 
 class SavingSeesTheSameTree(unittest.TestCase):
@@ -312,7 +316,7 @@ class SavingSeesTheSameTree(unittest.TestCase):
 
     def test_hiding_a_call_takes_the_blocks_it_adopted(self):
         out = trace.filtered_document(capture(*reply()), trace.Filter.of(span_ids=[CALL]))
-        self.assertEqual([str(s.get("span_id")) for s in trace.raw_spans_of(out["spans"])],
+        self.assertEqual([str(s.get("span_id")) for s in raw_spans_of(out["spans"])],
                          ["interaction", "session:s"])
         self.assertEqual(out["filtered"]["spans_removed"], 3)
 
@@ -321,7 +325,7 @@ class SavingSeesTheSameTree(unittest.TestCase):
         filt = trace.Filter.of(["reasoning"])
         out = trace.filtered_document(source, filt)
         self.assertEqual(
-            [str(s.get("span_id")) for s in trace.raw_spans_of(out["spans"])],
+            [str(s.get("span_id")) for s in raw_spans_of(out["spans"])],
             [r.span.span_id for r in trace.parse(source, filt).rows],
         )
 

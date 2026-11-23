@@ -24,7 +24,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 from nullius.runs import live, parse
-from nullius.standard import ledger
+from nullius.standard.calls import ledger
 from nullius import workspace
 
 APP_DIR = Path(__file__).resolve().parents[1]

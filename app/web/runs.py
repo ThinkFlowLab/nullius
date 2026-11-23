@@ -23,11 +23,10 @@ from nullius import importers as harnesses
 from nullius.redact import redact
 from nullius.runs import attempts, classify, feasibility, launches, live, parse
 from nullius import workspace
-from nullius.standard import definitions as standard_definitions
+from nullius.standard.contract import definitions as standard_definitions
 
 from .core import app
 from . import shared
-from . import settings as settings_web
 
 
 
@@ -247,7 +246,7 @@ def _cut_short(r) -> str:
     return ""
 
 
-# A shard's job as a recipe names it (standard/recipe.py): ``<launch>-shard-<I>of<N>``.
+# A shard's job as a recipe names it (standard/pages/recipe.py): ``<launch>-shard-<I>of<N>``.
 _SHARD = re.compile(r"-shard-(\d+)of\d+$")
 # A participant's state is its shards' most telling: one still working, else the one that ended worst.
 _TELLING = ("running", "preparing", "stopping", "paused", "queued", "failed", "refused", "stopped", execution.NOT_RUN,
@@ -737,7 +736,7 @@ def launch_add(key):
     """Add a launch's job roots to the workspace the form names, or, when it
     names none, to a new workspace called the form's ``label`` and opened."""
     shared._require_csrf()
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403)
     g = next((g for g in _every()[1] if g.key == key), None)
     name = request.form.get("workspace", "")
@@ -762,7 +761,7 @@ def launch_delete(key):
     each shard's copy on its own host when ticked. A launch with a run still
     going, or with a job from elsewhere, is refused. ``back=launches`` returns to the Launches page."""
     shared._require_csrf()
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403)
     every = request.form.get("back") == "launches"
     if shared.STATE["workspace"] is None and not every:

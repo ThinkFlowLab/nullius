@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 from typing import List, Optional
 
-from nullius import paths, settings
+from nullius import ondisk, paths, settings
 
 # --- the registry: protocols, presets and each provider's record ------------------------------------
 #
@@ -215,7 +215,7 @@ def protocol_for(choice: str, apis, env=None) -> str:
 def auth(protocol: str, key: str) -> dict:
     """The headers that carry ``key`` in ``protocol``: a bearer header, or Anthropic's ``x-api-key``."""
     if PROTOCOLS[protocol]["auth"] == "x-api-key":
-        from nullius.standard.relay import ANTHROPIC_VERSION
+        from nullius.standard.calls.relay import ANTHROPIC_VERSION
         return {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION}
     return {"Authorization": "Bearer " + key} if key else {}
 
@@ -448,7 +448,7 @@ def decision_models(env=None, *, fetch: bool = True, opener=None, clock=time.tim
 
 # A model OpenRouter serves: its maker, a slash, its name (a variant after a colon: ``:free``).
 _ROUTED = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._:-]*")
-# A serving provider's slug, as ``--served-by`` takes it (``standard.relay.SLUG``).
+# A serving provider's slug, as ``--served-by`` takes it (``standard.calls.relay.SLUG``).
 _SLUG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9._-]+)*")
 
 
@@ -583,10 +583,7 @@ def remember(results: dict, env=None) -> None:
         kept = {k: v for k, v in {**tests(env), **results}.items() if v is not None}
         out = _tests_file(env)
         os.makedirs(os.path.dirname(out), exist_ok=True)
-        part = f"{out}.{os.getpid()}.part"
-        with open(part, "w", encoding="utf-8") as f:
-            json.dump(kept, f, indent=1, sort_keys=True)
-        os.replace(part, out)
+        ondisk.write_whole(out, json.dumps(kept, indent=1, sort_keys=True))
 
 
 def mark(result: dict) -> str:

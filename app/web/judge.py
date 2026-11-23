@@ -15,7 +15,6 @@ from nullius.traces import trajectory
 
 from .core import app
 from . import shared
-from . import settings as settings_web
 from . import traces
 
 def key(lane: str = "decision") -> client.Judge:
@@ -269,7 +268,7 @@ def judge_trial(job, trial, api_key: str, post=None, calibration=None) -> dict:
 
 def _guard():
     shared._require_csrf()
-    if not settings_web._local_client():
+    if not shared._local_client():
         abort(403, description="Judging is asked from a browser on the application host only: it is a paid call.")
     if ws_dir() is None:
         abort(400, description="No workspace is open; judgements live in the workspace.")

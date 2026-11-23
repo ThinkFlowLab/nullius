@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from nullius.catalogue import catalog
-from nullius.standard import recipe
+from nullius.standard.pages import recipe
 
 
 class Listing(unittest.TestCase):

@@ -17,7 +17,7 @@ import time
 import unittest
 
 PIPE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nullius", "standard",
-                    "computer_pipe.py")
+                    "protocols", "computer_pipe.py")
 
 
 def pipe_module():

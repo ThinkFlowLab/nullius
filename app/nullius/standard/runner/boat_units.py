@@ -29,7 +29,10 @@ import uuid
 from typing import Callable, Dict, List, Optional
 
 from nullius import paths, secrets
-from nullius.standard import boat, definitions, hostreq, merge, payload, shard
+from nullius.standard.backends import boat
+from nullius.standard.contract import definitions
+from nullius.standard.requirements import hostreq
+from nullius.standard.runner import merge, payload, shard
 
 RUNPY = "import json, os, runpy, sys; os.environ.update(json.loads(sys.stdin.readline())); sys.path.insert(0, sys.argv.pop(1)); runpy.run_module('nullius.standard.cli', run_name='__main__', alter_sys=True)"
 SHARDS = ".boat"                 # the shards' jobs, under the jobs root, until they are merged

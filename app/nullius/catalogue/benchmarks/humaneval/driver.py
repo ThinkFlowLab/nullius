@@ -56,7 +56,7 @@ sys.stdout = sys.stderr
 sys.path.insert(0, os.environ["NULLIUS_UPSTREAM"])
 from human_eval.data import read_problems            # noqa: E402  as published
 from human_eval.execution import check_correctness   # noqa: E402
-from nullius.standard.container import CHECK_IMAGE, check_argv   # noqa: E402
+from nullius.standard.backends.container import CHECK_IMAGE, check_argv   # noqa: E402
 
 PROBLEMS = {}
 

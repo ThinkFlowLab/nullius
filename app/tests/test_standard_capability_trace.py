@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from nullius.standard import job
+from nullius.standard.runner import job
 
 
 class CapabilityTrace(unittest.TestCase):

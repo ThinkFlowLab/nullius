@@ -10,7 +10,12 @@ import shutil
 import tempfile
 import unittest
 
-from nullius.standard import cli, conform, definitions, install, recipe, run
+from nullius.standard import cli
+from nullius.standard.contract import definitions
+from nullius.standard.pages import recipe
+from nullius.standard.proofs import conform
+from nullius.standard.requirements import install
+from nullius.standard.runner import run
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard")
 ROOT = os.path.join(FIX, "catalogue")

@@ -52,7 +52,7 @@ from datetime import datetime, timezone
 from nullius import importers
 from nullius.redact import redact
 from nullius.traces import otel as reader
-from nullius.traces import trace
+from nullius.traces.spans import raw_spans_of
 
 NAME = "otel"
 LABEL = "OpenTelemetry"
@@ -140,7 +140,7 @@ def _dump(path: str, data) -> bool:
 def _window(document: dict) -> tuple:
     """(start_ns, end_ns) over every span, end None when no span ended."""
     starts, ends = [], []
-    for raw in trace.raw_spans_of(document.get("spans") or []):
+    for raw in raw_spans_of(document.get("spans") or []):
         starts.append(raw["start_ns"])
         if raw.get("end_ns") is not None:
             ends.append(raw["end_ns"])

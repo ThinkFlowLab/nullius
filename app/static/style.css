@@ -735,7 +735,7 @@ button.seg:hover { filter: brightness(1.25); }
    they hang under, because the two came from different clocks; a per-parent
    layout would have to clamp that away, and the clamp would hide the exact
    discrepancy the trace format exists to expose. Percentages come from
-   nullius/traces/trace.py as --left/--width. */
+   nullius/traces/waterfall.py as --left/--width. */
 
 /* One grid, shared by the header and every row, so all tracks are identical by
    construction and a tick at 50% lands over the middle of every bar. */

@@ -7,19 +7,12 @@ import shutil
 import socket
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from nullius import constraints, execution, hosts, paths, prerequisites, prices, providers, sandbox, secrets, settings
-from nullius.standard import boat, container
-from nullius.standard import recipe as standard_recipe
+from nullius.standard.backends import boat, container
+from nullius.standard.pages import recipe as standard_recipe
 from nullius.judge import client
 
 from .core import app
 from . import shared
-
-
-def _local_client() -> bool:
-    """Only a browser on this machine may write settings: the request comes
-    from a loopback address and nothing says it was forwarded."""
-    forwarded = any(h in request.headers for h in ("X-Forwarded-For", "X-Real-Ip", "Forwarded"))
-    return request.remote_addr in ("127.0.0.1", "::1") and not forwarded
 
 
 @app.route("/settings")
@@ -43,7 +36,7 @@ def settings_page():
         if needs:
             access.append({"key": benchmark.key, "title": benchmark.title, "needs": list(needs.values())})
     # A written value that goes unseen is said rather than left silent: a key no setting reads.
-    return render_template("settings/settings.html", embedded=request.args.get("embedded") == "1", groups=groups, benchmark_access=access, csrf=shared._csrf_token(), writable=_local_client(),
+    return render_template("settings/settings.html", embedded=request.args.get("embedded") == "1", groups=groups, benchmark_access=access, csrf=shared._csrf_token(), writable=shared._local_client(),
                            env_file=shared.ENV_FILE,
                            storage_paths=[("Settings", shared.ENV_FILE), ("User catalogue", paths.catalogue_dir()),
                                           ("Workspaces", paths.workspaces_dir()), ("Runs", paths.runs_dir()),
@@ -83,7 +76,7 @@ def settings_decision_judge_models():
     """Decision's models on OpenRouter for its card, asked after the page has loaded: OpenRouter's
     public list of decision models, kept in the cache (``client.decision_judge_models``)."""
     shared._require_csrf()
-    if not _local_client():
+    if not shared._local_client():
         abort(403)
     return jsonify(ok=True, models=[{"id": m, "name": m} for m in client.decision_judge_models("openrouter", fetch=True)])
 
@@ -165,7 +158,7 @@ def settings_host_test():
     comes back rendered (``info``). Same guards as Save. The entry need not be
     saved yet; ``local`` is this machine."""
     shared._require_csrf()
-    if not _local_client():
+    if not shared._local_client():
         abort(403, description="Hosts are tested from a browser on the application host only.")
     entry = request.form.get("entry", "")
     if entry == constraints.LOCAL:
@@ -211,7 +204,7 @@ def settings_host_key():
     0600 until Save removes its host; the entry that names it comes back.
     Same guards as Save."""
     shared._require_csrf()
-    if not _local_client():
+    if not shared._local_client():
         abort(403, description="Hosts are added from a browser on the application host only.")
     upload = request.files.get("key")
     try:
@@ -232,7 +225,7 @@ def settings_host_enrol():
     authorized_keys over ssh, and the entry that comes back names that key.
     The password is neither stored nor logged. Same guards as Save."""
     shared._require_csrf()
-    if not _local_client():
+    if not shared._local_client():
         abort(403, description="Hosts are added from a browser on the application host only.")
     try:
         user, host, port = _host_form()
@@ -328,7 +321,7 @@ def settings_huggingface():
 
 def _sandbox_guard(what):
     shared._require_csrf()
-    if not _local_client():
+    if not shared._local_client():
         abort(403, description=f"{what} from a browser on the application host only.")
 
 
@@ -531,7 +524,7 @@ def settings_save():
     the variable from the file. A variable the process environment also holds
     is written to the file for the next start, and the message says so."""
     shared._require_csrf()
-    if not _local_client():
+    if not shared._local_client():
         abort(403, description="Settings are written from a browser on the application host only.")
     current = {s["name"]: s for s in settings.states(shared.ENV_FILE)}
     if "host_from" in request.form:

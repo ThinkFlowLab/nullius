@@ -6,7 +6,8 @@ from pathlib import Path
 import tempfile
 import unittest
 from urllib.request import urlopen
-from nullius.standard import definitions, match, web_services
+from nullius.standard.backends import web_services
+from nullius.standard.contract import definitions, match
 
 spec = importlib.util.spec_from_file_location('search_kit', Path(definitions.KITS) / 'agent-search-v1' / 'driver.py')
 kit = importlib.util.module_from_spec(spec)
@@ -108,7 +109,7 @@ class SearchKit(unittest.TestCase):
 
 
 from tests import docker_tier
-from nullius.standard import container
+from nullius.standard.backends import container
 import subprocess
 import socket
 from unittest import mock

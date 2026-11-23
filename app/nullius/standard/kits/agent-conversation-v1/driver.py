@@ -1,5 +1,5 @@
 """Kit for agent.conversation/v1: the second turn needs the first."""
-from nullius.standard.jsonl import serve
+from nullius.standard.protocols.jsonl import serve
 
 CODES = {"c1": "heron-42", "c2": "maple-17"}
 
