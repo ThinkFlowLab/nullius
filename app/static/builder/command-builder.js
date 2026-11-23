@@ -770,6 +770,60 @@
     return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="nb-inlinebutton" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.label) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>`
       + `<div class="nb-pick-grid std-optgrid">${own.join('')}</div>` + (yours.length ? `<div class="nb-pick-grid std-optgrid std-yoursets" aria-label="Your task sets">${yours.join('')}</div>` : '');
   }
+  // A chosen dataset's plan begun on a part: all of it, or specific tasks, ticked in the list of the plan's tasks (the
+  // dataset's, or the set's it runs; pickTasks), the rest planned and run later from the job's page. A recipe from
+  // before holds a number or a task set: shown chosen, as it is, until another choice.
+  function startChoice(rec, b, x, u) {
+    const on = (rec.start_with || {})[x.id] || '', ids = Array.isArray(on) ? on : null, data = ` data-of="${esc(x.id)}"`;
+    const set = typeof on === 'string' && on.startsWith('set:') ? (x.sets || []).find(s => s.name === on.slice(4).split('@')[0]) : null;
+    const older = typeof on === 'string' && on ? (/^\d+$/.test(on) ? 'The first ' + on : set ? set.label : on.slice(4)) : '';
+    const tiles = [tile({attr: 'std-start', key: '', data, on: !on, title: 'All of it'}),
+      tile({attr: 'std-start-pick', key: x.id, on: !!ids, title: 'Specific ' + u.nouns, meta: ids ? ids.length + ' chosen' : ''}),
+      ...(older ? [tile({attr: 'std-start', key: on, data, on: true, title: older})] : [])];
+    return `<div class="nb-sectionhead std-sethead"><h3>${C.datasetsOf(rec).length > 1 ? esc(x.label) + ': start with' : 'Start with'}</h3>`
+      + (ids ? `<button type="button" class="nb-inlinebutton" data-std-start-pick="${esc(x.id)}">Change the ${esc(u.nouns)} <span aria-hidden="true">→</span></button>` : '')
+      + `</div><div class="nb-pick-grid std-optgrid">${tiles.join('')}</div>`;
+  }
+  // Specific tasks: the tasks page's list (catalogue/tasks.js) in a dialog, of the dataset's tasks at the recipe's
+  // version, or of the set it runs; each tick goes into the recipe at once. Closed with none ticked: all of it.
+  function pickTasks(id) {
+    const rec = r(), b = C.standardBench(rec), x = b && b.datasets.find(d => d.id === id), dialog = document.getElementById('nb-tasks');
+    if (!x || !dialog || !globalThis.nulliusTasks) return;
+    const u = unitsOf(rec), plan = ((rec.task_sets || {})[id] || '').split('@')[0], set = plan && (x.sets || []).find(s => s.name === plan);
+    const page = document.getElementById('nb-tasks-list').content.firstElementChild.cloneNode(true);
+    const base = `/benchmarks/${encodeURIComponent(b.key)}/tasks/${encodeURIComponent(id)}`;
+    Object.assign(page.dataset, {listing: base + '/listing', prepare: base + '/prepare', rows: base + '/rows', csrf: schema.csrf || '',
+      local: schema.local ? 'true' : 'false', nouns: u.nouns, version: b.version || '', within: set ? set.name : '',
+      limit: rec.limit || '', options: JSON.stringify({...(rec.model_choice === 'leaderboard' ? (b.leaderboard || {}).bench_options : {}), ...rec.bench_options})});
+    document.getElementById('nb-tasks-body').replaceChildren(page);
+    document.getElementById('nb-tasks-title').textContent = 'Start with: ' + (set ? set.label : x.label);
+    const was = (rec.start_with || {})[id];
+    globalThis.nulliusTasks(page, {chosen: Array.isArray(was) ? was : [], onChange: ids => { C.setStartWith(r(), id, ids); }});
+    if (!Array.isArray(was)) C.setStartWith(rec, id, []);
+    const close = () => {
+      const now = (r().start_with || {})[id];
+      if (Array.isArray(now) && !now.length) C.setStartWith(r(), id, '');
+      dialog.close(); renderForm(); refreshPlan();
+    };
+    document.getElementById('nb-tasks-done').onclick = close;
+    document.getElementById('nb-tasks-close').onclick = close;
+    dialog.oncancel = e => { e.preventDefault(); close(); };
+    dialog.showModal();
+  }
+  // the tasks ticked that the plan no longer holds (a lower number, another option): unticked, said once
+  function dropStartTasks(rec, errors) {
+    let changed = false;
+    for (const e of errors || []) {
+      const chosen = (rec.start_with || {})[e.dataset];
+      if (!e.dropped || !Array.isArray(chosen)) continue;
+      const gone = chosen.filter(id => e.dropped.includes(id)), u = unitsOf(rec);
+      if (!gone.length) continue;
+      C.setStartWith(rec, e.dataset, chosen.filter(id => !e.dropped.includes(id)));
+      window.nulliusNotify?.(`Unticked ${gone.length} ${gone.length === 1 ? u.noun : u.nouns} no longer in the plan: ${gone.join(', ')}.`);
+      changed = true;
+    }
+    return changed;
+  }
   function standardForm(rec) {
     const st = C.standard(), b = C.standardBench(rec);
     if (!b) return note('Choose a benchmark first', button('Benchmark step', `data-step="${S.benchmark}"`, 'nb-inlinebutton'));
@@ -783,7 +837,7 @@
       return `<div class="nb-sectionhead"><h2>Which datasets?</h2></div>`
         + `<div class="nb-pick-grid std-optgrid">${shown.map(x => tile({attr: 'std-dataset', key: x.id, on: on(x), title: x.label,
           tip: x.summary || '', meta: x.units ? x.units + ' ' + u.nouns : '', foot: datasetChecks(b, x)})).join('')}</div>`
-        + b.datasets.filter(x => chosen.includes(x.id)).map(x => nested ? familyChoice(rec, b, x, u) : taskSetChoice(rec, b, x, u)).join('')
+        + b.datasets.filter(x => chosen.includes(x.id)).map(x => (nested ? familyChoice(rec, b, x, u) : taskSetChoice(rec, b, x, u)) + startChoice(rec, b, x, u)).join('')
         + benchOptions(rec, b, 'dataset') + credentialWarnings(b, b.datasets.filter(x => chosen.includes(x.id)));
     }
     if (step === S.agent) {
@@ -910,6 +964,10 @@
     const rec = r(), key = JSON.stringify(rec);
     if (key === runnerKey) return;
     runnerKey = key;
+    if (Object.values(rec.start_with || {}).some(Array.isArray)) {
+      runnerOut = {errors: [{step: S.dataset, message: 'Checking the tasks ticked.'}], notes: [], review: []};
+      if (step === REVIEW) renderForm();
+    }
     clearTimeout(runnerTimer);
     runnerTimer = setTimeout(async () => {
       let out;
@@ -921,8 +979,9 @@
       runnerServed = accepted.served;
       if (step === S.model) syncServed();
       if (!accepted.current) return;
+      const dropped = dropStartTasks(r(), out.errors);
       runnerOut = out;
-      if (step === REVIEW) renderForm();
+      if (step === REVIEW || dropped && step === S.dataset) renderForm();
       refreshPlan();
     }, 120);
   }
@@ -1101,7 +1160,7 @@
     if(blocked)return `<div class="nb-runbox" id="nb-runbox"><div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run" disabled data-held title="'+esc(blocked)+'"','nb-button nb-primary')}</div><p class="nb-note nb-error">${esc(blocked)} ${button('Model step','data-step="'+S.model+'"','nb-inlinebutton')} · ${button('Settings','data-href="/settings#'+C.needsOf(C.choiceOf(rec))+'"','nb-inlinebutton')}</p></div>`;
     if(C.isStandard(rec)){
       const out=runnerOut||{errors:[{message:'Compiling the recipe…'}]}, noun=C.isStandard(rec)?unitsOf(rec).noun:'item';
-      return `<div class="nb-runbox" id="nb-runbox">${(out.errors||[]).length?(runnerOut?[]:out.errors).map(e=>`<p class="nb-note">${esc(e.message)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"','nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(out.confirm?`<p class="nb-note nb-nolimit">No ${esc(noun)} limit: ${esc(out.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
+      return `<div class="nb-runbox" id="nb-runbox">${(out.errors||[]).length?(runnerOut?[]:out.errors).map(e=>`<p class="nb-note">${esc(e.message)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"','nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(out.confirm?`<p class="nb-note nb-nolimit">${/^Run /.test(out.confirm)?`No ${esc(noun)} limit: `+esc(out.confirm.replace(/^Run /,'').replace(/\?$/,'')):esc(out.confirm.replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
     }
     const plan=C.runnable(rec), listed=C.compile(rec).errors.map(e=>e.message);   // the red box's, not said twice
     return `<div class="nb-runbox" id="nb-runbox">${plan.errors.length?plan.errors.filter(e=>!listed.includes(e)).map(e=>`<p class="nb-note">${esc(e)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"'+(C.validate(rec).errors.length?' disabled data-held':''),'nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(plan.confirm?`<p class="nb-note nb-nolimit">No task limit: ${esc(plan.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
@@ -1190,10 +1249,12 @@
     else if(d.runner){toRunner(d.runner,C.benchKey(r()));}
     else if(d.stdBench){C.setStandardBenchmark(r(),d.stdBench);}
     else if(d.stdOther){const rec=r(),c=C.chosenOf(rec);rec.others=c.includes(d.stdOther)?c.filter(k=>k!==d.stdOther):[...c,d.stdOther];delete rec.other;if(rec.options)delete rec.options[d.stdOther];}   // a check
-    else if(d.stdDataset){const rec=r(),c=C.datasetsOf(rec),b=C.standardBench(rec),mine=c.filter(k=>C.wholeOf(b,k)===d.stdDataset);rec.datasets=mine.length?(c.length>mine.length?c.filter(k=>!mine.includes(k)):c):[...c,d.stdDataset];delete rec.dataset;C.keepTaskSets(rec);}
+    else if(d.stdDataset){const rec=r(),c=C.datasetsOf(rec),b=C.standardBench(rec),mine=c.filter(k=>C.wholeOf(b,k)===d.stdDataset);rec.datasets=mine.length?(c.length>mine.length?c.filter(k=>!mine.includes(k)):c):[...c,d.stdDataset];delete rec.dataset;C.keepTaskSets(rec);C.keepStartWith(rec);}
     else if(d.stdFamily!==undefined){C.swapDataset(r(),d.was,d.stdFamily);}
     else if(d.stdFamilySet!==undefined){C.swapDataset(r(),d.was,d.in);C.setTaskSet(r(),d.in,d.stdFamilySet);}
     else if(d.stdTaskset!==undefined){C.setTaskSet(r(),d.of,d.stdTaskset);}
+    else if(d.stdStart!==undefined){C.setStartWith(r(),d.of,d.stdStart);}
+    else if(d.stdStartPick!==undefined){pickTasks(d.stdStartPick);return;}
     // the standard's machines: each a toggle, one at least; several split the run into shards
     else if(d.stdWhere){const rec=r(),list=C.whereList(rec),on=list.includes(d.stdWhere),next=on?list.filter(w=>w!==d.stdWhere):[...list,d.stdWhere];if(!next.length)return;rec.where=next.length>1?next:next[0];}
     // hosts or Boat sandboxes: a sandbox run starts from this machine alone

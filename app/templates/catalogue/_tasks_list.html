@@ -1,0 +1,28 @@
+{#- A dataset's tasks as a list to search and tick: the tasks page's, and the run builder's when it starts on specific
+    tasks (static/catalogue/tasks.js mounts either). -#}
+{% macro tasks_list(nouns) %}
+    <div class="tasks-bar">
+      <label class="st-search tasks-find"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="tasks-q" placeholder="Words of an id, a title or a text" aria-label="Search the {{ nouns }}" autocomplete="off" spellcheck="false"></label>
+      <div class="tasks-cats" id="tasks-cats"></div>
+    </div>
+    <div class="tasks-sel" role="group" aria-label="Chosen {{ nouns }}">
+      <b id="tasks-chosen">0 chosen</b>
+      <button type="button" class="btn ghost sm" id="tasks-match" hidden>Select the matches</button>
+      <button type="button" class="btn ghost sm" id="tasks-show" aria-pressed="false">Show selected</button>
+      <details class="tasks-paste"><summary class="btn ghost sm">Paste ids</summary>
+        <div class="tasks-paste-box"><textarea id="tasks-paste" rows="4" placeholder="One id a line, or separated by spaces or commas" spellcheck="false"></textarea>
+          <button type="button" class="btn sm" id="tasks-paste-add">Add</button></div>
+      </details>
+      <button type="button" class="btn ghost sm" id="tasks-clear">Clear</button>
+    </div>
+    <p class="tasks-count" id="tasks-count" aria-live="polite"></p>
+    <div class="tasks-scroll">
+      <table class="grid tasks-table" id="tasks-table" hidden>
+        <thead><tr><th scope="col" class="tasks-tick"><span class="sr">Chosen</span></th><th scope="col">Task</th><th scope="col" id="tasks-cat-head">Category</th></tr></thead>
+        <tbody id="tasks-rows"></tbody>
+      </table>
+    </div>
+    <nav class="tasks-pages" id="tasks-pages" aria-label="Pages" hidden>
+      <button type="button" class="btn ghost sm" data-page="prev">Previous</button><span id="tasks-page-of"></span><button type="button" class="btn ghost sm" data-page="next">Next</button>
+    </nav>
+{% endmacro %}

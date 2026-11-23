@@ -2,22 +2,30 @@
 // values (web/catalogue.py, standard/runner/units.py); this page keeps the chosen ids alone. The listing is asked for once the
 // page has loaded: in the cache, it shows at once; one that can be made lightly is started out of the request and
 // the page asks again until it is ready; one that needs the benchmark's full environment is never started here.
+// The run builder mounts the same list in a dialog (nulliusTasks, data-manual): the tasks of a dataset or of one of
+// its sets (data-within), its ticks given back through onChange.
 (() => {
-  const page = document.getElementById('tasks-page');
-  if (!page) return;
-  const $ = id => document.getElementById(id), d = page.dataset, nouns = d.nouns || 'tasks';
+function mount(page, opts = {}) {
+  const $ = id => page.querySelector('#' + id), d = page.dataset, nouns = d.nouns || 'tasks';
   const writable = d.writable === 'true';
-  const chosen = new Set(JSON.parse(($('tasks-chosen-ids') || {}).textContent || '[]'));
+  const chosen = new Set(opts.chosen || JSON.parse(($('tasks-chosen-ids') || {}).textContent || '[]'));
+  const changed = () => opts.onChange && opts.onChange([...chosen]);
   // opened from a set: its members first; Show all browses the dataset
   const st = {q: '', cats: {}, page: 1, showing: !!d.set && chosen.size > 0, ready: false, total: 0, pages: 1};
   const label = field => field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   // the listing at the version the page shows (data-version, empty for the benchmark's default)
-  const at = url => d.version ? url + (url.includes('?') ? '&' : '?') + 'version=' + encodeURIComponent(d.version) : url;
+  const at = url => {
+    const params = new URLSearchParams();
+    if (d.version) params.set('version', d.version);
+    if (d.options) params.set('options', d.options);
+    return String(params) ? url + (url.includes('?') ? '&' : '?') + params : url;
+  };
   const post = (url, body) => nulliusFetch(at(url), {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': d.csrf}, body: JSON.stringify(body)});
   const count = n => `${n.toLocaleString('en-US')} ${n === 1 ? nouns.replace(/s$/, '') : nouns}`;
 
   function say(text, warn) {
+    if (page.isConnected === false) return;
     const el = $('tasks-state'); el.hidden = !text; el.textContent = text || ''; el.classList.toggle('tasks-warn', !!warn);
   }
   function chosenLine() {
@@ -43,7 +51,7 @@
     const fields = [...new Set(tasks.flatMap(t => Object.keys(t.categories || {})))];
     $('tasks-cat-head').hidden = !fields.length;
     $('tasks-cat-head').textContent = fields.map(label).join(' · ');
-    document.querySelectorAll('#tasks-rows td.tasks-catcol').forEach(td => { td.hidden = !fields.length; });
+    page.querySelectorAll('#tasks-rows td.tasks-catcol').forEach(td => { td.hidden = !fields.length; });
   }
   function facets(cats) {
     $('tasks-cats').innerHTML = Object.entries(cats || {}).map(([field, values]) =>
@@ -64,6 +72,9 @@
     Object.entries(st.cats).forEach(([f, vs]) => vs.forEach(v => u.append('cat', `${f}=${v}`)));
     Object.entries(extra || {}).forEach(([k, v]) => u.set(k, v));
     if (d.version) u.set('version', d.version);
+    if (d.within) u.set('within', d.within);
+    if (d.options) u.set('options', d.options);
+    if (d.limit) u.set('limit', d.limit);
     return d.listing + '?' + u;
   }
   let polling = null, asked = 0;
@@ -77,13 +88,18 @@
     clearTimeout(polling);
     if (!got.preparing && d.local !== 'true') return say('The list is prepared from a browser on the application host. Ids can still be pasted.', true);
     if (!got.preparing && !asked++)
-      return post(d.prepare, {}).then(r => r.json()).then(g => { say(g.say || got.say); polling = setTimeout(load, 2500); })
+      return post(d.prepare, {}).then(r => r.json()).then(g => {
+        if (page.isConnected === false) return;
+        say(g.say || got.say); polling = setTimeout(load, 2500);
+      })
         .catch(() => say('The list could not be started. Reload the page.', true));
     polling = setTimeout(load, 2500);
   }
   async function load() {
+    if (page.isConnected === false) return;            // a list the builder's dialog has since replaced asks nothing more
     let got;
     try { got = await (await nulliusFetch(query({page: st.page}))).json(); } catch { return say('The list could not be read. Reload the page.', true); }
+    if (page.isConnected === false) return;
     if (!got.ok) return say(got.error || 'The list could not be read.', true);
     if (!got.ready) { $('tasks-count').textContent = ''; draw([...chosen].map(id => ({id}))); pager(); chosenLine(); return notReady(got); }
     say('');
@@ -101,6 +117,7 @@
     const ids = [...chosen];
     let got = {tasks: ids.map(id => ({id})), unknown: []};
     try { got = await (await post(d.rows, {units: ids})).json(); } catch { /* the ids alone */ }
+    if (page.isConnected === false) return;
     const unknown = new Set(got.unknown || []);
     draw([...got.tasks, ...[...unknown].map(id => ({id, unknown: true}))]);
     $('tasks-count').textContent = `${count(ids.length)} chosen` + (unknown.size ? ` · ${unknown.size} not in the listing` : '');
@@ -130,7 +147,7 @@
   $('tasks-rows').addEventListener('change', e => {
     const box = e.target.closest('input[type=checkbox]'); if (!box) return;
     const id = box.closest('tr').dataset.id;
-    box.checked ? chosen.add(id) : chosen.delete(id); chosenLine();
+    box.checked ? chosen.add(id) : chosen.delete(id); chosenLine(); changed();
   });
   $('tasks-pages').addEventListener('click', e => {
     const b = e.target.closest('[data-page]'); if (!b) return;
@@ -141,22 +158,24 @@
   });
   $('tasks-match')?.addEventListener('click', async () => {
     const got = await (await nulliusFetch(query({ids: 1}))).json();
-    if (got.ok && got.ready) { got.ids.forEach(id => chosen.add(id)); load(); }
+    if (page.isConnected === false) return;
+    if (got.ok && got.ready) { got.ids.forEach(id => chosen.add(id)); changed(); load(); }
   });
-  $('tasks-clear')?.addEventListener('click', () => { chosen.clear(); load(); });
+  $('tasks-clear')?.addEventListener('click', () => { chosen.clear(); changed(); load(); });
   $('tasks-paste-add')?.addEventListener('click', async () => {
     const ids = [...new Set($('tasks-paste').value.split(/[\s,]+/).map(s => s.trim()).filter(s => s && !s.startsWith('#')))];
-    ids.forEach(id => chosen.add(id));
+    ids.forEach(id => chosen.add(id)); changed();
     $('tasks-paste').value = ''; $('tasks-paste').closest('details').open = false;
     window.nulliusNotify?.(`${count(ids.length)} added.`);
     load();
   });
 
-  const msg = (text, bad) => { const el = $('tasks-msg'); if (el) { el.textContent = text; el.classList.toggle('bad', !!bad); } };
+  const msg = (text, bad) => { const el = $('tasks-msg'); if (el && page.isConnected !== false) { el.textContent = text; el.classList.toggle('bad', !!bad); } };
   async function save(body) {
     if (!chosen.size) return msg('Tick at least one task.', true);
     let got;
     try { got = await (await post(d.save, {...body, units: [...chosen]})).json(); } catch { return msg('Not saved: the server did not answer.', true); }
+    if (page.isConnected === false) return;
     if (!got.ok) return msg(got.error, true);
     location.href = got.open;
   }
@@ -166,7 +185,7 @@
       ...(d.version ? {version: d.version} : {})});
   });
   // the count and the way to save stay in view under the rows; the bar steps aside once the form is in view
-  const bar = $('tasks-savebar'), form = document.querySelector('.tasks-save');
+  const bar = $('tasks-savebar'), form = page.querySelector('.tasks-save');
   if (bar && form && 'IntersectionObserver' in window)
     new IntersectionObserver(([e]) => bar.classList.toggle('tasks-gone', e.isIntersecting)).observe(form);
   $('tasks-to-save')?.addEventListener('click', e => {
@@ -176,4 +195,9 @@
   setShowing(st.showing);
   chosenLine();
   load();
+  return {chosen};
+}
+globalThis.nulliusTasks = mount;
+const page = document.getElementById('tasks-page');
+if (page && !page.dataset.manual) mount(page, {chosen: JSON.parse(document.getElementById('tasks-chosen-ids')?.textContent || '[]')});
 })();

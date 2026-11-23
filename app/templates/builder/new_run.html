@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from '_page.html' import page_head %}
+{% from 'catalogue/_tasks_list.html' import tasks_list %}
 {% block title %}Run builder — Nullius{% endblock %}
 {% block crumb %}/ run builder{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{# the Agent step's cards #}
@@ -34,6 +35,16 @@
       <div class="nb-dialogactions"><button class="nb-button" id="nb-save-cancel" type="button">Cancel</button><button class="nb-button nb-primary" id="nb-save-submit" type="submit">Save recipe</button></div>
     </form>
   </dialog>
+  {#- Start with specific tasks: the tasks page's list of the plan's tasks, mounted afresh each time (catalogue/tasks.js) -#}
+  <dialog id="nb-tasks" class="nb-dialog nb-tasks-dialog" aria-labelledby="nb-tasks-title">
+    <div class="nb-dialoghead"><h2 id="nb-tasks-title">Start with</h2><button type="button" class="nb-dialogclose" id="nb-tasks-close" aria-label="Close">×</button></div>
+    <div id="nb-tasks-body"></div>
+    <div class="nb-dialogactions"><button class="nb-button nb-primary" id="nb-tasks-done" type="button">Done</button></div>
+  </dialog>
+  <template id="nb-tasks-list"><article class="tasks-page nb-tasks-page" id="tasks-page" data-manual="true" data-writable="true">
+    <p class="bench-blocked tasks-state" id="tasks-state" role="status" hidden></p>
+    <section class="bench-section tasks-browse" aria-label="Tasks">{{ tasks_list('tasks') }}</section>
+  </article></template>
   <nav class="nb-steps" aria-label="Recipe sections"></nav>
   <div class="nb-layout">
     <section class="nb-editor" aria-label="Recipe configuration">
@@ -53,4 +64,5 @@
 <script src="{{ url_for('static', filename='builder/command-builder-core.js') }}"></script>
 <script src="{{ url_for('static', filename='builder/model-picker.js') }}"></script>
 <script src="{{ url_for('static', filename='builder/command-builder.js') }}"></script>
+<script src="{{ url_for('static', filename='catalogue/tasks.js') }}"></script>
 {% endblock %}

@@ -61,10 +61,10 @@ class TheRecipe(Scratch):
                 dataset_row = next(r for r in out["review"] if r[1] == "Dataset")
                 self.assertEqual(dataset_row[2], f"all · task set Dev set · {n} tasks")
                 self.assertNotIn("revision", json.dumps(out["review"]))
-                self.assertTrue(next(r for r in out["review"] if r[1] == "Scope")[2].startswith(f"all {n} tasks"))
+                self.assertTrue(next(r for r in out["review"] if r[1] == "Scope")[2].startswith(f"{n} planned, {n} to begin"))
                 self.assertEqual(out["confirm"], "")                 # the set is the choice of tasks: Run asks nothing more
         out = self.compile(task_sets={"all": "dev-set"}, limit=2, where=["local", "me@bench"])  # a shard's limit is its own
-        self.assertTrue(next(r for r in out["review"] if r[1] == "Scope")[2].startswith("first 2 tasks of each shard"))
+        self.assertTrue(next(r for r in out["review"] if r[1] == "Scope")[2].startswith("2 planned, 2 to begin of each shard"))
 
     def test_a_set_of_another_benchmark_or_dataset_or_a_dataset_not_chosen_is_refused(self):
         sets.create(self.memo, "theirs", dataset=self.memo["datasets"][0]["id"], units=["x"])

@@ -161,6 +161,7 @@ HumanEval/12
 | The end | Finished, not stopped: "N of M planned tasks run", and the command for the rest |
 | The record | `config.json`: `datasets[0].n_tasks`, the plan's size; `standard.start_with`, how the part was named (a count, a file, a set; nothing more for ids) and its units. The feed queues every planned trial |
 | The rates | Over the tasks run; the job's page and `runs show` say how many of the plan have run |
+| The builder | Dataset step, **Start with**: all of it, or specific tasks ticked in the tasks list (written as `ids:`). A number, a file and `set:NAME` are given on the command line |
 
 ## Serving providers
 

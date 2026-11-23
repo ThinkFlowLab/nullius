@@ -170,12 +170,13 @@
     if (!b) return r;
     const was = standardBench(r), same = !!was && was.key === b.key;     // another version of it keeps the choices
     if (!same) { r.model_choice = 'any'; delete r.served_by; }
-    if (was !== b) delete r.task_sets;
+    if (was !== b) { delete r.task_sets; delete r.start_with; }
     r.benchmark = key;
     const kept = same ? datasetsOf(r).filter(id => b.datasets.some(d => d.id === id)) : [];
     r.datasets = kept.length ? kept : [b.datasets[0].id];
     delete r.dataset;
     keepTaskSets(r);
+    keepStartWith(r);
     const fitting = standardOthers(r).filter(o => !o.why.length);
     const keys = fitting.map(o => o.key), first = fitting.find(o => o.own) || fitting.find(o => o.setup && o.key === 'original')
       || fitting.find(o => !o.control && !o.setup);
@@ -191,26 +192,44 @@
   }
   // A benchmark whose lists name the list they are cut from (``subset_of``): the dataset a list is drawn under, its
   // own id for one cut from none. A choice of another list of that dataset takes the place of the one chosen, its task
-  // set dropped with it.
+  // set and its start dropped with it.
   const nestedDatasets = b => !!b && (b.datasets || []).some(d => d.subset_of);
   const wholeOf = (b, id) => ((b && b.datasets || []).find(d => d.id === id) || {}).subset_of || id;
   function swapDataset(r, was, now) {
     r.datasets = [...new Set(datasetsOf(r).map(id => id === was ? now : id))];
     delete r.dataset;
-    if (was !== now) { if (r.task_sets) delete r.task_sets[was]; }
+    if (was !== now) { if (r.task_sets) delete r.task_sets[was]; if (r.start_with) delete r.start_with[was]; }
     else if (r.task_sets) delete r.task_sets[now];
-    return keepTaskSets(r);
+    keepTaskSets(r);
+    return keepStartWith(r);
   }
   // A chosen dataset's task set, NAME, run in place of all its tasks (recipe.py: task_sets, {dataset: NAME});
   // '' for all of them. A dataset no longer chosen keeps none.
   function setTaskSet(r, dataset, ref) {
     r.task_sets = {...(r.task_sets || {})};
     if (ref) r.task_sets[dataset] = ref; else delete r.task_sets[dataset];
+    // tasks ticked to start with were ticked in the plan's list: another plan asks for them again
+    if (Array.isArray((r.start_with || {})[dataset])) setStartWith(r, dataset, '');
     return keepTaskSets(r);
   }
   function keepTaskSets(r) {
     const on = datasetsOf(r), kept = Object.entries(r.task_sets || {}).filter(([k, v]) => on.includes(k) && typeof v === 'string' && v);
     if (kept.length) r.task_sets = Object.fromEntries(kept); else delete r.task_sets;
+    return r;
+  }
+  // A chosen dataset's plan begun on a part (recipe.py: start_with, {dataset: [ID, ...]}): '' for all of it, the ids
+  // of the tasks ticked (an empty list while none is), or from a recipe before, N or set:NAME; the rest run later in
+  // the job. A dataset no longer chosen keeps none.
+  function setStartWith(r, dataset, value) {
+    r.start_with = {...(r.start_with || {})};
+    if (Array.isArray(value)) r.start_with[dataset] = value.filter(v => typeof v === 'string' && v);
+    else if (value) r.start_with[dataset] = String(value); else delete r.start_with[dataset];
+    return keepStartWith(r);
+  }
+  function keepStartWith(r) {
+    const on = datasetsOf(r), kept = Object.entries(r.start_with || {}).filter(([k, v]) => on.includes(k)
+      && (typeof v === 'string' && v || Array.isArray(v) && v.every(i => typeof i === 'string')));
+    if (kept.length) r.start_with = Object.fromEntries(kept); else delete r.start_with;
     return r;
   }
   // A saved standard recipe read back: known fields only, each of its type.
@@ -220,6 +239,7 @@
     const sets = Array.isArray(raw.datasets) ? raw.datasets.filter(k => typeof k === 'string') : typeof raw.dataset === 'string' && raw.dataset ? [raw.dataset] : null;
     if (sets && sets.length) r.datasets = [...new Set(sets)];
     if (raw.task_sets && typeof raw.task_sets === 'object' && !Array.isArray(raw.task_sets)) { r.task_sets = {...raw.task_sets}; keepTaskSets(r); }
+    if (raw.start_with && typeof raw.start_with === 'object' && !Array.isArray(raw.start_with)) { r.start_with = {...raw.start_with}; keepStartWith(r); }
     const picked = Array.isArray(raw.others) ? raw.others.filter(k => typeof k === 'string') : typeof raw.other === 'string' && raw.other ? [raw.other] : null;
     if (picked) r.others = [...new Set(picked)];
     if (Array.isArray(raw.where) && raw.where.length && raw.where.every(w => typeof w === 'string')) r.where = raw.where.length > 1 ? [...raw.where] : raw.where[0];
@@ -904,5 +924,5 @@
         at: String(d.at || ''), saved: typeof d.saved === 'string' ? d.saved : ''};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
-  return {setTaskSet,keepTaskSets,nestedDatasets,wholeOf,swapDataset,STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBase,standardBench,standardOthers,ownAgentsOf,ownChosen,runsOf,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
+  return {setTaskSet,keepTaskSets,setStartWith,keepStartWith,nestedDatasets,wholeOf,swapDataset,STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBase,standardBench,standardOthers,ownAgentsOf,ownChosen,runsOf,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
 });

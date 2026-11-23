@@ -96,6 +96,14 @@ class Scratch(unittest.TestCase):
 
 
 class Search(Scratch):
+    def test_the_plan_limit_follows_the_set_and_precedes_search_and_paging(self):
+        got = units.find(self.b, "all", {"mode": "short"}, within=["t007", "t019", "t024"], limit=1)
+        self.assertEqual((self.ids(got), got["of"]), (["t007"], 1))
+        self.assertEqual(units.find(self.b, "all", limit=1, search="t007")["tasks"], [])
+        got = units.find(self.b, "all", limit=101, page=2)
+        self.assertEqual((self.ids(got), got["of"]), (["t100"], 101))
+        self.assertEqual(units.find(self.b, "all", {"mode": "short"}, limit=100)["of"], 20)
+
     def test_a_word_of_an_id_a_title_or_a_text_finds_its_tasks_whatever_the_case(self):
         for search, want in (("t042", ["t042"]), ("SPREADSHEET", ["t007"]), ("quokka folder", ["t011"]),
                              ("number 24", ["t024", "t124", "t224"] + [f"t{i}" for i in range(240, 250)])):
