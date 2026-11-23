@@ -229,15 +229,37 @@ class EndedByTest(unittest.TestCase):
         return parse.parse_trial("j", d)
 
     def test_each_way_a_unit_can_end(self):
+        """Its known ends by their labels. An end the pages have no label for is said as the benchmark's detail wrote
+        it, before a cut after the benchmark's end, kept whole with a short form past ENDED_CHARS; a value that is
+        not text is none."""
+        long = "x" * (parse.ENDED_CHARS + 1)
         cases = [((None, "turn"), "agent", "Agent"), ((None, "done"), "done", "Done"), ((None, "fail"), "fail", "Fail"),
                  ((None, "steps"), "steps", "Step limit"), (("time", "turn"), "time", "Time limit"),
                  (("calls", "turn"), "calls", "Call cap"), (("end", "steps"), "steps", "Step limit"),
-                 (("end", None), "end", "Task end"), ((None, None), "", "")]
+                 (("end", None), "end", "Task end"), ((None, None), "", ""),
+                 ((None, "guard"), "guard", "guard"), (("end", "guard"), "guard", "guard"), ((None, " its own "), "its own", "its own"),
+                 (("time", "guard"), "time", "Time limit"), ((None, long), long, long), (("end", long), long, long),
+                 ((None, "   "), "", ""), ((None, 7), "", ""), ((None, ["guard"]), "", "")]
         for (cut, ended), by, label in cases:
-            t = self.trial(cut, ended)
-            self.assertEqual((t.ended_by, t.ended_label), (by, label), (cut, ended))
+            with self.subTest(cut=cut, ended=ended):
+                t = self.trial(cut, ended)
+                self.assertEqual((t.ended_by, t.ended_label), (by, label))
+                self.assertEqual(t.ended_preview, long[:parse.ENDED_CHARS] + "…" if label == long else label)
         self.assertEqual(self.trial(ended="done", standard=False).ended_by, "")     # not a run of the standard
         self.assertEqual(self.trial(scored=False).ended_by, "")                     # no score to read
+
+    def test_an_unknown_end_is_redacted_before_it_is_cached(self):
+        from nullius import workspace
+
+        secret = "sk-" + "example123456789012345"
+        trial = self.trial(ended=secret)
+        self.assertEqual(trial.ended_by, "[REDACTED]")
+        job = parse.Job("j", trial.dir, "model", "example", 1, None, None, [trial])
+        ws = workspace.Workspace("test", "Test", [], "", "", os.path.join(trial.dir, "workspace"))
+        path = os.path.join(ws.jobs_dir, "cached.json")
+        workspace._write_cache(ws, path, "sig", "head", job)
+        with open(path) as handle:
+            self.assertEqual(json.load(handle)["job"]["trials"][0]["ended_by"], "[REDACTED]")
 
     def test_score_links_are_not_followed(self):
         for part in ("score", "verifier", "trial"):

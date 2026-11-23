@@ -431,6 +431,7 @@
    "dur_verifier",
    "ended_by",
    "ended_label",
+   "ended_preview",
    "env_type",
    "exception_message",
    "exception_type",

@@ -162,18 +162,21 @@ class TrialHead(unittest.TestCase):
 
     def test_what_ended_the_work_is_beside_the_outcome_on_the_trial_and_the_jobs_table(self):
         """The record's cut, else the score's own end: by its name beside the outcome, on the trial's page and in
-        its row of the job's table; nothing for a trial that says neither."""
+        its row of the job's table; a benchmark's own word for it past 40 characters in a short form, the whole
+        text in its tooltip; nothing for a trial that says neither."""
         root = os.path.join(self.tmp.name, "parts-arm")
         shutil.copytree(NATIVE / "parts-arm", root)
         path = os.path.join(root, "t1", "result.json")
         score = os.path.join(root, "t1", "verifier", "score.json")
         badge = re.compile(r'<span class="[^"]*ended-by" title="([^"]*)">([^<]*)</span>')
+        long = 'launcher stopped after the window focus changed <"again">'
         with open(path) as f:
             res = json.load(f)
-        with open(score, "w") as f:
-            json.dump({"reward": 1.0, "detail": {"steps": 60, "steps_limit": 60, "ended": "steps"}}, f)
-        for cut, label in ((None, "Step limit"), ("time", "Time limit"), ("calls", "Call cap")):
-            with self.subTest(cut=cut):
+        for cut, ended, label in ((None, "steps", "Step limit"), ("time", "steps", "Time limit"), ("calls", "steps", "Call cap"),
+                                  (None, long, long[:parse.ENDED_CHARS] + "…")):
+            with self.subTest(cut=cut, ended=ended):
+                with open(score, "w") as f:
+                    json.dump({"reward": 1.0, "detail": {"steps": 60, "steps_limit": 60, "ended": ended}}, f)
                 with open(path, "w") as f:
                     json.dump(dict(res, standard=dict(res.get("standard") or {}, **({"cut": cut} if cut else {}))), f)
                 job = parse.parse_job(root)
@@ -182,10 +185,15 @@ class TrialHead(unittest.TestCase):
                     table = self.client.get(f"/job/{job.job_id}")
                 self.addCleanup(trial.close)
                 self.addCleanup(table.close)
-                head = trial.get_data(as_text=True).split('<div class="page-head-sub">', 1)[1].split("</div>", 1)[0]
-                row = table.get_data(as_text=True).split('data-trial="t1"', 1)[1].split("</tr>", 1)[0]
-                for part in (head, row):
-                    self.assertEqual(unescape(badge.search(part)[2]), label)
+                pages = trial.get_data(as_text=True), table.get_data(as_text=True)
+                head = pages[0].split('<div class="page-head-sub">', 1)[1].split("</div>", 1)[0]
+                row = pages[1].split('data-trial="t1"', 1)[1].split("</tr>", 1)[0]
+                for page, part in zip(pages, (head, row)):
+                    said = badge.search(part)
+                    self.assertEqual(unescape(said[2]), label)
+                    if ended == long:
+                        self.assertEqual(unescape(said[1]), long)
+                        self.assertNotIn('<"again">', page)
         os.remove(score)
         with open(path, "w") as f:
             json.dump(dict(res, standard=dict(res.get("standard") or {})), f)

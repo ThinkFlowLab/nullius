@@ -438,7 +438,7 @@
         <td><a class="task" href="{{ url }}" title="{{ t.task_name }}">{{ task_labels[t.trial_name] }}</a></td>
         {%- endif %}
         <td><span class="oc oc-{{ t.outcome }}"><i></i>{{ t.outcome_label }}</span>
-          {%- if t.ended_by %} <span class="badge ended-by" title="What ended the agent's work">{{ t.ended_label }}</span>{% endif %}
+          {%- if t.ended_by %} <span class="badge ended-by" title="{% if t.ended_label != t.ended_preview %}{{ t.ended_label }}{% else %}What ended the agent's work{% endif %}">{{ t.ended_preview }}</span>{% endif %}
           {%- if t.score is not none %} <span class="badge trial-score" title="{% if t.n_parts %}The mean score of its {{ t.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it">{{ '%.2f'|format(t.score) }}</span>{% endif %}
           {%- if t.n_rate_limited_retries %} <span class="badge rate-limits" title="{{ t.n_rate_limited_retries }} rate-limited call{{ '' if t.n_rate_limited_retries == 1 else 's' }} retried by the agent's SDK (agent/gateway.log) — the run survived them, so the outcome does not show them">429 ×{{ t.n_rate_limited_retries }}</span>{% endif -%}
           {%- if t.exception_type %}
