@@ -144,6 +144,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `filtered_score` | The adjusted solve rate without the trials of tasks with an accepted flag of the kinds switched on; shown only with a switch on. See [User judge](#user-judge). | derived | any |
 | `n_infra` | Trials removed from the adjusted denominator as infrastructure failures or run-imposed interruptions. | derived | any |
 | `mean_score` | The mean graded score, weighted by each trial's number of scored parts when present. When no trial passes or fails, it is the headline and the rates read —. | derived | mixed |
+| `mean_score_planned` | The mean of each trial's score over every trial planned, regardless of part counts: one that ended on an error, or never ran, counts 0. Absent when no trial was scored. Shown only for whole runs; matched tasks have no recorded planned count. | derived | mixed |
 | `score_by_group · parts_by` | The mean score per value of the field the benchmark breaks it down by (a question's category), from `verifier/parts.json`. | derived | mixed |
 | `n_regressions` | Trials whose patch broke a previously passing test. | derived | swe-bench |
 | `counts` | Trials per outcome. | derived | any |
@@ -159,6 +160,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `is_running` | The job records running or pending trials. Numbers are partial. | measured | any |
 | `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Repeated attempts are separate trials, not retries. | measured | any |
 | `retries` | Retries a standard run allows each attempt (`--retries`); 0 elsewhere. | measured | any |
+| `identity` | What tells a standard run from another, from `config.json` and `result.json`: benchmark, version and options; agent, version and options; model; provider; pinned serving providers and who served; limits, caps and resource constraints. A fact not recorded is left out. Empty for other jobs. | measured | any |
 | `dataset` | The dataset folder, `name@version` for a registry fetch, or the task names' shared prefix. | measured | any |
 
 ## Trial metrics, one row per task attempt {#trials}
