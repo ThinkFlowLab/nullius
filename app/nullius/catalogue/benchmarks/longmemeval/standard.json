@@ -266,7 +266,7 @@
     },
     "gen_length": {
       "label": "Reader output tokens",
-      "summary": "Upstream generation limit; upstream keeps the published default. Larger limits leave less room for history.",
+      "summary": "Reader output limit; larger values leave less room for history.",
       "pattern": "(?:upstream|[1-9][0-9]*)",
       "example": "4096",
       "default": "upstream",
