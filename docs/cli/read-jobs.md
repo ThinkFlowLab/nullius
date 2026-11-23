@@ -37,7 +37,7 @@ nullius standard traces <dir> [--dry-run]
 | Command | Gives |
 | --- | --- |
 | `nullius runs list <root>...` | The runs, as `/runs` lists them |
-| `nullius runs show <root> <id>` | A job: trials, outcomes, counts, solve rates |
+| `nullius runs show <root> <id>` | A job: trials, outcomes, counts, solve rates, mean scores over the trials scored and over all planned; with `--json`, what identifies the run (`identity`) |
 | `nullius runs show <root> <job> <trial>` | A trial: outcome, checks, usage, exception, steps. Tool arguments and observations stay on the page |
 | `nullius compare <root> <id> <id>... [--matched]` | `/compare`'s cohort: whole, or matched on the tasks every job ran |
 | `nullius workspace list [--home DIR]` | The workspaces, as `/workspaces` lists them |
