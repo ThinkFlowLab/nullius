@@ -49,7 +49,8 @@
   {%- if trial.reward is not none %}<div title="{{ "The benchmark's verdict on this trial: 1 when it counts as right" if job.runner else "The verifier's reward for this trial, what Harbor's headline mean averages" }}"><span class="k">Reward</span><span class="n">{{ trial.reward }}</span></div>{% endif -%}
   {%- if trial.score is not none %}<div title="{% if trial.n_parts %}The mean score of its {{ trial.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it"><span class="k">Score</span><span class="n">{{ '%.2f'|format(trial.score) }}</span></div>{% endif -%}
   {%- if trial.dur_agent is not none %}<div><span class="k">Agent time</span><span class="n">{{ trial.dur_agent|secs }}</span></div>{% endif -%}
-  {%- if traj and not traj.error %}<div><span class="k">Steps</span><span class="n">{{ traj.n_steps }}</span></div>{% endif -%}
+  {%- if steps_of %}<div title="The benchmark's own count of this trial's steps, of its limit"><span class="k">Steps</span><span class="n">{{ steps_of.steps }}<small> of {{ steps_of.limit }}</small></span></div>{% endif -%}
+  {%- if traj and not traj.error %}<div{% if steps_of %} title="The items of the agent's session, as its trajectory records them"{% endif %}><span class="k">{{ 'Session items' if steps_of else 'Steps' }}</span><span class="n">{{ traj.n_steps }}</span></div>{% endif -%}
 {% endset %}
 {% if attempts or tries %}
 {% if attempts %}

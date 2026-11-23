@@ -19,6 +19,7 @@ from unittest.mock import patch
 from nullius import workspace
 from nullius.judge import store
 from nullius.runs import artifacts, parse
+from nullius.traces import trajectory
 from tests.test_feasibility import swe_report, write_job
 from tests.test_reconcile import record
 from .test_routes import APP_DIR, web
@@ -135,6 +136,29 @@ class TrialHead(unittest.TestCase):
         self.assertIn(f"The mean score of its {trial.n_parts} parts", html)
         self.assertNotIn("Harbor", said)                             # a runner's job: its runner, in its own word
         self.assertNotIn("Runner", said)
+
+    def test_steps_are_the_benchmarks_own_count_of_its_limit_where_the_score_gives_them(self):
+        """The score's count of steps and its limit: Steps says them, and the session's items keep a card of
+        their own under their name. A trial whose score does not give both shows its session's items as Steps."""
+        root = os.path.join(self.tmp.name, "parts-arm")
+        shutil.copytree(NATIVE / "parts-arm", root)
+        items = trajectory.load(os.path.join(root, "t1", "agent", "trajectory.json")).n_steps
+        score = os.path.join(root, "t1", "verifier", "score.json")
+        for detail, steps in (({"steps": 15, "steps_limit": 60, "ended": "done"}, "15 of 60"), ({"steps": 0, "steps_limit": 1}, "0 of 1"),
+                              ({"steps": 15}, None), ({"steps": 15, "steps_limit": 0}, None), ({"steps": True, "steps_limit": 60}, None),
+                              ({"steps": "15", "steps_limit": 60}, None), ({"steps": -1, "steps_limit": 60}, None), ([15, 60], None), (None, None)):
+            with self.subTest(detail=detail):
+                with open(score, "w") as f:
+                    f.write(json.dumps({"reward": 1.0, "detail": detail}) if detail is not None else "not json")
+                said, _ = self.head(parse.parse_job(root), "t1")
+                if steps:
+                    self.assertTrue(said.endswith(f"Steps {steps} Session items {items}"), said)
+                else:
+                    self.assertTrue(said.endswith(f"Steps {items}"), said)
+                    self.assertNotIn("Session items", said)
+        os.remove(score)
+        said, _ = self.head(parse.parse_job(root), "t1")
+        self.assertTrue(said.endswith(f"Steps {items}"), said)
 
 
 class RecordDownload(unittest.TestCase):
