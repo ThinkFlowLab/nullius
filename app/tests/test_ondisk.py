@@ -84,6 +84,40 @@ class Whole(unittest.TestCase):
             ondisk.write_whole(os.path.join(gone, "file.json"), "x")
         self.assertEqual(self.left(), [])
 
+    def test_a_path_through_a_links_parent_is_staged_where_the_system_puts_the_file(self):
+        os.makedirs(os.path.join(self.tmp, "target", "nested"))
+        os.mkdir(os.path.join(self.tmp, "beside"))
+        os.symlink(os.path.join(self.tmp, "target", "nested"), os.path.join(self.tmp, "beside", "link"))
+        seen, rename = [], os.replace
+        def spy(src, dst):
+            seen.append(os.path.realpath(os.path.dirname(src)))
+            return rename(src, dst)
+        with mock.patch.object(os, "replace", spy):
+            ondisk.write_whole(os.path.join(self.tmp, "beside", "link", "..", "file.json"), "x")
+        self.assertEqual(seen, [os.path.join(os.path.realpath(self.tmp), "target")])     # not "beside": link/.. is the link's target's parent
+        self.assertEqual(sorted(os.listdir(os.path.join(self.tmp, "target"))), ["file.json", "nested"])
+        self.assertEqual(os.listdir(os.path.join(self.tmp, "beside")), ["link"])
+
+    def test_a_bare_name_is_written_in_the_current_folder(self):
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.tmp)
+        ondisk.write_whole("bare.json", "x")
+        self.assertEqual(self.left(), ["bare.json"])
+
+    def test_a_function_is_handed_the_file_and_what_it_writes_lands_whole(self):
+        def two(f):
+            f.write("first\n")
+            f.write("é\n")
+        ondisk.write_whole(self.path, two, mode=0o600)
+        def stops(f):
+            f.write("half")
+            raise ValueError("stopped")
+        with self.assertRaises(ValueError):
+            ondisk.write_whole(self.path, stops)
+        with open(self.path, "rb") as f:
+            self.assertEqual(f.read(), "first\né\n".encode())
+        self.assertEqual((self.mode(), self.left()), (0o600, ["file.json"]))
+
     def test_a_write_that_fails_leaves_the_file_as_it_was_and_nothing_beside_it(self):
         ondisk.write_whole(self.path, "kept")
         with mock.patch.object(os, "replace", side_effect=OSError("no rename")):

@@ -13,6 +13,7 @@ import shutil
 import tempfile
 import threading
 import time
+import tracemalloc
 import unittest
 from dataclasses import replace
 from unittest.mock import patch
@@ -241,21 +242,20 @@ class Cache(unittest.TestCase):
         changing, and both wrote the cache through one shared `<hash>.json.tmp`:
         the first rename took the file away and the second raised
         FileNotFoundError, a 500 on the page. Both writers are held with
-        their temp file written until the other has written its own, then released:
+        their temp file open until the other has opened its own, then released:
         each must finish, and the cache must be whole."""
         gate = threading.Barrier(2, timeout=5)
-        cache, rename = workspace._cache_file(self.ws, self.job_dir), os.replace
-        def held_rename(src, dst):
-            if dst == cache:                              # the cache alone: the index is written after it, by one or both
-                gate.wait()                               # both have written their temp file, neither has renamed yet
-            return rename(src, dst)
+        stamp = workspace._now
+        def held_now():
+            gate.wait()                                   # both are inside the write, temp file open, nothing renamed yet
+            return stamp()
         results, errors = [], []
         def load():
             try:
                 results.append(workspace.load_job(self.ws, self.job_dir))
             except Exception as e:                        # noqa: BLE001 - the failure under test
                 errors.append(e)
-        with patch.object(os, "replace", held_rename):
+        with patch.object(workspace, "_now", held_now):
             threads = [threading.Thread(target=load) for _ in range(2)]
             for t in threads: t.start()
             for t in threads: t.join(10)
@@ -264,6 +264,19 @@ class Cache(unittest.TestCase):
         job, from_cache = workspace.load_job(self.ws, self.job_dir)
         self.assertTrue(from_cache); self.assertEqual(job, results[0][0])
         self.assertEqual([n for n in os.listdir(self.ws.jobs_dir) if n.endswith(".part")], [])
+
+    def test_the_cache_is_written_a_piece_at_a_time(self):
+        job, rows = parse.parse_job(self.job_dir), {"rows": ["x" * 100] * 20000}       # about 2 MB as JSON
+        path = os.path.join(self.ws.jobs_dir, "large.json")
+        with patch.object(workspace, "job_to_dict", lambda job: rows):
+            tracemalloc.start()
+            try:
+                workspace._write_cache(self.ws, path, "sig", "head", job)
+                peak = tracemalloc.get_traced_memory()[1]
+            finally:
+                tracemalloc.stop()
+        self.assertGreater(os.path.getsize(path), 2_000_000)
+        self.assertLess(peak, os.path.getsize(path) / 2)                              # never the whole text in memory
 
     def test_load_jobs_matches_load_all(self):
         _job_dir(self.root, "job-b", n=1)
