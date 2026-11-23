@@ -50,6 +50,16 @@ A trial with a score, or one that ended on any other error, the agent's own amon
 | No cap | A job run without one has none until a part is given one |
 | The record | `budget`: `max_usd` the cap now, `spent_total_usd`, `closed` (the last part stopped at it), `changes` (each change: when, the cap, the one before); the first run's fields stay |
 
+## A job begun on a part
+
+A run begun with [`--start-with`](run.md#plan-the-whole-begin-with-a-part) has the rest of its plan with no attempt. `--next N`, `--set NAME` or `--unfinished` runs more of it in the job, a part at a time or all at once.
+
+| Rule | Detail |
+| --- | --- |
+| Refused, nothing moved | A set of another dataset; a set naming a task the job did not plan; `--next` above the tasks left |
+| The live board | While a part runs, a row for each of its tasks not yet begun, marked Queued; the plan's other tasks count as Not run |
+| Run whole | Once every planned task has run, the job's trials and results are those of the plan run at once; its record adds `start_with` and `reruns` |
+
 <div class="grid cards" markdown>
 
 - [Run a benchmark](run.md)

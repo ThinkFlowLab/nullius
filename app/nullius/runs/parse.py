@@ -349,6 +349,11 @@ class Job:
     # The task set a Nullius standard job ran (config ``standard.task_set``): its name, its label (its name for a
     # job from before labels) and id, its benchmark, and ``units``, its number of ids. {} for every other job.
     task_set: dict = field(default_factory=dict)
+    # A Nullius standard job planned on a whole and begun on a part of it (config ``standard.start_with``): how the
+    # part was named, ``by`` count, file, set or ids (named one by one), and ``name`` (the file's, the set's label,
+    # "the tasks chosen" for ids; "" for a count),
+    # and ``units``, the part's number of units. {} for every other job: the plan is then the job's from the start.
+    start_with: dict = field(default_factory=dict)
     # Each time chosen trials of a Nullius standard job were run again in it (``result.json`` ``reruns``,
     # ``standard/runner/rerun.py``): {at, reason, trials, replaced [{trial, unit, try, was, now}], begun [{trial, unit,
     # now}] and no_result [trial] when it had any, max_usd, spent_usd, stopped}, oldest first. [] for a job never
@@ -389,6 +394,13 @@ class Job:
         """How many trials the run set out to do — Harbor's own count when it
         recorded one, else the task count from the config."""
         return self.n_total_trials or self.n_tasks
+
+    @property
+    def n_tasks_run(self) -> int:
+        """How many of the job's tasks have an attempt that ended: of ``n_tasks`` planned, for a job begun on a
+        part of its plan (``start_with``) the tasks run so far."""
+        return len({re.sub(r"(__u\d+)r\d+$", r"\1", t.trial_name) if self.standard else t.task_name
+                    for t in self.trials})
 
     @property
     def is_running(self) -> bool:
@@ -1018,6 +1030,13 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
                      "id": str(ts.get("id") or ""), "benchmark": str(std.get("benchmark") or ""),
                      "units": len(ts["units"]) if isinstance(ts.get("units"), list) else 0}
                     if isinstance(ts.get("name"), str) and ts["name"] else {})
+    sw = std.get("start_with") if isinstance(std.get("start_with"), dict) else {}
+    if isinstance(sw.get("units"), list):
+        src = sw.get("units_file") if isinstance(sw.get("units_file"), dict) else sw.get("task_set") if isinstance(sw.get("task_set"), dict) else {}
+        by = "file" if sw.get("units_file") else "set" if sw.get("task_set") else "count" if "count" in sw else "ids"
+        job.start_with = {"by": by, "units": len(sw["units"]),
+                          "name": (str(src.get("label") or src.get("name") or "") if by == "set" else "the tasks chosen" if by == "ids"
+                                   else str(src.get("name") or ""))}
     job.budget = _budget(res.get("budget"))
     job.reruns = _reruns(res)
     job.standard = bool(std)

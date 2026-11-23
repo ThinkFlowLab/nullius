@@ -3,7 +3,7 @@
 One benchmark and one agent, capability, control or setup, into a job.
 
 ```bash title="Run"
-nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE | --set NAME] [--limit N] [-j N] \
+nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE | --set NAME] [--limit N] [--start-with N|FILE|set:NAME|ids:ID,ID...] [-j N] \
     [--unsandboxed | --backend container|boat] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
     [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS]... [--max-turns N] [--max-calls N] \
     [--constraint KEY=VALUE]... \
@@ -16,6 +16,7 @@ nullius standard run humaneval reference --model gpt-5-mini --limit 2 --unsandbo
 nullius standard run humaneval oracle --limit 6
 nullius standard run humaneval oracle --units tasks.txt
 nullius standard run humaneval oracle --set first-ten
+nullius standard run humaneval oracle --start-with 10
 nullius standard run locomo original --model gpt-3.5-turbo-4k
 nullius standard run locomo model --model gpt-4o-mini
 ```
@@ -29,6 +30,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--dataset`, `--limit`, `-j` | One dataset, the first N units, N at a time |
 | `--units FILE` | Only the units the file lists: [below](#a-list-of-units) |
 | `--set NAME` | Only the units of a [task set](task-sets.md); its dataset is the run's, the options the run's own |
+| `--start-with N\|FILE\|set:NAME\|ids:ID,ID...` | Plan the whole, begin with a part: [below](#plan-the-whole-begin-with-a-part) |
 | `--unsandboxed` | An agent runs as you; else `--backend container` |
 | `--backend` | `local` (default); `container`, each unit in a container with its relay; or [`boat`](../standard.md#the-boat-backend), a VM per unit |
 | `--boat-size` | Boat's VM size: `small` (default), `default`, `large`, `xlarge` |
@@ -140,6 +142,25 @@ HumanEval/12
 | Where it is read | On the machine the command runs on, from the directory it starts in |
 | The builder | A recipe has no field for a list |
 | A named list | A [task set](task-sets.md) keeps one, frozen: `--set NAME` |
+
+## Plan the whole, begin with a part
+
+`--start-with` plans what the run would run without it (the dataset, or what `--units`, `--set` and `--limit` name) and begins only a part of it. The rest stay planned with no attempt, run later in the same job by [`rerun`](rerun.md#a-job-begun-on-a-part).
+
+| The part | Begins |
+| --- | --- |
+| `N` | The plan's first N units, in its order |
+| `FILE` | The units a file lists, as [a list of units](#a-list-of-units) |
+| `set:NAME` | The units of a [task set](task-sets.md) of the run's dataset |
+| `ids:ID,ID,...` | The units named, separated by commas, with no space; an id that holds a comma goes in a file. The run builder writes this form for the tasks ticked under **Start with** → **Specific tasks** |
+
+| Rule | Detail |
+| --- | --- |
+| Refused before any unit starts | A part naming a unit outside the plan; more units than the plan holds; a set of another dataset; `--shard` |
+| Attempts | A unit begun gets all its `--attempts`; a unit not begun has none |
+| The end | Finished, not stopped: "N of M planned tasks run", and the command for the rest |
+| The record | `config.json`: `datasets[0].n_tasks`, the plan's size; `standard.start_with`, how the part was named (a count, a file, a set; nothing more for ids) and its units. The feed queues every planned trial |
+| The rates | Over the tasks run; the job's page and `runs show` say how many of the plan have run |
 
 ## Serving providers
 
