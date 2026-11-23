@@ -5,6 +5,8 @@ List the jobs under a root, open one, compare several, list the workspaces.
 ```bash title="The reading commands"
 nullius runs      list <root>... [--json]
 nullius runs      show <root> <job id> [<trial>] [--json]
+nullius runs      show <root> <job id> <trial> --call N --request
+nullius runs      show <root> <job id> <trial> --calls
 nullius compare   <root> <job id> <job id>... [--matched] [--json]
 nullius workspace list [--home DIR] [--json]
 nullius standard traces <dir> [--dry-run]
@@ -39,6 +41,8 @@ nullius standard traces <dir> [--dry-run]
 | `nullius runs list <root>...` | The runs, as `/runs` lists them |
 | `nullius runs show <root> <id>` | A job: trials, outcomes, counts, solve rates |
 | `nullius runs show <root> <job> <trial>` | A trial: outcome, checks, usage, exception, steps. Tool arguments and observations stay on the page |
+| `nullius runs show <root> <job> <trial> --call N --request` | The request the trial's agent sent in its call N, rebuilt from its [exchange record](run.md#the-exchange-record) as the bytes sent, unredacted, on stdout; on stderr, whether its sha256 is the recorded one (exit 4 when not) |
+| `nullius runs show <root> <job> <trial> --calls` | The trial's Conversation by model call, as JSON: each call's time, tokens and cost, what it sent that the call before had not (pictures by sha256), its answer whole, the steps under it. Redacted. Without an exchange record, the call record's abridged answer; without a relay record, no calls |
 | `nullius compare <root> <id> <id>... [--matched]` | `/compare`'s cohort: whole, or matched on the tasks every job ran |
 | `nullius workspace list [--home DIR]` | The workspaces, as `/workspaces` lists them |
 

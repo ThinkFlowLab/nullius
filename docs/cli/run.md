@@ -101,6 +101,7 @@ Each unit's relay keeps every call of its agent whole, its side calls included: 
 | Never in the way | A failure to write it (a full disk) leaves the agent's reply as it was; the call's line says what failed |
 | Not kept | The judge's and the simulated user's calls, and an option's embeddings: their call record alone |
 | Retries | A retried try's record goes with it under `retried/`; the next try starts its own |
+| A request rebuilt | `nullius runs show <root> <job> <trial> --call N --request` prints call N's request as sent and says whether its sha256 is the recorded one ([Read jobs](read-jobs.md)) |
 | The result | `config.json`: `standard.exchanges` and `standard.exchanges_max_mb`; a recipe's `exchanges` and `exchanges_max_mb` |
 
 ## A spending cap

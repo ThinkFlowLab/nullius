@@ -23,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
+from nullius.runs import cli as runs_cli, parse
 from nullius.standard import cli as standard_cli
 from nullius.standard.backends import container
 from nullius.standard.calls import exchanges, relay
@@ -287,13 +288,21 @@ class StoreFiles(unittest.TestCase):
                 rows[first] = rows[first][:40] if damage == "truncated" else json.dumps(row)
                 path.write_text("\n".join(rows) + "\n")
                 for n in (1, 2, 3):
+                    out, err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8"), io.StringIO()
+                    self.addCleanup(out.close)
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        code = runs_cli._request(trial, n)
+                    out.flush()
                     result = exchanges.check(store.dir, "u0001", n)
                     self.assertEqual(result["same"], n == 2)
                     if n == 2:
+                        self.assertEqual((code, out.buffer.getvalue()), (0, json.dumps(good).encode() + b"\n"))
+                        self.assertIn("the recorded sent_sha256", err.getvalue())
                         line = exchanges.lines(store.dir, "u0001")[1]
                         self.assertEqual(exchanges.rebuild(store.dir, line, exchanges.stored_parts(store.dir)),
                                          json.dumps(good).encode())
                     else:
+                        self.assertEqual((code, out.buffer.getvalue()), (runs_cli.EXIT_FAILED, b""))
                         self.assertIsNone(result["request"])
 
     def assert_picture_rejected(self, store, line, parts):
@@ -849,6 +858,46 @@ class TheRun(WithUpstream):
                 with open(os.path.join(root, n), "rb") as f:
                     self.assertNotIn(KEY.encode(), f.read(), os.path.join(root, n))
 
+        # the command: the request rebuilt, on stdout as the bytes sent, the verdict on stderr
+        (j,) = parse.load_all([os.path.join(self.tmp, "jobs")])
+        sent = [raw for _, _, raw in Upstream.seen if b"model hi" in raw][-1]
+        code, out, err = self.show(j.job_id, name, "--call", "1", "--request")
+        self.assertEqual((code, out), (0, sent + b"\n"))
+        self.assertIn("the recorded sent_sha256", err)
+        with open(os.path.join(now, exchanges.PARTS)) as f:
+            text = f.read()
+        with open(os.path.join(now, exchanges.PARTS), "w") as f:
+            f.write(text.replace("model hi", "model HI"))
+        code, out, err = self.show(j.job_id, name, "--call", "1", "--request")
+        self.assertEqual(code, runs_cli.EXIT_FAILED)
+        self.assertIn("not the recorded sent_sha256", err)
+        self.assertEqual(self.show(j.job_id, name, "--call", "9", "--request")[0], runs_cli.EXIT_NOT_FOUND)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as usage:
+            runs_cli.main(["show", os.path.join(self.tmp, "jobs"), j.job_id, name, "--call", "1"])
+        self.assertEqual(usage.exception.code, 2)
+
+    def test_an_earlier_try_is_read_by_its_name_call_by_call_as_for_one_request(self):
+        # a try kept in retried/ goes by its folder's name (NAME.try-N): --calls reads it as --call N --request does
+        Upstream.refuse = 1
+        job_dir = self.go(retries=1)
+        (kept,) = os.listdir(os.path.join(job_dir, "retried"))
+        name = kept.rpartition(".try-")[0]
+        (j,) = parse.load_all([os.path.join(self.tmp, "jobs")])
+        statuses = {}
+        for trial in (kept, name):
+            code, out, err = self.show(j.job_id, trial, "--calls")
+            self.assertEqual(code, 0, err)
+            statuses[trial] = [c["status"] for c in json.loads(out)["calls"]]
+        self.assertEqual(statuses, {kept: [429], name: [200]})          # each try's own calls
+        self.assertEqual(self.show(j.job_id, kept, "--call", "1", "--request")[0], 0)
+        self.assertEqual(self.show(j.job_id, name + ".try-9", "--calls")[0], runs_cli.EXIT_NOT_FOUND)
+
+    def show(self, job_id, trial, *more):
+        out, err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8"), io.StringIO()
+        with mock.patch.object(sys, "stdout", out), contextlib.redirect_stderr(err):
+            code = runs_cli.main(["show", os.path.join(self.tmp, "jobs"), job_id, trial, *more])
+        out.flush()
+        return code, out.buffer.getvalue(), err.getvalue()
 
     def test_off_and_a_bad_value_and_the_command_line(self):
         job_dir = self.go(exchanges="off", name="off")
@@ -965,10 +1014,14 @@ class Version(unittest.TestCase):
         path.write_text(json.dumps({"schema": "nullius.exchanges/v2"}) + "\n" + path.read_text().split("\n", 1)[1])
         for n in (1, 3, 4, 5):
             with self.subTest(n=n):
-                with self.assertRaises(exchanges.Later) as refused:
-                    exchanges.check(store.dir, "u0001", n)
-                self.assertIn("version 2", str(refused.exception))
-                self.assertIn("version 1", str(refused.exception))
+                out, err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8"), io.StringIO()
+                self.addCleanup(out.close)
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    code = runs_cli._request(trial, n)
+                out.flush()
+                self.assertEqual((code, out.buffer.getvalue()), (runs_cli.EXIT_NOT_FOUND, b""))
+                self.assertIn("version 2", err.getvalue())
+                self.assertIn("version 1", err.getvalue())
 
     def test_a_later_version_or_another_format_is_refused_by_each_reader_naming_both(self):
         for name in ("u0001.jsonl", exchanges.PARTS):
@@ -987,6 +1040,14 @@ class Version(unittest.TestCase):
                             read()
                         for word in (name,) + words:
                             self.assertIn(word, str(refused.exception))
+                    out, err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8"), io.StringIO()
+                    self.addCleanup(out.close)
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        code = runs_cli._request(trial, 1)
+                    out.flush()
+                    self.assertEqual((code, out.buffer.getvalue()), (runs_cli.EXIT_NOT_FOUND, b""))
+                    for word in words:
+                        self.assertIn(word, err.getvalue())
 
 
 class Unmarked:
