@@ -45,8 +45,9 @@ class Preparation(unittest.TestCase):
     def test_log_failure_still_closes_proxy_and_stops_processes(self):
         box = FakeBox()
         with mock.patch.object(box, 'egress_said', side_effect=OSError('disk full')):
-            with self.assertRaises(OSError):
+            with self.assertRaises(run._Ended) as failure:
                 self.r.prepare(self.step, box, self.tmp.name, agent=True)
+        self.assertEqual(failure.exception.kind, 'EnvironmentSetupError')
         self.assertEqual(box.did[-2:], ['offline', 'settle'])
 
     def test_definition_rejects_prompt_and_invalid_network(self):

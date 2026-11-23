@@ -2196,7 +2196,7 @@ class Run:
                 finally:
                     box.offline()
                     box.settle()
-        except (container.Unavailable, ValueError) as e:
+        except (container.Unavailable, ValueError, OSError) as e:
             raise _Ended("EnvironmentSetupError", f"the {who}'s preparation: {e}")
         finally:
             if done is not None:
