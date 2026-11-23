@@ -31,12 +31,12 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--backend` | `local` (default); `container`, each unit in a container with its relay; or [`boat`](../standard.md#the-boat-backend), a VM per unit |
 | `--boat-size` | Boat's VM size: `small` (default), `default`, `large`, `xlarge` |
 | `--option NAME=VALUE` | An agent's or capability's option (repeatable) |
-| `--bench-option NAME=VALUE` | A benchmark's option (repeatable), read as `NULLIUS_OPTION_<NAME>` |
+| `--bench-option NAME=VALUE` | A benchmark's option (repeatable) |
 | `--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]` | This run's price for a model in USD per million tokens (repeatable), over your [price list](../settings/model-prices.md) |
 | `--max-usd USD`, `--max-usd-per-unit USD` | A spending cap for the run, for each unit: [below](#a-spending-cap) |
 | `--timeout PHASE=SECONDS`, `--max-turns N` | A unit's time limit for a phase, a conversation's most turns, forced: [below](#time-limits) |
 | `--max-calls N` | The most model calls a unit's agent may make: [below](#a-cap-on-model-calls) |
-| `--constraint KEY=VALUE` | What the machine allows the run (repeatable): `cpus`, `memory_mb`, `processes`, `cpu_set`, `concurrency`, `gpu_ids` (indices, empty for none); [constraints](../settings/run-hosts.md#constraints). Containers take them as flags, the run's processes on the machine as a systemd scope. A recipe passes each machine's own |
+| `--constraint KEY=VALUE` | What the machine allows the run (repeatable): `cpus`, `memory_mb`, `processes`, `cpu_set`, `concurrency`, `gpu_ids` (indices, empty for none); [constraints](../settings/run-hosts.md#constraints). A recipe passes each machine's own |
 | `--served-by [MODEL=]SLUG[,SLUG...]` | On OpenRouter, the serving providers that may answer a model (repeatable): [below](#serving-providers) |
 | `--attempts K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--retries N` | Run a failed attempt again, up to N times: [below](#retries) |
@@ -57,7 +57,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | A control | No `--model`, no `--unsandboxed`; only a judge is called |
 | Machine programs | An option needing them is refused without them |
 | Progress | stderr, one line per stage (`[nullius] stage=install ...`, `stage=units n=10`, `stage=done`, `stage=refused`), also `progress.jsonl` |
-| The job | Opens in the app; `events.jsonl` feeds the live board |
+| The job | Opens in the app |
 
 ## Time limits
 
@@ -71,19 +71,19 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | `verify` | The verify step's `seconds`, else the agent's default | Verifier error |
 | `score` | The benchmark's `limits.score_seconds`, else 600 s: the driver's `score` | Verifier error |
 
-`--max-turns N` caps a conversation's agent turns over `limits.turns` (default 20); the conversation is scored as it stands. `config.json` records what was forced under `standard.timeouts` and `standard.max_turns`. From the builder, *Limits* takes them in minutes.
+`--max-turns N` caps a conversation's agent turns over `limits.turns` (default 20); the conversation is scored as it stands. `config.json` records what was forced under `standard.timeouts` and `standard.max_turns`.
 
 ## A cap on model calls
 
-`--max-calls 60` lets a unit's agent make at most 60 model calls, the whole unit through, every turn of a conversation. Agents only: a capability's route carries the benchmark's reader too, so a capability run refuses it. Most agents make one call per step, so it bounds a looping agent where nothing else counts steps, and where a model with no price leaves no spending cap.
+`--max-calls 60` lets a unit's agent make at most 60 model calls, the whole unit through, every turn of a conversation. Agents only: a capability run refuses it.
 
 | Rule | Detail |
 | --- | --- |
 | What is counted | Each call the provider answered on the unit's agent route. A refused call (a 429, an error) is not one; the judge's and the simulated user's never are |
-| Past it | The relay answers the next call itself (HTTP 402, `unit_call_cap`); the unit ends as `UnitCallCapError`, an Agent error, as a timeout is, and is not checked. The run goes on |
+| Past it | The unit ends as `UnitCallCapError`, an Agent error, and is not checked. The run goes on |
 | Not exact | Calls in flight together may pass it by the few already sent |
 | The upstream's own | A step limit of the benchmark's (τ³-bench's `--max-steps`, an OSWorld agent's `--max_steps`) still holds; this cap is on top |
-| The result | `config.json` records it under `standard.max_calls`; from the builder, *Limits* → *Model calls per unit* |
+| The result | `config.json` records it under `standard.max_calls` |
 
 ## A spending cap
 
@@ -98,7 +98,7 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | At a unit's cap | Its own calls and its simulated user's count, over all its tries; its judge's do not. A unit that reaches its cap is an Agent error; the run goes on |
 | Not exact | A call that costs more than its estimate can take the spend past a cap by up to the difference |
 | Cached input | Estimated as if not cached, so a unit can be cut off short of its cap |
-| The result | `result.json` carries `budget`, and the job page shows it |
+| The result | `result.json` carries `budget` |
 | From the builder | *Limits*: one cap shared in equal parts by the run's jobs, and one per unit |
 | Shards | A shard's cap is its own: [Shard and merge](shard-and-merge.md) |
 
@@ -134,7 +134,7 @@ HumanEval/12
 | With `--limit N` | The first N of the listed units, in the dataset's order |
 | With `--shard I/N` | The listed units of that shard; `standard.shard.units_total` counts the listed units; `merge` compares the units each list holds and refuses shards whose lists differ, even with `--force` |
 | The record | `config.json`: `standard.units_file`, the file's name, its sha256 and its units |
-| Where it is read | On the machine the command runs on, from the directory it starts in, with `--from-run` or without |
+| Where it is read | On the machine the command runs on, from the directory it starts in |
 | The builder | A recipe has no field for a list |
 
 ## Serving providers
@@ -149,14 +149,14 @@ nullius standard run humaneval reference --provider openrouter --model meta-llam
 | --- | --- |
 | A slug | As the model's page on OpenRouter names its provider: `deepinfra`, or a provider and its variant, a quantisation (`deepinfra/fp8`), a speed (`deepinfra/turbo`) or a region (`google-vertex/us-central1`). Several are tried in their order, and no other provider answers |
 | Without `MODEL=` | The run's model. With it, any model the run calls: its judge, its simulated user, an option's embeddings |
-| What is sent | `provider: {"order": [...], "allow_fallbacks": false}` on every request sent as that model, on every route, in place of the agent's own routing field. A pinned Chat Completions or Responses request to OpenRouter also asks for its routing facts (`X-OpenRouter-Metadata: enabled`). A Responses reply names the provider that served it there alone. A Messages request is sent without the header, since its reply names its provider. A model with no pin is sent as before |
-| Refused before any unit | A provider other than `openrouter`; a model the run does not call (a control calls only its judge's or an option's, never a simulated user's); a slug that is empty, malformed or given twice; a model named twice. The run, the command line and the relay's own command make the same check |
+| What is sent | `provider: {"order": [...], "allow_fallbacks": false}` on every request sent as that model, on every route, in place of the agent's own routing field. |
+| Refused before any unit | A provider other than `openrouter`; a model the run does not call; a slug that is empty, malformed or given twice; a model named twice |
 | No provider can serve it | OpenRouter answers 404 (no endpoint found) and nothing else is tried; the call fails as any refused call does |
-| The record | `config.json`: `standard.served_by`, the slugs by model. Each call in `agent/calls.jsonl`: `request.routing`, `request.routing_asked` when the agent sent its own, `reply.served_by` (for a Responses reply, the endpoint its routing facts mark as selected), `reply.end` (by choice index when there are several) and `reply.error`, an error held under a 200, its code, type and message alone ([Who served a call](../standard.md#a-run)) |
-| Who served the run | Each trial's `result.json`, `standard.served`, and the job's `result.json`, `served`: the answered calls of every route (the agent's, the judge's, the simulated user's, the benchmark's own relay's) by serving provider, those that named none, and for each pinned model `held`: `true` when every answered call names a provider that reads as a pinned slug, `unknown` when one names none or another name, `null` with no answered call. A name reads as a slug lowercased with its spaces as dashes (`DeepInfra` is `deepinfra`, the first part of `deepinfra/turbo`), and nothing else is folded. The tokens and the cost stay the agent's own calls' |
+| The record | `config.json`: `standard.served_by`, the slugs by model. Each call in `agent/calls.jsonl`: `request.routing`, `request.routing_asked` when the agent sent its own, `reply.served_by`, `reply.end` and `reply.error` ([Who served a call](../standard.md#a-run)) |
+| Who served the run | Each trial's `result.json`, `standard.served`, and the job's `result.json`, `served`: the answered calls of every route (the agent's, the judge's, the simulated user's, the benchmark's own relay's) by serving provider, those that named none, and for each pinned model `held`: `true` when every answered call names a provider that reads as a pinned slug, `unknown` when one names none or another name, `null` with no answered call. The tokens and the cost stay the agent's own calls' |
 | What `held` reads | The provider's name alone: a reply names no endpoint variant, and `held` for `deepinfra/fp8` is true for any endpoint of `deepinfra`. A reply gives the provider's display name. Where that name is not the slug once lowercased, `held` reads `unknown` though the provider served the call (`Google` for `google-vertex`, `SambaNova` for `sambanova-turbo`) |
 | Shards | `merge` refuses shards whose pins differ, unless `--force`; a model pinned differently in the merged shards reads `held: unknown` |
-| The builder | *Model* step, **Served by** after each model field, on OpenRouter alone, hidden while its list is pending or has exactly one entry unless the field already has a pin: the recipe's `served_by`, by field (`model`, `simulator`, `judge`), compiled into `--served-by` for each job that calls that model. Its list of a model's providers comes from OpenRouter (`/models/{maker}/{model}/endpoints`), asked once the model the run sends is known and shared with the picker for five minutes; two endpoints of one provider count as two entries. An empty or failed list leaves the row visible, and a slug typed by hand is taken |
+| The builder | *Model* step, **Served by** after each model field, on OpenRouter alone: the recipe's `served_by`, by field (`model`, `simulator`, `judge`), compiled into `--served-by` for each job that calls that model. |
 
 <div class="grid cards" markdown>
 

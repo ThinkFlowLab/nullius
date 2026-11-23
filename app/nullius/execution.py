@@ -8,11 +8,10 @@ agent in the order they run (controls first), the Harbor the recipe pins
 (``harbor_pin``, ``harbor/source.py``), the task folder they read, and the
 target. ``$NULLIUS_HARBOR`` is a small ``harbor`` script in the run
 directory that runs the pinned Harbor through ``uvx``: a release from PyPI,
-or a repository's commit built on this machine, whose wheels a host is sent
-(only this machine needs access to a private fork; the host resolves the
-rest from PyPI). A plan from before the pin names none, and its
+or a repository's commit built on this machine, whose wheels a host is sent.
+A plan can omit the pin, and its
 ``$NULLIUS_HARBOR`` is ``harbor``, whichever is first on the target's PATH.
-The job records which Harbor ran. An ``Execution`` carries the plan out in a
+An ``Execution`` carries the plan out in a
 thread of its own and writes what it does to a log the page follows:
 
 - on a host: ssh in; docker checked for, with ``uv`` for a pinned Harbor
@@ -57,11 +56,7 @@ while nobody was looking; one process at a time, by the runs root's lock.
 A record is checked against the part's files and processes on the target
 before it is trusted (``_settle``): a part whose pid
 was never saved, but which was claimed or started, is followed by the pid it
-wrote itself or by its processes - never started a second time; a record
-from before a part's end was one save, naming the next part with the ended
-one's pid, goes on from that end; and one saved as the next part was
-launched, still holding the ended one's pid, follows the next part by its
-own processes.
+wrote itself or by its processes - never started a second time.
 
 A pid is a hint, never proof: a part's processes are the ones running its
 script in its run directory (``_part_pids``). A part is alive while it has
@@ -95,10 +90,8 @@ more stdin line, ``NULLIUS_LICENCES``: in the launcher's environment, never
 on disk there - but for a licence file, which the run writes to
 ``/dev/shm/nullius-<run>/`` (0600, in memory) and the part's detached shell
 removes when it ends, a Stop included. On this machine the run reads the
-store itself, and nothing is sent. A record from before ``base_url`` loads with none, and its run
-goes on with the settings it named. Log lines pass through
-``redact`` before they are kept. Every command runner is a call-time seam,
-so the suite runs a plan with none of ssh, uv, rsync or docker present.
+store itself, and nothing is sent. Log lines pass through
+``redact`` before they are kept.
 
 What the run is doing is said in stages (``nullius/progress.py``): the steps
 here that get a host ready - connect, uv, the tasks, app/, a pinned Harbor -
@@ -171,8 +164,7 @@ def docker_here(sh: Callable, needs: str = "a Harbor run needs it", program: str
     PATH *and* ``<program> ps`` answered, as a host's probe asks
     (``hosts.PROBE``). The command alone is not enough - Docker Desktop's WSL
     integration leaves ``/usr/bin/docker`` in place while its engine is quit.
-    ``sh`` is the run's own (returncode, output) runner; this is looked up at
-    call time, so the suite can stand in for docker."""
+    ``sh`` returns (returncode, output)."""
     rc, out = sh(f"command -v {program} >/dev/null 2>&1 || {{ echo @missing; exit 0; }}; {program} ps 2>&1 >/dev/null || echo @down", 60)
     words = out.split()
     if rc != 0 or "@missing" in words:
@@ -224,7 +216,7 @@ def _script_rx(base: str) -> str:
 
 # Where a target shows its processes. A target without it (no /proc: not
 # Linux) cannot prove a pid is still the part's, and falls back to asking
-# whether the pid lives at all - what every target was asked before.
+# whether the pid lives at all.
 PROC = "/proc"
 
 
@@ -236,9 +228,7 @@ def _part_pids(base: str, pids=()) -> str:
     record holds), of the pid the part wrote, and of whatever ``pgrep`` finds
     by that command line, so a part is found with no pid saved. A pid the
     part held, since given to another process, is never printed, so nothing
-    that is not the part's is ever signalled - where the target has ``PROC``
-    to check it by; where it has none, a pid that lives is taken as the
-    part's, as before these checks."""
+    that is not the part's is ever signalled when the target supports ``PROC``."""
     rx = _script_rx(base)
     return (f"for p in {' '.join(str(int(p)) for p in pids if p)} $(head -c 32 {base}.pid 2>/dev/null | tr -cd 0-9) "
             f"$(pgrep -f '{rx}' 2>/dev/null); do [ \"$p\" != $$ ] || continue; "
@@ -259,9 +249,9 @@ class Plan:
     model: str = ""
     jobs: List[dict] = field(default_factory=list)   # the job directories the script writes: [{"name", "agent", "dataset"}], a shard's also its "launch"
     parts: List[dict] = field(default_factory=list)  # the run, one agent at a time: [{"id", "label", "script"}]; empty: the whole script at once
-    recipe: dict = field(default_factory=dict)       # the builder's recipe the script was compiled from, so the run can be opened again as one; {} for a plan from before
+    recipe: dict = field(default_factory=dict)       # the builder's recipe the script was compiled from, so the run can be opened again as one
     runner: str = "harbor"                    # or "standard" (standard/pages/recipe.py): the Nullius standard's own cli
-    harbor_pin: dict = field(default_factory=dict)   # the Harbor the recipe pins (harbor/source.py pin_of); {} for a plan from before: the harbor on PATH
+    harbor_pin: dict = field(default_factory=dict)   # the Harbor the recipe pins (harbor/source.py pin_of); {}: the harbor on PATH
     docker: bool = False                      # a runner that needs docker on its target though it is not Harbor (the standard's container backend)
     keyless: bool = False                     # nothing in it calls a model (the standard's controls): handed no key and no endpoint at all
     licences: dict = field(default_factory=dict)     # the standard's on a host: {"benchmark", "names", "providers"} - what it is sent of that benchmark's licences
@@ -285,8 +275,7 @@ class Plan:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Plan":
-        """A recorded plan; a field this version no longer has (a record
-        from before, naming an installed Harbor release) is left out."""
+        """A recorded plan; an unknown field is left out."""
         d = dict(d)
         d["host"] = hosts.parse(d["host"]) if d.get("host") else None
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
@@ -296,9 +285,7 @@ def subprocess_run(argv: List[str], timeout: float = 600.0, stdin: Optional[str]
                    stop: Optional[threading.Event] = None) -> tuple:
     """(returncode, combined output); a timeout is a return code of its own,
     and so is a stop: with ``stop`` given, the child is killed the moment the
-    event is set (130, "stopped") rather than when its timeout runs out -
-    an ssh that hangs for 120 s, an rsync for 900 s, would otherwise hold
-    a Stop for that long."""
+    event is set (130, "stopped") rather than when its timeout runs out."""
     try:
         # read as UTF-8 whatever the locale, a byte that is not one as U+FFFD: a run is never failed by how
         # its target spelt what it printed
@@ -311,7 +298,7 @@ def subprocess_run(argv: List[str], timeout: float = 600.0, stdin: Optional[str]
 
     def talk():
         # one communicate, whole: a retried one after a timeout stopped sending
-        # input past the pipe's buffer (a 465 KB price list never landed)
+        # input past the pipe's buffer
         try:
             got["out"] = proc.communicate(input=stdin if stdin is not None else "")[0]
         except (OSError, ValueError) as e:
@@ -342,9 +329,7 @@ def withheld() -> List[str]:
     names for the run's key and endpoint, the agent keys (a Harbor run is
     sent them by its launcher, as the key), the Boat key (a standard run on
     Boat is sent it the same way), the names a standard benchmark's
-    own licences go by - kept in its own store (``nullius.secrets``), although
-    imported saved settings may still hold a value until it is moved in
-    Custom keys - and GitHub tokens from saved settings or the
+    own licences go by and GitHub tokens from saved settings or the
     shell Nullius was started in. Every named endpoint's settings too, so a
     run gets its own endpoint's key alone. A data provider's token name is not one."""
     secret = {v.name for v in settings.VARIABLES if v.secret or v.kind in ("endpoint", "provider")} | set(settings.endpoint_names())
@@ -432,7 +417,7 @@ class Execution:
         # the part that may be running on the target, from its launch until its end is recorded: what a Stop ends
         self._live: Optional[dict] = None
         # the last part whose launch began, saved before its script is sent, so a restart tells a Stop that cut its
-        # launch short from one before it (_kill_part); "" in a record from before
+        # launch short from one before it (_kill_part)
         self.launched: str = rec.get("launched") or ""
         if self.state == "stopping":               # a Stop that a restart interrupted: finish it, do not run on
             self._stop.set()
@@ -449,12 +434,11 @@ class Execution:
         self.app_on_target = rec.get("app_on_target", "")   # the standard's source tree or runner snapshot on the target
         self.catalogue_on_target = rec.get("catalogue_on_target", "")   # writable definitions, separate from the immutable runner
         self.workspace = rec.get("workspace", "")   # the workspace its job was added to, the one a restart adds it back to
-        # the trials the log has said already, (job, trial), so a restart says each once; none in a record from before
+        # the trials the log has said already, (job, trial), so a restart says each once
         self._seen_trials: set = {(k[0], k[1]) for k in rec.get("seen_trials") or ()}
         self._settled: set = set()                  # the kept tries whose trial's copy was settled (settle_retried)
         if record:
-            # a run still going reads its log now, to go on from it; one that ended (most of them, and
-            # history only grows) when its page asks - start-up read every one, seconds and hundreds of MB
+            # a run still going reads its log now, to go on from it; one that ended when its page asks
             self._unread = True
             if self.state in ALIVE:
                 self._read_log()
@@ -689,9 +673,7 @@ class Execution:
         way (`subprocess_run`, `stop=`), the follow loop returns, `_done`
         ends the part on the target (`_kill_part`) - one whose launcher it
         cut short included - copies the job back from a host once more, and
-        records `stopped`: a part that had ended by itself with its own
-        result, a part the Stop ended with 130, the same for a Stop a restart
-        finishes (`_done` says the rule). Nothing
+        records `stopped` (`_done` says the rule). Nothing
         here waits on the host, so a host that does not answer cannot hold
         the button."""
         with self._turn:
@@ -710,8 +692,7 @@ class Execution:
         already set, reads the part's exit code before it ends anything: a
         part that has one ended by itself before the Stop reached it -
         between two of ``_follow``'s looks, or while Nullius was away - and
-        its end is recorded as the look would have recorded it (the rest of
-        its log, its result in ``ends``, the run moved past it); its exit
+        its end is recorded as the look would have recorded it; its exit
         code is returned. Otherwise its processes are ended, by their
         process groups, found as ``_part_pids`` finds them, so a part is
         ended though its launcher was cut short before its pid came back,
@@ -753,10 +734,10 @@ class Execution:
         text, mark, code = out.rpartition("\n__part__ ")
         code = code.strip()
         if rc == 0 and (not mark or code == "none"):
-            # nothing of the part there (nor its run directory): the Stop ended none - unless it cut the part's launch short
+            # A stopped launch may have left no files.
             return 130 if self.launched == part["id"] else None
         if rc != 0 or not code.isdigit():
-            return 130                                   # the Stop ended it, or the target did not say it had ended
+            return 130
         text, size = self._logged(text)
         for line in text.splitlines():
             self._read(line)
@@ -834,8 +815,7 @@ class Execution:
           Stop cut short (``_fail``) - a part's launch included, though
           nothing of the part reached the target: the record names the part
           whose launch began (``launched``), so a restart records the 130
-          too. A record from before ``launched`` takes it for a Stop before
-          the launch.
+          too.
         - the line says the run was stopped, and where: ``during <part>``
           for a part the Stop ended, else ``before`` the next part, or
           ``after`` the last one - ``✕ stopped before <part>: exit <rc>``,
@@ -854,7 +834,6 @@ class Execution:
             if ended is not None:
                 rc = ended
             if self.on_host and (ended is not None or self.ends):
-                # the trials that ended there since the run's last look, copied back once more before the run is stopped
                 left = until - time.monotonic()
                 if left >= 1:
                     self._mirror(self._run_plain, left)
@@ -1013,15 +992,14 @@ class Execution:
     def _prepare(self, fresh: bool = True) -> bool:
         """The target ready for the parts: the tasks, and what the run needs
         there - for a Harbor recipe docker, here or on a host, and the Harbor it pins
-        (built here when it is a repository's commit, its wheels sent to a
-        host, run through uvx) or, for a plan from before the pin, the harbor
+        or, without a pin, the harbor
         on the host's PATH; uv and the runner snapshot for the standard. False when a step
         failed and said so.
 
         A ``fresh`` run on a host first asks whether its run directory is
         there already, and stops before anything is sent when it is: a
         leftover of the same name would otherwise read as this run's parts,
-        claimed or ended already. (Here the route asks, ``web/execute.py``.)
+        claimed or ended already.
         A restored run's directory is its own."""
         self.harbor = "harbor"
         if fresh and not self.on_host and (self.plan.runner == "harbor" or self.plan.docker):
@@ -1107,7 +1085,7 @@ class Execution:
                            else "the host did not say whether python3 is there: " + out.strip()[-400:])
                 return False
         else:
-            # a run record from a runner no longer offered (a benchmark's own scripts now run as the standard's Original setup)
+            # a run record from a runner no longer offered
             self._fail("connect", f"this run's runner, {self.plan.runner}, is no longer offered")
             return False
         if (pin or self.plan.runner != "harbor") and probe["uv"]:
@@ -1271,8 +1249,7 @@ class Execution:
         before either is trusted; True when that part is to be followed, not
         launched. A part has started when its run directory there holds its
         pid file (its detached shell's first act), its log or its exit code,
-        or when a process runs its script there (``_part_pids``: the launcher
-        before c69f527 wrote no pid file).
+        or when a process runs its script there (``_part_pids``).
 
         - No pid in the record: it was saved before the pid was. Started, the
           part is followed - by the pid it wrote, else one of its processes,
@@ -1284,8 +1261,7 @@ class Execution:
           claim is cleared and the part launched. Not claimed: launched.
         - A pid, a part before it, and this part started: the pid is checked
           against the part - the one it wrote, or one of its processes. Not
-          its own, it is the part before's: a record an older version saved
-          as this part was launched. It is dropped, the part
+          its own, it is the part before's. It is dropped, the part
           before's end taken as below, and this part followed as if no pid
           had been saved.
         - A pid, and the part not started - or, past the last part, no end
@@ -1296,7 +1272,7 @@ class Execution:
           after a failure with more to come, else launches the part or ends
           with that exit.
         - A pause: it follows a part's end, so nothing of the run is running.
-          A pid it kept (an older record's: the ended part's) is
+          A pid it kept is
           nobody's now, and is dropped.
         - A Stop the restart cut short: the part is taken as above, and the
           Stop is then finished as a live one is (``_done``) - a part that
@@ -1327,7 +1303,7 @@ class Execution:
         if look is None:
             return bool(self.pid)
         found, procs = look
-        started = lambda: bool(procs) or any(n in found for n in mine[1:])     # its pid file, log or exit code, or its processes
+        started = lambda: bool(procs) or any(n in found for n in mine[1:])
         if check and mine[0] in found and not started():
             # claimed by a launcher and not started yet: the launcher is on its way to it, or died first
             look = self._await_start(mine + before, cur)
@@ -1340,8 +1316,6 @@ class Execution:
         if check and started():
             written = int(found.get(mine[1]) or 0) or None
             if self.pid and prev is not None and self.pid != written and self.pid not in procs:
-                # Not this part's: a record an older version saved as it was launched kept the part
-                # before's pid - and this part, started by the launcher before its pid file, is found by its processes.
                 with self._turn:
                     if before:
                         rc = found.get(before[0], "")
@@ -1463,8 +1437,7 @@ class Execution:
         """Start one part detached on the target and keep its pid. The key and
         endpoint arrive on stdin, become environment for the launcher, and the
         detached shell inherits them - nothing in argv, nothing on disk. They
-        are two lines and ``STDIN_END`` a third: either may be empty (a
-        recipe of controls needs no key, OpenAI's clients no endpoint), so a
+        are two lines and ``STDIN_END`` a third: either may be empty, so a
         stdin cut short - Nullius gone as it sent them, a dropped ssh - is
         told by the end line missing, never by an empty value. Without it the
         launcher answers ``@cut`` and does nothing more, the part neither
@@ -1542,9 +1515,7 @@ class Execution:
                     '[ -n "$U" ] && export ' + " ".join(f'{n}="$U"' for n in URL_NAMES) + '; unset K U; '
                     f'export {exports}; cd {self._q(run_dir)} || exit 1; '
                     + detach +
-                    # The part claimed before anything else is done for it, created only where there is none (noclobber:
-                    # O_EXCL): of two launchers - one a Nullius gone since sent, late to arrive, and the restart's - one
-                    # starts the part and the other says so and starts nothing. From the claim on, this launcher runs
+                    # An exclusive claim (noclobber: O_EXCL) prevents concurrent launchers starting the same part. From the claim on, this launcher runs
                     # in the run directory until the part has started, which is how a restart tells it is on its way.
                     f'( set -C; : >{base}.launch ) 2>/dev/null || {{ echo @claimed; exit 0; }}; rm -f {base}.exit {base}.pid; '
                     # `&` binds to the setsid command alone (hence `;` before it): $! is the detached shell, a session
@@ -1582,9 +1553,7 @@ class Execution:
         the trials - until its exit code lands; a part with no process left
         and no exit code is gone, a failure of its own."""
         base = _base(part)
-        # Alive while a process runs its script in its run directory (_part_pids): its pid when known, else the
-        # one it wrote or one found by its command line - a part an older launcher started has no pid file - and
-        # never a pid that has since gone to another process.
+        # Alive while a process runs its script in its run directory (_part_pids).
         alive = f"[ -n \"$({_part_pids(base, [self.pid])})\" ] && echo alive || echo gone"
         while True:
             # Read in the reverse of the order the target writes them (the log, the exit code, the process
@@ -1822,8 +1791,7 @@ def run_size(ex: "Execution") -> int:
     each ask while the run is alive; once it has ended, again only when its
     state, its record, its folder or its jobs folder moved. What Delete asks
     (``deletion``) walks the folder afresh.
-    shortcut: a file changed deep in an ended run alone (a trace view saved on
-    its trial page) is counted from the next move of those; walk the job folders too if that matters."""
+    shortcut: a file changed deep in an ended run alone is counted from the next move of those; walk the job folders too if that matters."""
     if ex.state in ALIVE:
         return size_of(ex.dir)
 

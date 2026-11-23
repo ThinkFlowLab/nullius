@@ -15,9 +15,8 @@ produce  - LoCoMo's reader prompt over what the memory recalled, as its RAG
            mode builds it (task_eval/gpt_utils.py: the context, a blank line,
            QA_PROMPT; a category-2 question carries the date hint
            get_gpt_answers adds), asked by LoCoMo's own run_chatgpt
-           (global_methods.py) as get_gpt_answers calls it for one question
-           (num_tokens_request=32, temperature=0, wait_time=2, its model
-           argument and use_16k from the model's name), with the openai 0.28
+           (global_methods.py) as get_gpt_answers calls it for one question,
+           with the openai 0.28
            client it is written for pointed at the relay (openai.api_base and
            openai.api_key, the base_url and key Nullius gives); the answer is
            its reply stripped, as get_gpt_answers keeps it. Its behaviour is
@@ -148,7 +147,7 @@ def produce(unit, dir, recalled, model, base_url, key):
     memory = recalled[0]["memory"] if recalled else ""
     asked = q["question"] + (HINT if q["category"] == 2 else "")
     query = (memory or "(nothing recalled)") + "\n\n" + gpt_utils.QA_PROMPT.format(asked)
-    openai.api_base, openai.api_key = base_url, key      # what run_chatgpt's client reads: the relay, for this question
+    openai.api_base, openai.api_key = base_url, key
     with contextlib.redirect_stdout(sys.stderr):
         # get_gpt_answers' own call for one question (batch size 1, as its RAG mode asks)
         answer = gpt_utils.run_chatgpt(query, num_gen=1, num_tokens_request=32,
@@ -165,8 +164,8 @@ def gold(q):
     return ref.split(";")[0].strip() if q["category"] == 3 else ref
 
 
-# The paper's batch per reader, as its scripts run evaluate_qa.py (scripts/evaluate_gpts.sh): every reader
-# with a gpt-3.5-turbo window is asked 10 questions a call, gpt-4-turbo 20.
+# The paper's batch per reader, as its scripts run evaluate_qa.py (scripts/evaluate_gpts.sh):
+# 10 questions a call, gpt-4-turbo 20.
 BATCH = {"gpt-4-turbo": 20}
 ASKED = "asked.json"                             # in the unit's folder: the conversation as fed, and what came back
 ANSWERS = "answers.json"

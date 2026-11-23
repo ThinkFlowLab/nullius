@@ -1,6 +1,6 @@
 # Add a benchmark with an assistant
 
-Open **Benchmarks → Add**. The shared dialog preselects **Benchmark**;
+Open **Benchmarks → Add**. Then
 enter its name and source, then copy the prompt to your coding assistant.
 It uses `/import-benchmark`. See the [shared import procedure](../standard.md#with-an-assistant).
 

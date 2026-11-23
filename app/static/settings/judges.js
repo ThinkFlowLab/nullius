@@ -47,7 +47,7 @@
     if (model) model.placeholder = on?.dataset.default || '';
   }
   // A provider with no list of its own here: its catalogue, asked once when the field is first used; a live list
-  // (Decision on OpenRouter) replaces the one drawn with the page. Typing a model still works.
+  // replaces the one drawn with the page. Typing a model still works.
   const catalogues = new Map();
   async function offerCatalogue(card, model) {
     const on = chosen(card);

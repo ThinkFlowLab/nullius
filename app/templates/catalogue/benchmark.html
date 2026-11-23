@@ -42,8 +42,7 @@
       {%- macro vattr(y, cls='') %} class="{{ (cls ~ ' std-version')|trim }}"{% if y.version %} data-version="{{ y.version }}"{% endif %}{% if not y.current %} hidden{% endif %}{% endmacro %}
 
       {% if std %}
-      {#- The standard's proofs of it, per dataset (standard/proofs/prove.py): its controls as chips, their source in the title - the
-          builder's dataset step draws the same - then its units and leak checks; and Prove it, cli prove as a run. -#}
+      {#- The standard's proofs of it, per dataset (standard/proofs/prove.py): its controls as chips, their source in the title, then its units and leak checks; and Prove it, cli prove as a run. -#}
       {% macro proof(rec, failed, expect, short='') -%}
         {%- if rec %}{% set notes = [short, ('over the first ' ~ rec.limit) if rec.limit, ('shard ' ~ rec.shard) if rec.shard]|select|list %}<span class="std-proof std-proof-{{ 'part' if short else 'ok' }}"{% if notes %} title="{{ notes|join(' · ') }}"{% endif %}>✓ {{ rec.passed }}{% if rec.limit %} · first {{ rec.limit }}{% endif %}</span>
         {%- elif failed and failed.value is defined %}{% set e = (failed.expect or expect or {'at_least': 1}) %}{% set k = e|list|first %}<span class="std-proof std-proof-no" title="not proven: {{ ([failed.passed] + (failed.problems or []))|select|join(' · ') }}">✕ {{ failed.value }} {{ '>' if k == 'at_most' else '<' }} {{ e[k] }}</span>
@@ -185,8 +184,7 @@
           {% if e.notes %}<p class="bench-ds-note">{{ e.notes }}</p>{% endif %}
           <dl class="bench-rows">
             {% if e.verifier %}<div><dt>Verifier</dt><dd>{{ e.verifier }}</dd></div>{% endif %}
-            {#- One row per way it runs: where that harness reads the data, at which pin. The harness
-                fetches it when a run starts; nobody downloads anything by hand. #}
+            {#- One row per way it runs: where that harness reads the data, at which pin. #}
             {% if y.data[d.key] %}<div><dt>Data</dt><dd>
               <ul class="bench-sources">
                 {% for r in y.data[d.key] %}
@@ -270,7 +268,7 @@
       </section>
       {% endif %}
       {%- if b.published %}
-      {#- A Harbor benchmark runs as published through Harbor's own agent for it, on any model: the builder names it. -#}
+      {#- A Harbor benchmark runs as published through Harbor's own agent for it, on any model. -#}
       <section class="bench-section std-setups" id="published" aria-labelledby="published-title">
         <h2 id="published-title">As published</h2>
         <p>Harbor's <span class="mono">{{ b.published.agent }}</span>: {{ b.published.says }}</p>

@@ -15,11 +15,7 @@ whose cost was never known - a reply with no token count, a reply cut off -
 keeps its whole booking, as ``unsettled``: it may have been billed.
 
 What was spent is each reply's real cost. Only a call in flight is an
-estimate, since its cost is known when its reply comes back: the prompt's
-characters over three as input tokens, and as output the average reply
-the run has had from that model so far (the ledger keeps their count and
-sum, ``seen``) - ``OUTPUT`` before any - and never more than the limit the
-call names or the model's own (its price row's ``max_output``). The
+estimate, since its cost is known when its reply comes back: see :func:`bound`. The
 model's limit alone would book a short answer at a hundred times its
 cost, and a few calls at a time would fill a cap nothing had been spent
 of; the largest reply so far would let one long answer do the same to
@@ -29,8 +25,7 @@ the spend past the cap by the difference, and the next call is refused.
 A cap per unit (``run --max-usd-per-unit``) is kept in the same file: what
 each unit spent and has in flight, beside the run's. A call that does not
 fit its unit's cap is refused, and so is every later call of that unit; the
-run goes on. A unit's calls are its own and its simulated user's - part of
-the task - and never its judge's, which scores it (:func:`unit_of`).
+run goes on. A unit's cap covers agent and simulator calls, excluding its judge (:func:`unit_of`).
 
 A call that lacks room only because of calls in flight is not refused: its
 relay waits for them to settle (``WAIT``), since their bookings are
@@ -46,7 +41,7 @@ first call the average is other units' replies, a guess of its own, and a
 unit refused on it would count against its agent with no call sent.
 
 The file is rewritten whole under a lock held for one read and one write
-(``flock`` on a file beside it, as an install is locked): a relay that dies
+(``flock`` on a file beside it): a relay that dies
 holding it lets it go.
 """
 from __future__ import annotations
@@ -62,8 +57,7 @@ from nullius import ondisk
 
 OUTPUT = 4096                       # output tokens booked for a call before the run has had a reply from its model
 ERROR = "SpendingCapError"          # what a unit the cap ended carries: its own outcome outside the rate, never a miss (runs.classify)
-# what a unit that reached its own cap carries: it had its attempt and spent its allowance, as one that spends its
-# time does - an agent error, counted against the agent (runs.classify)
+# what a unit that reached its own cap carries: an agent error, counted against the agent (runs.classify)
 UNIT_ERROR = "UnitSpendingCapError"
 WAIT = 120.0                        # seconds a call waits for the calls in flight to settle before it is refused
 _LIMITS = ("max_completion_tokens", "max_output_tokens", "max_tokens")
@@ -76,8 +70,7 @@ class Unavailable(Exception):
 def models(other: dict, model, judge, simulator, embed, control: bool = False) -> list:
     """Every model a run's relays may send a call to, as sent: the run's own, the judge's, the simulated
     user's (never a control's: it holds no conversation), an option's embeddings and the side models of
-    ``other`` (the agent, capability or setup). What a capped run must have a price for; the run and the
-    builder's Limits step both read it here."""
+    ``other`` (the agent, capability or setup). What a capped run must have a price for."""
     side = [(to or name) for name, _, to in (str(m).partition("=") for m in (other.get("model") or {}).get("side_models") or ())]
     return [m for m in dict.fromkeys([model, judge, None if control else simulator, embed, *side]) if m]
 
@@ -167,10 +160,7 @@ class Ledger:
         the state says the ``amount`` booked. ``wait``: a call that would
         fit with nothing in flight is not refused but told to wait (``by:
         wait``), and nothing is closed. ``least``: the part of ``amount``
-        that is no guess, the request's own (:func:`bound`): before any
-        reply from ``model``, a call whose ``least`` fits is booked the room
-        there is with nothing in flight, never refused on its guess; and so
-        is the call of a unit that has spent nothing, within its unit's cap."""
+        that is no guess, the request's own (:func:`bound`): book available run room if the model has no replies and ``least`` fits. Apply the same rule within the unit cap if the unit has spent nothing."""
         with self._locked() as doc:
             usual = _usual(doc, model)
             if callable(amount):
@@ -178,12 +168,12 @@ class Ledger:
             guess = least is not None and usual is None       # no reply from its model yet: its output is a guess
             each = doc["unit_max_usd"] if unit is not None else None
             u = doc["units"].setdefault(unit, {"spent_usd": 0.0, "unsettled_usd": 0.0, "closed": False}) if each is not None else None
-            # a unit that has spent nothing: the average is other units' replies, a guess for its own first call
+            # a unit that has spent nothing
             first = u is not None and least is not None and not u["spent_usd"] and not u["unsettled_usd"]
             for cap, count in ((each, u), (doc["max_usd"], doc)):
                 room = None if cap is None else cap - count["spent_usd"] - count["unsettled_usd"]
                 if (guess or (first and count is u)) and room is not None and least <= room < amount:
-                    amount = room                             # booked the room there is, never refused on the guess
+                    amount = room
             seen = dict(_state(doc), by="cap", amount=amount)
             if each is not None:
                 flight = sum(doc["held"].get(b, 0.0) for b, w in doc["of"].items() if w == unit) + u["unsettled_usd"]

@@ -73,7 +73,7 @@ def expected(unit, seed):
 
 
 def log_path(dir):
-    """The server's call log: beside the trial's verdict, not in the workspace."""
+    """The server's call log."""
     return os.path.join(os.path.dirname(os.path.abspath(dir)), "verifier", "mcp-calls.jsonl")
 
 

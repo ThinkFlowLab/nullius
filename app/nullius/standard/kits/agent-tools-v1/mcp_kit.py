@@ -2,8 +2,7 @@
 
 Twenty tools of a small shipping office - stock, parcels, orders, accounts,
 site permits - most of them decoys for any one check: names alike, answers
-of the same shape. Every value is derived from ``$KIT_SEED`` (one seed per
-unit, drawn by the driver and never in a prompt), so an answer cannot be
+of the same shape. Every value is derived from ``$KIT_SEED``, so an answer cannot be
 guessed, only fetched with the right tool and the right arguments.
 
 Every ``tools/call`` is appended to ``$KIT_LOG`` as one JSON line - the tool,
@@ -72,7 +71,7 @@ NUMBERS = {                       # one family of near-twins: the decoy check as
 }
 # "The site", not "the site's id": a schema asking for an id the agent has no
 # way to learn sends a careful agent looking for one instead of calling - the
-# error is where it learns the id, as from many a real API.
+# error is where it learns the id.
 SITE_YEAR = {"site": _s("The site."),"year": _i("The year, such as 2025.")}
 STOCK = {"warehouse": _s("The warehouse's name."), "item": _i("The item number.")}
 
@@ -111,7 +110,7 @@ def _str(args, name):
 
 def _site(seed, args):
     """A site is named by its id; a name is refused with the id it has, the
-    one way to learn it - so the first call errs and the second can succeed."""
+    one way to learn it."""
     s = norm(_str(args, "site"))
     if not s.startswith("SITE-"):
         raise ToolError(f"{_str(args, 'site')!r} is not a site id: sites are named by id here, "

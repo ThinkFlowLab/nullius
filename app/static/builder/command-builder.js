@@ -5,7 +5,7 @@
   // in order (recipe.py, served_by). Its picker is the Model row's (model-picker.js, list="nb-served"): typing filters
   // the model's providers (POST /new-run/endpoints), a pick or a slug typed and Enter joins the list under it, each
   // removable. Empty: any provider. What a row shows is C.servedRow's; `compiled()` is the server's last compile and
-  // the key of the recipe it was made for (C.servedKey). The tests run this under Node, with stand-ins for the page.
+  // the key of the recipe it was made for (C.servedKey).
   function servedRows({C, root, r, compiled, esc, button, providers}) {
     const NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
     // the model a Served by is for, as the step shows it: the field's, else the leaderboard's or the official one
@@ -55,7 +55,7 @@
   // move() sends what this browser kept before (nullius.recipes.v1, and the older nullius.recipes.v1.<workspace> lists)
   // to the lenient import, which skips names already saved, and removes those keys once the server answered. The
   // recipes it refused or skipped are kept under REJECTED, never sent again; move() returns how many of each. On a
-  // failure the keys stay for the next visit. `request` is nulliusFetch; the tests run this under Node with stand-ins.
+  // failure the keys stay for the next visit. `request` is nulliusFetch.
   function recipeStore({request, csrf, storage}) {
     const call = async (url, method, body) => {
       const res = await request(url, method ? {method, headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify(body || {})} : {});
@@ -100,7 +100,6 @@
   // What the page shows is kept in the browser as a draft on every change, so
   // leaving for another page and coming back finds the recipe as it was left.
   // A run's own recipe (?run=) or a prefill from a run's fields comes first.
-  // A draft comes back silently: the page simply is as it was left.
   const draftKey = 'nullius.recipe-draft.v1';
   let opened = '', savedId = '';   // savedId: the saved recipe this page holds, which a save updates (renames)
   if (schema.loadRecipe) { try { recipe = C.fromJSON(schema.loadRecipe); step = REVIEW; opened = 'Opened the recipe of run “' + schema.loadRun + '”. Run gives it a new name.'; } catch (e) { opened = 'This run’s recipe cannot be read: ' + e.message; } }
@@ -145,7 +144,7 @@
       + (current === 'dev' ? field('Path to the development harbor', 'harborDev', rec.harborDev, {placeholder: '~/harbor-dev/.venv/bin/harbor', hint: 'Runs from it are labelled development, not acceptance evidence.'}) : '');
   };
   // The Harbor agents as cards, grouped by what they are for. Every selected
-  // agent becomes one run command; the line above the cards says how many.
+  // agent becomes one run command.
   const agentLabel = (id, rec = r()) => C.agentById(id, rec)?.label || id;
   const chip = (id, label, on, extra = '') => `<button type="button" class="nb-agentchip" data-agent="${esc(id)}" aria-pressed="${on}" ${extra}>${esc(label)}${on ? ' <span aria-hidden="true">✓</span>' : ''}</button>`;
   // The agent list: the vocabulary as chips, and custom agents as typed
@@ -205,7 +204,7 @@
   // Nullius's own mark for the standard; Harbor's for Harbor
   const runnerMark = x => x.standard ? '<span class="brand-mark nb-nullius-mark" aria-hidden="true"></span>'
     : '<svg aria-hidden="true"><use href="/static/brand/marks.svg#harbor"/></svg>';
-  // A card per runner that runs the benchmark, alone when only one does: Harbor, and Nullius (the standard) - a benchmark's own scripts run there, as its Original setup.
+  // A card per runner that runs the benchmark, alone when only one does: Harbor, and Nullius (the standard).
   const runnerCard = (x, on, label, summary, mark) => tile({attr: 'runner', key: x.key, on, mark, title: label, tip: summary || ''});
   const runnerStep = rec => {
     const has = C.runnersOf(C.benchKey(rec)), list = C.runners().filter(x => x.builtin && has.includes(x.key));
@@ -413,8 +412,7 @@
     return '';
   };
   // The Nullius standard (C.isStandard): a benchmark, then an agent or a capability among every one there is - the
-  // ones that have not proved the ports it needs shown greyed, with the reasons - a model and a scope. The server
-  // compiles the choices (POST /new-run/runner, nullius/standard/pages/recipe.py).
+  // ones that have not proved the ports it needs shown greyed, with the reasons - a model and a scope.
   // what a unit is: the benchmark's, or a setup's own when only setups run (a conversation, where the paper batches its questions)
   const unitsOf = rec => { const b = C.standardBench(rec) || {}, runs = C.runsOf(rec), own = (b.setups || []).filter(x => runs.includes(x.key));
     return own.length && own.length === runs.length ? own[0].units : b.units || {noun: 'unit', nouns: 'units'}; };
@@ -633,8 +631,7 @@
   // The grids drawn by the server and run by the card toolkit (tables.js): the Benchmark step's (/new-run/benchmarks,
   // one choice) and the standard's Agent step's for its benchmark (/new-run/agents, from the Agents page's entries).
   // Each is kept while what it draws is the same, so a search or a filter survives each render, and its cards are
-  // pressed as the recipe chooses (nullius-pick changes the recipe). Its view, cards or a table, is the viewer's:
-  // the toggle switches it in place, never leaving the page.
+  // pressed as the recipe chooses (nullius-pick changes the recipe).
   const grids = [
     {slot: 'nb-bench-grid', store: 'nb-bench-view', url: () => '/new-run/benchmarks?', chosen: rec => [C.benchKey(rec)], after: benchTasks},
     {slot: 'nb-agent-grid', store: 'nb-agent-view', url: rec => '/new-run/agents?' + new URLSearchParams({benchmark: rec.benchmark}) + '&', chosen: rec => C.chosenOf(rec)},
@@ -1074,16 +1071,16 @@
     const rec={...r(),name:r().name+'-'+stamp};
     let body, ask;
     if(C.providerBlocker(rec))return;   // the button is disabled then; /run refuses the same
-    if(!(prereq.out&&prereq.out.ready))return;   // Run waits for the prerequisites; the run asks again as it starts
+    if(!(prereq.out&&prereq.out.ready))return;   // Run waits for the prerequisites
     // A runner of its own sends its choices only: /run compiles them again from the definition file.
     if(C.isStandard(rec)){body={name:rec.name,where:rec.where,recipe:rec};ask=runnerOut&&runnerOut.confirm;}
     else{const plan=C.runnable(rec); if(plan.errors.length)return; body={name:rec.name,script:plan.script,where:rec.where,tasks:plan.tasks,model:plan.model,jobs:plan.jobs,parts:plan.parts,recipe:rec}; ask=plan.confirm;}   // the recipe travels with the run
-    if(ask&&!window.confirm(ask)){say('Not started.');return;}   // the whole dataset is a decision, not a default
+    if(ask&&!window.confirm(ask)){say('Not started.');return;}
     const b=$('#nb-run'); b.disabled=true; say('starting…');
     try{
       const res=await nulliusFetch('/run',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':schema.csrf},body:JSON.stringify(body)});
       const j=await res.json(); if(!j.ok){say('✕ '+(j.error||('HTTP '+res.status)),'nb-error');b.disabled=false;return;}
-      location.href=j.open||'/runs?view=launch';   // the Runs page, by launch: this launch's runs, each opening its job
+      location.href=j.open||'/runs?view=launch';   // the Runs page, by launch: this launch's runs
     }catch(e){say('✕ '+e,'nb-error');b.disabled=false;}
   }
   // The button says it is reading until the answer's toast replaces it: a toast alone would be gone before a slow answer.

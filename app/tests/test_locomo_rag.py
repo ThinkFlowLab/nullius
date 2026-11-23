@@ -4,8 +4,7 @@ scripts with the flags the paper's scripts pass - evaluate_qa.py's --use-rag,
 get_session_summaries.py first for a database they write - and scores the
 predictions under the names evaluate_qa.py files them by. The upstream is a
 stand-in here: scripts that record how they were called and write what the
-real ones write, so nothing is installed and no GPU or model is needed. The
-real retrievers are proven on a machine with a GPU, by a run."""
+real ones write, so nothing is installed and no GPU or model is needed."""
 from __future__ import annotations
 
 import json

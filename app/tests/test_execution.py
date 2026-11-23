@@ -309,8 +309,7 @@ class SshWarnsAtEveryConnection(LocalHost):
     ahead of whatever the command prints. A part's log is read on from where
     the last look ended, by the log's own bytes: the warning is no part of
     it, so it moves nothing, and a look never starts inside a character.
-    Found on a τ³ run whose results table - box drawing, three bytes a
-    character - ended the run with a UnicodeDecodeError, its lines skipped."""
+    """
     TABLE = "━" * 40
     LINES = ["Downloading litellm (35.1MiB)", " Downloaded botocore", f"  20/20 Mean: 0.000 {TABLE} 0:00:08", "┃ Trials ┃ Exceptions ┃", "done"]
 

@@ -17,7 +17,7 @@ The same questions as Decision, answered as JSON by a chat model.
 
 ## Configure
 
-Add the connection in **Settings → Model providers** first. **Judges** offers only configured, compatible providers. A sole provider is selected automatically; with several, choose one and set the model. Under the provider, the card names the protocol the judge uses. When the provider serves both protocols, choose one under **Protocol**. Keys and endpoints stay in Model providers.
+Add the connection in **Settings → Model providers** first. **Judges** offers only configured, compatible providers. With several, choose one. Set the model, and the protocol when the provider serves both.
 
 You can also merge the shown properties into
 your existing `settings.json` ([location and precedence](README.md#save)).
@@ -31,7 +31,7 @@ your existing `settings.json` ([location and precedence](README.md#save)).
 ```
 
 !!! warning "A judgement is a paid call"
-    Configuration alone calls nothing; no recipe's model changes.
+    Configuration alone calls nothing.
 
 <div class="grid cards" markdown>
 

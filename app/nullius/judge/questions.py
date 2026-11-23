@@ -4,8 +4,7 @@ are the contract; the wording here is what the judge is sent.
 
 The vocabulary is versioned as a set. A record carries the version it was
 asked under and the store keeps every version side by side, so bumping
-``VERSION`` never makes an earlier judgement unreadable - it is shown under
-its own version, marked as earlier, and *Judge again* asks the current one.
+``VERSION`` never makes an earlier judgement unreadable.
 Rewording a question a stored record can carry is what bumps it. Adding a
 question, or dropping one that no stored record carries, leaves it alone:
 no recorded answer changes meaning. A question a stored record does carry
@@ -13,8 +12,7 @@ stays declared after its surface stops asking it, so that record still
 renders (``better_of_two``).
 
 Questions are declared in **groups**, one per surface that asks them
-(``register``): the trial page, a matched pair, a misbehaving control, the
-counted behaviour, a task's instruction, and whatever a later surface adds.
+(``register``).
 A group is appended here as one ``register`` block - never by editing
 another group's block - and a call site asks ``group_ids(name)`` rather
 than naming ids, so adding a question to a group reaches every page that
@@ -22,9 +20,7 @@ asks that group. A group goes when the last surface asking it does. A
 question may declare ``when: "unresolved"`` to be asked only of a trial
 that did not resolve. The ``hygiene`` group reads no state kind of its own (``state:
 "*"``): ``batch`` attaches it to every call. ``request_questions`` is the API shape and sends only ``type``,
-``instructions`` and ``criteria``; the id, the state kind, the group and
-``when`` never leave this process, nor do ``label`` and ``blurb``, the
-name and one-line reading a page shows for a question.
+``instructions`` and ``criteria``.
 
 Rails the wording keeps to (Jev's jaggedness page): no arithmetic, no date
 comparison, no interpolating a score, boundary cases in the criteria, an
@@ -34,9 +30,7 @@ from __future__ import annotations
 VERSION = "judgement.questions.v2"
 EARLIER = ("judgement.questions.v1",)     # versions the store still reads, newest first
 
-# What a question reads. `trial`: instruction, agent steps, final message;
-# `failure`: the trial state plus the recorded error and the verifier text;
-# `final`: the final message alone; `pair`: instruction and two transcripts.
+# What a question reads. See `state.build` for built-in kinds.
 # A group added later names its own kind and registers its builder
 # (`state.register`): `control` and `task` below.
 QUESTIONS: dict = {}
@@ -93,8 +87,7 @@ register("trial", {
     },
     "likely_outcome": {
         # The unknown bucket (`runs.classify.UNKNOWN`): the classifier found no evidence to place the trial. A Choice over
-        # the classifier's own labels, asked only of those trials (`when: unknown`, the failure state), so the
-        # classifier-vs-judge page can suggest a label directly - advisory, never written back as the outcome.
+        # the classifier's own labels, asked only of those trials (`when: unknown`, the failure state); suggestions never overwrite the outcome.
         "label": 'Likely outcome', "blurb": 'The outcome the judge reads for a trial the classifier could not place',
         "type": "choice", "state": "failure", "when": "unknown",
         "instructions": "The recorded outcome of this trial is unknown: nothing recorded placed it. From the transcript, the recorded error and the verifier output, which outcome did this trial most likely have?",
@@ -182,8 +175,7 @@ register("trial", {
 # Each side is scored on its own, over its own `trial` state, against one
 # rubric; the pick is made in code (`compare.comparison.better_of`), never by
 # the model. That removes position bias - a transcript is never "A" or "B" -
-# and halves the state. `better_of_two` is DEPRECATED: declared so a v1 record
-# still renders under its own version, asked by nothing since v2.
+# and halves the state. `better_of_two` is kept for v1 records.
 register("pair", {
     "task_satisfaction": {
         "type": "score", "state": "trial",
@@ -203,11 +195,7 @@ register("pair", {
 # --- state hygiene: asked on every call, over every state kind ---------------------
 # State is arbitrary text from a job directory and is not trusted: a transcript
 # can carry text arguing for its own classification, and a credential the
-# regex pass did not recognise. These two ride every call `batch.ask_states`
-# makes (output tokens are free), read the same state the surface's questions
-# read (`state: "*"`), and are kept apart from `answers` - under `hygiene`, per
-# state kind - so a raised flag is shown beside every answer drawn from that
-# state and changes none of them. They make the risk visible; they do not
+# regex pass did not recognise. Flags under `hygiene` appear beside answers for the same state kind and leave those answers unchanged. They make the risk visible; they do not
 # make the judge robust.
 register("hygiene", {
     "addresses_the_judge": {
@@ -226,14 +214,12 @@ register("hygiene", {
 
 
 def hygiene_ids() -> list:
-    """The hygiene questions, asked on every call over every state kind."""
+    """The hygiene questions."""
     return group_ids("hygiene")
 
 
 # --- feasibility triage: a control that did not behave in the sweep --------------------
-# One Choice over a purpose-built `control` state (which control, what it is
-# for, its recorded outcome and error, the verifier text, its own short
-# transcript) - never the agent's run. The feasibility verdict itself stays
+# One Choice over a purpose-built `control` state - never the agent's run. The feasibility verdict itself stays
 # `runs.feasibility.verdict`'s; this says *why* a side misbehaved, advisory.
 register("feasibility", {
     "control_failure_cause": {

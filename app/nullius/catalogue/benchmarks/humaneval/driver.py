@@ -13,9 +13,8 @@ score  - the upstream's own check_correctness (human_eval/execution.py) with
          the problem and a completion made of the agent's solution.py, at the
          timeout evaluate_functional_correctness gives it by default (3 s):
          the prompt, the completion and the problem's test run as one program,
-         in a process of its own under the upstream's reliability_guard. The
-         workspace files solution.py's import statements name are listed in
-         the detail (``not_tested``): the check is given solution.py alone
+         in a process of its own under the upstream's reliability_guard.
+         Only solution.py is tested. Imported workspace files are listed in ``not_tested``.
 oracle - the reference control: writes the problem's prompt and its
          canonical_solution, the authors' own body, as solution.py
 answer - the original setup: the problem's prompt completed by a model in one

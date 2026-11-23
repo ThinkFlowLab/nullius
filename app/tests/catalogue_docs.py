@@ -5,17 +5,14 @@ Under `docs/agents/supported/`, `docs/benchmarks/supported/` and
 and every entry has a page of its own, `<key>.md`, written whole. All of it
 is rendered from explicit bundled roots under `app/nullius/catalogue/`,
 independent of personal catalogue overlays, so the documentation names exactly
-what is shipped:
-every agent and its versions, the ports each has proven, the benchmarks each
-fits, every benchmark's datasets, needs, controls, setups and options. The
-prose around the README's block is written by hand; a page is not.
+what is shipped.
 
     python3 app/tests/catalogue_docs.py --write    # refresh the blocks and the pages
     python3 app/tests/catalogue_docs.py            # say which are stale
 
 `test_catalogue_docs.py` runs the check in the backend suite, so a definition
 that changes without the pages following fails the suite. No date, model or
-job name of a proof is written: the pages say what is proven, not when.
+job name of a proof is written.
 """
 from __future__ import annotations
 
@@ -426,8 +423,7 @@ HARBOR_CONTROLS = {"nop": "Harbor", "oracle": "the authors"}
 
 def _controls(d: dict, entry=None) -> dict:
     """Who wrote each control, by name: the standard definition's, else, for a
-    benchmark Harbor runs, Harbor's own two agents - `nop` is Harbor's and does
-    nothing; `oracle` applies the task's reference solution, the authors'."""
+    benchmark Harbor runs, Harbor's own two agents."""
     controls = (d or {}).get("controls") or {}
     if controls:
         return {c: SOURCES.get(controls[c].get("source"), controls[c].get("source")) for c in definitions.CONTROLS if c in controls}

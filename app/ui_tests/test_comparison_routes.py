@@ -1,6 +1,6 @@
 """The UI keeps cohort arithmetic and repeat semantics intact.
 
-This Flask-dependent suite is separate from the pure data-layer tests. It uses
+It uses
 synthetic parsed records and forbids workspace opens, conversion and writes.
 """
 

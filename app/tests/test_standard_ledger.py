@@ -84,7 +84,7 @@ class LedgerTest(unittest.TestCase):
         self.assertIsNone(ledger.Ledger.create(os.path.join(self.tmp, "run", "ledger.json"), 1.0).unit_left("u1"))   # no cap per unit
 
     def test_a_unit_that_has_spent_nothing_is_not_refused_on_what_other_units_replies_were(self):
-        """Refused on that average, it would count against its agent with no call sent: 8 of 16 problems did, on a real run."""
+        """Refused on that average, it would count against its agent with no call sent."""
         led = ledger.Ledger.create(self.path, None, 0.00015)
         booked = lambda usual: 0.00002 + (usual or ledger.OUTPUT) * 0.2e-6       # the request, and the reply at 0.20 USD a million
         a, _ = led.reserve(booked, "u1", "m", least=0.00002)

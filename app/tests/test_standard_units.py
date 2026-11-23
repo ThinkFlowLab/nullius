@@ -2,8 +2,7 @@
 dataset and no other, in the dataset's order, each keeping its place in the
 whole dataset; an id the dataset does not hold refuses the run before any
 unit starts, naming it; a file that lists an id twice, or none, is refused as
-it is read; the job's config names the file, its sha256 and its units. A run
-without a list is the run it always was. No key, no network: the runs are a
+it is read; the job's config names the file, its sha256 and its units. A run without a list is unchanged. No key, no network: the runs are a
 control's, but for one agent's whose model answers on this machine's
 loopback."""
 from __future__ import annotations
@@ -247,7 +246,7 @@ class Listed(unittest.TestCase):
         self.assertEqual(self.trials(job), ["good__u0000", "model__u0003", "slow__u0002", "wrong__u0001"])
         self.assertEqual(self.started(job), DATASET)
         cfg = read(os.path.join(job, "config.json"))
-        # the keys a control's run recorded before there were lists, the retries every run now records, and no other
+        # Control fields and retry metadata only.
         self.assertEqual(sorted(cfg["standard"]), ["backend", "benchmark", "control", "kind", "needs", "permissions_granted",
                                                    "plugged", "provider", "retries", "unsandboxed"])
         self.assertEqual(cfg["datasets"], [{"name": "fakebench/all", "n_tasks": 4}])

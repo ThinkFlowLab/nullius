@@ -41,8 +41,7 @@ def index():
     if shared.STATE["workspace"] is None:
         return render_template("runs/start.html", workspaces=workspace.list_all(shared.WS_HOME))
     jobs, have, mine, grouped = _grouped()
-    # Runs started from the builder whose job Harbor has not written yet:
-    # listed above the table, each a link to the page that follows it.
+    # Runs started from the builder whose job Harbor has not written yet.
     preparing = [(jid, e) for e in mine if e.state in execution.ALIVE for jid in e.summary()["job_ids"] if jid not in have]
     # a launch whose runs wrote no job yet (or never will: refused, stopped) is still shown
     if not jobs and not mine:
@@ -54,8 +53,7 @@ def index():
     # The header, the chips and the mix bar describe the agents' trials. A
     # control (nop, oracle) is a check on the tasks, not a competitor: it is
     # listed on its own line as behaved or not (`feasibility.summary_of`),
-    # and its trials never enter the totals — a nop rejected on every task
-    # is the expected result, not five failed verifications.
+    # and its trials never enter the totals.
     verdicts = {j.job_id: feasibility.summary_of(j) for j in jobs}
     verdicts = {i: replace(v, running=False) if v and ended[i] else v for i, v in verdicts.items()}
     agents = [j for j in jobs if verdicts[j.job_id] is None]
@@ -80,7 +78,6 @@ def index():
     ]
 
     # Distinct values behind the Filter menu's lists, as (value, label).
-    # Value is what the row carries; label is what the menu shows.
     choices = {
         "dataset": sorted(
             {(j.dataset, shared.dataset_title(j.dataset)) for j in jobs}, key=lambda p: p[1]
@@ -339,8 +336,8 @@ def _launch_view(g, by_id, verdicts, ended) -> dict:
     rows = _fold(rows, ended)
     rate = lambda r: r["job"].adjusted_solve_rate if r["job"] is not None and r["job"].adjusted_solve_rate is not None else -1.0
     rows.sort(key=lambda r: (_STATE_ORDER.get(r["state"], 9), -rate(r), r["job_id"]))
-    # The controls are rows of their own at the top of the table, written or still to come, nop before oracle:
-    # a check on the tasks, never ranked with the agents nor offered to Compare, and kept once they end.
+    # The controls are rows of their own at the top of the table, written or still to come, nop before oracle,
+    # kept once they end.
     controls = [{"job": j, "job_id": j.job_id, "state": _state_of(j.job_id, j, ended), "control": v.control, "verdict": v} for j, v in checks]
     controls += [{"job": None, "job_id": i, "state": _state_of(i, None, ended), "control": c, "verdict": None} for i, c in waiting]
     controls = _fold(controls, ended, control=True)
@@ -419,10 +416,7 @@ def _readable(roots, shown=lambda root: root):
 
     A root is refused when the importer that claims it cannot read it — a
     ``run.json`` that is not JSON, a log of the wrong shape — or when nothing
-    claims it and nothing in it is job-shaped either. Adopting either would
-    have been reported as success: the first as a job with no trials, the
-    second as a workspace with nothing new in it, and neither says what was
-    wrong with the folder. The message is redacted before it is shown: a
+    claims it and nothing in it is job-shaped either. The message is redacted before it is shown: a
     file's path or content is arbitrary text, and a credential in a bad one
     must not reach the page because the file was bad.
     """
@@ -518,7 +512,7 @@ def upload():
     files = request.files.getlist("files")
     files = [f for f in files if f.filename]
     # One Parse button serves both halves of the form, so typed paths can
-    # arrive alongside uploaded folders. Both end up in the same root list.
+    # arrive alongside uploaded folders.
     typed, bad = shared.resolve_submitted_paths(request.form.getlist("path"))
     if bad:
         flash(shared._bad_paths_message(bad), "error")
@@ -765,9 +759,7 @@ def launch_add(key):
 def launch_delete(key):
     """Delete a launch that has ended: every run of it (``execution.delete``),
     each shard's copy on its own host when ticked. A launch with a run still
-    going, or with a job from elsewhere, is refused. The launch's block on
-    the Runs page and the Launches page (``back=launches``: every launch,
-    in a workspace or not) ask first, in a dialog."""
+    going, or with a job from elsewhere, is refused. ``back=launches`` returns to the Launches page."""
     shared._require_csrf()
     if not shared._local_client():
         abort(403)
@@ -802,8 +794,7 @@ def _view_of(board, j=None) -> str | None:
     grows, and Results, the page rendered from the job's files. ``?view=`` wins,
     so a link opens the view it was copied from; otherwise Live while the feed
     says the job is going, Results once it ended - unless there are no results
-    to show: a job with a feed and no result record yet (a runner's arm whose
-    importer has not written one) stays on Live. A job with no feed, a broken
+    to show: a job with a feed and no result record yet stays on Live. A job with no feed, a broken
     one or an empty one has no Live view, and no tabs.
     """
     if not board or not board.get("initial") or board["initial"]["state"] == "unknown":
@@ -816,11 +807,6 @@ def _view_of(board, j=None) -> str | None:
 
 def _live_board_state(j):
     """Whether the job page has a live board, and from what.
-
-    The board is the job page's Live view, not a second page: it polls while
-    the feed says the job has not ended, and once it ended it stays as the
-    record of how the run went, beside Results. A job without a feed has no
-    live board.
     """
     if not live.has_feed(j.dir):
         return None

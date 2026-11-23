@@ -25,7 +25,7 @@ the dataset's units gives each shard exactly one.
 
 Every shard of one launch records the same ``launch`` id: ``--launch``, or by
 default the day (UTC), the benchmark, the agent or capability and the model, so
-shards started separately - on other machines, minutes apart - still say
+shards started separately still say
 they belong together. Two launches of the same pair on the same day need
 ``--launch`` to stay apart.
 """

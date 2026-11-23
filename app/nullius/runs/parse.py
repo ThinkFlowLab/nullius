@@ -22,9 +22,6 @@ from nullius.redact import redact
 # capture, or a filtered view saved from the trial page. A bare filename, so
 # there is no path to traverse in the first place, and no leading dot to hide the
 # file it writes.
-#
-# One definition, two readers: the trial page validates a name before writing it,
-# and one arriving in a query string (?trace=) before reading it.
 TRACE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\.json$")
 DEFAULT_TRACE_NAME = "trace.json"
 
@@ -34,8 +31,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 SCHEMA = "17"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
-# retries a 429 below the harness (an agent's `max_retries` reaching its
-# OpenAI client), so a limit the run survived leaves nothing in result.json —
+# retries a 429 below the harness, so a limit the run survived leaves nothing in result.json —
 # the outcome says `resolved` and the only evidence is the log. Three shapes
 # are counted: the exception class or the API's error code (`RateLimitError`,
 # `rate_limit_exceeded`, "Rate limit reached"), the HTTP reason phrase ("Too
@@ -81,8 +77,7 @@ def count_rate_limits(path: str) -> int | None:
 
     None and 0 are different answers: an agent that wrote no gateway log
     (a control, an imported run, the direct transport) cannot be said to have
-    hit no limits, only that nothing recorded it. Lines are counted, bounded by
-    GATEWAY_SCAN_BYTES, and the file is never held whole.
+    hit no limits, only that nothing recorded it. Bounded by GATEWAY_SCAN_BYTES.
     """
     try:
         handle = open(path, "rb")
@@ -102,8 +97,7 @@ def count_rate_limits(path: str) -> int | None:
 def _iso(ts: str | None):
     """A stamp as an aware datetime. Harbor writes its stamps without a zone,
     in UTC; the standard, OpenTelemetry and zoned ATIF imports write one. A
-    naive and an aware datetime cannot be compared or subtracted, so a page
-    that ordered or spanned both returned 500: every stamp is given UTC."""
+    naive and an aware datetime cannot be compared or subtracted, so every stamp is given UTC."""
     if not ts or not isinstance(ts, str):
         return None
     try:
@@ -155,8 +149,7 @@ class Trial:
     dur_agent: float | None
     dur_verifier: float | None
     has_trajectory: bool = False
-    # The resolved agent version recorded in agent_info —
-    # what makes two runs of "the same" agent actually comparable.
+    # The resolved agent version recorded in agent_info.
     agent_version: str = ""
     # The agent the trial's own result.json names (agent_info.name). A job
     # config written with defaults left out names no agent when the agent is
@@ -167,8 +160,7 @@ class Trial:
     # .type`, e.g. "docker") — the job-level config does not carry it.
     env_type: str = ""
     has_trace: bool = False
-    # Rate-limit records the agent's own log carries — 429s its SDK retried and
-    # the run survived, which no result.json field records (`count_rate_limits`).
+    # Rate-limit records the agent's own log carries (`count_rate_limits`).
     # None when the trial has no `agent/gateway.log`: not measured, not zero.
     n_rate_limited_retries: int | None = None
     # How many times the runner retried this attempt after an infrastructure or
@@ -195,13 +187,10 @@ class Trial:
     # score counting nothing, as in the trial's own mean; and that field's word.
     part_groups: dict = field(default_factory=dict)
     parts_by: str = ""
-    # Names of the tests that failed, kept so a regression can be shown, not
-    # just counted.
+    # Names of the tests that failed.
     f2p_failures: list = field(default_factory=list)
     p2p_failures: list = field(default_factory=list)
-    # Absolute clocks, for anything that places this trial on a timeline
-    # rather than measuring it — an exporter drawing spans needs where a phase
-    # *sat*, not just how long it took. `phases` maps a Harbor phase name
+    # Absolute clocks. `phases` maps a Harbor phase name
     # (environment_setup, agent_setup, agent_execution, verifier) to its
     # (started, finished) pair; a phase the run never recorded is absent, so a
     # reader sees nothing rather than a zero-length span.
@@ -257,7 +246,7 @@ class Trial:
 
 # Harbor's control agents. Neither calls a model: `oracle` applies the task's
 # gold patch, `nop` does nothing. Their zero tokens and zero cost are true
-# measurements, not missing ones — which is the whole reason to tell them apart.
+# measurements, not missing ones.
 CONTROL_AGENTS = {"oracle", "nop"}
 
 
@@ -305,8 +294,7 @@ class Job:
     # (config ``standard.control``): who wrote it - official, adapter, nullius.
     # "" for every other job.
     control_source: str = ""
-    # A Nullius standard job (config ``standard``): its trials are written as each unit ends, so the
-    # live board links one as soon as it has - unlike a runner's, imported at its end.
+    # A Nullius standard job (config ``standard``): its trials are written as each unit ends.
     standard: bool = False
     # The retries a Nullius standard job allowed each attempt (config
     # ``standard.retries``, its --retries); each attempt says how many it took
@@ -314,14 +302,12 @@ class Job:
     # the whole job only (``n_retries``).
     retries: int = 0
     # The launch a Nullius standard job was one shard of (config
-    # ``standard.launch``): the shards of one launch, run on several machines,
-    # are grouped as one on the runs page (launches.group). "" for every other job.
+    # ``standard.launch``): grouped by launches.group. "" for every other job.
     launch_id: str = ""
     # Source job names explicitly recorded by standard merge.
     merged_from: list[str] = field(default_factory=list)
     # How the job was launched, as its config.json recorded it with Harbor's
-    # defaults filled in (launch_of): what "New run like this" rebuilds a
-    # recipe from when the run kept none. Empty when config.json is absent.
+    # defaults filled in (launch_of). Empty when config.json is absent.
     launch: dict = field(default_factory=dict)
     # A run with a spending cap (a Nullius standard job's ``result.json``, ``budget``): the cap and what was
     # spent in USD, whether the cap stopped the run, the units it cut off and those never begun; a cap per unit
@@ -353,8 +339,7 @@ class Job:
     @property
     def n_planned(self) -> int:
         """How many trials the run set out to do — Harbor's own count when it
-        recorded one, else the task count from the config. Comparing this with
-        the trials actually on disk exposes a partial or interrupted run."""
+        recorded one, else the task count from the config."""
         return self.n_total_trials or self.n_tasks
 
     @property
@@ -373,8 +358,7 @@ class Job:
     @property
     def is_preparing(self) -> bool:
         """Launched, not started: Harbor has written the job's config and
-        nothing else yet — no result record, no trial. The runs list shows the
-        row now rather than when the first event lands."""
+        nothing else yet — no result record, no trial."""
         return self.preparing
 
     @property
@@ -393,8 +377,7 @@ class Job:
 
         Every job on disk runs one dataset, so the first trial that names its
         checks speaks for the run. A job of only unknown datasets gets the
-        empty vocabulary, and the table drops the check columns rather than
-        labelling them with another benchmark's words.
+        empty vocabulary.
         """
         for t in self.trials:
             v = t.vocab
@@ -430,7 +413,7 @@ class Job:
     @property
     def total_cost_usd(self):
         """The trials' costs and their earlier tries' (``Trial.retried_cost_usd``);
-        None when none reported a cost — not every agent does."""
+        None when none reported a cost."""
         costs = [c for t in self.trials for c in (t.cost_usd, t.retried_cost_usd) if c is not None]
         return sum(costs) if costs else None
 
@@ -489,8 +472,7 @@ class Job:
         held checks leaves at 0 — indistinguishable from "nothing broke"
         unless the question of whether it was asked is kept separate. A job
         where some trial reported held checks at all can be counted; one where
-        none did shows absence, per the rule that a field a benchmark cannot
-        answer is never rendered as a plausible zero.
+        none did shows absence.
         """
         return any(t.p2p_pass or t.p2p_fail for t in self.trials)
 
@@ -509,7 +491,7 @@ class Job:
         is a different claim from "everything scored missed": the rates
         below are `None` here, and the pages show absence rather than 0%.
         One verified trial is enough — from then on the unknowns stay in the
-        denominator, the rule `.claude/rules/running.md` states.
+        denominator.
         """
         return any(t.outcome != classify.UNKNOWN for t in self.trials)
 
@@ -538,8 +520,7 @@ def is_preparing_job_dir(path: str) -> bool:
     """A job directory Harbor has created but not started: its job-level
     ``config.json`` (the one naming ``agents`` or ``datasets`` — a trial's names
     a ``task``) with no ``result.json`` yet. Everything between the launch and
-    ``job.start`` looks like this on disk, and it is the state a person who
-    just pressed Run is waiting to see."""
+    ``job.start`` looks like this on disk."""
     if os.path.isfile(os.path.join(path, "result.json")):
         return False
     cfg = verifier._read_json(os.path.join(path, "config.json"))
@@ -550,8 +531,7 @@ def looks_like_job_dir(path: str) -> bool:
     """A ``result.json`` and either a trial that has one of its own or a live
     feed — or a job that has been launched and not started yet. Harbor writes a
     trial's ``result.json`` when the trial ends, so a job whose first trial is
-    still running has none, and that is exactly the job the live board exists
-    for: its ``events.jsonl`` is Harbor's own sign that the job is underway, so
+    still running has none, but it has a feed: its ``events.jsonl`` is Harbor's own sign that the job is underway, so
     it counts. Before even that, the job-level ``config.json`` alone means
     *preparing* (see :func:`is_preparing_job_dir`). A bare ``result.json``
     still does not count.
@@ -571,8 +551,7 @@ def find_job_dirs(roots) -> list[str]:
     """Return every job directory found under the given root paths.
 
     A root may itself be a job dir, or a parent containing job dirs (one level
-    down). Both are handled, and results are de-duplicated while preserving
-    order, so overlapping roots are safe.
+    down). Duplicates are dropped in first-seen order.
     """
     found: list[str] = []
     seen: set[str] = set()
@@ -647,7 +626,6 @@ def parse_trial(job_id: str, trial_dir: str) -> Trial | None:
     outcome = classify.from_verdict(exc_type, verdict)
     rewards = (ver_res.get("rewards") or {}) if isinstance(ver_res, dict) else {}
     score = rewards.get("score") if isinstance(rewards.get("score"), (int, float)) and not isinstance(rewards.get("score"), bool) else None
-    # the parts' scores by the field the benchmark breaks its score down by (verifier/parts.json)
     part_groups, parts_by = {}, ""
     pj = verifier._read_json(os.path.join(trial_dir, "verifier", "parts.json"))
     if isinstance(pj, dict) and pj.get("by") and isinstance(pj.get("parts"), list):
@@ -747,15 +725,14 @@ def harbor_command(cfg: dict, env_type: str = "") -> str:
     """Reconstruct the `harbor run` invocation a job's config.json records.
 
     Faithful to the file: only flags the harness actually recorded appear, so
-    a copied command reruns what ran rather than what a form would suggest —
-    including the `--ak` kwargs, which no other surface reproduces. The one
+    a copied command reruns what ran rather than what a form would suggest. The one
     outside fact is `--env`, which the job-level config does not carry; the
     caller passes it from a trial's recorded environment when it has one.
 
     A job that another harness produced records its own invocation under
     ``command`` and it is returned verbatim: reconstructing a ``harbor run``
     for a run Harbor never performed would print a line that cannot reproduce
-    it, which is the one thing this function exists not to do. No Harbor
+    it. No Harbor
     config carries that key, so this cannot shadow a real one.
     """
     recorded = cfg.get("command")
@@ -768,10 +745,7 @@ def harbor_command(cfg: dict, env_type: str = "") -> str:
     if not name:
         return ""
 
-    # No PYTHONPATH is reconstructed, whatever the recorded name looks like: the
-    # lane in service is Harbor's built-in agent, and a module:Class name in an
-    # old job is a fact about that job, not an instruction to rebuild the
-    # adapter checkout it once resolved in. The --agent value is what the job
+    # A recorded module:Class name does not reconstruct PYTHONPATH. The --agent value is what the job
     # recorded, verbatim.
     parts = ["harbor", "run"]
 
@@ -1053,8 +1027,7 @@ def _agent_of(t, agents: list) -> int:
 def split_agents(jobs: list) -> list:
     """A Harbor job of several agents or models as one view per agent, in
     their config's order: each its own trials, rate, control or not, and
-    command. Pooled under its first agent, model-b's misses were shown as
-    model-a's and an oracle listed first made the real agent a control. A
+    command. A
     view's id is the job's with the agent after ``~``; its trials link to it.
     Harbor's job-level counts are shared evenly; the rest is the view's own."""
     out = []

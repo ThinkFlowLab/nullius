@@ -315,7 +315,7 @@
         {% else %}<span class="faint">not judged</span>{% endif %}</td>{% endif %}
     </tr>
 
-    {# detail rows: the same metrics for each side, so differences line up #}
+    {# detail rows #}
     <tr class="detail-row" id="compare-detail-{{ loop.index0 }}" data-detail="{{ loop.index0 }}" hidden>
       <td colspan="{{ columns|length + 1 + (1 if judgement else 0) }}">
         <div class="detail-body" data-detail-url="{{ url_for('compare_detail_row', index=task_index, pick=picks, cohort=cohort) }}"><p class="faint small">Loading…</p></div>

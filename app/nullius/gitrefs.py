@@ -5,7 +5,7 @@ One lister for the picker that names a version of a repository: the Harbor a
 recipe pins (``harbor/source.py``). It asks the repository itself, as this machine's git
 would: with the machine's own credentials - an ssh key, a credential helper -
 and never a token of its own, so a private repository lists when this
-machine can clone it, and there is no API rate limit to meet. Nothing is
+machine can clone it. Nothing is
 prompted for (``GIT_TERMINAL_PROMPT=0``, ssh in batch mode) and a repository
 that does not answer within the timeout is said to, not waited on.
 

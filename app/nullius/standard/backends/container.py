@@ -7,9 +7,7 @@ socket and no settings of its own for Nullius.
 
 **One base image** (``nullius/base:<hash>``), built once and named by the
 hash of its Dockerfile, so a change to it builds a new one beside the old:
-Ubuntu 24.04 with git, python3, curl, CA certificates, tmux (Terminus's
-terminal), Node 22 from its official tarball, checked by its sha256, and uv
-from its official image, pinned by digest. A unit's image is chosen by
+Ubuntu 24.04 with git, python3, curl, CA certificates, tmux, Node 22 and uv, each pinned. A unit's image is chosen by
 :func:`image_for`: the base image, or the benchmark's environment the unit
 asks for - a layer on the base, its Dockerfile in the benchmark's folder,
 named by the hash of what it is built from
@@ -27,13 +25,7 @@ inside unchanged. A uv environment's interpreter is in the install
 (``.python``), installed with it in the base image (:func:`install_argv`).
 The container runs as this machine's user, with no capabilities and no way to gain
 privileges, so what it writes in the workspace is the user's to read and
-remove. That is ``--user uid:gid``, with ``--userns=keep-id`` on rootless
-podman, which maps that uid to this user, or ``--user 0:0`` on rootless
-Docker, where only a container's root is this machine's user. On a Docker with
-``userns-remap``, a container that uses this machine's user's files also
-runs in this machine's user namespace (:func:`_userns`). On podman it
-runs with no SELinux label (:func:`_security_opt`), as on Docker's default
-daemon.
+remove (:func:`_user`, :func:`_userns`, :func:`_security_opt`).
 
 **The relay is a sidecar, and the agent's only way out** but for the public
 web proxy of an environment that declares ``network``. Per unit, an
@@ -49,10 +41,7 @@ publishes its port on 127.0.0.1 so the driver (on the machine for
 agent/capability runs) reaches the judge's route and a capability
 benchmark's reader. Its record folder is mounted read-write, so the host
 reads each call as the local relay's are read. On podman the default bridge
-is Nullius's own (:data:`BRIDGE`, :func:`way_out`). A model endpoint on this
-machine's loopback is reached by the relays alone (:class:`Loopback`):
-through a forwarder on the default bridge's gateway, or, on a rootless
-engine or podman, a door container on the engine's default network.
+is Nullius's own (:data:`BRIDGE`, :func:`way_out`). A model endpoint on this machine's loopback is reached by the relays alone (:class:`Loopback`).
 
 **A licence server is one more door.** A unit whose environment needs a
 licence of kind ``server`` (``host:port``) gets a forwarder beside its relay
@@ -101,7 +90,6 @@ the image - a glibc build in a musl one - is found before the agent starts
 Everything a unit starts carries the label ``nullius.job=<job>`` and is
 removed when the unit ends, after an error or an interrupt too; :func:`sweep`
 removes whatever a killed run left behind.
-Docker Original setup drivers are handled by ``setup_container.py``.
 """
 from __future__ import annotations
 
@@ -155,7 +143,7 @@ def _answers(program: str) -> bool:
 def engine() -> str:
     """``podman`` when it is on the PATH and ``docker`` is not, or is podman
     under that name, or does not answer while podman does; else ``docker``.
-    Only a machine with both is asked, so one engine costs no call."""
+    """
     docker, podman = shutil.which("docker"), shutil.which("podman")
     if not podman:
         return "docker"
@@ -164,7 +152,7 @@ def engine() -> str:
     return "podman" if not _answers(docker) and _answers(podman) else "docker"
 
 
-DOCKER = engine()                          # the engine's program, chosen once
+DOCKER = engine()
 LABEL = "nullius.job"
 RELAY_PORT = 8080
 RELAY_ALIAS = "relay"
@@ -358,8 +346,7 @@ def base_tag() -> str:
 
 
 def present(tag: str) -> bool:
-    """Whether this machine has an image by that tag: a run says it is there
-    already, or that it builds it now (``progress``)."""
+    """Whether this machine has an image by that tag."""
     if _built.get(tag) or _docker(["image", "inspect", tag], check=False).returncode == 0:
         _built[tag] = True
     return bool(_built.get(tag))
@@ -415,8 +402,9 @@ def env_image(bench: dict, name: str, log_dir: Optional[str] = None) -> str:
     run builds only the environments its units use - and kept by its tag
     after. Two units asking at once wait for one build. Its build output is
     ``env-<name>.log`` in ``log_dir`` (the job's ``.work``). A secret is never
-    given to a build: an image is shared, a secret is the run's."""
-    base = base_image(os.path.join(log_dir, "image.log") if log_dir else None)
+    given to a build: an image is shared, a secret is the run's. An
+    environment's own ``base`` replaces the base image."""
+    base = bench["environments"][name].get("base") or base_image(os.path.join(log_dir, "image.log") if log_dir else None)
     tag = env_tag(bench, name, base)
     with _locks_lock:
         lock = _locks.setdefault(tag, threading.Lock())
@@ -602,7 +590,7 @@ def _security_opt() -> List[str]:
     """Every container's ``--security-opt``: no way to gain privileges, and on
     podman no SELinux label. Docker's default daemon (``selinux-enabled`` off)
     gives none, so a container reads the folders it mounts, which are never
-    relabelled (``:z`` would relabel the user's). Labels are future work."""
+    relabelled (``:z`` would relabel the user's)."""
     return ["--security-opt", "no-new-privileges", *(["--security-opt", "label=disable"] if podman() else [])]
 
 
@@ -691,7 +679,7 @@ def check_env() -> dict:
     ``CLIENT_KEEP`` (``CONTAINER_HOST``, ``REGISTRY_AUTH_FILE``...) except ``PATH``, ``HOME``,
     ``XDG_DATA_HOME`` and ``XDG_CONFIG_HOME``, and ``CHECK_ENGINE``. That is
     :func:`check_start` behind ``env``, which gives podman this user's XDG data
-    and config folders. The driver's own processes do not use these folders."""
+    and config folders."""
     if not podman():                     # the machine's constraints reach the driver's checks as CHECK_ENGINE
         return {**{k: v for k, v in client_env().items() if k.startswith("DOCKER")},
                 **({CHECK_ENGINE: json.dumps(check_start())} if _CEILING else {})}
@@ -1044,8 +1032,8 @@ class Unit:
                  ledger: Optional[str] = None, network_probe: Optional[str] = None, probe_now: bool = True,
                  serving: Optional[Dict[str, List[str]]] = None, timeout: Optional[int] = None, max_calls: Optional[int] = None):
         self.job, self.tag, self.dir, self.image, self.app = job, tag, record_dir, image, app
-        self.max_calls = max_calls               # the run's cap on its agent's model calls, when it has one
-        self.ledger = ledger                     # the file of the run's spending cap, when it has one
+        self.max_calls = max_calls
+        self.ledger = ledger
         self.serving = dict(serving or {})       # by model, the serving providers that may answer it
         self.timeout = timeout
         self.servers = list(servers)             # licence servers, host:port each: a forwarder apiece
@@ -1504,7 +1492,7 @@ def fetched(image: str) -> bool:
 def drop_image(image: str) -> None:
     """Remove an own image this process fetched, once no unit needs it: one
     per SWE-bench Verified instance, kept, filled docker's disk part-way
-    through a run (the upstream harness removes its instance images too)."""
+    through a run."""
     if image in _fetched:
         _fetched.discard(image)
         _built.pop(image, None)
@@ -1628,7 +1616,7 @@ class Box:
     check all act on one container's state, one after the other.
 
     It runs as the image's own user, as the task was written for - usually
-    root, which its tasks need (a package to install, a file in ``/etc``) -
+    root, which its tasks need -
     with docker's default capabilities, no way to gain more
     (``no-new-privileges``), and on the unit's internal network (or one of its
     own, for a control): the relay, when there is one, is its only way out.
@@ -1642,8 +1630,7 @@ class Box:
     check's network reaches. So every process but docker's init and the
     keep-alive is stopped, as root in the box, and the box is confirmed empty
     of them, before anything is copied in. A task about a service the agent
-    must leave running opts out with its ``verify`` step's ``keep_processes``;
-    what that keeps runs on beside the tests, which is the task's trade.
+    must leave running opts out with its ``verify`` step's ``keep_processes``.
 
     **The check's way out is a proxy, not a bridge** (:meth:`online`). The
     box stays on its internal network; a proxy container joins it as
@@ -1653,7 +1640,7 @@ class Box:
     bridge. A benchmark may also grant it for the agent's work with
     ``internet: true``; it is removed before the check. Each phase is told
     of its proxy through ``HTTP_PROXY`` and ``HTTPS_PROXY``. It needs no root
-    on the machine, so every host runs the check the same way; ``egress.py`` says why that beat firewall rules.
+    on the machine, so every host runs the check the same way.
 
     **The agent's mounts stay for the check.** A running container's mounts
     cannot be changed, and taking its home away would mean a second container
@@ -1791,7 +1778,7 @@ class Box:
     def online(self) -> Dict[str, str]:
         """A way out for the check: its proxy (``egress.py``, in the base image)
         started on the default bridge (``BRIDGE`` on podman) and joined to the box's network as
-        ``egress``. The box itself stays on its internal network. The
+        ``egress``. The
         variables the check is run with, which name the proxy - and leave
         the box's own services (``localhost``) to be reached directly."""
         if self.egress is None:

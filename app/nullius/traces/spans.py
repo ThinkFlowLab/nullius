@@ -35,13 +35,12 @@ KIND_ORDER = (
 )
 
 # What a namespace span becomes. A kind of its own rather than a flag, because
-# every consumer already switches on `kind` — the swatch, the legend, the chart
-# split, and `_KIND_CATEGORY` below, which by omitting it charges a group no time.
+# every consumer already switches on `kind`, and `_KIND_CATEGORY` omits groups so they accrue no time.
 GROUP_KIND = "group"
 
 # Said in the label, because the label is the only thing most of the page shows.
 # Appended rather than substituted: "Bash [group]" and "Bash" sort together and
-# read as the same call seen at two levels, which is what they are.
+# read as the same call seen at two levels.
 GROUP_SUFFIX = " [group]"
 
 # How far a namespace span's children may fall short of covering it and still
@@ -55,15 +54,11 @@ GROUP_SLACK_NS = 2 * NS_PER_MS
 
 # Kinds that already say they bracket their children. They are exempt from the
 # normalisation below, which exists to stop a span *claiming to be work* when it
-# is a container — a kind that never made the claim needs no correcting, and
-# `_KIND_CATEGORY` already charges these nothing.
+# is a container — a kind that never made the claim needs no correcting.
 _BRACKET_KINDS = ("session", "subagent", GROUP_KIND)
 
 # The OTel span for one API call, and the log-derived span for one *record* of
-# the reply. Harbor merges the two itself when the exporter reports a request id
-# (recorded in `harbor.merged_from`); when the provider returns none
-# it cannot, and the same call is left drawn twice — once under the interaction,
-# once under the parallel `session` subtree. `fold_llm_requests` finishes the job.
+# the reply. Without a request ID, Harbor can leave duplicate call spans for `fold_llm_requests` to join.
 _OTEL_LLM_NAME = "claude_code.llm_request"
 _LOG_LLM_NAME = "llm_request"
 
@@ -108,8 +103,7 @@ class Span:
     def merged(self) -> bool:
         """Assembled from more than one source (OTLP span + agent log).
 
-        Either the producer said so, or `fold_llm_requests` did it here — the
-        badge means the same thing to a reader, so both keys light it.
+        Either the producer said so, or `fold_llm_requests` did it here.
         """
         return any(k in _MERGED_KEYS for k, _ in self.attributes)
 
@@ -136,7 +130,7 @@ def label_of(name: str, attributes: dict, kind: str = "", blocks: tuple = ()) ->
     Merged spans overwrite `name` with the log-derived tool name ("Write");
     unmerged ones keep the instrumentation name ("claude_code.tool") and put the
     tool name only in an attribute. Prefer the attribute, so both render as the
-    tool. The raw name stays on the span for the detail pane.
+    tool.
 
     An LLM call reads the same way. `claude_code.llm_request` is the exporter's
     name for the same thing the agent log calls `llm_request`, so it is shown
@@ -232,7 +226,7 @@ def all_spans(roots: list):
 
 
 def find_span(roots: list, span_id: str):
-    """The span called *span_id* in this tree, or None. Same walk as `all_spans`."""
+    """The span called *span_id* in this tree, or None."""
     if not span_id:
         return None
     return next((s for s in all_spans(roots) if s.span_id == span_id), None)
@@ -302,7 +296,7 @@ def _self_ns(raw: dict) -> int | None:
 def _same_extent(raw: dict, child: dict) -> bool:
     """Do these two spans start and end together, to within `GROUP_SLACK_NS`?
 
-    Both ends, and that is the point. Coverage alone is satisfied by a child that
+    Coverage alone is satisfied by a child that
     overruns its parent — a background subagent hung under the launch that
     returned in 47ms runs for minutes. Clipped
     to the parent it covers all of it, but the launch is a real 47ms event.
@@ -329,26 +323,19 @@ def is_group(raw: dict) -> bool:
       An `llm_request` may hold one `reasoning` or `output` block whose start
       and end are *byte-identical* to its own,
       because the producer splits a response into blocks and a one-block response
-      is the request again. `fold_llm_requests` runs first and collapses that
-      pair outright wherever it can match the request to the call it answered,
-      which is the better answer — one span keeping both clocks and both sets of
-      text. What reaches here is the remainder it could not match.
+      is the request again. `fold_llm_requests` runs first; this sees what it could not match.
 
-    Everything else with children stays what it is, and the near misses are worth
-    knowing because each one looks like this from a distance. OpenCode's
+    Everything else with children stays what it is. OpenCode's
     `ai.streamText` also brackets the stream call it is named for, but can spend
     time on its own transport; it is still a call. `claude_code.interaction`
     is covered by the calls inside it, and `session`/`subagent` are exempt
-    outright: a kind that already announces itself as a bracket is not claiming
-    to be work, and `_KIND_CATEGORY` already charges it nothing. A group is
-    specifically a span pretending to be the event nested inside it.
+    outright: they never claim to be work.
 
     A call `fold_llm_requests` gave children to is exempt for a sharper reason:
     it would match, always, and the match would be this reader's own doing. The
     fold moves the reply's blocks under the call and then labels the call after
     what it produced, so the parent shares a label with a child by construction
-    and the blocks span the call because they are the reply to it. Nothing was
-    pretending to be anything — and the call is the one span in that subtree with
+    and the blocks span the call because they are the reply to it. The call is the one span in that subtree with
     a measured clock, so re-kinding it would charge the only real measurement to
     nothing and leave the inferred blocks holding the time.
     """

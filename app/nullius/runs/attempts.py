@@ -12,20 +12,12 @@ Two trials are attempts at the same task when they carry the same
 it - the standard names attempt 2 of unit 42 ``..._u0042r2`` - so an attempt
 retried after the others keeps its place; otherwise by when they started, a
 trial with no recorded start after every one that has, ties by trial name.
-Harbor's names carry no number, and that order says nothing about the one
-Harbor indexed them in.
 
 The attempts at a task are read as the run's adjusted rate reads its trials:
 an infra attempt (a rate limit, a provider or setup error, the spending cap, a
 cancellation) never got a fair try, so it is left out of the pass count, the
 rate and the means and counted apart; an unknown outcome stays in once anything
 at the task was passed or failed. ``has_verdict`` is that rule, for every page.
-
-pass@k and pass^k are here too: ``estimate`` is the estimators, which the
-standard's ``pass_hat_k`` uses as well, and ``for_tasks`` the pages' reading of
-a run's tasks.
-
-Nothing here reads a file: it takes the parsed job.
 """
 from __future__ import annotations
 
@@ -114,7 +106,7 @@ class Attempts:
     @property
     def has_verdicts(self) -> bool:
         """False when no attempt that ran was passed or failed (all unknown,
-        scored or infra), so a pass count would say nothing."""
+        scored or infra)."""
         return has_verdict(self.trials)
 
     @property
@@ -170,8 +162,7 @@ class Attempts:
 
 
 def _by_task_name(job) -> dict[str, list]:
-    """The job's trials by task name, the tasks in the order they first appear:
-    what makes two trials attempts at one task, for every page of one run."""
+    """The job's trials by task name, the tasks in the order they first appear."""
     groups: dict[str, list] = {}
     for t in job.trials:
         groups.setdefault(t.task_name, []).append(t)

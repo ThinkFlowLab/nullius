@@ -2,13 +2,9 @@
 answers: the seam every surface uses, so a page never groups questions by
 state or merges records on its own.
 
-``states_for(ids, build)`` groups the ids by the state kind each reads and
-builds each state once; ``ask_states`` makes one call per state and merges
-the records (``client.merge``); ``ask_and_store`` does that and saves the
-result under the trial's key in the workspace store, merged over what was
-there. A new surface registers its group (``questions.register``) and, if
+A new surface registers its group (``questions.register``) and, if
 its questions read a state of their own, that state's builder
-(``state.register``), then calls these with its own key.
+(``state.register``), then calls ``states_for`` and ``ask_and_store`` with its own key.
 
 Every call also carries the ``hygiene`` group - does the state address the
 judge, does it still show a credential - because state is untrusted text
@@ -31,8 +27,7 @@ def with_hygiene(ids) -> list:
 
 def split_hygiene(rec: dict, kind: str) -> dict:
     """Move the hygiene answers out of `rec["answers"]` into
-    `rec["hygiene"][kind]` - `{id: probability}` - so the surface's answers
-    read as before and the reading is kept per state kind."""
+    `rec["hygiene"][kind]` - `{id: probability}`."""
     readings = {}
     for q in Q.hygiene_ids():
         a = rec["answers"].pop(q, None)
@@ -62,10 +57,8 @@ def preflight(states: dict, calibration: Optional[dict] = None, budget: int = cl
     the request budget. Raises JudgeError(413) naming the state kind and
     roughly how far over it is; returns {kind: tokens_high} otherwise.
 
-    state.LIMIT is 60,000 characters - about 20,000 tokens at the measured
-    3 per token, 24,000 at the band's edge of 2.5 - so a built-in state fits on the default
-    of thumb. The check matters when a calibration says the judge counts
-    fewer characters per token than that, and for a state kind a later
+    The check matters when a calibration says the judge counts
+    fewer characters per token than the default band's 2.5, and for a state kind a later
     group registers with a limit of its own."""
     out = {}
     for kind, (qs, text, _) in states.items():
@@ -108,8 +101,7 @@ def ask_and_store(ws_dir: str, job_id: str, trial_name: str, states: dict, key, 
     """`ask_states`, then the merged record saved under the trial's key -
     its answers over the version's earlier ones. Returns the record as
     stored. The pre-flight reads the workspace's own calibration unless one
-    is given, so a judge that counts more tokens per character than the rule
-    of thumb is refused on its own evidence. `started`: the trial's own
+    is given. `started`: the trial's own
     start, which the record keeps (`store.save`)."""
     if calibration is None:
         calibration = store.calibration(ws_dir)

@@ -1,15 +1,9 @@
 # Contributing
 
-Welcome to the Nullius community! Contributions are welcome, whether you are
-reporting a bug, improving documentation, bringing in a benchmark, agent or
-capability, or contributing code. If this is your first contribution, this guide
-will help you get started.
-
 ## Before you start
 
 - **Look for an existing issue or pull request first.** A duplicate splits the
-  evidence. If there is none, open one with the Bug or Enhancement form; the
-  forms ask for what the fixer and the PR judge read.
+  evidence. If there is none, open one with the Bug or Enhancement form.
 - **Say what you intend to do on the issue** before a large change, so nobody
   builds the same thing twice and the shape can be agreed early.
 - **A security problem goes to the address in [SECURITY.md](SECURITY.md)**,
@@ -18,7 +12,7 @@ will help you get started.
 ## Setting up
 
 Python 3.12 or later and [uv](https://docs.astral.sh/uv/). Flask is the only
-dependency, and nothing is installed into the application's environment.
+dependency.
 
 To use a release, follow the [uv installation guide](docs/getting-started.md).
 To contribute, run from a checkout:
@@ -44,11 +38,7 @@ for the container backend and for Harbor recipes.
 [AGENTS.md](AGENTS.md) is the map of the repository and the rules every
 contributor and coding assistant follows. Read it before your first change.
 
-Three rules are load-bearing and each has a test: the backend under
-`app/nullius/` imports no Flask; there is exactly one implementation of
-`nullius`, nothing installed; and the fields the templates render are pinned
-in `app/tests/field_contract.json`. If a test guarding one of these fails, the
-layering has broken, not the test.
+The tests require a Flask-free backend, one provider of `nullius`, and the template fields pinned in `app/tests/field_contract.json`.
 
 ## Bringing in a benchmark, an agent or a capability
 
@@ -82,8 +72,7 @@ python3 app/tests/catalogue_docs.py --write
 
 A change to the interface also gets a look in a browser: the pages it touches,
 in both themes, at the widths it affects. The owner's rules for every page are
-in `.claude/rules/ui.md`; the short version is less text, names rather than
-keys, every choice a card, and no em dashes.
+in `.claude/rules/ui.md`.
 
 A change to what a metric means updates the field guide,
 `docs/field-guide.md`, in the same change.
@@ -91,8 +80,7 @@ A change to what a metric means updates the field guide,
 ## Releases
 
 The [release guide](app/packaging/README.md) covers building verified downloads
-and preparing a draft release. The manual workflow runs the tests and
-attaches the wheel, source archive and checksums; publication is a separate
+and preparing a draft release. Publication is a separate
 decision by the repository owner.
 
 ## Pull requests
@@ -100,8 +88,7 @@ decision by the repository owner.
 - **Small and targeted.** One change per pull request; no refactoring of
   unrelated areas on the way.
 - **Fill in the template.** The PR judge compares the description with the
-  diff and with the linked issue's acceptance list, and posts an experimental
-  verdict. It is never a required check, but it reads what you wrote.
+  diff and with the linked issue's acceptance list.
 - **Reference the issue** so it shows in the issue's Development panel.
 - **Say what you verified.** Tests run, browser checks made, widths tried.
   "Not verified" is an honest answer.

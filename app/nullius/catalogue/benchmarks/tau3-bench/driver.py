@@ -24,9 +24,7 @@ setup  - the agent's instructions and the domain's policy as the upstream's
          executes nothing itself: it passes each call to this driver
 turn   - the conversation is the upstream's: its batch runner,
          ``runner.batch.run_tasks``, run on the unit's one task in a thread of
-         this driver, with a ``TextRunConfig`` at the upstream's defaults (no
-         timeout, one trial, its seed 300, three
-         retries, its user simulator), its max steps and max errors the run's
+         this driver, with a ``TextRunConfig`` at the upstream's defaults, its max steps and max errors the run's
          ``max_steps`` and ``max_errors`` options (``bounds``). It draws the trial's seed from the
          base seed as it does for every run: the unit's first attempt is
          trial 0 of a one-trial run, its attempt N (``--attempts``) trial N-1
@@ -342,7 +340,7 @@ def trial_seed(base, attempt):
 
 def trial(cfg, t, attempt=None):
     """One unit's run: trial ``attempt - 1`` of the upstream's batch runner on the unit's task. The first
-    attempt is run_tasks itself (a one-trial run: trial 0 at its seed), as every run was before attempts;
+    attempt is run_tasks itself (a one-trial run: trial 0 at its seed);
     a later one is what run_tasks does for that trial of a run of as many (its ``_run_tracked``): its
     run_single_task at the trial's seed, made again by its run_with_retry, which records
     INFRASTRUCTURE_ERROR after the last retry."""

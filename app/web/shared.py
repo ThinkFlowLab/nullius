@@ -26,8 +26,7 @@ _APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # app/,
 # User settings, loaded at start and read again before any request once it has
 # changed on disk (settings.sync), so a key written by hand while the app
 # runs counts from the next request, without a restart; existing environment
-# variables win. The Settings page edits the same file (nullius.settings
-# knows every variable read here).
+# variables win.
 ENV_FILE = paths.settings_file()
 settings.load(ENV_FILE)
 
@@ -63,8 +62,7 @@ def _refuse_foreign_host():
 
 @app.before_request
 def _sync_env_file():
-    """The file as it is now: a hand edit applies to this request and every
-    one after it. A file that cannot be read leaves the settings as loaded."""
+    """The file as it is now. A file that cannot be read leaves the settings as loaded."""
     try:
         settings.sync(ENV_FILE)
     except (OSError, ValueError, UnicodeDecodeError) as e:
@@ -162,8 +160,7 @@ COLUMNS = [
 
 # Active roots, mutable at runtime via the workspace picker. Seeded at
 # startup from CLI args / env; roots may be empty, in which case the UI asks.
-# `label` is what the header shows — roots can be an internal detail (an upload
-# scans a temp dir *and* its child, which is meaningless to read).
+# `label` is what the header shows — roots can be an internal detail.
 # The open workspace, and what it resolved to. `roots` and `label` are what
 # the user pointed at; `job_roots` is after the foreign trees among them were
 # converted — the directories parse actually walks. Conversion happens when
@@ -184,8 +181,7 @@ def is_pattern(value) -> bool:
 def resolve_submitted_paths(values):
     """Split submitted paths into (existing dirs, unusable), preserving order.
 
-    Entries containing glob metacharacters expand to every directory they
-    match, so `.../jobs_*` picks up all of them in one field. Non-matching
+    Globs expand to every matching directory. Non-matching
     patterns are reported like a missing directory rather than silently
     resolving to nothing.
     """
@@ -267,12 +263,6 @@ def set_source(roots, label=None) -> None:
 def _import_roots(roots, import_root):
     """Convert any root a foreign harness recognises, returning job roots.
 
-    Which harness wrote a run is a property of the directory, not a question
-    for whoever opens it: the shapes are distinguishable, and someone handed a
-    results folder often cannot answer. Detection identifies it, and
-    a harness added to `nullius/importers/` is readable here without a UI
-    change — the point of the registry.
-
     What one job is under a claimed root is the importer's answer
     (`harnesses.trees`), matching the CLI's job boundaries. A root nothing
     claims goes through as it is: a Harbor job directory or a parent of
@@ -280,8 +270,7 @@ def _import_roots(roots, import_root):
 
     A tree the importer claims but refuses is left out, so one bad tree
     never costs the others or the process — but not silently: the reason,
-    redacted where it was raised, is flashed to the page being served, where
-    the picker shows it in place of "Nothing job-shaped", and logged when
+    redacted where it was raised, is flashed to the page being served, and logged when
     there is no page (a workspace reopened at start-up).
     """
     resolved, seen = [], set()
@@ -403,7 +392,7 @@ def run_ends():
 def _jobs_for_workspace(name=None):
     """Read an indexed workspace without making it active or converting sources.
     Once per request and workspace: a page that asks for the jobs several
-    times (the job page's controls, the rail, a summary) walks them once."""
+    times walks them once."""
     memo = request_memo("jobs")
     key = name if name and not (STATE["workspace"] and name == STATE["workspace"].name) else ""
     if key in memo:

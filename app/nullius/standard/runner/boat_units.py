@@ -7,17 +7,14 @@ on the driver's machine. So here the Boat VM is that machine, for one unit:
 this runner's own snapshot (``payload``) is sent to it and run there as a
 shard of one unit on local processes (``shard``, by ``position``: shard I of
 N, N the dataset's units, is the unit at place I-1), which installs what it
-needs itself - the upstream, the driver's environment, the VM image - as on
-any machine. The Boat image has the rest (Docker for its user, KVM, git,
+needs itself. The Boat image has the rest (Docker for its user, KVM, git,
 uv); what the benchmark's chosen options still need of a machine is
 installed with the VM's sudo. Each shard's job comes back to this machine as
 its unit ends, the VM is deleted, and the shards are merged here into the
 one job the run is named for (``merge``), recorded as a Boat run.
 
 As many VMs at once as the account runs (``boat.slots``), never more than
-the run's own concurrency; a VM the account cannot start yet is waited for.
-Every VM carries the run's label, so a Stop or a crash leaves none
-(``boat.sweep``). The VMs are the run's own code: no locked agent's user
+the run's own concurrency; a run waits for account capacity. Stop and crash cleanup find VMs by run label (``boat.sweep``). The VMs are the run's own code: no locked agent's user
 (``boat.VM``, ``lock``). Each model-calling unit uses a separate relay container in its Boat VM.
 """
 from __future__ import annotations

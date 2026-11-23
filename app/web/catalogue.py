@@ -136,8 +136,7 @@ def catalogue_use_bundled(group, key):
 @app.route("/benchmarks/<key>/prove", methods=["POST"])
 def benchmark_prove(key):
     """Prove a benchmark of the standard, here, as a run - its units, the leak
-    check and its controls (``cli prove``), as an agent's page proves its
-    ports; then the first control's job page, which follows the run. The
+    check and its controls (``cli prove``); then the first control's job page, which follows the run. The
     controls call no model, so an unjudged benchmark's run is handed no key
     at all (``execution.Plan.keyless``)."""
     shared._require_csrf()
@@ -423,8 +422,7 @@ def benchmark_edit_save(key):
 
 @app.route("/benchmarks/<key>/delete", methods=["POST"])
 def benchmark_delete(key):
-    """Remove a Harbor entry: its folder and its mark. The page asks first,
-    in place; runs already made from it are not touched."""
+    """Remove a Harbor entry: its folder and its mark. The runs already made from it are not touched."""
     _guard()
     entry = _editable(key)
     try:

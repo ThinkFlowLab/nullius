@@ -29,24 +29,20 @@ The comment opens with two ratings, then a table of questions:
 
 The pick for a question is the status with the highest *median* probability
 over the k asks, undecided when the top two medians are closer than the
-spread the asks showed. Nothing re-asks to make a pick appear. The judge
-reads text, not behaviour: a `yes` says the change *looks like* it does what
-is asked; the tests say whether it does. Exit status 0 whenever the judge
+spread the asks showed. Nothing re-asks to make a pick appear. The verdict assesses submitted text. Tests establish behavior. Exit status 0 whenever the judge
 answered, whatever it answered; 2 for a usage error, 3 when it could not be
 asked (no key, refused, unreachable). The workflow wraps the call with
 `continue-on-error` and stays green either way.
 
 What leaves this machine: the issue, the description, the commit messages
 and the diff, after `redact` has replaced every key-shaped string and every
-email address, so a secret or a person's address pasted into a pull request
-reaches neither the judge nor the comment. The key is `TYPESAFE_API_KEY` in
+email address. The key is `TYPESAFE_API_KEY` in
 the environment (`API_KEY_TYPESAFE`, the older spelling, is read too); it is
 sent in one header and appears in no output, argv or record. Cost is
 estimated from the state sizes before any call and refused above
 `--max-usd`; it is kept in the record and the step log, never in the comment.
 
-`--comment` posts the summary on the PR as a new comment on every run (the
-timeline reads in order); the earlier ones, found by the `<!-- judge-pr -->`
+`--comment` posts the summary on the PR as a new comment on every run; the earlier ones, found by the `<!-- judge-pr -->`
 marker, are collapsed as outdated, never deleted. With `--pr` everything comes
 from the `gh` CLI (`GH_TOKEN` in CI): the linked issue is the PR's closing
 reference or the first `Closes/Fixes/Resolves/Refs #n` in the body; `--issue`
@@ -721,8 +717,7 @@ def run(issue: Optional[dict], pr: dict, diff: str, key: str, k: int = 3, max_us
         post: Callable = http_post, model: str = MODEL, sleep: Callable = time.sleep,
         state_limit: int = None, file_limit: int = None) -> dict:
     """The record. `issue` None is a pull request that links no issue: no
-    criteria, no question about the issue. Everything the judge reads has
-    been through `redact` first."""
+    criteria, no question about the issue."""
     pr = dict(pr, title=redact(pr.get("title", "")), body=redact(pr.get("body") or ""),
               commit_messages=[redact(m) for m in pr.get("commit_messages") or []])
     diff = redact(diff)

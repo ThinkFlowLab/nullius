@@ -32,12 +32,7 @@ Recognition is by content: a ``.json`` file whose top level is an
 (``trees``): an export directory is one job, and a parent that holds no
 export of its own but several export directories is one job per directory —
 each is one producer's export (the trial's agent is its ``service.name``),
-and pooling them would put several agents under one heading. The CLI
-converts the directory it is given as one job; a parent given to it is one
-pooled job, which is the one place the two still read a tree differently.
-Nothing Harbor writes carries ``resourceSpans``, and an ATIF
-trajectory carries ``schema_version`` instead, so nothing here claims their
-directories.
+and pooling them would put several agents under one heading. The CLI pools the supplied directory into one job.
 
 A file the reader refuses — bad JSON, no ``resourceSpans``, an unsupported
 schema URL — is reported with its redacted message and skipped; only when
@@ -98,8 +93,7 @@ def trees(root: str) -> list[str]:
 
     *root* itself when an export file sits directly in it — an export
     directory is one job however its files are arranged below. Otherwise
-    each child directory holding an export, one job per producer's export
-    rather than one pooled job of several agents. Nothing when there is no
+    each child directory holding an export. Nothing when there is no
     export under *root* at all.
     """
     exports = find_exports(root) if os.path.isdir(root) else []
@@ -112,8 +106,7 @@ def trees(root: str) -> list[str]:
 
 
 def refused(root: str) -> list[str]:
-    """(path, redacted reason) for every candidate file the reader refuses —
-    what the CLI reports beside the job it wrote."""
+    """(path, redacted reason) for every candidate file the reader refuses."""
     out = []
     for dirpath, _dirnames, filenames in os.walk(root):
         for name in sorted(filenames):
@@ -156,7 +149,7 @@ def _window(document: dict) -> tuple:
 
 def trial_name_of(document: dict) -> str:
     """``<root span name>__<7 hex of the trace id>`` — readable, and unique
-    per trace the way a Harbor trial name is unique per attempt."""
+    per trace."""
     tid = str(document.get("session_id") or "")
     stem = _UNSAFE.sub("_", str(document.get("trial_name") or "")).strip("._-") or "trace"
     return f"{stem[:80]}__{tid[:7] or 'unknown'}"

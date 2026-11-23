@@ -59,13 +59,12 @@ def segments_of(source) -> list:
     """[{key, label, ns, pct}] for a stacked strip, zero-length categories dropped.
 
     Shared by :class:`Totals` and :class:`Breakdown` so the reported strip and a
-    recomputed one are laid out and labelled identically — the only difference
-    between them should be the numbers, never the presentation.
+    recomputed one are laid out and labelled identically.
 
     Percentages are of the wall clock, so categories that do not close read as
     short of 100% instead of being silently rescaled to fill it; ``unaccounted``
     is what closes them. With no wall clock to divide by they fall back to the
-    segments' own sum, which is the only honest denominator left.
+    segments' own sum.
     """
     out = [
         {"key": key, "label": label, "ns": int(getattr(source, attr))}
@@ -106,7 +105,7 @@ class Totals:
         than its instrumented children, so a stacked bar that just leaves a gap
         reads as a rendering bug. Name the gap instead. Clamped at both ends —
         under an epsilon it is noise, and a negative would corrupt the geometry
-        silently (the same reasoning as `Trial.dur_other`).
+        silently.
         """
         if not self.wall_ns:
             return 0
@@ -125,18 +124,16 @@ class Breakdown:
     """Category time recomputed from a set of spans — for a filtered view only.
 
     The producer's ``totals`` stays authoritative and is never replaced by this
-    (see :class:`Totals`). It exists because hiding spans has to take their time
-    out of the picture, and the producer cannot be asked a second time.
+    (see :class:`Totals`).
 
     It is deliberately *not* the same arithmetic, and it does not reproduce the
     same numbers. Harbor's ``llm_ns`` is the plain sum of its LLM spans, while
     this partitions the timeline so an instant covered by both a tool call and
-    the LLM call that asked for it is charged once, to the tool. The two are
-    shown as separate strips because they measure different things.
+    the LLM call that asked for it is charged once, to the tool.
 
     ``wall_ns`` is carried over from the source unchanged: hiding a span does not
     make the run shorter, it makes more of the run unattributed. That is what
-    ``unaccounted_ns`` then absorbs, and it is the honest place for it to land.
+    ``unaccounted_ns`` then absorbs.
     """
 
     wall_ns: int = 0
@@ -165,7 +162,7 @@ class Breakdown:
     def compared_to(self, other: "Breakdown") -> list:
         """`segments`, each carrying `delta_ns` against *other*.
 
-        The comparison a filtered view actually needs. Both sides come from this
+        Both sides come from this
         same partition, so every delta is the filter's doing and nothing else —
         whereas the difference against the producer's reported strip mixes the
         filter up with two different ways of accounting for the same run, and on

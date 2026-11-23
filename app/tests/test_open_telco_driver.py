@@ -2,8 +2,7 @@
 
 No download, no Inspect install, no model call: the stubs stand for the
 upstream's task functions and Inspect's eval, so these tests check what the
-driver asks of them and what it makes of their reply. GSMA's prompts and
-scorers are not reimplemented here; a real run calls them unchanged.
+driver asks of them and what it makes of their reply.
 """
 import copy
 import hashlib

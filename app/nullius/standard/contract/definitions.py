@@ -35,7 +35,7 @@ A benchmark's **setups** are driver methods behind one Original procedure.
 ``original`` uses the upstream's model selection; ``model`` substitutes the
 chosen model while preserving the ``runs_as`` window and prompt. The driver's
 ``answer`` op uses the unit's relay and may declare conversation-sized ``units``.
-The builder chooses participant and model separately; the resolved setup's
+The resolved setup's
 ``comparable`` flag records whether the run can compare with the paper.
 
 A benchmark may hold **versions** the same way (``key@version``): each
@@ -46,15 +46,16 @@ agent's is; :func:`load` and :func:`get` resolve a benchmark as they resolve
 an agent.
 
 A benchmark may give its units **environments** (``environments``): named
-Dockerfiles in its folder, each a layer on the standard's base image (the
-Dockerfile has no ``FROM``: Nullius writes it), with the files it copies
+Dockerfiles in its folder, each a layer on the standard's base image, or on
+its own ``base`` pinned by digest (the Dockerfile has no ``FROM``: Nullius
+writes it), with the files it copies
 listed (``files``), the licences it needs (``needs_secrets``: each a
 ``value`` - a key, given as a variable -, a ``file`` - mounted read-only at
 its ``path`` -, or a ``server`` - the one ``host:port`` the agent may reach -,
 kept per benchmark by ``nullius.secrets``, and where it goes - ``agent`` or
 ``driver``) and whether the local backend may run it (``local_ok``). A unit's setup names its
 environment, or its dataset gives a default; none is the base image
-(:func:`environment_of`). ``container.image_for`` builds and picks the image.
+(:func:`environment_of`).
 An environment may instead be an **own image** (``"image": "own"``): no
 Dockerfile here, each unit's setup naming the task's own image - a folder
 of the upstream to build, its ``FROM`` its own, or a reference by digest -
@@ -166,11 +167,12 @@ HOST_INSTALLERS = ("apt", "npm")
 # A benchmark's environment (``environments``): its name, what it may say, and where a secret it needs may go -
 # into the agent's container (``agent``) or the driver's process, which scores (``driver``).
 _ENV_KEY = re.compile(r"^[a-z][a-z0-9-]{0,29}$")
-ENV_FIELDS = ("summary", "dockerfile", "files", "needs_secrets", "local_ok", "image", "network")
+ENV_FIELDS = ("summary", "dockerfile", "files", "needs_secrets", "local_ok", "image", "network", "base")
+# an environment's own base image, in place of the standard's: a registry reference pinned by digest
+_BASE_REF = re.compile(r"[a-z0-9][a-z0-9._/-]*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}")
 OWN_IMAGE = "own"                    # an environment whose units each bring their own image (``image``)
 SECRET_TO = ("agent", "driver")
-# A licence's shape (``kind``): a key the process gets as a variable, a file mounted read-only where the
-# software looks for it, or a licence server - the one address the agent's container may reach.
+# A licence's shape (``kind``): `value` as an environment variable, `file` as a read-only mount, `server` as one reachable address.
 SECRET_KINDS = ("value", "file", "server")
 SECRET_FIELDS = ("name", "to", "summary", "kind", "path", "env", "provider")
 _ABS = re.compile(r"^(?:/[A-Za-z0-9_@+-][A-Za-z0-9_.@+-]*)+$")
@@ -220,7 +222,7 @@ def resolve(d: dict, version: Optional[str] = None) -> Optional[dict]:
         if k in block:
             out[k] = block[k]
     if isinstance(d.get("options"), dict) and isinstance(block.get("options"), dict):
-        out["options"] = dict(d["options"], **block["options"])       # a version adds an option or restates one
+        out["options"] = dict(d["options"], **block["options"])
     out["upstream"] = _version_upstream(d, v)
     out["proven"] = dict(block.get("proven") or {})
     if not bench:                                                     # a benchmark offers nothing: it needs
@@ -602,7 +604,7 @@ def _host(d: dict) -> List[str]:
     """A benchmark's ``host``: what the machine its driver runs on must have for some of its options,
     by name - a ``label``, a ``summary``, the programs that ``check`` it (each on PATH) and how to ``install`` them
     (``apt`` and ``npm`` packages, pinned where the upstream pins them); no ``install`` for the
-    machine's own hardware (a GPU, checked by its driver's program), which no package puts there."""
+    machine's own hardware."""
     h = d.get("host")
     if h is None:
         return []
@@ -726,8 +728,7 @@ def _mcp_servers(servers, has_install: bool) -> List[str]:
     machine** in the driver's environment rather than in the agent's - each
     a name, its ``command`` (slots ``{here}``, ``{install}``) and a
     ``summary``. A unit's setup asks for one by name in its ``mcp`` entry
-    (``{"name", "server", "args", "env"}``); the run gives the agent a stdio
-    command that reaches it (``mcp_machine``)."""
+    (``{"name", "server", "args", "env"}``)."""
     if servers is None:
         return []
     if not isinstance(servers, dict) or not servers:
@@ -893,7 +894,7 @@ def _dockerfile(w: str, text: str, files: List[str]) -> List[str]:
         word, _, rest = line.partition(" ")
         word = word.upper()
         if word == "FROM":
-            bad.append(f"{w}: no FROM - Nullius writes FROM nullius/base:<hash>, the layer's base")
+            bad.append(f"{w}: no FROM - Nullius writes it: nullius/base:<hash>, or the environment's base")
         elif word == "ADD":
             bad.append(f"{w}: COPY, not ADD")
         elif word == "COPY":
@@ -909,7 +910,7 @@ def _dockerfile(w: str, text: str, files: List[str]) -> List[str]:
 
 def _environments(envs, here: Optional[str]) -> List[str]:
     """``environments``: name -> {summary, dockerfile, files?, needs_secrets?,
-    local_ok?}, or {summary, image: "own", needs_secrets?} for units that
+    local_ok?, base?}, or {summary, image: "own", needs_secrets?} for units that
     each bring their own image. ``dockerfile`` and each of ``files`` are paths in the
     benchmark's folder; ``needs_secrets`` is [{name, to, kind, ...}] - a
     credential the user sets in Settings → Data providers (one with ``provider``)
@@ -961,6 +962,11 @@ def _environments(envs, here: Optional[str]) -> List[str]:
                     bad += _dockerfile(f"{w}.dockerfile", f.read(), files)
             except OSError:
                 bad.append(f"{w}.dockerfile: {df} is not in the benchmark's folder")
+        if "base" in e:
+            if own_image(e):
+                bad.append(f"{w}.base: not with an own image - the unit's setup names the image")
+            elif not isinstance(e["base"], str) or not _BASE_REF.fullmatch(e["base"]):
+                bad.append(f"{w}.base: an image reference pinned by digest (name[:tag]@sha256:<64 hex>)")
         if "local_ok" in e and not isinstance(e["local_ok"], bool):
             bad.append(f"{w}.local_ok: true or false")
         if "network" in e:
@@ -1077,8 +1083,7 @@ def environment_of(bench: dict, unit_setup: Optional[dict], dataset: Optional[di
 
 
 def own_image(env_def: Optional[dict]) -> bool:
-    """Whether an environment is an own image: each unit's setup names the
-    task's own image, and the agent is added to it at run time."""
+    """Whether an environment is an own image: the setup supplies each unit's image."""
     return isinstance(env_def, dict) and env_def.get("image") == OWN_IMAGE
 
 
@@ -1746,16 +1751,14 @@ def kit(port: str) -> Optional[dict]:
 
 # A kit is made stronger under the same port - more checks of the same
 # contract - and says so by its ``kit_version``; each proof records the one it
-# passed. A proof on an older kit stays a proof (a kit's change un-proves no
-# one), but it is said to be one, so a re-run can be asked for.
+# passed. A proof on an older kit stays a proof, but it is said to be one, so a re-run can be asked for.
 def kit_version(k: Optional[dict]) -> int:
     """A kit's version; 1 for a kit that does not say."""
     return int((k or {}).get("kit_version") or 1)
 
 
 def proof_kit(record: Optional[dict]) -> int:
-    """The kit version a ``proven`` record passed; 1 for a record from before
-    kits had versions."""
+    """The kit version a ``proven`` record passed; 1 if the record names none."""
     return int((record or {}).get("kit_version") or 1)
 
 
@@ -1777,7 +1780,7 @@ def older_kit(port: str, record: Optional[dict]) -> Optional[str]:
 # agent that misses one still has the port, and its proof says which skills
 # it showed; a benchmark that relies on one says so (``needs_skills``). A
 # check a kit does not name a skill is basic, so a kit without ``skills``
-# is every check basic, as before skills existed.
+# is every check basic.
 def skills_of(k: Optional[dict]) -> dict:
     """A kit's skills, {id: what it shows}; empty for a kit without."""
     s = (k or {}).get("skills")
@@ -1790,10 +1793,7 @@ def port_skills(port: str) -> dict:
 
 
 def skills_shown(port: str, record: Optional[dict]) -> List[str]:
-    """The skills of ``port`` that ``record``, its proof, showed. A proof from
-    before skills were recorded passed every check of its kit - all of them
-    basic then - so on the current kit it showed every skill the kit has; on
-    an older kit, none can be read from it."""
+    """The skills of ``port`` that ``record``, its proof, showed. A proof that records no skills showed every skill of the current kit; on an older kit, none."""
     if not record:
         return []
     if isinstance(record.get("skills"), dict):
@@ -1842,8 +1842,7 @@ def path_of(d: dict) -> str:
 
 @contextlib.contextmanager
 def _locked(path: str):
-    """One writer of a definition file at a time, across processes (two
-    proofs, a conformance check and the user's own edit through the app)."""
+    """One writer of a definition file at a time, across processes."""
     where = os.path.join(paths.cache_dir(), "locks")
     os.makedirs(where, exist_ok=True)
     with ondisk.locked(os.path.join(where, hashlib.sha256(os.path.realpath(path).encode()).hexdigest()[:24])):

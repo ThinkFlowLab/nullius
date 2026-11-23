@@ -301,8 +301,7 @@ class StartAndReap(unittest.TestCase):
 
 class Bounds(unittest.TestCase):
     """The unit's budget and the bounds that follow from it (the driver's module text): each derived from the unit's
-    own limits, the clean-up inside the reap, the reap inside the core's bounds. No test sleeps a fixed time to see a
-    bound."""
+    own limits, the clean-up inside the reap, the reap inside the core's bounds."""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

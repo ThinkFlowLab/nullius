@@ -2,8 +2,7 @@
 
 A sidecar to the trajectory, not a replacement: where ``trajectory.json`` carries
 one timestamp per step with no duration, a trace carries measured start *and*
-end per LLM call, tool call and subagent, with causal parentage. It is the first
-artefact in this tree that can say where the wall clock actually went.
+end per LLM call, tool call and subagent, with causal parentage.
 
 Two rules shape everything here.
 
@@ -31,8 +30,7 @@ event of its own is re-kinded ``group`` and reads ``Bash [group]``: Harbor's
 Claude Code instrumentation opens a ``claude_code.tool`` span carrying
 ``tool_name: "Bash"`` and puts the permission wait and the actual ``Bash``
 execution inside it. Counting the wrapper as work would double-count the call.
-See :func:`spans.is_group` for what qualifies and, more importantly, for the near
-misses that deliberately do not.
+See :func:`spans.is_group`.
 
 The order is load-bearing. An ``llm_request`` holding a single ``reasoning`` or
 ``output`` block of byte-identical extent is the same
@@ -46,9 +44,7 @@ This module is the reader's front: ``Trace``, ``Filter``, ``parse``, ``load`` an
 saved view. The span tree is ``spans``, the fold ``fold``, the accounting
 ``breakdown``, the layout ``waterfall``.
 
-Everything is redacted at load, so templates hold display text only. Stdlib
-only, and no Flask: ``python3 -m unittest discover -s app/tests -t app`` needs no
-install at all.
+Everything is redacted at load, so templates hold display text only. Stdlib only, no Flask.
 """
 
 from __future__ import annotations
@@ -78,8 +74,7 @@ def toggled(values: tuple, value: str) -> tuple:
 class Filter:
     """What a view is leaving out: span labels, and individual spans by id.
 
-    Two axes, because they answer different questions — "never mind Bash" is a
-    label, "not *that* call" is one span. Both take the span's subtree with them;
+    Both take the span's subtree with them;
     see :func:`prune`.
 
     Immutable and canonical: every mutation returns a new Filter with its values
@@ -264,8 +259,7 @@ def inventory(spans: list, filt: "Filter | None" = None) -> list:
         )
         for name, count in counts.items()
     ]
-    # Commonest first, then alphabetical — a stable order, and the labels worth
-    # filtering are the ones there are a lot of.
+    # Commonest first, then alphabetical — a stable order.
     out.sort(key=lambda f: (-f.count, f.name))
     return out
 
@@ -339,9 +333,7 @@ def filtered_document(data: dict, filt: "Filter | None" = None) -> dict:
     # unfolded save would drop a different set of spans than the page showed;
     # `mark_groups` because `hide` carries the displayed label, and "Bash [group]"
     # only matches a span that has been re-kinded. Both are written out with the
-    # spans — the document already names this tree as its producer, and a saved
-    # view that reopened as a different shape than the one saved would be worse
-    # than a changed enum.
+    # spans.
     kept, removed = prune(mark_groups(fold_llm_requests(data.get("spans") or [])), filt)
     source_totals = data.get("totals") or {}
     view = breakdown(kept, _int_or_none(source_totals.get("wall_ns")) or 0)
@@ -349,8 +341,7 @@ def filtered_document(data: dict, filt: "Filter | None" = None) -> dict:
     out["spans"] = kept
     out["totals"] = view.as_totals()
     # This file was written here, whatever wrote the spans — `producer` naming a
-    # script that never saw these totals is exactly the kind of plausible-looking
-    # provenance that makes a derived artefact unfalsifiable. The original moves
+    # script that never saw these totals would misattribute them. The original moves
     # into the block below rather than being dropped.
     out["producer"] = FILTER_PRODUCER
     out["filtered"] = {
@@ -400,9 +391,7 @@ def parse(data: dict, filt: "Filter | None" = None) -> Trace:
     # The zoom is a second, explicit window on top of the filter — never a
     # re-scaling of the filtered view. It is looked up in the *pruned* tree, so a
     # zoom on a span the filter hides falls back to the whole trace with a note,
-    # and the axis it re-bases on is the subtree's own extent (`extent_of` over
-    # the one span, the same walk the global axis uses — no second layout).
-    # Spans outside the subtree are left out of the rows, not squeezed in.
+    # and the axis it re-bases on is the subtree's own extent.
     axis, zoomed, zoom_lost = extent, None, ""
     if filt.zoom:
         zoomed = find_span(roots, filt.zoom)

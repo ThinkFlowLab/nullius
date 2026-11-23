@@ -1,6 +1,6 @@
 """τ³-bench's setups and settings: the original (the upstream's own agent as
 any model, in its own batch runner), the options that set what tau2 run sets
-- each where it applies, each defaulting to what every earlier run did - the
+- each where it applies - the
 attempts told apart by the upstream's seed per trial, and the inventory of
 every setting of its evaluation.
 

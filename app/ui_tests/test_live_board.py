@@ -1,12 +1,11 @@
 """The live board on the job page: the route, the page, and the renderer's contract.
 
-Three things, each in the pattern this suite already uses. The `/job/<id>/live`
+The `/job/<id>/live`
 route is exercised against a synthetic job directory carrying the live
 fixture's `events.jsonl`. The job page is checked for its two views — Live open
 while the feed says the job is running, Results open once it says `job.end` (Live
 still there, a click away), and no views at all for a job with no feed. And the renderer is executed under Node against
-the fixture's `expected.json`, the way the run builder's core is, so the
-strings a user reads are asserted rather than described: "not reported" for a
+the fixture's `expected.json`: "not reported" for a
 null cost, an absent counter absent, the redacted line redacted.
 """
 
@@ -140,7 +139,7 @@ class LiveBoard(unittest.TestCase):
             runs = self.client.get("/runs"); self.addCleanup(runs.close)
             row = next(r for r in re.findall(r"<tr [^>]*>.*?</tr>", runs.get_data(as_text=True), re.S) if '/job/running-run"' in r)
             self.assertIn(">stopped</span>", row); self.assertNotIn(">running</span>", row)
-        # without the record, as before: running
+        # without the record: running
         self.assertTrue(self.client.get("/job/running-run/live").get_json()["running"])
 
     def test_live_route_is_404_without_a_feed_or_a_job(self):
@@ -480,8 +479,7 @@ class LiveBoard(unittest.TestCase):
 
     def test_renderer_reads_harbors_recorded_progress_run(self):
         # The P3 recording: four reporting trials carry step, tokens and a
-        # redacted activity line; four silent ones read "—" in those cells;
-        # the header has a measured rate for the first time.
+        # redacted activity line; four silent ones read "—" in those cells; the header has a measured rate.
         s = json.loads((FIXTURE / "harbor-progress-x8" / "expected.json").read_text())
         self.assertGreater(s["tokens_per_sec"], 0)
         live = dict(s, state="running", running=True, finished_at=None,
@@ -553,9 +551,7 @@ class LiveBoard(unittest.TestCase):
         self.assertFalse(out["finished"])
 
     def test_renderer_shows_the_four_leader_states_as_text(self):
-        # single-agent, strict win, tie, undecided — one fixture each (two-agents
-        # carries the strict win beside a tie and an undecided task; the tie and
-        # undecided fixtures carry nothing else, so the table reads one word).
+        # single-agent, strict win, tie, undecided — one fixture each.
         single = self.render(json.loads((FIXTURE / "rate-eta" / "expected.json").read_text()))
         self.assertEqual((single["lanes"], single["winners"], single["lanesLine"]), (0, "", ""))   # one lane, nothing to win
         self.assertNotIn("won", visible(single["meta"] + single["stats"]))

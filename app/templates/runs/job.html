@@ -113,7 +113,7 @@
 {% if job.is_preparing and not live_board and not ended %}
 <script>
 // Ask for the feed every second while preparing. Reload when it appears or
-// the runner reports an end; the settled page no longer starts this poll.
+// the runner reports an end.
 (() => {
   const url = document.getElementById('preparing').dataset.live;
   const tick = async () => { if (document.hidden) return; try { const r = await nulliusFetch(url, {cache: 'no-store'}); if (r.ok) location.reload(); } catch {} };
@@ -122,7 +122,7 @@
 </script>
 {% endif %}
 
-{#- The run page below its header: the scoreboard, the trials it scopes, and two disclosures.
+{#-
     Board counts are whole-run and never change under a filter; the trial rows are rendered here, and job.js only filters,
     sorts and links them. Every lane and tally count is nullius.judge.lanes, which is reconcile's. -#}
 {% macro slots(jr, extra) -%}

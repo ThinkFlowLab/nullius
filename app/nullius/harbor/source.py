@@ -34,7 +34,7 @@ beside the pin (``agents.json``), so it is asked once per pin. Building and
 scanning run on an explicit action - the builder's scan, or a Run - never on
 a page load; two asks for one pin build it once.
 
-Nothing here imports Flask; every command goes through a ``run`` seam and
+Every command goes through a ``run`` seam and
 PyPI through a ``fetch`` seam.
 """
 from __future__ import annotations
@@ -92,8 +92,7 @@ def _now() -> str:
 
 def pin_of(raw) -> tuple:
     """``(pin, problem)`` for a recipe's ``harbor`` field: the pin
-    normalised, or None with no problem when the recipe names none (a recipe
-    from before the field, or a release not chosen yet) - that recipe runs
+    normalised, or None with no problem when the recipe names none - that recipe runs
     the harbor on the target's PATH - or None and what is wrong."""
     if not isinstance(raw, dict) or raw.get("kind") not in KINDS:
         return None, None

@@ -3,10 +3,6 @@
 Nullius installs only Flask into its application's environment. Agents and
 benchmark runtimes run in separate environments; reading their output must
 not import their dependencies.
-
-`OneName` checks that `nullius` resolves to this application's package from
-exactly one place. The requirements and import checks together keep the
-viewer independent of the runtime.
 """
 
 import fnmatch
@@ -25,8 +21,7 @@ REPO = APP.parent
 REQUIREMENTS = APP / "requirements.txt"
 
 #: Every distribution this application may install, and why it is here.
-#: Adding a line to requirements.txt without adding it here fails this test,
-#: which is the point: the surface grows only on purpose.
+#: Adding a line to requirements.txt without adding it here fails this test.
 ALLOWED = {
     "flask": "the web framework the routes are written against",
 }
@@ -43,9 +38,7 @@ FORBIDDEN = (
 
 #: The importable names a viewer could plausibly reach for and must not: the
 #: harness whose output this application reads. The backend suite asserts it
-#: is not importable where it runs;
-#: `ui_tests/test_viewer_without_runtime.py` opens a workspace and job pages
-#: with it absent.
+#: is not importable where it runs.
 RUNTIME_MODULES = ("harbor",)
 
 
@@ -133,10 +126,7 @@ class TheRuntimeStaysOut(unittest.TestCase):
                 )
 
     def test_the_backend_suite_runs_where_the_runtime_is_absent(self):
-        """This suite is documented to run on a bare `python3`, and it does:
-        every backend test imports nothing but the standard library and
-        `nullius`. Assert that the runtime is absent so imports cannot hide
-        an undeclared dependency."""
+        """Assert that the runtime is absent so imports cannot hide an undeclared dependency."""
         for name in RUNTIME_MODULES:
             with self.subTest(name):
                 self.assertIsNone(
@@ -175,10 +165,7 @@ class OneName(unittest.TestCase):
     """One name, one implementation in the source test interpreter.
 
     Counting *providers* rather than testing that an import succeeded is the
-    whole point. While a local package shared a top-level name with an
-    installed distribution, the local copy won at `sys.path[0]` and 595 tests
-    passed against code that was meant to have been replaced; only a provider
-    count noticed. Wheel tests use an isolated interpreter outside the source
+    whole point. A local package can shadow an installed distribution. Wheel tests use an isolated interpreter outside the source
     checkout: installing Nullius there must still expose exactly one provider.
     """
 

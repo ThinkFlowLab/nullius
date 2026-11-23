@@ -1,4 +1,4 @@
-// Notifications belong to the main viewport, including saves made in Settings.
+// Notifications belong to the main viewport.
 (() => {
   function host() {
     return [...document.querySelectorAll('dialog[open]')].at(-1) || document.body;

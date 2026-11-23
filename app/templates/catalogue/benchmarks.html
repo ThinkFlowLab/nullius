@@ -12,8 +12,7 @@
   {% set actions %}<button type="button" class="btn sm" id="std-how-open" aria-haspopup="dialog">+ Add a benchmark</button>{% endset %}
   {{ page_head('Benchmarks', sub=listed|length ~ ' benchmarks · ' ~ count.datasets ~ ' datasets', actions=actions) }}
 
-  {#- Two routes in: the Nullius standard (a paper's own scripts as its Original setup), or Harbor. The assistant asks
-      which (the import-benchmark skill); by hand, each route has its own way. #}
+  {#- Two routes in: the Nullius standard (a paper's own scripts as its Original setup), or Harbor. #}
   {% from "catalogue/add_dialog.html" import add_dialog %}
   {% call add_dialog('a benchmark', prompts, 'benchmark') %}
     <p>Two ways a benchmark runs here. Pick its route, then follow it.</p>
@@ -35,7 +34,7 @@
                  dict(key='scoring', label='Scored by', card='stat', class='word'), dict(key='needs', label='Needs', card='note', icon='wrench', off=true),
                  dict(key='blocker', label='Blocker', card='alert')] %}
   {#- Two shelves: the official benchmarks, then the community benchmarks; the table is one table in that order, its
-      Origin the shelf. A card or a name opens the benchmark's own page. #}
+      Origin the shelf. #}
   {% set sort = ['title', 'tasks', 'datasets'] %}{% set shelves = [('official', 'Official'), ('community', 'Community')] %}
   {% set rows = [] %}{% for state, _ in shelves %}{% set _ = rows.extend(items|selectattr('shelf', 'equalto', state)) %}{% endfor %}
   {% call cards('benchmarks', cols, rows, search='Name, category, dataset', choices=choices, sort=sort, empty='No benchmark matches.', noun='benchmarks', layout='table' if request.args.get('view') == 'table' else 'cards', default='cards') %}

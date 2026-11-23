@@ -8,8 +8,7 @@ cross-check that matters most: the fixture folds to its `expected.json`, byte
 for byte as JSON.
 
 The fixture (`fixtures/live/events.jsonl`, `expected.json`) is a hand-written
-three-trial job with a torn last line; Harbor's first recorded run replaces it
-additively, and these cases stay valid as a second case.
+three-trial job with a torn last line.
 """
 
 import json
@@ -77,8 +76,7 @@ class Schema(unittest.TestCase):
 class Redaction(unittest.TestCase):
     def test_the_tail_is_scrubbed_too_not_only_the_cards(self):
         # Redaction happens at parse, so the event tail the snapshot carries
-        # cannot print what the card hid. This application's first draft did
-        # exactly that; this is the shape that catches it.
+        # cannot print what the card hid.
         key = "sk-abcdefghijklmnopqrstuvwxyz1234567890"
         snap = board_of(ev(1, "trial.log", line=f"got {key}"),
                         ev(2, "trial.progress", activity=f"call {key}")).snapshot()
@@ -281,8 +279,7 @@ class Fold(unittest.TestCase):
 
     def test_a_key_that_appears_only_on_a_later_report_is_not_a_rate(self):
         # Harbor's writer reports input/output on progress and adds the cache
-        # count only on trial.end; this application saw 32k "tokens/s" on a
-        # real run from that key's first appearance. Deltas are per key, over
+        # count only on trial.end; using the first value as a delta inflates the rate. Deltas are per key, over
         # reports carrying that key — the cache figure has one point and no
         # baseline.
         start = datetime(2026, 9, 12, 18, 0, 0, tzinfo=timezone.utc)
@@ -462,8 +459,7 @@ class Lanes(unittest.TestCase):
         # The prepare feed reports stages before the job starts:
         # job.prepare {stage: dataset}, job.prepare {stage: tasks},
         # then job.start - written at launch, so a board polling the file sees
-        # the window. A local dataset here, so the whole window is 14 ms; on a
-        # registry dataset it is the download. Folded prefix by prefix, the way
+        # the window. Folded prefix by prefix, the way
         # a poller sees the file grow.
         events = live.read_events(FIXTURES / "harbor-prepare-x4" / "events.jsonl").events
         self.assertEqual([e.event for e in events[:3]], ["job.prepare", "job.prepare", "job.start"])
@@ -546,10 +542,6 @@ class Fixture(unittest.TestCase):
         self.assertIsNone(got["totals"]["cost_usd"])
 
     def test_harbors_recorded_prepare_run_folds_at_both_moments(self):
-        # The prepare feed contains:
-        # job.prepare {stage: dataset, n_concurrent, agents} the
-        # moment the job directory is claimed, job.prepare {stage: tasks}
-        # before caching, then job.start — 14 ms later on a local dataset.
         # Harbor's stage vocabulary is dataset/tasks (images build per trial,
         # after job.start). n_total is not on its prepare lines, so the
         # header's total is null, not 0, until job.start.
@@ -753,7 +745,7 @@ class EndedByRunner(unittest.TestCase):
             snap = live.snapshot(d, now=start + timedelta(seconds=100), ended=("failed", start + timedelta(seconds=70)))
             self.assertEqual((snap["state"], snap["ended_by"], snap["counts"]["running"]), ("finished", "failed", 0))
             self.assertIn("The run was failed at 08:01:10Z", snap["notices"][-1])
-            self.assertEqual(live.snapshot(d, now=start + timedelta(seconds=100))["state"], "running")   # without it, as before
+            self.assertEqual(live.snapshot(d, now=start + timedelta(seconds=100))["state"], "running")   # without it
 
 
 def at_(start, sec):

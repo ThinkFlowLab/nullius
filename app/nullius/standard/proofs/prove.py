@@ -1,7 +1,6 @@
 """A benchmark's proofs: its controls behave, its units are stable, nothing leaks.
 
-An agent or a capability proves its ports by kits (``conform``); a benchmark
-proves itself, per dataset, by four checks - what ``cli prove`` runs and
+A benchmark proves itself, per dataset, by four checks - what ``cli prove`` runs and
 writes into the benchmark's ``proven``:
 
 - ``nop``, the null control: no agent, an empty answer, the workspace as
@@ -34,12 +33,11 @@ it needs no key - except a judged benchmark's, whose judge still grades.
 ``--job nop=DIR`` holds a merged launch of a control to its bound.
 
 A check that passes is recorded with its date, its counts and its job; one
-that fails is taken back, as ``conform`` takes back a port - what it reached kept
-under ``failed``, for a page to say why. A check run on
+that fails is taken back - what it reached kept
+under ``failed``. A check run on
 fewer units (``--limit``) does not replace one that covered more. A
 benchmark whose units may not be redistributed (``units.redistribute``) is
-recorded without what names them: no ``in_prompt.first``, no problems. Parity
-with the authors' own scorer is not checked yet (``docs/standard.md``).
+recorded without what names them: no ``in_prompt.first``, no problems.
 """
 from __future__ import annotations
 
@@ -150,8 +148,7 @@ def _flat(text: str) -> str:
 def leak_check(driver: _Driver, units: List[str], family: str, in_prompt: str = "") -> dict:
     """For each unit: set up, run the oracle on a copy, and look for what it
     gave in what setup had already shown. ``in_prompt``: the benchmark's
-    reason a prompt may name its own answer (``controls.oracle.in_prompt``,
-    a choice question offering it among others); such a unit is counted and
+    reason a prompt may name its own answer (``controls.oracle.in_prompt``); such a unit is counted and
     named, not failed. Found in a file setup wrote, it is always a leak."""
     p = driver.start(0)
     looked, short, nothing, leaks, failed, bad, named = 0, 0, 0, [], [], set(), []
@@ -238,7 +235,7 @@ def control_check(bench: dict, ds: dict, which: str, *, limit: Optional[int], jo
                           jobs_root=jobs_root, name=job_name(stamp, definitions.job_word(bench), ds["id"], which, shard),
                           say=lambda s: say("    " + s), env=env, judge_model=judge_model, shard=shard, launch=launch,
                           licences=licences, bench_options=options,
-                          remove_images=remove_images, retries=1, retry_if=retries.rate_limited)   # as conform's
+                          remove_images=remove_images, retries=1, retry_if=retries.rate_limited)
         cfg = {}
     field = FIELD[bench["score"]["kind"]]
     results = [res for _, res in trials(job_dir)]
@@ -465,9 +462,7 @@ def record(bench: dict, got: Dict[str, dict]) -> None:
     """Write what passed into ``bench``'s ``proven`` and save it: a check that
     passed replaces its record unless that one covered more units; one that
     failed is taken back. The failure itself is kept under ``failed`` - what
-    it reached, against what bound - so a page can say "0.9955 < 1"
-    rather than only "not proven"; the next pass of that check clears it. The
-    record never names its job: that folder is on the machine that ran it.
+    it reached, against what bound; the next pass of that check clears it.
     Units that may not be redistributed are never named (:func:`_unnamed`)."""
     if (bench.get("units") or {}).get("redistribute") is False:
         got = {ds: {name: _unnamed(r) for name, r in checks.items()} for ds, checks in got.items()}
@@ -536,7 +531,7 @@ def status(bench: dict) -> Dict[str, Dict[str, dict]]:
     comes from, its bound and what it must score - and whether it is proven on
     that dataset, with the record and how far short of the full mark it is
     (``short_of``); then the units and leak checks the same way. ``failed``:
-    the last attempt that did not pass, while none has since. What a page shows."""
+    the last attempt that did not pass, while none has since."""
     out = {}
     controls = bench.get("controls") or {}
     for ds in bench["datasets"]:

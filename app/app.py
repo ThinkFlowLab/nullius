@@ -1,8 +1,6 @@
 """Nullius: the run behind a benchmark score, as a Flask app.
 
-Reads job directories and runs recipes from the builder. `save_trace` writes a
-filtered trace view beside the trial's own `agent/trace.json`, under a name the
-user types. It never overwrites an existing file, and never the producer's.
+Reads job directories and runs recipes from the builder.
 
 Point it at one or more roots, any of:
 
@@ -78,7 +76,6 @@ def main(argv=None) -> None:
         p for p in os.environ.get("JOB_ROOTS", "").split(os.pathsep) if p
     ]
     # Same expansion as the web form, so `app.py 'current/jobs_*'` works too.
-    # Quote the pattern or the shell expands it first — harmless either way.
     roots, unmatched = shared.resolve_submitted_paths(values)
 
     for miss in unmatched:

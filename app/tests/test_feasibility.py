@@ -5,8 +5,7 @@ Synthetic control jobs are written the way Harbor writes them — a job
 directory with config.json and one trial directory per task holding a
 result.json — under the names the builder gives them (`<name>-nop`,
 `<name>-oracle`, `<name>-<agent>`, and the bundle's `-bracket-` spelling).
-The one real capture, `liveboard-oracle-x4`, is an oracle-only sweep and is
-read as exactly that."""
+"""
 from __future__ import annotations
 
 import json
@@ -160,9 +159,7 @@ class Classification(unittest.TestCase):
 class TaskBroken(unittest.TestCase):
     """A task whose nop control fails previously-passing tests was
     broken before any agent touched it — the same `p2p_fail` the trial page
-    flags as ⚠ Broke tests, read on the control. The specimen is written
-    here in the SWE-bench verifier's own shape, since no capture on disk has
-    a failing nop."""
+    flags as ⚠ Broke tests, read on the control."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

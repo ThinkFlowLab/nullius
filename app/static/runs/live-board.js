@@ -85,7 +85,7 @@
       const parts = [T.n_cache_tokens != null ? `${count(T.n_cache_tokens)} cached` : '', T.n_output_tokens != null ? `${count(T.n_output_tokens)} out` : ''].filter(Boolean);
       bits.push(`<span><b>${count(tok)}</b> tokens${parts.length ? ' (' + parts.join(', ') + ')' : ''}</span>`);
     }
-    // measured, or left out: a rate the window could not measure, and a cost nobody reported, are absent, never 0
+    // not measured or not reported: absent, never 0
     if (s.tokens_per_sec != null) bits.push(`<span><b>${count(Math.round(s.tokens_per_sec))}</b> tokens / s, last 30 s</span>`);
     // as the job page says a cost: to the cent, and under a cent to four decimals ($0.00 beside a cap of $0.004 says nothing)
     if (T.cost_usd != null) bits.push(`<span><b>$${Number(T.cost_usd).toFixed(Number(T.cost_usd) < 0.01 ? 4 : 2)}</b> spent</span>`);
@@ -131,8 +131,7 @@
     return {bar, chips};
   }
   // Several agents in one job: the fold groups the trials into one lane per
-  // agent and names a winner per task; the board only lays them out. Nothing
-  // unreported reads as 0.
+  // agent and names a winner per task; the board only lays them out.
   function renderLanes(lanes, contested) {
     if (!lanes || lanes.length < 2) return '';
     return lanes.map(l => {
@@ -207,7 +206,7 @@
         ${has.tokens ? `<td class="num${tok == null ? ' na' : ''}">${count(tok)}</td>` : ''}
         ${has.line ? `<td><span class="lb-line${line ? '' : ' na'}" title="${esc(line || '')}">${line ? redacted(line) : '—'}</span></td>` : ''}<td class="lb-go"></td></tr>`;
     }).join('') + doneRows.map(t => {
-      // an ended trial stays, below the running ones: its outcome, its time in all, its tokens, and its page
+      // an ended trial: its outcome, its time in all, its tokens, and its page
       const tok = tokensOf(t), line = t.activity || t.last_line, href = trialHref(t, opts);
       const dim = opts.filter && t.outcome !== opts.filter ? ' dim' : '';
       return `<tr class="lb-row lb-ended${dim}" data-trial="${esc(t.trial)}" tabindex="0" aria-current="${opts.selected === t.trial}">
@@ -372,7 +371,7 @@
         doc.getElementById(t.getAttribute('aria-controls')).hidden = !on;
       });
       const u = new URL(location.href); u.searchParams.set('view', view);
-      // Results as rendered when the page loaded predate trials or a run that ended since: read them again
+      // Results rendered at page load may be stale: read them again
       const badge = doc.getElementById('results-badge');
       if (view === 'results' && badge && badge.dataset.stale) { location.assign(u); return; }
       history.replaceState(null, '', u);

@@ -369,10 +369,9 @@
   const compareBtn = document.getElementById('compare-btn');
   const pickNote = document.getElementById('pick-note');
   let picks = [...table.querySelectorAll('[data-check]')];
-  // the header box ticks the visible rows, and shows all, none or some of them ticked
   const ticks = NulliusTable.checks(table);
 
-  // greyed while fewer than two are ticked: still focusable, its reason its tooltip and description
+  // Fewer than two selected: still focusable, its reason its tooltip and description
   const why = compareBtn.title;
   function syncPicks() {
     const on = picks.filter(p => p.checked), ready = on.length >= 2;
@@ -401,8 +400,7 @@
 
   /* ---- the list keeps up by itself ----
      A run launched elsewhere shows up here on its own: every few seconds the page
-     asks what the job roots look like now and, when that changes (a new directory,
-     a feed growing, a result landing), reads itself again and puts in only what
+     asks what the job roots look like now and, when that changes, reads itself again and puts in only what
      moved. No reload: the scroll, the view, the filters, the sort and the ticks
      stay. A hidden tab does not ask, and a selection is left to be copied. */
   /* a participant's shards fold into one row: the row, or its chevron, unfolds them */

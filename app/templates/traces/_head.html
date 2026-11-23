@@ -1,7 +1,7 @@
 {% from 'runs/_runtime.html' import what_ran %}
 {# What ran, said the same on a trial's page and on its task's All attempts: where the task is from
    and what ran it, then the agent, its mark (`mark`: base.html's agent_mark) and the model that
-   answered. An imported trial says its importer: no benchmark gave it, and no runner ran it here.
+   answered. An imported trial says its importer.
    A block with nothing to say is not drawn. #}
 {% macro ran_cards(job, trial, imported_from, mark) -%}
   {# The trial records a bare model name ("gpt-5.6-luna"); the job keeps the

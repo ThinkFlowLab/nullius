@@ -4,7 +4,7 @@ Only backend Python modules, definition documents and their local resources
 travel. The installation's neighbours, user configuration, licences and SSH
 keys are never inputs. Source checkouts and installed wheels use the same
 content address, including executable bits; neither Git nor the viewer is
-needed on the target. Credential transport belongs to ``execution``.
+needed on the target.
 """
 from __future__ import annotations
 
@@ -202,8 +202,7 @@ def _cached(destination: Path, marker: str, files: dict) -> bool:
 def build(cache: str, *, package: Path | None = None, catalogue: str | None = None) -> tuple[str, str]:
     """Return (content ID, snapshot root), with ``app/nullius`` below it.
 
-    A user entry replaces the whole bundled entry, as the normal catalogue
-    loader does. Nothing is created in either input tree. The staged tree is
+    A user entry replaces the whole bundled entry. Nothing is created in either input tree. The staged tree is
     replaced atomically, and the address covers the exact bytes being sent.
     """
     package = Path(package) if package is not None else PACKAGE

@@ -123,11 +123,10 @@ def _folded_child(raw: dict, parent: dict) -> dict:
     same instants twice more. The block keeps its identity and content; the
     request hands over its attributes and its tokens.
 
-    Handing the tokens over matters more than it looks. The producer's own
+    The producer's own
     `totals.tokens` is the sum over every span it wrote, duplicated usage
     included: dropping a record's copy here would leave the recomputed breakdown
-    disagreeing with the reported totals by a factor of three, and this reader
-    would appear to have invented the defect.
+    disagreeing with the reported totals by a factor of three.
     """
     children = [c for c in raw.get("children") or [] if isinstance(c, dict)]
     typed = [c for c in children if str(c.get("kind") or "") in _BLOCK_KINDS]
@@ -156,7 +155,7 @@ def fold_llm_requests(spans: list) -> list:
     Nothing is invented and nothing is dropped. Every span survives with its own
     start, end and tokens; a request span that collapsed into its one block is
     that block, carrying what the request knew. The rows move, the clocks do not,
-    and the producer's `totals` is untouched, as ever.
+    and the producer's `totals` is untouched.
 
     Copy-on-write, like `prune`: a document with nothing to fold is returned by
     reference.

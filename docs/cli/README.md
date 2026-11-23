@@ -3,14 +3,9 @@
 One page per command of Nullius's shell interface; `--help` on any command gives its arguments.
 
 After [installation](../getting-started.md), use `nullius` from any directory.
-`python -m nullius` is identical when that Python environment contains Nullius.
-An installation made by `uv tool install` has its own interpreter: use its
-`nullius` command, not an unrelated system Python.
 
 From a source checkout, replace `nullius` with
-`PYTHONPATH=app python3 -m nullius`. To serve from source with Flask, the existing
-`uv run --no-project --with-requirements app/requirements.txt app/app.py` command
-also works.
+`PYTHONPATH=app python3 -m nullius`.
 
 | Page | Command |
 | --- | --- |
@@ -31,7 +26,3 @@ also works.
 | [Exit codes and output](exit-codes.md) | |
 
 A Harbor recipe runs by its generated script, not a command: [Run builder](../builder.md).
-
-The module CLIs remain available from an installed interpreter or with
-`PYTHONPATH=app` in a checkout. The unified command loads saved settings;
-`standard --from-run` uses only the supplied run environment.

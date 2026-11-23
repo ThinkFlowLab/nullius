@@ -2,8 +2,7 @@
 
 A port's name carries its version. Its contract never changes under the same
 name: a different contract is a new version, and a definition naming the old
-one keeps meaning the old one. ``label`` is what a page calls it, in words a
-person needs no glossary for; the port's name stays beside it. ``kit`` is the folder under ``standard/kits/``
+one keeps meaning the old one. ``label`` is what a page calls it. ``kit`` is the folder under ``standard/kits/``
 holding the tiny benchmark that proves the port, or None while a port is
 defined ahead of its first benchmark.
 """

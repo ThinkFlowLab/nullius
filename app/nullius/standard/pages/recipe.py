@@ -1,7 +1,6 @@
 """The standard in the run builder: its choices, its recipe, its compile.
 
-The builder offers the standard as a runner beside Harbor and the runner
-definitions. A recipe for it carries *choices* - a benchmark, one of its
+A recipe for it carries *choices* - a benchmark, one of its
 datasets, an agent or a capability and any of its options (``options``, name ->
 value; the rest keep the vendor's defaults), a provider and a model, a limit,
 how many units at a time, and for an agent the explicit yes to running it
@@ -10,7 +9,7 @@ the preview route and ``/run`` compile again from the definitions, never from a
 script the page sent.
 
 Every pair is shown, and the ones that do not fit are refused with
-``match.fit``'s reasons, the same sentences the page greys a choice out with.
+``match.fit``'s reasons.
 
 The command is ``nullius.standard.cli run``, and
 ``--from-run`` makes it read the key and endpoint the run is handed
@@ -23,10 +22,9 @@ to the directory the script was started in.
 *Where* (``where``) is this machine (``local``), a host from Settings, or a
 list of them: one machine is one run, several split it - one shard per
 machine (``shard.py``), each its own run with its own job
-(``<name>-shard-<I>of<N>``), all under one launch id, the recipe's name, so
-the runs page groups them and ``cli merge`` puts them together. A shard's
+(``<name>-shard-<I>of<N>``), all under one launch id, the recipe's name. A shard's
 ``limit`` is its own. ``backend``: ``local`` processes, or ``container`` - each
-unit's agent or capability in a container, ``docker`` its earlier name - which a
+unit's agent or capability in a container, also accepted as ``docker`` - which a
 host must have Docker or Podman for (``docker`` in the result: the run checks it
 before anything is sent), or ``boat`` - each unit's agent or capability in a
 boat.dev VM of its own (``boat.py``), started where the run runs, with this
@@ -162,7 +160,7 @@ def _bench_page(b: dict) -> dict:
                              for n, e in (b.get("environments") or {}).items()},
             "needs": list(b.get("needs") or []), "units": b.get("units") or {"noun": "unit", "nouns": "units"},
             "score": (b.get("score") or {}).get("says", ""), "judged": bool((b.get("score") or {}).get("judge")),
-            # the upstream it runs: its repository, the release tag when it has one, the commit that is the authority
+            # the upstream it runs
             "upstream": {k: str((b.get("upstream") or {}).get(k) or "") for k in ("repository", "tag", "branch", "tested")},
             "controls": controls,
             # One Original procedure, with separate reference-participant and paper-model metadata.
@@ -213,9 +211,7 @@ def protocol(o: dict) -> str:
 def skills_of(port: str, record: Optional[dict]) -> List[dict]:
     """The skills of ``port``'s kit as a page shows them under a proof:
     {id, says, shown, passed} each, ``passed`` the count when the proof
-    recorded one. Empty without a proof, for a kit without skills, and for a
-    proof on an older kit from before skills were recorded - it says nothing
-    of them."""
+    recorded one. Empty without a proof, for a kit without skills, and for a proof on an older kit that recorded none."""
     have = definitions.port_skills(port)
     if not record or not have or not (isinstance(record.get("skills"), dict) or definitions.on_current_kit(port, record)):
         return []
@@ -225,7 +221,7 @@ def skills_of(port: str, record: Optional[dict]) -> List[dict]:
 
 
 def _other_page(o: dict) -> dict:
-    # a benchmark's own agent: its benchmark, the models it is published with and the upstream's name for it
+    # a benchmark's own agent
     own = {"benchmark": o["benchmark"], "benchmark_label": o["benchmark_label"], "models": list(o.get("models") or []), "agent": o["start"]["driver"]["agent"]} \
         if "driver" in (o.get("start") or {}) else {}
     return {**own, "key": o["_ref"], "base": o["key"], "label": definitions.title(o), "summary": o["summary"], "kind": o["_kind"],
@@ -245,8 +241,7 @@ def _other_page(o: dict) -> dict:
 
 def _with_versions(b: dict) -> dict:
     """A benchmark's page for the builder: its default version's, each other version
-    carrying its own whole ``page`` (upstream, datasets, proofs, setups, options), so
-    choosing a version changes everything the steps show, not its name alone."""
+    carrying its own whole ``page`` (upstream, datasets, proofs, setups, options)."""
     page = _bench_page(b)
     for v in page["versions"]:
         if not v["default"]:
@@ -299,7 +294,6 @@ def entries(kind: str, benches: Optional[List[dict]] = None, every: bool = False
         fid = (o.get("proven") or {}).get("fidelity")
         out.append({"d": o, "protocol": protocol(o), "ports": rows, "fits": fits,
                     "install": _install_words(o),
-                    # its options, each with its default and what else it takes; its fidelity proof, when it has one
                     "options": [{"name": n, "summary": x.get("summary", ""), "default": x.get("default"),
                                  "values": list(x.get("values") or []), "pattern": x.get("pattern", ""), "example": x.get("example", "")}
                                 for n, x in (o.get("options") or {}).items()],
@@ -353,7 +347,7 @@ def page_of(benchmark: str) -> Optional[dict]:
 
 def chosen_of(recipe: dict) -> List[str]:
     """The agents, capabilities and controls a recipe runs, each once, in its order:
-    ``others``, or the one ``other`` of a recipe from before several could be chosen."""
+    ``others``, or the one ``other``."""
     picked = recipe.get("others")
     if not isinstance(picked, list):
         picked = [recipe.get("other")] if recipe.get("other") else []
@@ -375,8 +369,7 @@ def with_own_agents(recipe: dict, bench: dict) -> dict:
 
 
 def options_for(recipe: dict, ref: str, several: bool):
-    """One choice's options: ``options`` is {ref: {name: word}}; a recipe from before, or one with a
-    single choice, may give that choice's {name: word} directly."""
+    """One choice's options: ``options`` is {ref: {name: word}}; a recipe with a single choice may give that choice's {name: word} directly."""
     given = recipe.get("options") or {}
     if isinstance(given, dict) and ref in given and isinstance(given[ref], dict):
         return given[ref]
@@ -400,14 +393,13 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     for one recipe; errors name the step
     that edits what is wrong. And ``shards``: one per machine of *Where*, each
     {where, index, of, name, script, parts, jobs} - what one run on that
-    machine is given (``web/execute.py`` starts one per shard) - and
+    machine is given - and
     ``docker``, whether the runs need docker where they run.
 
     ``docker_unusable``: asked, when the container backend is chosen for this
     machine, why docker cannot run here (``container.unusable``) - a reason
     is the Where step's error. Not given, it is not asked: compiling stays a
-    function of the definitions alone, and the routes that preview or start
-    a run pass it. ``boat_unusable``: the same for the boat backend
+    function of the definitions alone. ``boat_unusable``: the same for the boat backend
     (``boat.unusable``), asked with whether the run is on this machine: its
     key, and there the programs that reach a VM (a host's are its prerequisites);
     ``boat_size_problem``, why the account cannot start a VM of the size.
@@ -421,10 +413,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     turns in a conversation (``--max-turns``); ``max_calls``: the most model
     calls a unit's agent may make (``--max-calls``).
     ``max_usd_per_unit``: each unit's own cap (``--max-usd-per-unit``), given
-    whole to every job that calls a model: a unit is a unit wherever it runs.
+    whole to every job that calls a model.
     ``unpriced``: asked, for a recipe with a cap, which of the models it
     names have no price in the user's list (``nullius.prices``): a run
-    with a cap is refused without one, and the Limits step says so first.
+    with a cap is refused without one.
 
     ``served_by``: on OpenRouter, the serving providers each model field
     pins, ``{model|simulator|judge: [slug, ...]}``, checked as ``--served-by``
@@ -449,7 +441,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # its own agents are the benchmark's, whatever its version: they keep its plain name
     base, b = b, dict(b, label=definitions.title(b))
     recipe = with_own_agents(recipe, base)
-    # one dataset or several (``datasets``; a recipe from before names one, ``dataset``): each its own jobs
+    # one dataset or several (``datasets``; or one, ``dataset``): each its own jobs
     wanted = recipe.get("datasets") if isinstance(recipe.get("datasets"), list) else ([recipe["dataset"]] if recipe.get("dataset") else [])
     wanted = list(dict.fromkeys(str(x) for x in wanted if isinstance(x, str)))
     dss = [x for x in b["datasets"] if x["id"] in wanted]
@@ -478,7 +470,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         if ref == "model":
             add("agent", "Choose Original, then choose the model on the Model step.")
             continue
-        own = definitions.own_agent(base, ref) if ":" in ref else None   # one of the benchmark's own agents
+        own = definitions.own_agent(base, ref) if ":" in ref else None
         if ":" in ref and own is None:
             other = definitions.find(definitions.benchmark_agents(d["benchmark"]), ref)
             add("agent", f"{other['label']} cannot run {base['label']}: " + "; ".join(match.fit(b, other)) + "." if other
@@ -623,8 +615,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # the leaderboard's own models, as the run's provider spells them; the official ones stay the run's default
     sim_model = providers.served_as(lb["simulator"], provider_) if lb.get("simulator") else sim_model
     judge_model = providers.served_as(lb["judge"], provider_) if lb.get("judge") else judge_model
-    # the serving providers each model field pins, on OpenRouter (served_by: {model|simulator|judge: [slug, ...]}),
-    # checked as --served-by is (relay.serving_problems); an empty list pins nothing
+    # served_by is {model|simulator|judge: [slug, ...]}; an empty list pins nothing
     roles = {"model": "the model", "simulator": "the user simulator's model", "judge": "the judge's model"}
     pins = recipe.get("served_by")
     served: Dict[str, List[str]] = {}
@@ -637,7 +628,6 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                 add("model", "Served by " + problem + ".")
             if served and provider_ != "openrouter":
                 add("model", "Served by needs OpenRouter, the provider that routes a model to several: choose it, or leave Served by empty.")
-    # the run's spending cap: an amount in USD, or none
     cap = recipe.get("max_usd")
     if cap in ("", None):
         cap = None
@@ -654,7 +644,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     elif per_unit < 1e-6:                                     # what the command line can say: a millionth of a dollar
         add("limits", f"The spending cap per {noun} is too small.")
         per_unit = None
-    # the time limits the recipe forces, in minutes by phase (run --timeout, in seconds), and a conversation's length
+    # minutes here, seconds on the command
     forced: Dict[str, float] = {}
     given_t = recipe.get("timeouts") if isinstance(recipe.get("timeouts"), dict) else {}
     for k, v in given_t.items():
@@ -665,7 +655,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             add("limits", f"A time limit is a number of minutes above zero, at most {run.MAX_TIMEOUT_SECONDS // 60}, or empty for the default.")
             continue
         forced[k] = round(v * 60, 1)
-    calls = recipe.get("max_calls")              # the most model calls a unit's agent may make (run --max-calls)
+    calls = recipe.get("max_calls")
     if calls in ("", None):
         calls = None
     elif _int(calls, 1, 1000000) is None:
@@ -743,7 +733,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         if missing:
             add("limits", f"A spending cap needs a price for {', '.join(missing)}: update the price list in Settings, or set a price there.")
     try:
-        for t in targets:                                     # each machine's constraints go on its command
+        for t in targets:
             limits.of(t)
     except ValueError as e:
         add("where", f"{e}: fix it in Settings.")
@@ -793,7 +783,6 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     n = sum(min(limit, t) for t in each) if isinstance(limit, int) and total else (limit or total)
     of = len(targets)
     many = len(dss) > 1
-    # what a run is made of: each dataset with each choice, a job each, in that order
     pairs = [(x, p) for x in dss for p in picks]
 
     def word_of(d: dict, p: dict) -> str:
@@ -869,7 +858,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["model"] = model
     # Nothing in the run asks a model: no key is handed to it, and none need be set.
     out["keyless"] = only_controls and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"]
-    # what the machines must have for the chosen options (``host``): the Where step and its test show it, Run checks it
+    # what the machines must have for the chosen options (``host``)
     on_host = [] if backend == "boat" and whole else needs["host"]     # each VM installs them (boat_units.prepare)
     if backend == "container" and any(p.get("setup") for p in picks):
         # a container setup's image installs what has an install; nothing else reaches its container
@@ -1031,8 +1020,7 @@ def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: 
 
 def proving(benchmark: str, *, dataset: str = "", limit=None, provider: str = "openai", judge_model: str = "",
             stamp: str, concurrency: int = 4) -> dict:
-    """The proof a benchmark's page starts, as an Agents page starts a check
-    of ports (``conformance``): ``cli prove`` over one dataset or each - its
+    """The proof a benchmark's page starts: ``cli prove`` over one dataset or each - its
     units, the leak check and every control it declares - as one command,
     the control jobs it will write named ahead (``prove.job_name``).
     ``keyless``: the controls call no model, so the run is handed no key at

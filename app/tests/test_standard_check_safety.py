@@ -1,19 +1,7 @@
 """An own image's check runs with nothing of the agent's left running and
 with a way out to public addresses only.
 
-Without docker: the ``keep_processes`` field of a step; the script that stops
-what the agent left (``container.SETTLE``) and the one that finds the
-keep-alive (``container.KEEPER``), run by ``sh`` over a made-up ``/proc``
-with ``kill`` recorded rather than sent; the order a check's step is taken
-in (stopped, copied in, online, run with the proxy named); the proxy's rule
-(``egress.public``), its parsing, and its refusals, served here; and
-Terminal-Bench's driver keeping processes for the tasks whose tests need a
-service the agent left running, and preparing every task with tmux; a unit's
-preparation (root, its proxy closed and what it left stopped before the
-agent). With docker (skipped otherwise): a loop left running in a box is gone
-after ``settle``, a check's proxy refuses the metadata address and a private
-one while it reaches a public host, and a preparation's proxy, once closed,
-leaves no ``egress`` name and no route out."""
+Docker checks require Docker and are skipped otherwise."""
 from __future__ import annotations
 
 import json

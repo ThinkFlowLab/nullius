@@ -2,13 +2,6 @@
 per benchmark, and one page per benchmark folder that names its route - the
 builder, or why there is none - as text a reader can quote.
 
-Of the four discovery cases the spec names, the shipped catalogue renders
-three - Harbor only, a harness of its own (a runner, the standard), and
-Harbor beside one of those - and this suite pins them.
-
-A benchmark's page carries its datasets: `DatasetsOnTheirPage` pins what
-each one shows.
-
 No workspace is opened; the pages read the shipped catalogue only."""
 from __future__ import annotations
 
@@ -193,7 +186,7 @@ class BenchmarksList(PageCase):
         self.assertIn('data-keys="longmemeval longmemeval-s longmemeval-m longmemeval-oracle"', self.card("longmemeval"))
 
     def test_an_anchor_from_the_one_page_list_goes_on_to_its_page(self):
-        # /benchmarks#longmemeval-m was a dataset inside a card; now it is that benchmark's page, at that tab
+        # /benchmarks#longmemeval-m opens that benchmark's page, at that tab
         script = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("location.replace(owner.querySelector('.card-link').href", script)
         self.assertIn("dataset.keys.split(' ')", script)

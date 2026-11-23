@@ -155,6 +155,7 @@ class Definition(unittest.TestCase):
         self.assertEqual(list(kit["check_details"]), list(driver.UNITS))
         self.assertEqual(kit["basic"], list(checks.BASIC))
         self.assertEqual(set(kit["skills"]), set(driver.UNITS) - set(checks.BASIC))
+        self.assertTrue(kit["skills"]["late"].endswith("and presses it once"))
         self.assertEqual(kit["environments"]["desktop"], dict(desktop.KIT["environments"]["desktop"],
                                                              summary=kit["environments"]["desktop"]["summary"]))
         self.assertEqual(kit["mcp_servers"]["computer"]["command"], ["python3", "{here}/pipe.py"])     # a file of its folder
@@ -512,11 +513,12 @@ def _alive(pid):
                           timeout=30).stdout.strip()[:1] not in ("", "Z")
 
 
-def _png(text, scale, above=()):
+def _png(text, scale, above=(), at=None):
     """A screen of 1920 by 1080 with ``text`` drawn as the fixture draws it, as PNG bytes (filter 0)."""
     w, h = 1920, 1080
     cols, rows, cells = driver.fixture.pixels(text)
-    x0, y0 = (w - cols * scale) // 2, (h - rows * scale) // 2
+    x, y = at or (w // 2, h // 2)
+    x0, y0 = x - cols * scale // 2, y - rows * scale // 2
     ink = {(x0 + x * scale + dx, y0 + y * scale + dy) for x, y in cells for dx in range(scale) for dy in range(scale)}
     for i, label in enumerate(above):
         _, _, cells = driver.fixture.pixels(label)
@@ -1154,7 +1156,8 @@ class Fake(FakeDesktop):
         self.log.append({"kind": "ready", "t": time.monotonic(), "boxes": dict(self.boxes)})
 
     def capture(self):
-        return super().capture() + json.dumps(self.boxes).encode()
+        labels = self.values.get("labels", [])
+        return _png(" ".join(labels), 5, at=driver.centre(self.boxes[labels[0]]) if len(labels) == 1 else None)
 
 
 class Fixture(unittest.TestCase):
@@ -1280,6 +1283,13 @@ class Window(unittest.TestCase):
         self.assertTrue(got["passed"], got)
         self.assertIn("wait", got["detail"]["calls"])
 
+    def test_late_reference_refuses_blank_observations_even_when_capture_times_are_kept(self):
+        capture, blank = driver.Pictures.capture, _png("", 5)
+        with mock.patch.object(driver.Pictures, "capture", lambda pictures: (capture(pictures), blank)[1]):
+            ws, _ = self.unit("late")
+            with self.assertRaisesRegex(driver.ReferenceFailed, "not seen within the steps"):
+                driver.oracle("late", ws)
+
     def test_late_fails_a_click_sent_with_no_look_by_a_step_once_the_button_is_up(self):
         ws, s = self.unit("late")
         u, c = driver.OPEN["late"], self.client(s)
@@ -1290,6 +1300,19 @@ class Window(unittest.TestCase):
         got = driver.score("late", ws, [], "done")
         self.assertFalse(got["passed"])
         self.assertIn("without looking again by a step", got["detail"]["why"])
+
+    def test_late_fails_more_than_one_press_even_after_a_look_by_a_step(self):
+        ws, s = self.unit("late")
+        u, c = driver.OPEN["late"], self.client(s)
+        driver.task_given("late", ws)
+        self.assertTrue(u.up.wait(5))
+        self.assertFalse(c.call("wait")[0])                                     # a look by a step, with the button up
+        x, y = driver.centre(u.boxes[u.expected["target"]])
+        self.assertFalse(c.call("click", {"x": 5, "y": 5})[0])                  # a guess, then the button
+        self.assertFalse(c.call("click", {"x": x, "y": y})[0])
+        got = driver.score("late", ws, [], "done")
+        self.assertFalse(got["passed"], got)
+        self.assertIn("2 presses", got["detail"]["why"])
 
     def test_late_draws_its_button_away_from_the_centre_at_a_place_drawn_for_each_unit(self):
         rng, places = random.Random(7), set()

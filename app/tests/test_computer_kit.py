@@ -311,6 +311,12 @@ class Image(unittest.TestCase):
             names.add(ln.split("==")[0].lower())
         self.assertTrue({"pyautogui", "pillow"} <= names)
 
+    def test_the_desktop_is_built_as_the_kit_declares_it(self):
+        with open(os.path.join(KIT, "standard.json")) as f:
+            declared = json.load(f)["environments"]["desktop"]
+        for field in ("base", "dockerfile", "files"):
+            self.assertEqual(desktop.KIT["environments"]["desktop"][field], declared[field], field)
+
     def test_the_package_carries_every_file_the_image_is_built_from(self):
         with open(os.path.join(ROOT, "pyproject.toml")) as f:
             line = next(ln for ln in f if ln.startswith('"nullius.standard"'))
@@ -667,6 +673,29 @@ class DockerDesktop(unittest.TestCase):
         sudo = self.d.python("import shutil; print(shutil.which('sudo'))")
         self.assertEqual(sudo["output"].strip(), "None")
 
+    def test_a_failed_prepare_action_says_its_exit_code_and_cause_without_pyautoguis_warnings(self):
+        from nullius.standard.protocols import computer_port as cp
+        bridge = cp.Bridge(self.d, 3, 0, desktop.SCREEN, "/tmp/agent", window=True)
+        bridge._begin(None)
+        self.addCleanup(bridge.finish)
+
+        def error(actions):
+            replies = []
+            call = cp.Call("prepare", {"actions": actions}, lambda c, v, i, e: replies.append(e))
+            cp.checked(call, bridge.screen, bridge.folder)
+            bridge._serve(call)
+            return replies[0]
+        said = error(["import sys; sys.exit(3)"])
+        self.assertIn("actions[0]", said)
+        self.assertIn("exit code 3", said)
+        self.assertNotIn("SyntaxWarning", said)
+        said = error(["print('fine')", "raise RuntimeError('installation failed')"])
+        self.assertIn("actions[1]", said)
+        self.assertIn("exit code 1", said)
+        self.assertIn("RuntimeError: installation failed", said)
+        self.assertNotIn("SyntaxWarning", said)
+        self.assertEqual(bridge.used, 0)
+
     def test_the_fixture_is_read_from_the_screen_alone(self):
         values, exp = checks.draw("see")
         self.d.start_fixture(values)
@@ -737,7 +766,7 @@ class DockerDesktop(unittest.TestCase):
     def test_the_desktop_ends_when_its_window_manager_does(self):
         self.d.python("import os, signal\nfor p in os.listdir('/proc'):\n    if p.isdigit():\n        try:\n"
                       "            name = open(f'/proc/{p}/comm').read().strip()\n        except OSError:\n            continue\n"
-                      "        if name == 'openbox':\n            os.kill(int(p), signal.SIGKILL)")
+                      f"        if name == {session.WINDOW_MANAGER[:15]!r}:\n            os.kill(int(p), signal.SIGKILL)")
         state = ""
         for _ in range(40):
             r = subprocess.run([container.DOCKER, "container", "inspect", "--format", "{{.State.Running}}", self.d.name],

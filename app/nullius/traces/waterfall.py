@@ -90,7 +90,7 @@ def place(span: Span, extent: Extent) -> tuple:
     """(left_pct, width_pct) on the global axis.
 
     All arithmetic is Python int until this line, so the nanosecond magnitudes
-    that overflow a JS double are exact here — no BigInt problem to work around.
+    that overflow a JS double are exact here.
     """
     left = _clamp((span.start_ns - extent.start_ns) / extent.span_ns * 100)
     duration = span.duration_ns or 0
@@ -101,9 +101,7 @@ def place(span: Span, extent: Extent) -> tuple:
 def flatten(roots: list, collapsed=frozenset(), extent: Extent | None = None) -> tuple:
     """Depth-first rows, skipping the children of collapsed spans.
 
-    Returns (rows, truncated). Collapse is honoured here so it is testable, but
-    the template renders every row and lets the browser hide descendants — which
-    is what makes expanding a deep-linked span a no-round-trip operation.
+    Returns (rows, truncated). The template renders every row so the browser can expand descendants locally.
 
     *extent* is the window the rows are placed on and their offsets counted
     from. A zoomed view passes the subtree's own window here (`extent_of` over

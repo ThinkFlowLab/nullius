@@ -20,12 +20,9 @@ back, neither a step; an acting call is refused until the task is given.
   step), and serves the reading calls that come before it, in the thread of the loop: one desktop operation at a time,
   in the order the calls arrived. An acting call is held until the loop has run its actions and their pause, then
   answered; a ``step`` with an ``end`` then hands the loop its DONE or FAIL, in the same step. Once the steps are used
-  up, every call but ``info`` is refused. The turn's end (``end_turn``) ends the
-  wait for the agent's next call and the actions of a step not yet run; a ``done`` or ``fail`` already taken still
-  reaches the loop, and each later ``predict`` gives the loop no action.
+  up, every call but ``info`` is refused.
 - ``Server``: the MCP server over a Unix socket: JSON-RPC 2.0, one message a line; every connection of the unit's
-  session accepted, the task's state kept in the bridge, outside them; each connection's answers written by a thread
-  of its own, at most OUT_BYTES waiting, so that a client that stops reading holds up nothing else; one line per tool
+  session accepted, the task's state kept in the bridge, outside them; one line per tool
   call in the call log (the tool, its start and end, whether it failed; no argument and no result).
 - ``Held``: whole files kept by their sha256 for a run, when the runner is given a folder for them.
 - What a runner needs around them: the ready file (``ready``), the lifeline (``lifeline``, which also carries the
@@ -54,6 +51,8 @@ import tempfile
 import threading
 import time
 from typing import Optional, Protocol
+
+from nullius.redact import redact
 
 PROTOCOL = "2025-06-18"
 LINE_BYTES = 24 * 1024 * 1024                        # one message either way, its newline counted
@@ -100,7 +99,9 @@ NAMES = ["info", "screenshot", "upload", "prepare", "click", "move", "drag", "sc
 WINDOW = ("upload", "prepare")                       # the tools of the window before the task
 FILES_ROOM = LINE_BYTES - 64 * 1024                  # of an answer, what its files and image may take
 TASK_GIVEN = b"task-given"                           # the lifeline's message: the agent is being given its task
-PREPARE = "import pyautogui\nimport time\npyautogui.FAILSAFE = False\n{code}"   # a prepare's action, as a step's is
+# a prepare's action, as a step's is; pyautogui's own SyntaxWarnings, printed as it is compiled, kept out of its error
+PREPARE = ("import warnings\nwith warnings.catch_warnings():\n    warnings.simplefilter('ignore', SyntaxWarning)\n"
+           "    import pyautogui\nimport time\npyautogui.FAILSAFE = False\n{code}")
 SCREEN_TOOLS = ("click", "move", "drag", "scroll", "type", "key", "wait")   # answered with the screen after the pause
 ACTING = SCREEN_TOOLS + ("step", "done", "fail")
 FINAL = {"done": "DONE", "fail": "FAIL"}
@@ -162,7 +163,8 @@ def tools(screen):
         ("prepare", "Before the task alone, in the window between the session's start and the task: runs actions in "
                     "the desktop, each a line of Python with pyautogui and time imported as a step's are, with no "
                     "pause after them, then reads files, any number of paths inside folder. Returns {files}: each in "
-                    "base64, null when there is no such file. Not a step.",
+                    "base64, null when there is no such file. Not a step. An action that exits with an error returns "
+                    "the desktop's words and stops the actions after it.",
          {"type": "object", "additionalProperties": False, "required": ["actions"],
           "properties": {"actions": actions, "files": FILES}}),
         ("click", "One step: a click at the point. Returns the screen as a PNG image after the pause.",
@@ -316,8 +318,7 @@ class Call:
 
 def checked(call, screen, folder) -> None:
     """The call checked against its tool's schema, in full and before it is queued; for an acting call, the actions
-    it stands for (Python lines run with pyautogui and time imported, or WAIT, DONE, FAIL). Refused when it does not
-    hold: the call is then answered at once, takes no step and never reaches the desktop. An upload's path and the
+    it stands for (Python lines run with pyautogui and time imported, or WAIT, DONE, FAIL). Invalid calls are rejected before queuing and consume no step. An upload's path and the
     files of a step or a prepare are also checked to be inside ``folder``, the agent's."""
     schema = next(s for n, _, s in tools(tuple(screen)) if n == call.tool)
     a = call.clean = _valid(call.args, schema, call.tool, "arguments")
@@ -418,7 +419,7 @@ class Bridge:
                 and posixpath.normpath(folder) == folder):
             raise ValueError("the agent's folder is an absolute path in its plain form")
         self.folder = folder
-        self.window, self.prepared = bool(window), prepared   # the window before the task
+        self.window, self.prepared = bool(window), prepared
         self.preparing = False
         self.seen, self.unseen = None, "no step has ended"   # the observation, or why there is none
         self.password = desktop.password()
@@ -524,18 +525,25 @@ class Bridge:
 
     def _prepare(self, call):
         """A prepare call, in the loop's thread: its record written, its actions run one at a time with no pause (WAIT
-        does nothing), then its files read. An action the desktop did not end in time stops it."""
+        does nothing), then its files read. An action that fails or does not end in time stops it."""
         if self.prepared:
             with open(self.prepared, "a", encoding="utf-8") as f:
-                f.write(json.dumps({"start": time.time(), "actions": call.actions,
-                                    "files": [named for named, _ in call.files or []]}) + "\n")
+                f.write(json.dumps({"start": time.time(), "actions": [redact(code) for code in call.actions],
+                                    "files": [redact(named) for named, _ in call.files or []]}) + "\n")
         for i, code in enumerate(call.actions):
-            if code.strip() != "WAIT" and self.desktop.python(PREPARE.format(code=code)) is None:
+            if code.strip() == "WAIT":
+                continue
+            reply = self.desktop.python(PREPARE.format(code=code))
+            if reply is None:
                 raise Refused(f"the desktop did not end actions[{i}] in time; the actions after it were not run")
+            if reply.get("returncode", 0) != 0:
+                said = (reply.get("error") or "").strip() or (reply.get("output") or "").strip() or "nothing printed"
+                raise Refused(f"the desktop failed actions[{i}] (exit code {reply['returncode']}): {said}; "
+                              "the actions after it were not run")
         return {"files": self._files(call.files or [])}
 
     def close_window(self):
-        """Close the window before the task, refuse waiting preparation and wait for active preparation to end."""
+        """Close the window, refuse waiting preparation and wait for active preparation to end."""
         with self.change:
             self.window = False
             refused = [c for c in self.calls if c.tool in WINDOW]

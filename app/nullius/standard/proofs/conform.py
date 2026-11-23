@@ -8,7 +8,7 @@ passes. Its **skills** (``definitions.skills_of``: the harder uses of the same
 contract a kit may name) are recorded one by one, shown or not, and never take
 the port away - a benchmark that relies on one says so in its
 ``needs_skills``. A kit that names no skill is every check basic: it passes
-when every check has reward 1, as before skills existed.
+when every check has reward 1.
 
 ``repeat``: each check run that many times, for confidence; a check, basic or
 a skill, passes when it passes in a majority of its runs, and the record
@@ -17,10 +17,10 @@ counts them (``2/3``). One run each by default.
 The record keeps the date, the score, the model it passed on, the version of
 the agent, the version of the kit (``kit_version``: a kit grows stronger under
 the same port, and a proof says which one it passed), the skills it showed or
-missed, and the job that shows it - a claim anyone can open and read.
+missed, and the job that shows it.
 
 A port whose kit fails is taken out of ``offers`` when the definition is
-written back: a claim that stopped being true does not stay.
+written back.
 """
 from __future__ import annotations
 

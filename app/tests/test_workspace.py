@@ -114,8 +114,7 @@ class Lifecycle(unittest.TestCase):
 
     def test_the_runs_a_workspace_started_do_not_hide_it_from_its_own_paths(self):
         """A run started from the page adds its job root to the open workspace;
-        a restart with the same paths reopened a new, empty one, and the runs
-        were only in the first."""
+        a restart with the same paths finds it."""
         ws = workspace.create(self.home, ["/r/jobs", "/data/runs/one/jobs", "/data/runs/two/jobs"])
         self.assertIsNone(workspace.find_by_roots(self.home, ["/r/jobs"]))
         self.assertEqual(workspace.find_by_roots(self.home, ["/r/jobs"], besides="/data/runs").name, ws.name)

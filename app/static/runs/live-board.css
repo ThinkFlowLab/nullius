@@ -1,6 +1,5 @@
 /* The job page's two views, and the Live board.
-   One board: a header line, one stats strip, the outcome bar with its chips, every trial as a tile, one table with
-   a row per trial in flight, and a drawer for one trial. Scoped to .lb; the phase and outcome hues are the app's own. */
+   Scoped to .lb; the phase and outcome hues are the app's own. */
 
 /* ---- the two views ---- */
 .view-tabs { display: flex; align-items: flex-end; gap: 2px; margin: 0 0 16px; border-bottom: 1px solid var(--border-soft); }
@@ -172,7 +171,7 @@
 }
 @media (prefers-reduced-motion: reduce) { .lb *, .view-tabs * { animation: none !important; transition: none !important; } }
 
-/* an attempt retried under its own name (Harbor's max_retries, the standard's --retries): how often, and how the try before ended */
+/* an attempt retried under its own name: how often, and how the try before ended */
 .lb-retry { display: block; color: var(--patch_failed_tests, var(--text-dim)); font-size: 11.5px; }
 /* an ended trial, kept below the running ones */
 .lb-ended .lb-outcome { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); }

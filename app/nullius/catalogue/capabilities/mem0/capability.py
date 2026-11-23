@@ -8,7 +8,6 @@ its local Qdrant store (Mem0's default vector store, the one with its keyword
 search, here in a folder of this process's own: Nullius starts a process per
 unit) index them, and its ``search`` recalls them, optionally reranked by its
 LLM reranker. Every model call goes to ``OPENAI_BASE_URL``, the run's relay.
-Nothing of Mem0 is changed.
 
 ``add {session}``     - the session's turns as Mem0 messages (a role other than
                         user or assistant is a user turn naming its speaker),

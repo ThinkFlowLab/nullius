@@ -33,7 +33,7 @@ _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*")
 
 # A state kind a later question group adds: `register(kind, builder)`, the
 # builder taking the same keywords `build` does and returning the *raw* text;
-# `build` redacts and truncates it, so nothing raw leaves here either way.
+# `build` redacts and truncates it.
 BUILDERS: dict = {}
 
 
@@ -56,7 +56,7 @@ def truncate(text: str, limit: int = LIMIT) -> tuple:
 
 def instruction_of(traj) -> str:
     """The task as the agent was given it: the first user step. Many Harbor
-    agents (mini-swe-agent, swe-agent, OpenHands, Codex) open with their own
+    agents open with their own
     system prompt, which is not the task; only a trajectory with no user step
     falls back to its first step that is not the agent's."""
     first = next((s.message for s in traj.steps if s.source == "user" and s.message), "")
@@ -229,7 +229,7 @@ def control_state(traj, trial=None, trial_dir=None, control: str = "", outcome_l
 
 def task_state(traj, instruction: str = "", **_) -> str:
     """The `task` state: the instruction alone - the same text for every
-    attempt at the task, and nothing of any run."""
+    attempt at the task."""
     return "[instruction]\n" + (instruction or (instruction_of(traj) if traj is not None else ""))
 
 

@@ -5,8 +5,7 @@ are recorded, a document normalises the same whichever directory it sits in
 and whatever its `agent` block says, a standalone trial reads as `unknown`
 with no reward, a broken or foreign-version document is refused by name
 with a redacted message, the source is never written, and the Harbor jobs
-the same trajectories came from are not claimed (their accounting is the
-reader's, exercised by `test_parse` and `test_trajectory`).
+the same trajectories came from are not claimed.
 """
 
 import json
@@ -56,8 +55,7 @@ def write_doc(root, name, doc) -> str:
 
 class SupportedVersions(unittest.TestCase):
     def test_the_supported_versions_are_pinned(self):
-        # The issue's first supported input format: ATIF-v1.0 through v1.7,
-        # the versions trajectory.py already parses inside a Harbor job.
+        # Match the versions parsed inside Harbor jobs.
         self.assertEqual(atif.SUPPORTED_VERSIONS,
                          tuple(f"ATIF-v1.{i}" for i in range(8)))
 

@@ -19,7 +19,7 @@ Why a proxy and not firewall rules: rules on docker's ``DOCKER-USER`` chain
 need root on the machine, and a host without it would have to run the check
 with no filter at all; a proxy needs nothing but docker, so every machine
 runs the check the same way. What it costs is that a download must honour the
-proxy variables - apt, curl, wget, git over HTTPS, pip, uv and npm do - and a
+proxy variables and a
 name cannot be resolved inside, which a client using the proxy never needs.
 
 Run as a file on its own (``python3 egress.py --listen 0.0.0.0:3128``),

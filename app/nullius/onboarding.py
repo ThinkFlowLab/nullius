@@ -1,6 +1,6 @@
 """Getting started: the checklist a person is guided through on a first open.
 
-Five sections, each a page of the application and its sub-tasks. A sub-task
+Sections, each a page of the application and its sub-tasks. A sub-task
 is done by a fact this machine can check (``fact``: a key set, a run on disk,
 a trial judged) or, where nothing on disk records it, by the person having
 been on the page that does it (``visit``: a path pattern the browser matches

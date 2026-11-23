@@ -1,12 +1,10 @@
 """The live board's feed and fold: ``events.jsonl`` → the snapshot the job page renders.
 
-A running job should look like something running. Every Harbor run from
+Every Harbor run from
 here appends one ``events.jsonl`` per job from Harbor's own trial hooks
 (``nullius.harbor.feed``, whatever the Harbor); this application reads that file
 — never a socket, never an agent runtime — and folds it into a board: per-trial
-phase, time in phase, counters, outcome; job counts; a rate; an ETA. The board is
-the job page's Live view, beside Results; when the feed records ``job.end`` it
-stops polling and Results becomes the view the page opens on.
+phase, time in phase, counters, outcome; job counts; a rate; an ETA.
 
 The feed schema, the fold and the snapshot document are pinned by the
 fixtures under ``app/tests/fixtures/live/``: each feed there folds to its
@@ -78,7 +76,6 @@ ERROR_OUTCOMES = {"agent_error", "infra_error", "timeout", "budget"}
 COUNTERS = ("step", "n_input_tokens", "n_cache_tokens", "n_output_tokens", "cost_usd")
 TOKEN_FIELDS = ("n_input_tokens", "n_cache_tokens", "n_output_tokens")
 
-#: The rate window and the tail the snapshot carries.
 RATE_WINDOW_SEC = 30.0
 TAIL_EVENTS = 50
 ACTIVITY_MAX = 120
@@ -361,9 +358,7 @@ class Board:
         report inside the window *and* a baseline to measure from (a report at
         or before the window's start, or a second report inside it). Totals
         that arrive only on ``trial.end`` give one point per trial and no
-        rate; a real rate needs ``trial.progress``. A zero where nothing was
-        measured is a lie — the same rule as ``cost_usd`` — so a board renders
-        ``None`` as "not reported".
+        rate; a real rate needs ``trial.progress``.
 
         The delta is taken **per counter key, over reports that carry that
         key**. A writer may report ``n_input_tokens``/``n_output_tokens`` on
@@ -451,8 +446,7 @@ class Board:
 
     def elapsed_sec(self) -> float | None:
         """Since the launch when the feed recorded one, else since job.start:
-        the user's clock starts at Run, and a board that showed nothing for
-        the preparation window is what job.prepare exists to fix."""
+        the user's clock starts at Run."""
         origin = self.launched_at or self.started_at
         if origin is None or self.now is None:
             return None
@@ -507,8 +501,7 @@ def _counts(trials: list, n_total: int | None) -> dict:
     done = [t for t in trials if t.outcome is not None]
     return {
         # Unknown until job.prepare/job.start says, or a trial appears: a
-        # "0 tasks" header during preparation would be a lie. A lane passes
-        # the trials it has seen, so its total is always a number.
+        # "0 tasks" header during preparation would be a lie.
         "total": n_total if n_total is not None else (len(trials) or None),
         "running": sum(t.state == "running" for t in trials),
         "pending": (n_total - len([t for t in trials if t.state != "queued"])
@@ -684,8 +677,7 @@ def timeline(events: list[Event]) -> dict:
     {phase: ts}, "ended": ts | None}}``, the first ``trial.phase`` per phase and the
     ``trial.end``, as the feed recorded them.
 
-    Not part of the snapshot, which the fixtures pin and which stays byte for
-    byte what it folds (``test_live``); the page's route carries it beside the
+    Not part of the snapshot; the page's route carries it beside the
     snapshot, so a trial's phases can be drawn on its own clock. Only times the
     feed wrote: nothing here is measured by this application."""
     out: dict[str, dict] = {}
@@ -702,12 +694,9 @@ def timeline(events: list[Event]) -> dict:
 
 def snapshot(job_dir: str, now: datetime | None = None, ended: tuple | None = None,
              with_timeline: bool = False) -> dict:
-    """Read and fold a job directory's feed. The one call the route makes.
+    """Read and fold a job directory's feed.
 
-    Always ``now``-driven for a live board: `fold`'s default (the last
-    event's ``ts``) is exact for replaying a finished file, but a page that is
-    polling wants the timers to move between polls, so the route passes the
-    clock. ``ended`` is ``(how, at)`` from the runner's own record
+    Pass ``now`` for live timers. Replay uses the last event's timestamp. ``ended`` is ``(how, at)`` from the runner's own record
     (`execution.ended_for`) when it knows the run is over: a feed Harbor
     never closed then settles instead of reading as a job still going.
     ``with_timeline`` adds :func:`timeline` under ``"timeline"`` for the page.

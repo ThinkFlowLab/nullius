@@ -3,8 +3,8 @@ desktop the agent sees and acts on, and the five operations a benchmark's
 side gives the port's server.
 
 **The image** is an environment of the kit, as a benchmark's environments
-are (``container.env_image``): ``desktop.Dockerfile`` on Nullius's base
-image, its build context the three files :data:`KIT` lists, tagged
+are (``container.env_image``): ``desktop.Dockerfile`` on its own base,
+Debian slim pinned by digest (:data:`BASE`), its build context the three files :data:`KIT` lists, tagged
 ``nullius/env-agent-computer-v1-desktop:<hash>`` by the sha256 of that text
 and those files, and built the first time it is asked for (:func:`image`).
 
@@ -14,13 +14,7 @@ the X display, the session bus and the window manager, and the desktop is
 ready once the window manager holds the display. Everything after is
 ``docker exec``:
 
-- :meth:`Desktop.python` runs code as ``user`` in the desktop's Python and
-  answers ``{status, output, error, returncode}``, or None when it did not
-  end within its bound (it is killed then);
-- :meth:`Desktop.upload` and :meth:`Desktop.read` write and read a file as
-  ``user``, a read bounded at 12 MiB and of a regular file alone;
-  :meth:`Desktop.capture` is the screen as PNG bytes;
-  :meth:`Desktop.password` is ``""``: ``user`` has no password and no sudo;
+- :meth:`Desktop.password` is ``""``: ``user`` has no password and no sudo;
 - :meth:`Desktop.act` runs one action, Python text with ``pyautogui`` and
   ``time`` imported, as ``user``, and keeps its start and end, read on the
   desktop's monotonic clock (the fixture's) by the root process that runs it:
@@ -46,8 +40,9 @@ from nullius.standard.backends import container
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENVIRONMENT = "desktop"
+BASE = "docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
 KIT = {"key": "agent-computer-v1", "_here": HERE,
-       "environments": {ENVIRONMENT: {"dockerfile": "desktop.Dockerfile",
+       "environments": {ENVIRONMENT: {"base": BASE, "dockerfile": "desktop.Dockerfile",
                                       "files": ["desktop-requirements.txt", "fixture.py", "session.py"]}}}
 SCREEN = (1920, 1080)
 USER = "1000:1000"

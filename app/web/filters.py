@@ -228,9 +228,7 @@ def _inject():
                           for d in definitions.load(kind)[0]), key=lambda d: (not d["example"], d["label"].casefold()))
             for kind in ("agent", "capability")
         },
-        # Named on the import page so what is readable stays discoverable
-        # without asking anyone to choose it. Empty when no importer is
-        # installed, and the sentence disappears with it.
+        # Readable formats for the import page. An empty list hides the note.
         "IMPORTERS": [
             getattr(m, "LABEL", n.upper()) for n, m in harnesses.available().items()
         ],

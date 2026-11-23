@@ -1,14 +1,11 @@
 """τ³-bench's domain tools as a stdio MCP server: the upstream's tools, the
 upstream's Orchestrator executing them.
 
-The tools it declares are the upstream's (``tau2-bench`` at the release tag
-``standard.json`` pins, installed as the driver's environment,
-``driver.install``): the domain's ``Environment`` from the upstream's
+The tools it declares are the upstream's: the domain's ``Environment`` from the upstream's
 registry, each tool's schema its ``Tool.openai_schema``. It executes
 nothing: each call goes to the driver (``TAU_AT``, the unit's socket on this
 machine), where it becomes the agent's next message to the upstream's
-``Orchestrator``, which executes it in its own environment - counting its
-steps and errors, ending the conversation by its rules - and the answer it
+``Orchestrator``, which executes it in its own environment and the answer it
 gives (the result, or ``Error: <what was raised>``) comes back as the
 call's result. The MCP side is the official ``mcp`` SDK (its low-level
 server, so the schemas go out as the upstream writes them and a call is

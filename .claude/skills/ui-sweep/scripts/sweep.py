@@ -13,8 +13,7 @@ browser profile is not left as it was; it writes only under --out.
 
 Writes <out>/<theme>/<runner>-<benchmark>-<step>.png and <out>/report.json:
 for each screenshot, the page's red lines, its JavaScript errors and every
-card or heading whose text is cut (wider than its box) - the things the
-rules in .claude/rules/ui.md forbid that a look can miss.
+card or heading whose text is cut (wider than its box).
 Exits with status 1 when a page error or cut text is found.
 """
 import argparse

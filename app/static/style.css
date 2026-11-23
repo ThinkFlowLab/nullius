@@ -1,8 +1,7 @@
 /* Nullius identity: neutral surfaces, blue actions, sage success.
    UI text tokens clear WCAG AA on all three surfaces (tested in test_palette).
    Data palettes retain their separate jobs: a tool, outcome and trace kind
-   must stay distinguishable even when they appear beside one another.
-   base.html chooses the theme before paint; every asset remains local. */
+   must stay distinguishable even when they appear beside one another. */
 :root {
   --topbar-height: 56px;
   --tool-h: 2.1rem;                               /* a page's buttons and a table's controls: as tall as a small button with its icon */
@@ -71,8 +70,7 @@
      clears that in both themes.
 
      reasoning and output are steps of the LLM blue rather than hues of their
-     own, which is also what they are semantically: the model's own production,
-     nested inside the request that asked for it. The structural kinds (session,
+     own. The structural kinds (session,
      user_message, compaction) take the neutral plus an icon.
 
      The ramp steps away from --surface-2: lighter on dark, darker on light.
@@ -558,8 +556,7 @@ button.seg:hover { filter: brightness(1.25); }
 .detail-more { margin: .8rem 0 0; padding: 0 0 .8rem .7rem; font-size: .86rem; }
 
 /* Sections are full-width rows; every run's cells share a grid row, so the same
-   section starts at the same height in every column. Separate cards could never
-   do this — each one flowed to its own height. */
+   section starts at the same height in every column. */
 .cmp-grid {
   display: grid; gap: .35rem 1rem;
   grid-template-columns: repeat(var(--cols, 2), minmax(420px, 1fr));
@@ -579,7 +576,7 @@ button.seg:hover { filter: brightness(1.25); }
 .cmp-head:active { cursor: grabbing; }
 /* A light box per cell. Section headings sit between the rows, so the boxes
    never double up, and with several columns it stays obvious which run a value
-   belongs to — the bare grid gave no edge to follow. */
+   belongs to. */
 .cmp-cell {
   min-width: 0; padding: .85rem .95rem 1rem;
   overflow-wrap: anywhere;
@@ -655,8 +652,7 @@ button.seg:hover { filter: brightness(1.25); }
 .ph-agent { background: var(--accent); }
 .ph-verify { background: var(--ph-verify); }
 /* Harness overhead, not agent behaviour. Kept subordinate by texture rather
-   than by dimming: a hatch reads as "unallocated" and stays legible, whereas
-   the low opacity it replaces looked like a shadow on the bar. Also avoids a
+   than by dimming: a hatch reads as "unallocated" and stays legible. Also avoids a
    second flat grey sitting next to Env's. */
 .ph-other {
   background:
@@ -839,8 +835,7 @@ button.seg:hover { filter: brightness(1.25); }
   outline: 2px solid var(--c); outline-offset: -2px;
 }
 
-/* One tooltip for the whole table. A per-row tooltip with hover-intent delay
-   feels terrible on a dense timeline. */
+/* One tooltip for the whole table. */
 .wf-tip {
   position: fixed; z-index: 50; pointer-events: none;
   max-width: min(70ch, 90vw);
@@ -871,8 +866,7 @@ button.seg:hover { filter: brightness(1.25); }
 .chip.q-unknown::before { background: transparent; box-shadow: inset 0 0 0 1px var(--text-dim); }
 
 /* ---- breakdown + coverage strips ---- */
-/* Categories, not a timeline: left-to-right order carries no meaning, which is
-   why the heading says so. */
+/* Categories, not a timeline: left-to-right order carries no meaning. */
 .tt-llm { background: var(--span-llm); }
 .tt-tool { background: var(--span-tool); }
 .tt-reasoning { background: var(--span-reasoning); }
@@ -1473,7 +1467,7 @@ a.chip { text-decoration: none; }
 
 /* ---- the shell: left rail + content ----
    A neutral navigation surface leaves colour to selection and evidence.
-   The rail remembers its width; the real workspace forms live in a styled,
+   The real workspace forms live in a styled,
    keyboard-operable menu rather than a browser-native select. */
 :root { --rail-w: 224px; --rail-w-icon: 68px; }
 .shell { display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr); min-height: 100vh; }
@@ -1732,8 +1726,7 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
 
 .origin-tag.community { color: var(--origin-community, #b8741a); background: color-mix(in srgb, var(--origin-community, #b8741a) 16%, transparent); }
 
-/* A notice (flash) as a toast at the bottom right, as the builder's: its bar counts down the seconds it stays
-   (an error twice as many), paused while pointed at; the × closes it at once. */
+/* A notice (flash) as a toast at the bottom right, as the builder's. */
 .toasts { position: fixed; inset: auto 16px 16px auto; margin: 0; padding: 0; border: 0; background: transparent; width: max-content; z-index: 60; display: flex; flex-direction: column; gap: 8px; max-width: min(440px, calc(100vw - 32px)); }
 .toast { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 10px 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 13px; box-shadow: 0 12px 32px #0005; overflow: hidden; }
 .toast.bad { border-color: color-mix(in srgb, var(--bad) 55%, var(--border)); }
