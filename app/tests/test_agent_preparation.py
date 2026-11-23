@@ -157,3 +157,51 @@ class SweAgentToolCompatibility(unittest.TestCase):
             for version in ('[3, 8, 0]', '[3, 12, 15]'):
                 with self.subTest(version=version), mock.patch('subprocess.run', return_value=SimpleNamespace(stdout=version)):
                     check()
+
+
+class SweAgentToolStaging(unittest.TestCase):
+    def setUp(self):
+        import runpy
+        from pathlib import Path
+        wrapper = Path(__file__).parents[1] / 'nullius/catalogue/agents/swe-agent/run.py'
+        self.stage = runpy.run_path(str(wrapper))['tool_staging']
+
+    def test_cleanup_allows_fresh_uploads_and_keeps_installed_dependencies(self):
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / 'tools'
+            dependency = Path(folder) / 'site-packages' / 'installed'
+            for _ in range(2):
+                with self.stage(root):
+                    (root / 'registry').mkdir(parents=True)
+                    (root / 'registry' / 'tool').write_text('upstream')
+                    dependency.parent.mkdir(exist_ok=True)
+                    dependency.write_text('installed')
+                self.assertFalse(root.exists())
+                self.assertEqual(dependency.read_text(), 'installed')
+
+    def test_partial_upload_is_cleaned_on_failure(self):
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / 'tools'
+            with self.assertRaisesRegex(RuntimeError, 'install failed'):
+                with self.stage(root):
+                    root.mkdir()
+                    raise RuntimeError('install failed')
+            self.assertFalse(root.exists())
+
+    def test_preexisting_directory_or_symlink_is_preserved(self):
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            existing = Path(folder) / 'existing'
+            existing.mkdir()
+            marker = existing / 'keep'
+            marker.write_text('benchmark data')
+            link = Path(folder) / 'tools'
+            link.symlink_to(existing, target_is_directory=True)
+            for root in (existing, link):
+                with self.assertRaisesRegex(RuntimeError, 'unused'):
+                    with self.stage(root):
+                        self.fail('preexisting uploads accepted')
+                self.assertEqual(marker.read_text(), 'benchmark data')
+            self.assertTrue(link.is_symlink())

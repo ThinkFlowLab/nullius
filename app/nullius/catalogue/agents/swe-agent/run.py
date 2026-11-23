@@ -9,6 +9,8 @@ from pathlib import Path
 import sys
 import subprocess
 import json
+import shutil
+from contextlib import contextmanager
 
 
 def check_tool_python():
@@ -24,6 +26,20 @@ def check_tool_python():
             "the task PATH selects Python " + ".".join(map(str, version)) + ". "
             "Nullius will not replace the benchmark's Python environment."
         )
+
+
+@contextmanager
+def tool_staging(root=Path("/root/tools")):
+    """Own only preparation's temporary uploads, not installed dependencies."""
+    if root.exists() or root.is_symlink():
+        raise RuntimeError("SWE-agent preparation requires an unused /root/tools directory")
+    try:
+        yield
+    finally:
+        if root.is_symlink():
+            root.unlink()
+        elif root.exists():
+            shutil.rmtree(root)
 
 
 def main():
@@ -55,7 +71,8 @@ def main():
         env = SWEEnv.from_config(EnvironmentConfig.model_validate(environment))
         try:
             env.start()
-            ToolHandler(ToolConfig.model_validate(config['agent']['tools'])).install(env)
+            with tool_staging():
+                ToolHandler(ToolConfig.model_validate(config['agent']['tools'])).install(env)
         finally:
             env.close()
         return

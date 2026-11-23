@@ -21,17 +21,20 @@ The subsequent single instance needs its own allocation. A cap refusal is
 not a passing proof. Tool dependencies use pip's supported constraints file;
 the upstream install scripts remain unchanged.
 
-Zero-cost validation on the pinned Django `django-10097` image reaches
-upstream tool installation with SWE-ReX 1.2.1 and 1.4.0, but cannot complete:
-the task uses Python 3.5.6; the default editor requires
-[tree-sitter 0.21.3](https://pypi.org/project/tree-sitter/0.21.3/) (Python ≥3.8).
-Nullius now refuses that incompatible task interpreter before startup.
-This is an upstream tool/task-runtime incompatibility, exposed by our local
-deployment configuration; it is not a benchmark or model failure.
+Preparation and offline tool installation pass on the pinned Django
+`django-17087` image (Python 3.11), using SWE-ReX 1.2.1. Preparation removes
+its temporary tool uploads while retaining installed dependencies;
+preexisting tool directories are refused rather than overwritten. Offline
+startup reaches the agent loop; the built-in empty-submit model fails the
+default function-call format check and supplies no capability proof.
 
-The earlier intermittent shell-startup timeout is not established as a
-SWE-ReX version defect. Neither a dependency upgrade nor a conda prompt
-setting is proven necessary; the 1.2.1 pin remains. Full preparation and its
-offline repeat remain unproven. Supporting this image needs a supported way
-to separate tool and task interpreters without changing upstream tools or
-the benchmark environment.
+Legacy task interpreters remain unsupported: `django-10097` uses Python
+3.5.6, but the default editor requires
+[tree-sitter 0.21.3](https://pypi.org/project/tree-sitter/0.21.3/) (Python ≥3.8).
+Nullius refuses that interpreter before startup. Supporting those images
+needs a supported separation of tool and task interpreters; the benchmark's
+Python is never replaced.
+
+An intermittent shell-startup timeout is not established as a SWE-ReX
+version defect; the 1.2.1 pin remains. Successful installation does not
+establish a scored instance or port proof.
