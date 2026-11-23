@@ -10,6 +10,7 @@ import http.client
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -399,6 +400,7 @@ class Changes(ReplayCase):
 
 class Sends(ReplayCase):
     def test_whole_replies_survive_the_exchange_store_limit(self):
+        from nullius.standard.runner import study
         original = exchanges.Store.__init__
         body = dict(reply_of(3), extra="whole-provider-field" + "x" * 600000)
 
@@ -415,6 +417,8 @@ class Sends(ReplayCase):
         rows = [json.loads(x) for x in Path(doc["out"], "answers.jsonl").read_text().splitlines()]
         self.assertEqual([json.loads(a["body"]) for a in rows], [body, body])
         self.assertIn("cut", exchanges.lines(str(Path(doc["out"], "relay", "exchanges")), "r002")[0])
+        again = study.recount(doc["out"], rule=lambda a: json.loads(a["body"]).get("extra", "recorded"))
+        self.assertEqual((again["read"], again["not_kept"]), (2, 0))
         self.assertEqual(len(Upstream.seen), 2)
 
     def test_echoed_credentials_are_removed_from_answers_and_labels(self):
@@ -585,6 +589,17 @@ class CommandLine(ReplayCase):
         self.assertEqual((out.returncode, out.stdout), (2, ""))
         self.assertIn("refused: OPENROUTER_API_KEY is not set", out.stderr)
         self.assertEqual(sorted(os.listdir(self.tmp)), ["jobs", "site"], "a refusal writes nothing")
+
+
+class ReadingPage(unittest.TestCase):
+    def test_the_documented_reader_consumes_the_parsed_answer(self):
+        page = (APP.parent / "docs" / "cli" / "replay.md").read_text()
+        script = re.search(r'```python title="read_action.py"\n(.*?)```', page, re.S).group(1)
+        body = json.dumps({"choices": [{"message": {"content": '{"action":"click"}'}}]}).encode()
+        answer = replay.answer("/chat/completions", 200, body, False)
+        got = subprocess.run([sys.executable, "-c", script], input=json.dumps(answer),
+                             capture_output=True, text=True, timeout=10)
+        self.assertEqual((got.returncode, got.stdout, got.stderr), (0, "click\n", ""))
 
 
 if __name__ == "__main__":
