@@ -331,8 +331,7 @@ class Prove(unittest.TestCase):
         self.assertTrue(all(r["ok"] for r in got["kit"].values()), got)
         self.assertEqual(got["kit"]["oracle"]["passed"], "2/2")
         self.assertEqual(got["kit"]["nop"]["passed"], "0/2")
-        with open(os.path.join(b["_here"], "standard.json")) as f:
-            written = json.load(f)
+        written = definitions.read_document(os.path.join(b["_here"], "standard.json"), "benchmark")
         proven = written["proven"]["kit"]
         self.assertEqual(list(proven), ["units", "leak", "nop", "oracle"])
         self.assertEqual(got["kit"]["oracle"]["job"], "2026-01-02__03-04-05__agent-workspace-v1__kit__prove-oracle")
@@ -413,10 +412,10 @@ class Prove(unittest.TestCase):
         self.assertEqual(bad, [])
         got = self.prove(b)
         self.assertEqual((got["choice"]["leak"]["in_prompt"]["first"], got["leaky"]["leak"]["ok"]), (["held-unit-1"], False))
-        with open(os.path.join(here, "standard.json")) as f:
+        with open(os.path.join(here, "proofs.json")) as f:
             text = f.read()
         self.assertNotIn("held-unit", text)
-        proven = json.loads(text)["proven"]
+        proven = json.loads(text)["versions"][""]["proven"]
         self.assertEqual(proven["choice"]["leak"]["in_prompt"], {"units": 1, "why": "A choice question names its answer."})
         self.assertEqual((proven["leaky"]["failed"]["leak"]["passed"], proven["leaky"]["failed"]["leak"]["problems"]), ("0/1", []))
         self.assertEqual(proven["leaky"]["oracle"]["passed"], "1/1")

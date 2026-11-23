@@ -1,0 +1,221 @@
+{
+  "schema": "nullius.proofs/v1",
+  "kind": "benchmark",
+  "key": "longmemeval",
+  "versions": {
+    "": {
+      "proven": {
+        "longmemeval_s": {
+          "units": {
+            "units": 500,
+            "passed": "500 ids, the same twice, unique"
+          },
+          "leak": {
+            "units": 500,
+            "looked_for": 248,
+            "short": 252,
+            "passed": "500/500",
+            "in_prompt": {
+              "units": 11,
+              "first": [
+                "gpt4_4929293a",
+                "gpt4_2487a7cb",
+                "gpt4_2312f94c",
+                "gpt4_2d58bcd6",
+                "gpt4_483dd43c"
+              ],
+              "why": "A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+            },
+            "note": "252 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 11 prompt(s) name their answer, as the benchmark says they may: A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+          },
+          "nop": {
+            "passed": "20/500",
+            "value": 0.04,
+            "expect": {
+              "at_most": 0.07
+            },
+            "units": 500,
+            "judge": "gpt-4o-2024-08-06"
+          },
+          "oracle": {
+            "passed": "471/500",
+            "value": 0.942,
+            "expect": {
+              "at_least": 0.92
+            },
+            "units": 500,
+            "judge": "gpt-4o-2024-08-06"
+          }
+        },
+        "longmemeval_m": {
+          "units": {
+            "units": 500,
+            "passed": "500 ids, the same twice, unique"
+          },
+          "leak": {
+            "units": 500,
+            "looked_for": 248,
+            "short": 252,
+            "passed": "500/500",
+            "in_prompt": {
+              "units": 11,
+              "first": [
+                "gpt4_4929293a",
+                "gpt4_2487a7cb",
+                "gpt4_2312f94c",
+                "gpt4_2d58bcd6",
+                "gpt4_483dd43c"
+              ],
+              "why": "A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+            },
+            "note": "252 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 11 prompt(s) name their answer, as the benchmark says they may: A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+          },
+          "nop": {
+            "passed": "24/500",
+            "value": 0.048,
+            "expect": {
+              "at_most": 0.07
+            },
+            "units": 500,
+            "judge": "gpt-4o-2024-08-06"
+          },
+          "oracle": {
+            "passed": "470/500",
+            "value": 0.94,
+            "expect": {
+              "at_least": 0.92
+            },
+            "units": 500,
+            "judge": "gpt-4o-2024-08-06"
+          }
+        },
+        "longmemeval_oracle": {
+          "units": {
+            "units": 500,
+            "passed": "500 ids, the same twice, unique"
+          },
+          "leak": {
+            "units": 500,
+            "looked_for": 248,
+            "short": 252,
+            "passed": "500/500",
+            "in_prompt": {
+              "units": 11,
+              "first": [
+                "gpt4_2487a7cb",
+                "gpt4_2312f94c",
+                "gpt4_2d58bcd6",
+                "gpt4_483dd43c",
+                "gpt4_93f6379c"
+              ],
+              "why": "A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+            },
+            "note": "252 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 11 prompt(s) name their answer, as the benchmark says they may: A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+          },
+          "nop": {
+            "passed": "22/500",
+            "value": 0.044,
+            "expect": {
+              "at_most": 0.07
+            },
+            "units": 500,
+            "judge": "gpt-4o-2024-08-06"
+          },
+          "oracle": {
+            "passed": "469/500",
+            "value": 0.938,
+            "expect": {
+              "at_least": 0.92
+            },
+            "units": 500,
+            "judge": "gpt-4o-2024-08-06"
+          }
+        },
+        "longmemeval_s_original": {
+          "units": {
+            "units": 500,
+            "passed": "500 ids, the same twice, unique"
+          },
+          "leak": {
+            "units": 500,
+            "looked_for": 248,
+            "short": 252,
+            "passed": "500/500",
+            "in_prompt": {
+              "units": 11,
+              "first": [
+                "gpt4_4929293a",
+                "gpt4_2487a7cb",
+                "gpt4_2312f94c",
+                "gpt4_2d58bcd6",
+                "gpt4_483dd43c"
+              ],
+              "why": "A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+            },
+            "note": "252 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 11 prompt(s) name their answer, as the benchmark says they may: A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+          },
+          "nop": {
+            "passed": "21/500",
+            "value": 0.042,
+            "expect": {
+              "at_most": 0.07
+            },
+            "units": 500,
+            "judge": "gpt-4o-2024-08-06"
+          },
+          "oracle": {
+            "passed": "469/500",
+            "value": 0.938,
+            "expect": {
+              "at_least": 0.92
+            },
+            "units": 500,
+            "judge": "gpt-4o-2024-08-06"
+          }
+        },
+        "longmemeval_m_original": {
+          "units": {
+            "units": 500,
+            "passed": "500 ids, the same twice, unique"
+          },
+          "leak": {
+            "units": 500,
+            "looked_for": 248,
+            "short": 252,
+            "passed": "500/500",
+            "in_prompt": {
+              "units": 11,
+              "first": [
+                "gpt4_4929293a",
+                "gpt4_2487a7cb",
+                "gpt4_2312f94c",
+                "gpt4_2d58bcd6",
+                "gpt4_483dd43c"
+              ],
+              "why": "A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+            },
+            "note": "252 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 11 prompt(s) name their answer, as the benchmark says they may: A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+          },
+          "nop": {
+            "passed": "27/500",
+            "value": 0.054,
+            "expect": {
+              "at_most": 0.07
+            },
+            "units": 500,
+            "judge": "gpt-4o-2024-08-06"
+          },
+          "oracle": {
+            "passed": "469/500",
+            "value": 0.938,
+            "expect": {
+              "at_least": 0.92
+            },
+            "units": 500,
+            "judge": "gpt-4o-2024-08-06"
+          }
+        }
+      }
+    }
+  }
+}

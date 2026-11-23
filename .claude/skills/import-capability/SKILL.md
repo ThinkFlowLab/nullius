@@ -163,7 +163,9 @@ See `docs/standard.md`, "Native capabilities and composition".
    `model` block (`apis`, `env` with `{base_url}`, `{key}`, `{model}` under
    the names it reads) when it calls a model, so those calls reach the relay.
    `options` as an agent's, the agents' settings (`reasoning_effort`) among
-   them when it calls a model. Leave `offers` and `proven` empty.
+   them when it calls a model. Omit `offers` and `proven`: `cli conform` writes
+   the generated evidence in `proofs.json`, beside the definition. Never copy
+   another entry's proof file.
 5. `cli check` - no problems.
 
 ## 3. Prove

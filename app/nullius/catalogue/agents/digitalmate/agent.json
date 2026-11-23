@@ -89,27 +89,5 @@
       "MODEL_NAME": "{model}",
       "MODEL_PROVIDER": "OpenAI"
     }
-  },
-  "offers": [
-    "agent.task/v1",
-    "agent.search/v1"
-  ],
-  "proven": {
-    "agent.task/v1": {
-      "passed": "3/3",
-      "model": "meta/muse-spark-1.3-contributor",
-      "provider": "openrouter",
-      "version": "0.1.13",
-      "kit_version": 1,
-      "backend": "container"
-    },
-    "agent.search/v1": {
-      "passed": "3/3",
-      "model": "meta/muse-spark-1.3-contributor",
-      "provider": "openrouter",
-      "version": "0.1.13",
-      "kit_version": 1,
-      "backend": "container"
-    }
   }
 }

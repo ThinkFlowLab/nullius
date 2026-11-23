@@ -173,7 +173,8 @@ class Write(Catalogue):
         d = definitions.get("agent", "bot@2.0.0", self.root)
         d["proven"] = {"agent.task/v1": dict(PROOF, version="2.0.0")}
         definitions.save(d)
-        raw = self.read("bot")
+        self.assertEqual(self.read("bot"), VERSIONED)
+        raw = definitions.read_document(os.path.join(self.root, "agents", "bot", "agent.json"), "agent")
         self.assertEqual(raw["versions"]["2.0.0"]["proven"], {"agent.task/v1": dict(PROOF, version="2.0.0")})
         self.assertEqual(raw["versions"]["1.0.0"], VERSIONED["versions"]["1.0.0"])
         self.assertNotIn("offers", raw)
@@ -193,8 +194,11 @@ class Write(Catalogue):
         self.assertEqual(self.read("flat"), FLAT)  # the bundle stays intact
         self.assertEqual(raw["default"], "0.3.0")
         self.assertEqual(list(raw["versions"]), ["0.4.0", "0.3.0"])
-        self.assertEqual(raw["versions"]["0.4.0"], {"install": {"npm": ["flat-acp@0.4.0"]}, "proven": {}})
-        self.assertEqual(raw["versions"]["0.3.0"]["proven"], FLAT["proven"])
+        self.assertEqual(raw["versions"]["0.4.0"], {"install": {"npm": ["flat-acp@0.4.0"]}})
+        self.assertNotIn("proven", raw["versions"]["0.3.0"])
+        combined = definitions.read_document(os.path.join(self.user, "agents", "flat", "agent.json"), "agent")
+        self.assertEqual(combined["versions"]["0.3.0"]["proven"], FLAT["proven"])
+        self.assertEqual(definitions.resolve(combined, "0.4.0")["offers"], [])
         self.assertEqual(raw["upstream"], {"package": "flat-acp", "license": "MIT"})
         self.assertNotIn("offers", raw)
         self.assertEqual(definitions.problems(dict(raw, _here=os.path.dirname(self.root)), "agent"), [])
@@ -203,7 +207,7 @@ class Write(Catalogue):
     def test_new_version_copies_the_default_and_refuses_a_duplicate(self):
         self.new_version("bot", "1.1.0")
         self.assertEqual(self.read("bot", user=True)["versions"]["1.1.0"],
-                         {"upstream": {"package": "@old/bot-acp"}, "install": {"npm": ["@old/bot-acp@1.1.0"]}, "proven": {}})
+                         {"upstream": {"package": "@old/bot-acp"}, "install": {"npm": ["@old/bot-acp@1.1.0"]}})
         self.assertEqual(self.read("bot"), VERSIONED)
         with self.assertRaises(SystemExit):
             self.new_version("bot", "1.1.0")
@@ -296,7 +300,10 @@ class BenchmarkVersions(unittest.TestCase):
         with open(os.path.join(job, "config.json")) as f:
             std = json.load(f)["standard"]
         self.assertEqual((std["benchmark"], std["benchmark_version"], std["benchmark_ref"]), ("toy", "2", "toy@2"))
-        raw = json.load(open(os.path.join(self.root, "benchmarks", "toy", "standard.json")))
+        path = os.path.join(self.root, "benchmarks", "toy", "standard.json")
+        with open(path) as f:
+            self.assertEqual(json.load(f), TOY)
+        raw = definitions.read_document(path, "benchmark")
         self.assertIn("hard", raw["versions"]["2"]["proven"])                           # its own block
         self.assertEqual(raw["versions"]["1"]["proven"], TOY["versions"]["1"]["proven"])
         self.assertNotIn("proven", raw)
@@ -311,7 +318,7 @@ class BenchmarkVersions(unittest.TestCase):
         with open(os.path.join(self.root, "benchmarks", "toy", "driver2.py")) as original, \
                 open(os.path.join(self.user, "benchmarks", "toy", "driver2.py")) as copied:
             self.assertEqual(original.read(), copied.read())
-        self.assertEqual(raw["versions"]["3"], {"proven": {}})
+        self.assertEqual(raw["versions"]["3"], {})
         self.assertEqual(raw["default"], "1")
 
 

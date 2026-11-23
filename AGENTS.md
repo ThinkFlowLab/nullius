@@ -61,7 +61,7 @@ and its resources.
   `feed`: the live feed any Harbor writes, from its own trial hooks),
   `importers/` (`atif` ATIF, `otel` OpenTelemetry, and the `cli`), `judge/` (`questions`, `state`, `client`, `store`, `batch`, `reconcile`, `lanes`),
   `standard/` (the Nullius standard, `docs/standard.md`, one folder per purpose, importing one way: `test_layering.StandardFolders`;
-  `contract/`: `ports`, `names` (capability vocabulary and legacy aliases), `definitions` (with an agent's or capability's versions), `match`;
+  `contract/`: `ports`, `names` (capability vocabulary and legacy aliases), `definitions` (with an agent's or capability's versions), `proofs` (generated evidence in sibling `proofs.json`), `match`;
   `requirements/`: `install`, `hostreq` (what a benchmark's options need of the machine its driver runs on: the check and the install), `network_requirements` (an environment's declared public web access: the connectivity check before any unit);
   `protocols/`: `jsonl`, `acp`, `cancellation` (interruptible protocol waits), `computer_port` and `computer_pipe` (the computer port's MCP server, served by a desktop benchmark's runner over the benchmark's own loop, and the session's stdio pipe to it);
   `calls/`: `relay`, `ledger` (a run's spending cap);
@@ -114,6 +114,9 @@ and its resources.
 Benchmark integrations expose one current entry with supported behavior as options.
 Internal driver changes do not create selectable versions. Reserve benchmark versions
 for explicit upstream releases or requested forks; retain only applicable proofs.
+Authored definitions contain configuration; generated evidence belongs in the entry's
+`proofs.json`. Proof runs leave definition files untouched. Read through
+`definitions` to combine the two; do not infer proven ports from raw definition JSON.
 
 ### Installation and user storage
 

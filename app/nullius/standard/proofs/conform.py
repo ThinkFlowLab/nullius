@@ -19,8 +19,8 @@ the agent, the version of the kit (``kit_version``: a kit grows stronger under
 the same port, and a proof says which one it passed), the skills it showed or
 missed, and the job that shows it.
 
-A port whose kit fails is taken out of ``offers`` when the definition is
-written back.
+A port whose kit fails is taken out of ``offers`` when ``proofs.json`` is
+updated. The authored definition is unchanged.
 """
 from __future__ import annotations
 
@@ -107,7 +107,8 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
           repeat: int = 1, fixture_image: Optional[str] = None,
           max_usd_per_unit: Optional[float] = None, max_calls: Optional[int] = None) -> Dict[str, dict]:
     """Run the kits of ``which`` (every candidate port by default) and, with
-    ``write``, record the result in the definition. Returns {port: record}.
+    ``write``, record the result in the version's ``proofs.json`` evidence.
+    Returns {port: record}.
     Each kit's job is named ``<stamp>__kit__<kit>__<key>`` (:func:`job_name`),
     ``stamp`` being now unless given: a page that starts the check names the
     jobs before they exist. ``backend``: where the kits run (``run.Run``).
@@ -191,7 +192,7 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
     if refused and not got:
         raise run.Refused("every kit was refused here: " + ", ".join(refused))
     if write:
-        def change(cur):                 # on the definition as it is now: another proof or an edit since the start stays
+        def change(cur):                 # current evidence: another proof since the start stays
             offers = [p for p in cur.get("offers") or [] if not (p in got and not got[p]["ok"])]
             offers += [p for p, r in got.items() if r["ok"] and p not in offers]
             # a port's record goes with its offer; another proof (fidelity), or the record of a port whose kit

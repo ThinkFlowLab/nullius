@@ -31,82 +31,82 @@
   "datasets": [
     {
       "id": "teleqna-lite",
-      "label": "TeleQnA · Lite",
+      "label": "TeleQnA \u00b7 Lite",
       "units": 1000
     },
     {
       "id": "teleqna-full",
-      "label": "TeleQnA · Full",
+      "label": "TeleQnA \u00b7 Full",
       "units": 10000
     },
     {
       "id": "teletables-lite",
-      "label": "TeleTables · Lite",
+      "label": "TeleTables \u00b7 Lite",
       "units": 100
     },
     {
       "id": "teletables-full",
-      "label": "TeleTables · Full",
+      "label": "TeleTables \u00b7 Full",
       "units": 500
     },
     {
       "id": "telemath-lite",
-      "label": "TeleMath · Lite",
+      "label": "TeleMath \u00b7 Lite",
       "units": 100
     },
     {
       "id": "telemath-full",
-      "label": "TeleMath · Full",
+      "label": "TeleMath \u00b7 Full",
       "units": 500
     },
     {
       "id": "telelogs-lite",
-      "label": "TeleLogs · Lite",
+      "label": "TeleLogs \u00b7 Lite",
       "units": 100
     },
     {
       "id": "telelogs-full",
-      "label": "TeleLogs · Full",
+      "label": "TeleLogs \u00b7 Full",
       "units": 864
     },
     {
       "id": "3gpp_tsg-lite",
-      "label": "3GPP TSG · Lite",
+      "label": "3GPP TSG \u00b7 Lite",
       "units": 100
     },
     {
       "id": "3gpp_tsg-full",
-      "label": "3GPP TSG · Full",
+      "label": "3GPP TSG \u00b7 Full",
       "units": 2000
     },
     {
       "id": "oranbench-lite",
-      "label": "ORANBench · Lite",
+      "label": "ORANBench \u00b7 Lite",
       "units": 150
     },
     {
       "id": "oranbench-full",
-      "label": "ORANBench · Full",
+      "label": "ORANBench \u00b7 Full",
       "units": 1500
     },
     {
       "id": "srsranbench-lite",
-      "label": "srsRANBench · Lite",
+      "label": "srsRANBench \u00b7 Lite",
       "units": 150
     },
     {
       "id": "srsranbench-full",
-      "label": "srsRANBench · Full",
+      "label": "srsRANBench \u00b7 Full",
       "units": 1502
     },
     {
       "id": "sixg_bench-lite",
-      "label": "6G-Bench · Lite",
+      "label": "6G-Bench \u00b7 Lite",
       "units": 150
     },
     {
       "id": "sixg_bench-full",
-      "label": "6G-Bench · Full",
+      "label": "6G-Bench \u00b7 Full",
       "units": 3722
     }
   ],
@@ -304,470 +304,6 @@
         "original",
         "yours"
       ]
-    }
-  },
-  "proven": {
-    "teleqna-lite": {
-      "units": {
-        "units": 1000,
-        "passed": "1000 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 1000,
-        "looked_for": 0,
-        "short": 1000,
-        "passed": "1000/1000",
-        "note": "1000 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/1000",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 1000
-      },
-      "oracle": {
-        "passed": "1000/1000",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 1000
-      }
-    },
-    "teletables-lite": {
-      "units": {
-        "units": 100,
-        "passed": "100 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 100,
-        "looked_for": 0,
-        "short": 100,
-        "passed": "100/100",
-        "note": "100 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/100",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 100
-      },
-      "oracle": {
-        "passed": "100/100",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 100
-      }
-    },
-    "telemath-lite": {
-      "units": {
-        "units": 100,
-        "passed": "100 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 100,
-        "looked_for": 81,
-        "short": 19,
-        "passed": "100/100",
-        "note": "19 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/100",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 100
-      },
-      "oracle": {
-        "passed": "100/100",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 100
-      }
-    },
-    "telelogs-lite": {
-      "units": {
-        "units": 100,
-        "passed": "100 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 100,
-        "looked_for": 0,
-        "short": 100,
-        "passed": "100/100",
-        "note": "100 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/100",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 100
-      },
-      "oracle": {
-        "passed": "100/100",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 100
-      }
-    },
-    "3gpp_tsg-lite": {
-      "units": {
-        "units": 100,
-        "passed": "100 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 100,
-        "looked_for": 100,
-        "short": 0,
-        "passed": "100/100"
-      },
-      "nop": {
-        "passed": "0/100",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 100
-      },
-      "oracle": {
-        "passed": "94/100",
-        "value": 0.94,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 100
-      }
-    },
-    "oranbench-lite": {
-      "units": {
-        "units": 150,
-        "passed": "150 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 150,
-        "looked_for": 0,
-        "short": 150,
-        "passed": "150/150",
-        "note": "150 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/150",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 150
-      },
-      "oracle": {
-        "passed": "150/150",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 150
-      }
-    },
-    "srsranbench-lite": {
-      "units": {
-        "units": 150,
-        "passed": "150 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 150,
-        "looked_for": 0,
-        "short": 150,
-        "passed": "150/150",
-        "note": "150 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/150",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 150
-      },
-      "oracle": {
-        "passed": "150/150",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 150
-      }
-    },
-    "sixg_bench-lite": {
-      "units": {
-        "units": 150,
-        "passed": "150 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 150,
-        "looked_for": 0,
-        "short": 150,
-        "passed": "150/150",
-        "note": "150 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/150",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 150
-      },
-      "oracle": {
-        "passed": "150/150",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 150
-      }
-    },
-    "telemath-full": {
-      "units": {
-        "units": 500,
-        "passed": "500 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 500,
-        "looked_for": 425,
-        "short": 75,
-        "passed": "500/500",
-        "note": "75 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/500",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 500
-      },
-      "oracle": {
-        "passed": "500/500",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 500
-      }
-    },
-    "teletables-full": {
-      "units": {
-        "units": 500,
-        "passed": "500 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 500,
-        "looked_for": 0,
-        "short": 500,
-        "passed": "500/500",
-        "note": "500 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/500",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 500
-      },
-      "oracle": {
-        "passed": "500/500",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 500
-      }
-    },
-    "telelogs-full": {
-      "units": {
-        "units": 864,
-        "passed": "864 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 864,
-        "looked_for": 0,
-        "short": 864,
-        "passed": "864/864",
-        "note": "864 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/864",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 864
-      },
-      "oracle": {
-        "passed": "864/864",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 864
-      }
-    },
-    "oranbench-full": {
-      "units": {
-        "units": 1500,
-        "passed": "1500 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 1500,
-        "looked_for": 0,
-        "short": 1500,
-        "passed": "1500/1500",
-        "note": "1500 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/1500",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 1500
-      },
-      "oracle": {
-        "passed": "1500/1500",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 1500
-      }
-    },
-    "srsranbench-full": {
-      "units": {
-        "units": 1502,
-        "passed": "1502 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 1502,
-        "looked_for": 0,
-        "short": 1502,
-        "passed": "1502/1502",
-        "note": "1502 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/1502",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 1502
-      },
-      "oracle": {
-        "passed": "1502/1502",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 1502
-      }
-    },
-    "3gpp_tsg-full": {
-      "units": {
-        "units": 2000,
-        "passed": "2000 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 2000,
-        "looked_for": 2000,
-        "short": 0,
-        "passed": "2000/2000"
-      },
-      "nop": {
-        "passed": "0/2000",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 2000
-      },
-      "oracle": {
-        "passed": "1871/2000",
-        "value": 0.9355,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 2000
-      }
-    },
-    "sixg_bench-full": {
-      "units": {
-        "units": 3722,
-        "passed": "3722 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 3722,
-        "looked_for": 0,
-        "short": 3722,
-        "passed": "3722/3722",
-        "note": "3722 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/3722",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 3722
-      },
-      "oracle": {
-        "passed": "3722/3722",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 3722
-      }
-    },
-    "teleqna-full": {
-      "units": {
-        "units": 10000,
-        "passed": "10000 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 10000,
-        "looked_for": 0,
-        "short": 10000,
-        "passed": "10000/10000",
-        "note": "10000 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/10000",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 10000
-      },
-      "oracle": {
-        "passed": "10000/10000",
-        "value": 1.0,
-        "expect": {
-          "at_least": 0.93
-        },
-        "units": 10000
-      }
     }
   }
 }

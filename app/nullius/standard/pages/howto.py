@@ -28,8 +28,6 @@ AGENT_JSON = {
         "apis": ["chat"],
         "env": {"OPENAI_BASE_URL": "{base_url}", "OPENAI_API_KEY": "{key}", "OPENAI_MODEL": "{model}"},
     },
-    "offers": [],
-    "proven": {},
 }
 
 # What an agent may add: an option a run can set (its default the vendor's own,
@@ -56,8 +54,6 @@ FEATURE_JSON = {
     "kind": "memory",
     "install": {"pip": ["my-memory==0.3.1"]},
     "start": {"command": ["{install}/.venv/bin/python", "{here}/capability.py"]},
-    "offers": [],
-    "proven": {},
 }
 
 # The same memory installed from its own repository, calling a model: the parts that change.
@@ -123,12 +119,12 @@ def steps(kind: str) -> list:
              "text": "<b>install</b> pins the package (npm <code>name@version</code>, or pip <code>name==version</code>). "
                      "<b>start.acp</b> is the program that speaks ACP on stdin and stdout; <code>{install}</code> is where it was installed. "
                      "<b>model.env</b> tells it where its model is: the relay's address, a placeholder key and the run's model - "
-                     "use the variable names the agent itself reads. Leave <b>offers</b> and <b>proven</b> empty: step 4 writes them.",
+                     "use the variable names the agent itself reads. Step 4 records its proofs separately in <code>proofs.json</code>.",
              "code": _json(AGENT_JSON)},
             {"title": "Check the definition", "lang": "shell", "text": "Every field is checked; a problem is named with its field.",
              "code": f"{CLI} check\n# ok"},
             {"title": "Prove its ports", "lang": "shell",
-             "text": "Runs the kit of every port it can take and writes what passed into agent.json. "
+             "text": "Runs the kit of every port it can take and writes what passed into proofs.json. "
                      "<code>--unsandboxed</code> is your yes to running the agent on this machine as you. Or use <i>Prove its ports</i> on its page.",
              "code": f"{CLI} conform my-agent --model gpt-5-mini --unsandboxed\n"
                      "# agent.task/v1: passed 3/3\n# agent.workspace/v1: passed 2/2\n# agent.tools/v1: passed 2/2\n# agent.conversation/v1: passed 2/2"},
@@ -148,7 +144,7 @@ def steps(kind: str) -> list:
             {"title": "Show ACP sends what its own command sends", "lang": "shell",
              "text": "Runs the workspace kit's two units over ACP and through <b>fidelity.command</b>, twice each, and compares "
                      "every field of the requests its model was sent; what differs between two runs of one way is noise. "
-                     "The verdict is written into agent.json beside the kits' proofs.",
+                     "The verdict is written into proofs.json beside the kits' proofs.",
              "code": f"{CLI} fidelity my-agent --model gpt-5-mini --unsandboxed\n# equal: 20 fields\n# verdict: same"},
             {"title": "Run a benchmark with it", "lang": "shell",
              "text": "Or from the Run builder: runner <i>Nullius</i>, a benchmark, then your agent on the Agent step.",
@@ -172,7 +168,7 @@ def steps(kind: str) -> list:
          "code": TRY_FEATURE.replace("{wrapper}", shlex.quote(wrapper))},
         {"title": "Fill in capability.json", "lang": "json", "file": definition,
          "text": "<b>install.pip</b> pins its packages; <b>start.command</b> runs the wrapper in that environment. "
-                 "Leave <b>offers</b> and <b>proven</b> empty: step 6 writes them.",
+                 "Step 6 records its proofs separately in <code>proofs.json</code>.",
          "code": _json(FEATURE_JSON)},
         {"title": "Or: installed from its repository, calling a model", "lang": "json",
          "text": "Replace <b>upstream</b> and <b>install</b> with these when the memory lives in a repository: it is cloned at that "
