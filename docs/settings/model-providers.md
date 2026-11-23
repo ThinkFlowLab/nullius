@@ -49,10 +49,6 @@ model: **Served by** on the builder's Model step, or
 2. **Remove** clears the provider's key, or a custom provider's base and key. A value set in the process environment is removed there.
 3. In the builder's Model step, choose the provider, then search its model list or enter an exact model ID. See [model selection](../builder.md#which-providers).
 
-OpenRouter runs that need embeddings check both its chat and embedding model
-lists before starting. An unavailable list does not establish that a model is
-unsupported; the run then checks the provider's actual responses.
-
 ## Test a provider
 
 **Test** on a provider card asks the provider with its saved settings. **Test all** tests every configured card. It sends only `GET` requests that cost nothing,
