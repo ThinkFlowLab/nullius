@@ -34,7 +34,7 @@
   {"entry": "src/generation/run_generation.py", "setting": "--con", "values": "true, false", "default": "false", "nullius": "option:separate_notes"},
   {"entry": "src/generation/run_generation.py", "setting": "--cot", "values": "true, false", "default": "required", "nullius": "option:reading"},
   {"entry": "src/generation/run_generation.py", "setting": "--merge_key_expansion_into_value", "values": "merge, replace, none", "default": "none", "nullius": "option:merge_key_expansion"},
-  {"entry": "src/generation/run_generation.py", "setting": "--gen_length", "values": "an integer", "default": "None (500, or 800 with --cot)", "nullius": "fixed:None - run_generation.sh never passes it, so the answer length follows the reading method"},
+  {"entry": "src/generation/run_generation.py", "setting": "--gen_length", "values": "an integer", "default": "None (800: --cot is a nonempty string, including false)", "nullius": "option:gen_length"},
   {"entry": "src/generation/run_generation.py", "setting": "model2maxlength, max_retrieval_length", "values": "128000 for the GPT readers; the window less the answer length less 1000", "default": "", "nullius": "fixed:as published - the history is cut to 126,200 tokens (con) by o200k_base, the start kept"},
   {"entry": "src/generation/run_generation.py", "setting": "temperature, n", "values": "0, 1", "default": "", "nullius": "fixed:0, 1 - as published"},
   {"entry": "src/generation/run_generation.py", "setting": "chat_completions_with_backoff", "values": "a rate limit retried every 5 s, without end", "default": "", "nullius": "fixed:as published - the unit's turn_seconds (3600 s) bounds it"},

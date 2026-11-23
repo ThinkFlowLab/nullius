@@ -116,6 +116,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from nullius import constraints, ondisk, paths
 from nullius.standard.contract import definitions
+from nullius.standard.contract.definitions import step_problems
 from nullius.standard.requirements import install
 
 def _runs_podman(path: str) -> bool:
@@ -985,12 +986,26 @@ def door_argv(image: str, *, name: str, job: str, port: int, socket_path: str,
             image, "python3", FORWARD_IN, "--listen", f"0.0.0.0:{port}"]
 
 
+# A new drop-in per online phase adds only the six proxy variables to sudo's
+# environment allowlist. Its existing policy is not rewritten.
+PROXY_SUDOERS = r'''set -eu
+test ! -L /etc/sudoers.d
+mkdir -p /etc/sudoers.d
+policy=$(mktemp /etc/sudoers.d/nullius-egress-XXXXXXXXXX)
+trap 'rm -f "$policy"' 0
+printf '%s\n' 'Defaults env_keep += "HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy"' > "$policy"
+chmod 0440 "$policy"
+printf '%s\n' "$policy"
+trap - 0
+'''
+
+
 def proxy_env(direct: Iterable[str] = ()) -> Dict[str, str]:
     """The variables that send HTTP(S) through the ``egress`` proxy; this
     machine's loopback and ``direct`` (the unit's relay, doors and servers) are
     reached as they are."""
     proxy = f"http://{EGRESS_ALIAS}:{EGRESS_PORT}"
-    local = ",".join(dict.fromkeys(["localhost", "127.0.0.1", "::1", *direct]))
+    local = ",".join(dict.fromkeys(["localhost", "127.0.0.1", "::1", "0.0.0.0", *direct]))
     return {"HTTP_PROXY": proxy, "HTTPS_PROXY": proxy, "http_proxy": proxy, "https_proxy": proxy,
             "NO_PROXY": local, "no_proxy": local}
 
@@ -1284,7 +1299,6 @@ RUNTIMES = "/opt/nullius"                # where an own image is given what the 
 PYTHON_VERSION = "3.12.14"               # the standalone Python an agent started as python3 runs on there; moves with UV_VERSION
 _PULL = re.compile(r"^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$")
 IMAGE_SPEC = ("build", "pull", "memory_mb", "cpus")
-STEP = ("copy", "write", "run", "collect", "seconds", "network", "keep_processes")
 KEEP_ALIVE = ["sh", "-c", "while :; do sleep 3600; done"]
 INIT = "/usr/sbin/docker-init"           # what --init mounts: docker's, not the unit's
 
@@ -1384,40 +1398,6 @@ def task_env_problems(env, reserved: Iterable[str] = ()) -> List[str]:
             bad.append(f"env.{name}: a string without NUL")
         elif name == "PATH" and any(not part.startswith("/") for part in value.split(":")):
             bad.append("env.PATH: absolute folders separated by ':'")
-    return bad
-
-
-def step_problems(step, *, collect: bool) -> List[str]:
-    """What is wrong with a step run in a unit's box (``verify``, ``solve``):
-    ``copy`` {relative path in the upstream: absolute path inside}, ``write``
-    {absolute path inside: its text - a file the driver has by content, an
-    eval script or a patch the dataset carries}, ``run``
-    (argv), ``collect`` (a folder inside, ``verify`` only), ``seconds``,
-    ``network`` (true: a way out to public addresses, :meth:`Box.online`),
-    ``keep_processes`` (``verify`` only - true: what the agent left running is
-    not stopped before the check, :meth:`Box.settle`)."""
-    if not isinstance(step, dict):
-        return ["a step: {copy?, write?, run, collect?, seconds?, network?, keep_processes?}"]
-    bad = [f"{k}: not a field ({', '.join(STEP)})" for k in step
-           if k not in STEP or (k in ("collect", "keep_processes") and not collect)]
-    run = step.get("run")
-    if not isinstance(run, list) or not run or not all(isinstance(w, str) and w for w in run):
-        bad.append("run: the command, a list of words")
-    copy = step.get("copy") or {}
-    if not isinstance(copy, dict) or not all(isinstance(d, str) and d.startswith("/") for d in copy.values()):
-        bad.append("copy: {path in the upstream: absolute path inside}")
-    write = step.get("write") or {}
-    if not isinstance(write, dict) or not all(isinstance(d, str) and d.startswith("/") and isinstance(t, str)
-                                              for d, t in write.items()):
-        bad.append("write: {absolute path inside: the file's text}")
-    if "collect" in step and not (isinstance(step["collect"], str) and step["collect"].startswith("/")):
-        bad.append("collect: an absolute path inside")
-    if "seconds" in step and (not isinstance(step["seconds"], (int, float)) or step["seconds"] <= 0):
-        bad.append("seconds: a positive number")
-    if "network" in step and not isinstance(step["network"], bool):
-        bad.append("network: true or false")
-    if "keep_processes" in step and not isinstance(step["keep_processes"], bool):
-        bad.append("keep_processes: true or false")
     return bad
 
 
@@ -1667,6 +1647,7 @@ class Box:
         self.up = False
         self.keep: Optional[str] = None          # the keep-alive's PID inside, found at the start
         self.egress: Optional[str] = None        # the check's proxy container, once online
+        self.proxy_sudoers: Optional[str] = None  # only proxy variables survive sudo during an online phase
 
     def start(self) -> "Box":
         if self.app:
@@ -1780,7 +1761,8 @@ class Box:
         started on the default bridge (``BRIDGE`` on podman) and joined to the box's network as
         ``egress``. The
         variables the check is run with, which name the proxy - and leave
-        the box's own services (``localhost``) to be reached directly."""
+        the box's own services (``localhost``) to be reached directly. A
+        temporary sudoers drop-in also preserves those variables through sudo."""
         if self.egress is None:
             image = base_image()
             name = self.name + "-egress"
@@ -1789,13 +1771,19 @@ class Box:
             _docker(egress_argv(image, name=name, job=self.job)[1:])
             _docker(["network", "connect", "--alias", EGRESS_ALIAS, self.net, name])
             wait_listening(name, "the task's proxy")
+            policy = self.run(["sh", "-c", PROXY_SUDOERS], 60, user="0")
+            path = policy["output"].strip()
+            if policy["exit"] != 0 or not re.fullmatch(r"/etc/sudoers\.d/nullius-egress-[A-Za-z0-9]{10}", path):
+                raise Unavailable("the task's proxy variables could not be preserved through sudo: " + path[-300:])
+            self.proxy_sudoers = path
         return proxy_env()
 
     def offline(self):
         """The way out :meth:`online` gave taken away again: its proxy
         container removed, then shown gone - no container of that name, and
         none answering to ``egress`` on the box's network. Unavailable when
-        either is still there: the agent is never started beside it."""
+        either is still there: the agent is never started beside it. The
+        temporary sudoers drop-in is removed before the next phase too."""
         name = self.egress
         if not name:
             return
@@ -1806,6 +1794,11 @@ class Box:
         on = _docker(["network", "inspect", "-f", "{{range .Containers}}{{.Name}} {{end}}", self.net], check=False, timeout=30)
         if on.returncode != 0 or name in on.stdout.split():
             raise Unavailable(f"the way out ({name}) is still on the unit's network")
+        if self.proxy_sudoers:
+            removed = self.run(["rm", "-f", self.proxy_sudoers], 30, user="0")
+            if removed["exit"] != 0:
+                raise Unavailable("the task's proxy policy for sudo could not be removed")
+            self.proxy_sudoers = None
         self.egress = None
 
     def egress_said(self) -> str:

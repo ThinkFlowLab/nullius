@@ -64,6 +64,18 @@ class Inventory(unittest.TestCase):
         self.assertEqual(defaults, {"retriever": "full-history-session", "topk": "1000", "reading": "con", "separate_notes": "false",
                                     "history_format": "json", "useronly": "false", "merge_key_expansion": "none"})
 
+    def test_generation_limit_validation_and_scope(self):
+        for setup in ("original", "model"):
+            for length in ("upstream", "1", "4096"):
+                vals, bad = definitions.bench_options_of(BENCH, "longmemeval_s", {"gen_length": length}, setup)
+                self.assertEqual(bad, [])
+                self.assertEqual(vals["gen_length"], length)
+            for length in ("0", "-1", "1.5", "", "4096x"):
+                _, bad = definitions.bench_options_of(BENCH, "longmemeval_s", {"gen_length": length}, setup)
+                self.assertTrue(bad, length)
+        vals, _ = definitions.bench_options_of(BENCH, "longmemeval_s", {}, "yours")
+        self.assertNotIn("gen_length", vals)
+
     def test_the_memory_path_keeps_its_meaning(self):
         """Reading is shared; retrieval and separate notes belong to Original."""
         for setup in ("original", "model", "yours"):
@@ -194,8 +206,23 @@ class Driver(unittest.TestCase):
         self.assertEqual(pairs["--openai_base_url"], "http://relay/v1")
         self.assertEqual(pairs["--openai_key"], "placeholder")
         self.assertEqual(argv[-2:], ["--cot", "true"])
+        self.assertNotIn("--gen_length", argv)
         self.assertTrue(got[1]["passed"], got[1])
         self.assertEqual(got[1]["detail"]["asked_as"], "gpt-4o-2024-08-06")
+
+    def test_explicit_generation_limit_reaches_upstream_and_score_provenance(self):
+        judge = {"model": "chosen-judge", "base_url": "http://judge/v1", "key": "k"}
+        for setup in ("original", "model"):
+            got = self.run_driver([
+                {"op": "answer", "unit": "q1", "setup": setup, "model": "gpt-4o",
+                 "base_url": "http://relay/v1", "key": "k"},
+                {"op": "score", "unit": "q1", "setup": setup, "transcript": [],
+                 "answer": "", "judge": judge}], {"gen_length": "4096"})
+            self.assertNotIn("error", got[0], got[0])
+            argv = json.loads(got[0]["answer"])
+            self.assertEqual(argv[-2:], ["--gen_length", "4096"])
+            self.assertEqual(got[1]["detail"]["options"]["gen_length"], "4096")
+            self.assertEqual(got[1]["detail"]["judge"], "chosen-judge")
 
     def test_direct_reading_reaches_original_even_with_separate_notes_selected(self):
         got = self.run_driver([{"op": "answer", "unit": "q1", "setup": "original", "model": "gpt-4o",
@@ -336,6 +363,16 @@ class Scripts(unittest.TestCase):
             recorded = " ".join(r["setting"] for r in rows() if r["entry"] in ("/".join(path), "/".join(path)[:-3] + ".sh"))
             if path[1] == "generation":
                 self.assertEqual({f for f in flags if f not in recorded}, set())
+
+    def test_pinned_reader_supports_length_but_judge_keeps_ten(self):
+        source = self.script("src", "generation", "run_generation.py")
+        self.assertIn("parser.add_argument('--gen_length', type=int, default=None)", source)
+        self.assertIn("gen_length = args.gen_length", source)
+        self.assertIn("gen_length = 500 if not args.cot else 800", source)
+        self.assertIn("max_retrieval_length = model_max_length - gen_length - 1000", source)
+        self.assertIn("'max_tokens': gen_length", source)
+        judge = self.script("src", "evaluation", "evaluate_qa.py")
+        self.assertIn("'max_tokens': 10", judge)
 
     def test_every_offered_value_is_a_script_alias(self):
         sh = self.script("src", "generation", "run_generation.sh")

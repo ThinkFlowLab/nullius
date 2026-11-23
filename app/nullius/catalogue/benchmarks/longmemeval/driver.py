@@ -334,6 +334,10 @@ def answer(unit, dir, setup, model, base_url, key, judge=None, simulator=None, a
             "--retriever_type", retriever_type, "--topk_context", _opt("topk", "1000"),
             "--merge_key_expansion_into_value", _opt("merge_key_expansion", "none"),
             "--history_format", _opt("history_format", "json"), "--useronly", _opt("useronly", "false")] + flags.split()
+    # The pinned Python entry point supports this flag; omission preserves its defaults.
+    length = _opt("gen_length", "upstream")
+    if length != "upstream":
+        argv += ["--gen_length", length]
     log = os.path.join(dir, "run_generation.log")
     _run(argv, os.path.join(up, "src", "generation"), env, log, "run_generation.py")
     hyp = [json.loads(ln) for p in glob.glob(os.path.join(out, "*_testlog_*")) for ln in open(p, encoding="utf-8") if ln.strip()]
@@ -366,7 +370,7 @@ def score_setup(unit, dir, judge):
                        "options": {n: _opt(n, d) for n, d in (("retriever", "full-history-session"), ("topk", "1000"),
                                    ("reading", "con"), ("separate_notes", "false"), ("history_format", "json"), ("useronly", "false"),
                                    ("merge_key_expansion", "none"), ("session_expansion", "none"), ("turn_expansion", "none"),
-                                   ("expansion_join", "separate"))}}}
+                                   ("expansion_join", "separate"), ("gen_length", "upstream"))}}}
 
 
 HANDLERS = {"units": units, "setup": setup, "produce": produce, "score": score, "oracle": oracle, "answer": answer}

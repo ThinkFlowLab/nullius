@@ -1423,6 +1423,10 @@ class Run:
                 box = self.own_box(tag, setup, rl, home)
                 if setup.get("prepare") is not None:
                     self.prepare(setup["prepare"], box, trial)
+            if self.other.get("prepare") is not None and self.other["_kind"] == "agent":
+                if box is None:
+                    raise _Ended("EnvironmentSetupError", "agent preparation requires an own-image container", retryable=False)
+                self.prepare(self.other["prepare"], box, trial, agent=True)
             with self.unit_vm(ws, home, trial, setup):     # boat: the VM up and given its files before the agent's time starts
                 try:
                     with self.agent_internet(setup, box, rl, trial):
@@ -1763,7 +1767,9 @@ class Run:
         if not self.base:
             return
         try:
-            listed = {m["id"] for m in providers.list_models(self.provider, getattr(self, "provider_env", os.environ))}
+            listed = {m["id"] for m in providers.list_models(
+                self.provider, getattr(self, "provider_env", os.environ),
+                include_embeddings=bool(getattr(self, "embed_model", None)))}
         except ValueError:
             return
         unknown = [m for m in self.models_called() if m not in listed and m.rpartition(":")[0] not in listed]
@@ -1975,8 +1981,8 @@ class Run:
             os.makedirs(os.path.join(os.path.dirname(ws), "agent"), exist_ok=True)
             with open(os.path.join(os.path.dirname(ws), "agent", "solve.txt"), "w") as f:
                 f.write(done["output"])
-            if done["exit"] != 0:
-                raise _Ended("NonZeroAgentExitCodeError", "the benchmark's oracle: its solution "
+            if done["timed_out"] or done["exit"] != 0:
+                raise _Ended("AgentTimeoutError" if done["timed_out"] else "NonZeroAgentExitCodeError", "the benchmark's oracle: its solution "
                              + ("did not end in time" if done["timed_out"] else f"ended with exit {done['exit']}"),
                              retryable=not done["timed_out"])
         return str(reply.get("answer") or "")
@@ -2149,7 +2155,7 @@ class Run:
         except (container.Unavailable, ValueError) as e:
             raise _Ended("VerifierError" if collect else "NonZeroAgentExitCodeError", f"{what}: {e}")
 
-    def prepare(self, step: dict, box, trial: str) -> None:
+    def prepare(self, step: dict, box, trial: str, *, agent: bool = False) -> None:
         """The benchmark's preparation of the unit's container (``prepare``),
         before the agent or a control starts: what the task's own harness adds
         to every image (Terminal-Bench's tmux). Its files copied and written
@@ -2160,34 +2166,46 @@ class Run:
         out but its model, as it would have without one. Its output and what
         the proxy let through are kept (``setup/prepare.txt``,
         ``setup/egress.log``). Any failure, closing the way out included, is
-        the environment's (``EnvironmentSetupError``), never the agent's."""
-        out = os.path.join(trial, "setup")
+        the environment's (``EnvironmentSetupError``), never the agent's.
+
+        With ``agent=True``, resolve files and command slots from the agent's
+        definition and install, preserving separate evidence under ``agent/``.
+        The preparation receives no model configuration or provider key."""
+        out = os.path.join(trial, "agent" if agent else "setup")
         os.makedirs(out, exist_ok=True)
-        root = self.up or self.bench["_here"]
+        root = self.other["_here"] if agent else self.up or self.bench["_here"]
+        who = "agent" if agent else "benchmark"
+        command = install.words(step["run"], {"here": root, "install": self.inst}) if agent else step["run"]
         done = None
         try:
             for src, dest in (step.get("copy") or {}).items():
                 box.copy_in(container.within(root, src), dest)
             for dest, text in (step.get("write") or {}).items():
                 box.write_in(dest, text)
-            env = box.online() if step.get("network") else None
             try:
-                done = box.run(step["run"], self.step_limit("setup", step), user="0", env=env)
+                env = box.online() if step.get("network") else None
+                if agent:
+                    task_env = getattr(box, "env", {})
+                    path = ":".join(p for p in (task_env.get("PATH"), getattr(box, "path", None)) if p)
+                    env = {**task_env, **({"PATH": path} if path else {}), **(env or {})}
+                done = box.run(command, self.step_limit("setup", step), user="0", env=env)
             finally:
-                said = box.egress_said()
-                if said:
-                    with open(os.path.join(out, "egress.log"), "w") as f:
-                        f.write(said)
-                box.offline()
-            box.settle()
-        except (container.Unavailable, ValueError) as e:
-            raise _Ended("EnvironmentSetupError", f"the benchmark's preparation: {e}")
+                try:
+                    said = box.egress_said()
+                    if said:
+                        with open(os.path.join(out, "prepare-egress.log" if agent else "egress.log"), "w") as f:
+                            f.write(said)
+                finally:
+                    box.offline()
+                    box.settle()
+        except (container.Unavailable, ValueError, OSError) as e:
+            raise _Ended("EnvironmentSetupError", f"the {who}'s preparation: {e}")
         finally:
             if done is not None:
                 with open(os.path.join(out, "prepare.txt"), "w") as f:
                     f.write(done["output"])
         if done["exit"] != 0:
-            raise _Ended("EnvironmentSetupError", "the benchmark's preparation "
+            raise _Ended("EnvironmentSetupError", f"the {who}'s preparation "
                          + ("did not end in time" if done["timed_out"] else f"ended with exit {done['exit']}")
                          + ": " + done["output"].strip()[-300:], retryable=not done["timed_out"])
 
@@ -2209,6 +2227,9 @@ class Run:
         with open(os.path.join(out, "test-stdout.txt"), "w") as f:
             f.write(done["output"])
         collected = box.copy_out(step["collect"], out) if step.get("collect") else False
+        if done["timed_out"]:
+            raise _Ended("VerifierError", "the benchmark's check did not end in time: "
+                         + done["output"].strip()[-300:], retryable=False)
         return {"exit": done["exit"], "timed_out": done["timed_out"], "output": done["output"][-4000:],
                 "dir": out, "collected": collected}
 

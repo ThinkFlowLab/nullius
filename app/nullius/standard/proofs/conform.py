@@ -104,7 +104,8 @@ def said(port: str, rec: dict) -> List[str]:
 def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] = None, jobs_root: str = "jobs",
           write: bool = True, say: Callable[[str], None] = print, env=None, unsandboxed: bool = False,
           stamp: Optional[str] = None, backend: str = "local", options: Optional[dict] = None,
-          repeat: int = 1) -> Dict[str, dict]:
+          repeat: int = 1, fixture_image: Optional[str] = None,
+          max_usd_per_unit: Optional[float] = None, max_calls: Optional[int] = None) -> Dict[str, dict]:
     """Run the kits of ``which`` (every candidate port by default) and, with
     ``write``, record the result in the definition. Returns {port: record}.
     Each kit's job is named ``<stamp>__kit__<kit>__<key>`` (:func:`job_name`),
@@ -125,6 +126,26 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
     env = env if env is not None else os.environ
     repeat = max(1, int(repeat or 1))
     kits = [(p, definitions.kit(p)) for p in which or candidates(other)]
+    if fixture_image:
+        from ..backends import container
+        import copy
+        if backend not in ("container", "docker") or which != ["agent.workspace/v1"]:
+            raise run.Refused("fixture_image requires the container backend and only agent.workspace/v1")
+        bad = container.spec_problems({"pull": fixture_image})
+        if bad:
+            raise run.Refused("fixture_image: " + "; ".join(bad))
+        kits = copy.deepcopy(kits)
+        for _, kit in kits:
+            try:
+                image = container.own_image(kit, {"pull": fixture_image}, kit["_here"])
+                user = container.image_config(image)["user"]
+            except (container.Unavailable, ValueError) as e:
+                raise run.Refused(f"fixture_image: {e}") from e
+            if user not in ("", "0", "root", "0:0", "root:root"):
+                raise run.Refused("fixture_image must run as root by default")
+            kit["environments"] = {"fixture": {"summary": "Explicit root workspace fixture.", "image": "own"}}
+            kit["datasets"][0]["environment"] = "fixture"
+            kit["driver"]["command"] += ["--fixture-image", fixture_image]
     if any(kit for _, kit in kits):
         run.provider_endpoint(provider, env)    # the key is the whole command's: missing, no kit is begun
     got: Dict[str, dict] = {}
@@ -135,10 +156,17 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
             continue
         say(f"{p}: {kit['summary']}")
         try:
-            job_dir = run.run(kit, other, model=model, provider=provider, jobs_root=jobs_root, concurrency=2,
+            # A benchmark-restricted catalogue agent must still be able to prove
+            # its ports. Permit this kit only in the run's copy; retain the
+            # original restriction in the saved definition and normal pairing.
+            proof_other = other
+            if other.get("only_for") and not other.get("benchmark"):
+                proof_other = dict(other, only_for=[*other["only_for"], kit["key"]])
+            job_dir = run.run(kit, proof_other, model=model, provider=provider, jobs_root=jobs_root, concurrency=2,
                               name=job_name(stamp or time.strftime(STAMP), kit["key"], definitions.job_word(other)),
                               say=lambda s: say("  " + s), env=env, proving=True, unsandboxed=unsandboxed,
                               backend=backend, options=options, repeat=repeat,
+                              max_usd_per_unit=max_usd_per_unit, max_calls=max_calls,
                               # a unit the provider's rate limit refused runs once more, after its pause: a proof says
                               # what the agent does, never how busy the endpoint was
                               retries=1, retry_if=retries.rate_limited)
@@ -153,6 +181,8 @@ def check(other: dict, *, model: str, provider: str, which: Optional[List[str]] 
                   "version": str((other.get("upstream") or {}).get("version") or ""),
                   "kit_version": definitions.kit_version(kit), "backend": backend, "job": os.path.basename(job_dir),
                   **{k: o[k] for k in ("repeat", "checks", "skills") if k in o}}
+        if fixture_image:
+            got[p]["fixture"] = {"image": fixture_image, "user": "0", "kit": kit["key"]}
         changed = {k: v for k, v in (options or {}).items() if v != ((other.get("options") or {}).get(k) or {}).get("default")}
         if changed:
             got[p]["options"] = changed

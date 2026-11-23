@@ -29,7 +29,7 @@
     {
       "id": "offline",
       "label": "Every task whose reference solution downloads nothing",
-      "units": 53,
+      "units": 51,
       "environment": "task"
     },
     {
@@ -108,44 +108,6 @@
           "at_least": 1.0
         },
         "units": 8
-      }
-    },
-    "offline": {
-      "units": {
-        "units": 53,
-        "passed": "53 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 53,
-        "looked_for": 0,
-        "short": 0,
-        "passed": "53/53",
-        "note": "53 unit(s) whose oracle gave nothing to look for"
-      },
-      "failed": {
-        "nop": {
-          "passed": "0/53",
-          "value": 0.0,
-          "expect": {
-            "at_most": 0.0
-          },
-          "units": 53,
-          "problems": [
-            "2 unit(s) ended in an error before the score: read the job's trials"
-          ]
-        },
-        "oracle": {
-          "passed": "45/53",
-          "value": 0.8491,
-          "expect": {
-            "at_least": 1.0
-          },
-          "units": 53,
-          "problems": [
-            "3 unit(s) ended in an error before the score: read the job's trials",
-            "pass rate 0.8491, expected at least 1.0"
-          ]
-        }
       }
     }
   }

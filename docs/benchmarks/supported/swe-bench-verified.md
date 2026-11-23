@@ -52,7 +52,7 @@ Software engineering: fix a real GitHub issue so the failing tests pass.
 - On Nullius, the agent can reach only its model. The tests get internet access after the agent ends.
 - The prompt is the issue's title and body, without the hints, as on the leaderboard.
 - Each instance's image is pinned. An image the authors rebuild is not used until the pin is refreshed.
-- SWE-agent, the authors' own agent, runs only on Harbor.
+- SWE-agent passes its root workspace fixture and requires task Python >=3.8. A scored instance remains unproven; the selected attempt ended at its spending cap before grading.
 
 ## Cite
 

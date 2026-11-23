@@ -16,6 +16,22 @@ def units(dataset):
 
 
 def setup(unit, dir):
+    if "--fixture-image" in sys.argv:
+        image = sys.argv[sys.argv.index("--fixture-image") + 1]
+        normal = setup_plain(unit, dir)
+        files = {"/workspace/calc.py": CALC, "/workspace/test_calc.py": TEST} if unit == "fix" else {}
+        # The same kit input and original test; only the execution location differs.
+        return {**normal, "image": {"pull": image}, "workdir": "/workspace",
+                "prepare": {"write": files, "run": ["sh", "-c",
+                    "git init -q && git -c user.name=kit -c user.email=kit.invalid commit -qm initial --allow-empty && "
+                    "git add . && git -c user.name=kit -c user.email=kit.invalid commit -qm files --allow-empty"]},
+                "verify": {"write": {"/workspace/test_calc.py": TEST} if unit == "fix" else {},
+                           "run": ["python3", "-c", "from pathlib import Path; p = Path('result.txt'); assert not p.is_symlink() and p.is_file() and p.read_text().strip() == 'nullius-ok'"]
+                                  if unit == "write" else ["python3", "test_calc.py"]}}
+    return setup_plain(unit, dir)
+
+
+def setup_plain(unit, dir):
     if unit == "write":
         return {"prompt": "In the current working directory, create a file named result.txt whose whole content is: nullius-ok"}
     with open(os.path.join(dir, "calc.py"), "w") as f:
@@ -25,7 +41,10 @@ def setup(unit, dir):
     return {"prompt": "In the current working directory, calc.py has a bug: `python3 test_calc.py` fails. Fix calc.py so the test prints OK. Do not change test_calc.py."}
 
 
-def score(unit, dir, transcript, answer):
+def score(unit, dir, transcript, answer, verified=None):
+    if "--fixture-image" in sys.argv:
+        ok = bool(verified) and verified.get("exit") == 0 and (unit == "write" or "OK" in verified.get("output", ""))
+        return {"reward": float(ok), "passed": ok, "detail": verified or {}}
     if unit == "write":
         got = _read_plain(os.path.join(dir, "result.txt"))
         ok = got == "nullius-ok"
@@ -53,6 +72,9 @@ def _read_plain(path):
 
 
 def oracle(unit, dir):
+    if "--fixture-image" in sys.argv:
+        files = {"/workspace/result.txt": "nullius-ok\n"} if unit == "write" else {"/workspace/calc.py": CALC.replace("a - b", "a + b")}
+        return {"answer": "", "solve": {"write": files, "run": ["true"]}}
     if unit == "write":
         with open(os.path.join(dir, "result.txt"), "w") as f:
             f.write("nullius-ok\n")

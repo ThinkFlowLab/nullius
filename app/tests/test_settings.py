@@ -25,7 +25,7 @@ class Table(unittest.TestCase):
         src = (HERE.parent / "app.py").read_text() + "".join(p.read_text() for p in list((HERE.parent / "nullius").rglob("*.py")) + list((HERE.parent / "web").glob("*.py")) if p.name != "settings.py" and own(p))
         import re
         read = set(re.findall(r'environ(?:\.get\(|\[)\s*"([A-Z][A-Z0-9_]*)"', src)) | set(re.findall(r'env\.get\("([A-Z][A-Z0-9_]*)"', src))
-        read -= {"HOME"}                                                  # the user's home directory, not a Nullius setting
+        read -= {"HOME", "PATH"}                                          # OS home and executable paths, not Nullius settings
         read -= {"GH_TOKEN"}                                              # stripped from subprocesses, never read
         read -= {"LOCALAPPDATA"}                                          # Windows's user directory, not a Nullius setting
         read -= {"OPENAI_BASE_URL"}                                       # what a run's launcher hands it (execution.URL_NAMES), read by the run: standard cli --from-run
