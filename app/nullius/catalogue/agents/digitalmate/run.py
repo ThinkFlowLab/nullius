@@ -15,7 +15,7 @@ from urllib.error import URLError
 from urllib.request import urlopen
 import uuid
 
-from gateway import submit_task
+from gateway import Conversation, submit_task
 
 
 def stop(service: subprocess.Popen) -> None:
@@ -136,14 +136,19 @@ def run(install: Path, prompt: str) -> str:
 
 
 def session(install: Path, port: int, *, project: Path | None = None, mcp_config: Path | None = None) -> None:
-    """One instance for several prompts, one JSON line each way; Hive keeps the conversation."""
+    """One instance for several prompts, one JSON line each way; Hive keeps the conversation.
+
+    A Bee's open question is that turn's reply, and the next prompt answers it.
+    """
     with product(install, port=port, project=project, mcp_config=mcp_config) as token:
         print(json.dumps({"ready": True}), flush=True)
+        conversation = Conversation()
         for line in sys.stdin:
             prompt = json.loads(line).get("prompt")
             if not isinstance(prompt, str):
                 raise ValueError("Session prompt must be text")
-            answer = submit_task(prompt, token, url=f"ws://127.0.0.1:{port}/digitalmate/ws")
+            answer = submit_task(prompt, token, url=f"ws://127.0.0.1:{port}/digitalmate/ws",
+                                 conversation=conversation)
             print(json.dumps({"answer": answer}), flush=True)
 
 

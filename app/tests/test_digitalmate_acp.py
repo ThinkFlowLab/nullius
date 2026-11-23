@@ -194,6 +194,8 @@ class ProductSessionTests(unittest.TestCase):
                                             "mcp_config": Path("/private/servers.json")}), ("stop", {})])
         self.assertEqual([c.args for c in submit.call_args_list], [("first", "token"), ("second", "token")])
         self.assertEqual(submit.call_args.kwargs["url"], "ws://127.0.0.1:12345/digitalmate/ws")
+        conversations = {id(c.kwargs["conversation"]) for c in submit.call_args_list}
+        self.assertEqual(len(conversations), 1, "one conversation carries a Bee question to the next prompt")
         self.assertEqual([json.loads(x) for x in output.getvalue().splitlines()],
                          [{"ready": True}, {"answer": "one"}, {"answer": "two"}])
 

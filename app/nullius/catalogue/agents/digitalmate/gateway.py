@@ -71,6 +71,7 @@ class Completion:
         self.answer = None
         self.answer_seq = -1
         self.seen: set[str] = set()
+        self.answered: set[str] = set()
 
     def response(self, reply: dict) -> None:
         if reply.get("message_id") != self.message_id:
@@ -129,8 +130,32 @@ class Completion:
         return self.initial and self.tasks <= self.terminals and self.tasks <= self.reports
 
 
-def await_answer(gateway: Gateway, completion: Completion) -> str:
-    """The turn's final answer once every Bee it dispatched has reported."""
+class Question:
+    """A Bee's open question card: the turn's reply, answered by the next user turn."""
+
+    def __init__(self, task_ref: str, card) -> None:
+        if not isinstance(card, dict) or not isinstance(card.get("interaction_id"), str) \
+                or not card["interaction_id"]:
+            raise RuntimeError("DigitalMate returned an invalid Bee question")
+        questions = card.get("questions")
+        if not isinstance(questions, list) or len(questions) != 1 or not isinstance(questions[0], dict):
+            # The product's answer edge takes one answer to one question.
+            raise RuntimeError("DigitalMate Bee asked several questions at once")
+        self.task_ref, self.interaction_id = task_ref, card["interaction_id"]
+        self.question = text_answer(questions[0].get("question"))
+        options = [option.get("label") or option.get("value") if isinstance(option, dict) else option
+                   for option in questions[0].get("options") or []]
+        self.options = [option for option in options if isinstance(option, str) and option.strip()]
+
+    @property
+    def text(self) -> str:
+        if not self.options:
+            return self.question
+        return self.question + "\n\nOptions: " + ", ".join(self.options)
+
+
+def await_answer(gateway: Gateway, completion: Completion, *, questions: bool = False):
+    """The turn's final answer, or with ``questions`` the first open Bee question."""
     while True:
         completion.collect(gateway.events)
         if completion.done:
@@ -138,9 +163,13 @@ def await_answer(gateway: Gateway, completion: Completion) -> str:
         for ref in sorted(completion.tasks - completion.terminals):
             result = gateway.rpc("hive.result.get", task_ref=ref)
             if result.get("status") == "waiting_user":
-                # A one-task run has nobody to answer a Bee's question.
-                raise RuntimeError("DigitalMate Bee task requires user input")
-            if result.get("status") not in {"pending", "available"}:
+                if not questions:
+                    raise RuntimeError("DigitalMate Bee task requires user input")
+                question = Question(ref, result.get("interaction"))
+                # The card just answered can still read as open until its Run resumes.
+                if question.interaction_id not in completion.answered:
+                    return question
+            elif result.get("status") not in {"pending", "available"}:
                 raise RuntimeError("DigitalMate returned an invalid Hive result status")
         completion.collect(gateway.events)
         if completion.done:
@@ -158,6 +187,26 @@ def pause(gateway: Gateway) -> None:
             raise TimeoutError("DigitalMate task deadline exceeded") from None
 
 
+# Committed but not yet proven delivered, or not reconciled: the edge asks for the same ID again.
+RETRY_ANSWER = {"delivery_pending", "unknown"}
+
+
+def answer_question(gateway: Gateway, completion: Completion, question: Question, text: str) -> None:
+    """Answer the Bee's card at its original wait point, as the product's card does."""
+    operation = str(uuid.uuid4())
+    while True:
+        reply = gateway.rpc("digitalmate.request", action="task.answer", task_id=question.task_ref,
+                            interaction_id=question.interaction_id, message_id=operation,
+                            answers={question.question: text})
+        status = (reply.get("hive_answer") or {}).get("status")
+        if status == "consumed":
+            completion.answered.add(question.interaction_id)
+            return
+        if status not in RETRY_ANSWER:
+            raise RuntimeError("DigitalMate did not accept the answer: " + str(status))
+        pause(gateway)
+
+
 def stop_tasks(gateway: Gateway, completion: Completion) -> None:
     # Best effort through the public owner. run.py also stops the entire isolated
     # process group, including a turn that never returned a dispatch receipt.
@@ -169,19 +218,41 @@ def stop_tasks(gateway: Gateway, completion: Completion) -> None:
             break
 
 
+class Conversation:
+    """One ACP session's open Bee question; Hive owns everything else."""
+
+    def __init__(self) -> None:
+        self.waiting: tuple[Completion, Question] | None = None
+
+
 def submit_task(prompt: str, token: str, *, timeout: float = 600,
-                url: str = "ws://127.0.0.1:18092/digitalmate/ws") -> str:
-    """Send the prompt unchanged as one Hive user turn; the answer is Beebou's last committed reply."""
+                url: str = "ws://127.0.0.1:18092/digitalmate/ws", conversation: Conversation | None = None) -> str:
+    """Send the prompt unchanged as one Hive user turn; the answer is Beebou's last committed reply.
+
+    Without a conversation a Bee question fails the task: nothing could answer it.
+    With one (a session), the question is the reply and the next prompt answers it.
+    """
     deadline = time.monotonic() + timeout
-    completion = Completion(str(uuid.uuid4()))
+    waiting = conversation.waiting if conversation is not None else None
+    completion = waiting[0] if waiting else Completion(str(uuid.uuid4()))
+    if conversation is not None:
+        conversation.waiting = None
     try:
         with connect(url, additional_headers={"Authorization": "Bearer " + token},
                      open_timeout=min(30, timeout), close_timeout=5,
                      max_size=32 * 1024 * 1024, proxy=None) as socket:
             gateway = Gateway(socket, deadline)
             try:
-                completion.response(gateway.rpc("hive.message.send", message_id=completion.message_id, text=prompt))
-                return await_answer(gateway, completion)
+                if waiting:
+                    answer_question(gateway, completion, waiting[1], prompt)
+                else:
+                    receipt = gateway.rpc("hive.message.send", message_id=completion.message_id, text=prompt)
+                    completion.response(receipt)
+                answer = await_answer(gateway, completion, questions=conversation is not None)
+                if isinstance(answer, Question):
+                    conversation.waiting = (completion, answer)
+                    return answer.text
+                return answer
             except BaseException:
                 stop_tasks(gateway, completion)
                 raise
