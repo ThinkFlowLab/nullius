@@ -65,6 +65,7 @@ class El {
     for (let e = this; e && !ev.stopped; e = e.parentNode) (e.on[type] || []).forEach(f => f(ev));
     return ev;
   }
+  dispatchEvent(ev) { return this.dispatch(ev.type); }
   click() {
     if (this.tagName === 'INPUT' && this.getAttribute('type') === 'checkbox') this.checked = !this.checked;
     if (this.tagName === 'INPUT' && this.getAttribute('type') === 'radio') {
@@ -94,6 +95,7 @@ document.readyState = 'complete';
 document.getElementById = id => document.querySelector(`[id="${id}"]`);
 document.createElement = tag => new El(tag);
 global.window = global;
+global.Event = class { constructor(type) { this.type = type; } };
 const on = {};
 global.addEventListener = (t, f) => (on[t] ||= []).push(f);
 global.scrollY = 0;
@@ -133,7 +135,7 @@ global.build = ({id, cols, rows, filter, dropdowns = [], pills = [], only = {}, 
   const radio = (k, v) => el('label', {}, el('input', {type: 'radio', name: `${id}-sort-${k}`, [`data-sort-${k}`]: '', value: v}), ' ' + v);
   const button = !filter ? [] : typeof filter[0] === 'string' ? [filter] : filter;
   const tools = el('div', {id: id + '-tools'},
-    ...(search ? [el('label', {}, el('input', {type: 'search', 'data-search': ''}))] : []),
+    ...(search ? [el('label', {}, el('input', {type: 'search', 'data-search': ''}), el('button', {type: 'button', 'data-search-clear': '', hidden: true}))] : []),
     ...dropdowns.map(c => dropdownOf(c, only)),
     ...(button.length ? [el('button', {'data-tools-btn': 'filter'}, 'Filter', el('span', {class: 'tools-count', hidden: true})),
                          el('div', {'data-tools': 'filter', hidden: true}, el('button', {'data-clear': ''}), ...button.map(c => fieldOf(c, only)))] : []),
@@ -219,6 +221,23 @@ setTimeout(() => {
         self.assertIn('data-noun="rows"', html)
         self.assertNotIn('role="status"', html)
 
+
+    def test_the_clear_button_empties_the_box_as_typing_would(self):
+        got = node(LAUNCHES + r'''
+const box = t.tools.querySelector('[data-search]'), x = t.tools.querySelector('[data-search-clear]');
+let heard = 0; box.addEventListener('input', () => heard++);                              // a page's own listener
+const out = {start: x.hidden};
+t.type('gamma'); out.typed = [x.hidden, t.note()];
+document.activeElement = null; x.click();
+out.clicked = [box.value, t.note(), x.hidden, document.activeElement === box, heard];
+t.type('delta'); document.activeElement = null; box.dispatch('keydown', {key: 'Escape'});
+out.escaped = [box.value, t.note(), x.hidden, document.activeElement === box, heard];
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got["start"], True)                                                       # hidden while empty
+        self.assertEqual(got["typed"], [False, "1–15 of 15"])
+        self.assertEqual(got["clicked"], ["", "1–25 of 30", True, True, 2])                         # every row back, focus in the box
+        self.assertEqual(got["escaped"], ["", "1–25 of 30", True, True, 4])
 
 # Thirty rows of a state and a kind; the kind in pills, a dropdown and the Filter menu, the state in the Filter menu.
 FORMS = r'''
@@ -458,7 +477,7 @@ class Macros(unittest.TestCase):
                      f"{{% call(r, c) table('t', {cols}, [], none, search='Find', columns=true, choices={{'x': [('a', 'A')]}}, views=views, actions=actions) %}}{{% endcall %}}"):
             with self.subTest(call=call[:12]):
                 html = self.slotted(call)
-                self.assertEqual(re.findall(r'data-search|data-slot="(\w+)"|data-tools-btn="(\w+)"|<button>(\w+)</button>', html),
+                self.assertEqual(re.findall(r'data-search(?!-)|data-slot="(\w+)"|data-tools-btn="(\w+)"|<button>(\w+)</button>', html),
                                  [("", "", ""), ("views", "", ""), ("", "", "v1"), ("", "", "v2"), ("", "columns", ""), ("", "filter", ""),
                                   ("", "sort", ""), ("actions", "", ""), ("", "", "a1"), ("", "", "a2")])
                 self.assertEqual(html.count('class="table-slot"'), 2)                  # each slot one group, spaced as the buttons

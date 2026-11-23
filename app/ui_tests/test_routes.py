@@ -146,6 +146,13 @@ class Routes(unittest.TestCase):
         self.assertEqual(response.status_code, 200, path)
         return response
 
+    def test_the_toolkit_search_carries_its_clear_button_hidden(self):
+        for path in ("/runs", "/benchmarks", "/agents", "/kits", "/workspaces"):
+            with self.subTest(path=path):
+                html = self.get_ok(path).get_data(as_text=True)
+                self.assertIn('<button class="st-search-clear" type="button" data-search-clear aria-label="Clear search" hidden>'
+                              '<svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>', html)
+
     def test_home_opens_runs_with_or_without_active_workspace(self):
         for active in (self.active, None):
             with self.subTest(active=bool(active)):

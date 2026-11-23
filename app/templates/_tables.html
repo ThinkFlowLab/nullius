@@ -79,7 +79,7 @@
 {% macro controls(id, cols, search='', columns=false, choices={}, only={}, views=none, actions=none, sort=true, layout=none, default='table') %}
 {%- set by = {'button': [], 'dropdown': [], 'pills': []} %}{% for c in cols if c.key in choices %}{% for f in ([c.filter] if c.filter is string else c.filter or ['button']) %}{% set _ = by[f].append(c) %}{% endfor %}{% endfor %}
 <div class="table-tools table-controls" id="{{ id }}-tools">
-  {% if search %}<label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-search placeholder="{{ search }}" aria-label="{{ search }}" autocomplete="off" spellcheck="false"></label>{% endif %}
+  {% if search %}<label class="st-search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" data-search placeholder="{{ search }}" aria-label="{{ search }}" autocomplete="off" spellcheck="false"><button class="st-search-clear" type="button" data-search-clear aria-label="Clear search" hidden><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></label>{% endif %}
   {% if columns or by.dropdown or by.button or sort or views or actions or layout %}<div class="table-buttons">
   {{ slot('views', views) }}
   {% if columns %}<div class="menu-wrap">{{ columns_button() }}{{ columns_menu(cols) }}</div>{% endif %}

@@ -153,17 +153,22 @@ window.NulliusTable = {
   /* A controls row's search box and filters (the controls macro), under
      `tools`; each optional. Search keeps the rows (or cards) whose
      data-search holds every word of the query, in any order and case;
-     Escape clears it. A column narrows when it does not show every value;
+     its clear button, shown while it holds text, or Escape empties it as
+     typing would and leaves the focus in it. A column narrows when it does not show every value;
      the Filter button or a dropdown holding such a column is marked
      .narrowed and counts: the Filter button the columns it narrows, a
      dropdown the values chosen (after None, 0), or the one chosen by name. Clear filters clears every
      column. `changed` runs after any of them. Returns passes(row). */
   narrow(tools, changed) {
     const [fbtn, fmenu] = [tools.querySelector('[data-tools-btn="filter"]'), tools.querySelector('[data-tools="filter"]')];
-    const q = tools.querySelector('[data-search]');
+    const q = tools.querySelector('[data-search]'), x = tools.querySelector('[data-search-clear]');
+    const shown = () => { if (x) x.hidden = !q.value; };
+    const clear = () => { q.value = ''; q.dispatchEvent(new Event('input', {bubbles: true})); q.focus(); };
     if (q) {
-      q.addEventListener('input', changed);
-      q.addEventListener('keydown', e => { if (e.key === 'Escape' && q.value) { e.preventDefault(); q.value = ''; changed(); } });
+      q.addEventListener('input', () => { shown(); changed(); });
+      q.addEventListener('keydown', e => { if (e.key === 'Escape' && q.value) { e.preventDefault(); clear(); } });
+      x?.addEventListener('click', clear);
+      shown();   // a value the browser restored
     }
     const found = row => !q || this.matches(row.dataset.search, q.value);
     const menus = [...(fmenu ? [[fbtn, fmenu, () => 1]] : []),
@@ -176,7 +181,7 @@ window.NulliusTable = {
       count.textContent = sets.length === 1 ? n(sets[0]) : sets.length ? sets.reduce((sum, set) => sum + n(set), 0) : '';
       count.hidden = !sets.length;
     });
-    const narrowed = () => { mark(); changed(); };
+    const narrowed = () => { mark(); if (q) shown(); changed(); };   // a page that empties the box itself, then filters
     const f = this.filters(tools, narrowed);
     mark();
     menus.forEach(([btn, menu]) => this.menu(btn, menu));
