@@ -3,7 +3,7 @@
 One benchmark and one agent, capability, control or setup, into a job.
 
 ```bash title="Run"
-nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE] [--limit N] [-j N] \
+nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE | --set NAME] [--limit N] [-j N] \
     [--unsandboxed | --backend container|boat] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
     [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS]... [--max-turns N] [--max-calls N] \
     [--constraint KEY=VALUE]... \
@@ -15,6 +15,7 @@ nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--
 nullius standard run humaneval reference --model gpt-5-mini --limit 2 --unsandboxed
 nullius standard run humaneval oracle --limit 6
 nullius standard run humaneval oracle --units tasks.txt
+nullius standard run humaneval oracle --set first-ten
 nullius standard run locomo original --model gpt-3.5-turbo-4k
 nullius standard run locomo model --model gpt-4o-mini
 ```
@@ -27,6 +28,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--provider` | `anthropic`, `custom`, `openai` or `openrouter` |
 | `--dataset`, `--limit`, `-j` | One dataset, the first N units, N at a time |
 | `--units FILE` | Only the units the file lists: [below](#a-list-of-units) |
+| `--set NAME` | Only the units of a [task set](task-sets.md); its dataset is the run's, the options the run's own |
 | `--unsandboxed` | An agent runs as you; else `--backend container` |
 | `--backend` | `local` (default); `container`, each unit in a container with its relay; or [`boat`](../standard.md#the-boat-backend), a VM per unit |
 | `--boat-size` | Boat's VM size: `small` (default), `default`, `large`, `xlarge` |
@@ -136,6 +138,7 @@ HumanEval/12
 | The record | `config.json`: `standard.units_file`, the file's name, its sha256 and its units |
 | Where it is read | On the machine the command runs on, from the directory it starts in |
 | The builder | A recipe has no field for a list |
+| A named list | A [task set](task-sets.md) keeps one, frozen: `--set NAME` |
 
 ## Serving providers
 

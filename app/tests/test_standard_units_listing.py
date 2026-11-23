@@ -24,7 +24,7 @@ from unittest import mock
 from nullius import paths
 from nullius.standard import cli
 from nullius.standard.contract import definitions
-from nullius.standard.runner import units
+from nullius.standard.runner import sets, units
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 OSWORLD1 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nullius", "catalogue",
@@ -255,6 +255,32 @@ class CommandLine(Scratch):
                 got, out, err = self.cli(*args)
                 self.assertEqual((got, out), (code, ""))
                 self.assertTrue(err.startswith("refused: ") and said in err and len(err.splitlines()) == 1, err)
+
+
+class SetFromAFilter(Scratch):
+    def test_the_ids_stored_are_the_ones_the_listing_gives_and_the_note_holds_the_filter(self):
+        code, out, err = self.cli("set", "create", "described", "picked", "--dataset", "all", "--search", "number 24",
+                                  "--category", "kind=alpha", "--category", "kind=beta")
+        self.assertEqual(code, 0, err)
+        entry = sets.load("described", "picked")
+        listed = units.find(self.b, "all", search="number 24", categories={"kind": ["alpha", "beta"]}, size=None)
+        self.assertEqual(sets.revision(entry)["units"], self.ids(listed))
+        self.assertEqual(sets.revision(entry)["units"], ["t024", "t124", "t240", "t241", "t243", "t244", "t246", "t247", "t249"])
+        self.assertEqual(sets.revision(entry)["note"],
+                         'matched by --search "number 24" --category kind=alpha --category kind=beta')
+        code, out, err = self.cli("set", "create", "described", "by-kind", "--dataset", "all", "--category", "kind=gamma")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(len(sets.revision(sets.load("described", "by-kind"))["units"]), 83)
+
+    def test_a_filter_that_matches_nothing_or_beside_another_source_is_refused(self):
+        for args, said in ((["--search", "wombat"], "no task of all matches --search \"wombat\""),
+                           (["--search", "t1", "--units", os.path.join(self.tmp, "x.txt")], "--units FILE, --from-job"),
+                           ([], "--units FILE, --from-job")):
+            with self.subTest(args=args):
+                code, out, err = self.cli("set", "create", "described", "none", "--dataset", "all", *args)
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn(said, err)
+        self.assertFalse(os.path.exists(os.path.join(self.cat, "sets")))
 
 
 ASKED = AssertionError("the listing asked for the driver's environment")

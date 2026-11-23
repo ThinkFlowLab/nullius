@@ -152,7 +152,7 @@ def prepare(checkout: Path, licence_source: Path | None = None):
     bundled = Path(__file__).resolve().parent / "catalogue"
     source_catalogue = checkout / "app" / "nullius" / "catalogue"
     pending.catalogue_snapshot = source_catalogue.resolve() == bundled.resolve()
-    for kind in ("benchmarks", "agents", "features", "capabilities"):
+    for kind in ("benchmarks", "agents", "features", "capabilities", "sets"):
         parent = source_catalogue / kind
         _no_symlinks(parent)
         if not parent.exists():

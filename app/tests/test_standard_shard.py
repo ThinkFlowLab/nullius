@@ -66,7 +66,7 @@ class Partition(unittest.TestCase):
 
 def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="gpt-5-mini", bench=BENCH, other=AGENT,
                 planned=None, t0=1_760_000_000.0, failed=(), budget=None, backend="local", bench_options=None,
-                reward=lambda place: float(place % 2)):
+                reward=lambda place: float(place % 2), task_set=None):
     """A shard job as a run writes it: its config, a trial per unit (tagged by
     the unit's place in the whole dataset), its result."""
     d = os.path.join(root, name)
@@ -74,7 +74,7 @@ def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="g
     planned = list(units) if planned is None else planned
     job.write_config(d, job=name, bench=bench, other=other, model=model, provider="openai", dataset="all", units=planned,
                      concurrency=2, granted=True, launch=launch, shard=shard.record(index, of, total, planned), backend=backend,
-                     bench_options=bench_options)
+                     bench_options=bench_options, task_set=task_set)
     results = []
     for k, u in enumerate(units):
         place = int(u.split("-")[1])
@@ -211,6 +211,31 @@ class Merge(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(self.tmp, "never")))
         got = merge.merge([a, b], os.path.join(self.tmp, "forced"), force=True)
         self.assertIn("merged_despite", read((os.path.join(got["out"], "config.json")))["standard"])
+
+    def test_shards_of_two_task_sets_or_revisions_are_refused_unless_forced_and_the_merge_keeps_the_set(self):
+        units = sorted(self.split[1] + self.split[2] + self.split[3])
+        def of(name="dev", rev=1, id_="a" * 32, digest=None):
+            return {"id": id_, "name": name, "revision": rev, "hash": digest or f"{rev}" * 64, "units": units}
+        a = write_shard(self.tmp, "a", self.split[1], 1, 3, task_set=of())
+        # the whole id and hash are compared: one changed in its last character is another set, never named whole
+        changed = ("a" * 31 + "b", "1" * 63 + "b")
+        for name, rec in (("b-rev", of(rev=2)), ("b-other", of(name="other", id_="b" * 32)),
+                          ("b-id", of(id_=changed[0])), ("b-hash", of(digest=changed[1])), ("b-none", None)):
+            with self.subTest(other=name):
+                b = write_shard(self.tmp, name, self.split[2], 2, 3, task_set=rec)
+                with self.assertRaisesRegex(merge.Refused, "task set: a 'dev@1 ") as refused:
+                    merge.merge([a, b], os.path.join(self.tmp, "never"))
+                self.assertFalse(os.path.exists(os.path.join(self.tmp, "never")))
+                self.assertFalse([value for value in changed if value in str(refused.exception)])
+                got = merge.merge([a, b], os.path.join(self.tmp, "forced-" + name), force=True)
+                cfg = read(os.path.join(got["out"], "config.json"))["standard"]
+                self.assertEqual(cfg["task_set"], of())
+                self.assertTrue(any(d.startswith("task set: ") for d in cfg["merged_despite"]))
+        b = write_shard(self.tmp, "b", self.split[2], 2, 3, task_set=of())
+        got = merge.merge([a, b], os.path.join(self.tmp, "out", "run"))
+        cfg = read(os.path.join(got["out"], "config.json"))["standard"]
+        self.assertEqual(cfg["task_set"], of())
+        self.assertNotIn("merged_despite", cfg)
 
     def test_a_shard_recorded_with_docker_is_of_one_launch_with_a_container_shard(self):
         a = write_shard(self.tmp, "a", self.split[1], 1, 3, backend="docker")      # the container backend's earlier name

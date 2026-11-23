@@ -814,6 +814,16 @@ class StandardOnHost(HostBase):
         self.assertEqual(json.loads((self.tmp / "runs" / "std-shard-2of2" / "run.json").read_text())["catalogue_on_target"],
                          "~/.nullius/runs/std-shard-2of2/catalogue")
 
+    def test_the_snapshot_a_host_is_sent_carries_the_recipes_task_sets(self):
+        self.plan.recipe = {"harness": "standard", "benchmark": "fakebench@1", "task_sets": {"all": "dev@2", "more": "other"}}
+        ex = self.run_it()
+        self.assertEqual((ex.state, ex.exit_code), ("done", 0), ex.lines)
+        self.assertEqual(execution.standard_payload.build.call_args.kwargs["sets"], [("fakebench", "dev"), ("fakebench", "other")])
+        self.plan.recipe = {}
+        self.plan.name = "std-plain"
+        self.run_it()
+        self.assertEqual(execution.standard_payload.build.call_args.kwargs["sets"], [])
+
     def test_gaias_hugging_face_token_is_handed_from_data_providers_alone(self):
         # over the launcher's stdin as a licence is, read from Settings → Data providers; a value GAIA's own folder
         # holds under that name is never sent

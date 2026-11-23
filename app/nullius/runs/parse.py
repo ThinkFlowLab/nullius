@@ -28,7 +28,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "17"
+SCHEMA = "18"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness, so a limit the run survived leaves nothing in result.json —
@@ -306,6 +306,9 @@ class Job:
     launch_id: str = ""
     # Source job names explicitly recorded by standard merge.
     merged_from: list[str] = field(default_factory=list)
+    # The task set a Nullius standard job ran (config ``standard.task_set``): its name, its label (its name for a
+    # job from before labels) and id, its benchmark, and ``units``, its number of ids. {} for every other job.
+    task_set: dict = field(default_factory=dict)
     # How the job was launched, as its config.json recorded it with Harbor's
     # defaults filled in (launch_of). Empty when config.json is absent.
     launch: dict = field(default_factory=dict)
@@ -964,6 +967,11 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
     job.launch_id = str(std.get("launch") or "")
     merged = std.get("merged_from")
     job.merged_from = [s["job"] for s in merged if isinstance(s, dict) and isinstance(s.get("job"), str) and s["job"]] if isinstance(merged, list) else []
+    ts = std.get("task_set") if isinstance(std.get("task_set"), dict) else {}
+    job.task_set = ({"name": str(ts["name"]), "label": str(ts.get("label") or ts["name"]),
+                     "id": str(ts.get("id") or ""), "benchmark": str(std.get("benchmark") or ""),
+                     "units": len(ts["units"]) if isinstance(ts.get("units"), list) else 0}
+                    if isinstance(ts.get("name"), str) and ts["name"] else {})
     job.budget = _budget(res.get("budget"))
     job.standard = bool(std)
     setup = std.get("setup") if isinstance(std.get("setup"), dict) else {}

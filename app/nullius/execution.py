@@ -1140,10 +1140,12 @@ class Execution:
 
         The exact code imported here travels, including source edits, so
         installed wheels and editable checkouts have the same behaviour.
-        Configuration and credential stores are not payload inputs.
+        Configuration and credential stores are not payload inputs; the
+        task sets the recipe runs are, from the user catalogue.
         """
         try:
-            return standard_payload.build(app_root(self.root), catalogue=self._catalogue)
+            return standard_payload.build(app_root(self.root), catalogue=self._catalogue,
+                                          sets=standard_payload.recipe_sets(self.plan.recipe))
         except (OSError, ValueError) as e:
             self._fail("app", "the standard runner could not be packed: " + str(e)[-300:])
             return None

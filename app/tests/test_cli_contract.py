@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -293,19 +294,35 @@ class CommandLine(Scratch):
 
 class TaskSetCommands(Scratch):
     def test_help_and_refusals_of_the_task_set_commands(self):
-        """The units command has help with its examples and exit codes; a
+        """Each set command, and units, has help with its examples and exit codes; a
         refusal is one line on stderr with nothing on stdout, 2 for a usage
         error or a refusal, 3 for what is not found, and writes nothing."""
         cat = os.path.join(self.tmp, "catalogue")
         env = {"NULLIUS_CATALOGUE": cat, "NULLIUS_HOME": os.path.join(self.tmp, "profile")}
-        for sub in (("units",),):
+        for sub in (("set",), ("set", "create"), ("set", "list"), ("set", "show"), ("set", "rename"),
+                    ("set", "delete"), ("set", "import"), ("units",)):
             with self.subTest(help=sub):
                 out = self.sh("standard.cli", *sub, "--help", env=env)
                 self.assertEqual(out.returncode, 0, out.stderr)
                 for line in ("usage:", "examples:", "exit codes:"):
                     self.assertIn(line, out.stdout)
                 self.assertEqual(out.stderr, "")
+        listed = write_json(Path(self.tmp, "ten.txt"), "HumanEval/0\nHumanEval/1\n")
         cases = [
+            (["set", "create", "humaneval"], 2, "usage:"),
+            (["set", "create", "humaneval", "..", "--dataset", "humaneval", "--units", listed], 2, "needs a letter or a digit"),
+            (["set", "show", "humaneval", "a/b"], 2, "not a task set's name"),
+            (["set", "create", "humaneval", "ok", "--dataset", "nope", "--units", listed], 2, "no dataset 'nope'"),
+            (["set", "create", "no-such-bench", "ok", "--dataset", "x", "--units", listed], 3, "no benchmark"),
+            (["set", "show", "humaneval", "nowhere"], 3, "no task set 'nowhere'"),
+            (["set", "update", "humaneval", "nowhere", "--add", "HumanEval/2"], 2, "invalid choice: 'update'"),     # a set is frozen
+            (["set", "rename", "humaneval", "nowhere", "elsewhere"], 3, "no task set 'nowhere'"),
+            (["set", "rename", "humaneval", "nowhere"], 2, "usage:"),
+            (["set", "delete", "humaneval", "nowhere"], 3, "no task set 'nowhere'"),
+            (["set", "import", os.path.join(self.tmp, "absent.json")], 3, "no such file or job"),
+            (["set", "create", "humaneval", "ok", "--dataset", "humaneval", "--units", listed, "--bench-option", "a=b"], 2,
+             "unrecognized arguments: --bench-option"),
+            (["set", "create", "humaneval", "ok", "--dataset", "humaneval"], 2, "--units FILE, --from-job"),
             (["units", "humaneval"], 2, "usage:"),
             (["units", "humaneval", "--dataset", "nope"], 3, "no dataset 'nope'"),
             (["units", "no-such-bench", "--dataset", "x"], 3, "no benchmark"),
@@ -324,6 +341,18 @@ class TaskSetCommands(Scratch):
         self.assertEqual(out.stderr, "refused: cannot prepare humaneval's dataset humaneval for its listing: "
                                      "git is not on this machine\n")
         self.assertFalse(os.path.exists(cat))
+        out = self.sh("standard.cli", "set", "list", "--json", env=env)
+        self.assertEqual((out.returncode, json.loads(out.stdout), out.stderr), (0, [], ""))
+
+    def test_the_index_of_commands_names_each_set_command_there_is_and_no_other(self):
+        """The commands' index (docs/cli/README.md) names the set commands one by one: the ones ``set`` takes."""
+        out = self.sh("standard.cli", "set", "--help", env={"NULLIUS_HOME": os.path.join(self.tmp, "profile")})
+        self.assertEqual(out.returncode, 0, out.stderr)
+        taken = set(re.findall(r"^    ([a-z]+) ", out.stdout, re.M))                  # the help's list of commands
+        row = next(line for line in (APP.parent / "docs" / "cli" / "README.md").read_text(encoding="utf-8").splitlines()
+                   if line.startswith("| [Task sets]"))
+        listed = row[row.index("`set create`"):].split(";")[0]
+        self.assertEqual({name.removeprefix("set ") for name in re.findall(r"`([^`]+)`", listed)}, taken)
 
 
 # ── import.md ───────────────────────────────────────────────────────────────

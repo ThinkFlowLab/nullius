@@ -80,7 +80,7 @@ from nullius.standard.calls import ledger as ledgers, relay
 from nullius.standard.contract import definitions, match
 from nullius.standard.protocols import acp, jsonl
 from nullius.standard.requirements import hostreq, install
-from nullius.standard.runner import job, pace as pacing, shard as shards
+from nullius.standard.runner import job, pace as pacing, sets, shard as shards
 from nullius.standard.runner.retries import RETRIES, retryable
 
 # the totals a unit's end carries onto the live board, from its trial's agent_result
@@ -470,7 +470,7 @@ class Run:
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
                  max_usd_per_unit: Optional[float] = None, prices_unreachable: Optional[str] = None,
-                 units_file: Optional[dict] = None,
+                 units_file: Optional[dict] = None, task_set: Optional[dict] = None,
                  constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
                  max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None, boat_size: str = boat.SIZE, relay_container: bool = False):
         """``proving``: the run is a conformance kit's, the one run that may
@@ -494,6 +494,9 @@ class Run:
         an id the dataset does not hold refuses the run before any unit
         starts. The job's config records the file's name, its sha256 and its
         units.
+        ``task_set``: a task set's record (``sets.record``): its units run as
+        a file's would, and the job's config keeps the record. Refused beside
+        ``units_file``.
         ``repeat``: each unit run that many times (a conformance check run for
         confidence, ``conform``), each run a trial of its own tagged
         ``u0042r2``; once by default, tagged ``u0042``. Each is an
@@ -717,7 +720,10 @@ class Run:
         self.provider_env = env                  # where the provider's model list is asked (``known_models``)
         self.key_header = "authorization" if keyless else key_header(provider, other, env)
         self.limit, self.concurrency = limit, limits.concurrency(max(1, int(concurrency)), self.constraints)
+        if units_file and task_set:
+            raise Refused("a run takes its units from a file or from a task set, not both")
         self.units_file = units_file
+        self.task_set = task_set
         self.repeat = max(1, int(repeat or 1))
         self.retries = max(0, int(retries or 0))
         self.retry_if = retry_if or retryable
@@ -877,39 +883,56 @@ class Run:
                 container.sweep(self.name)
             raise
         everything = [str(u) for u in units]
-        listed = self.units_file["units"] if self.units_file else None
+        listed = self.units_file["units"] if self.units_file else self.task_set["units"] if self.task_set else None
+        why, unknown = "", []
         if listed is not None:
             held = set(everything)
             unknown = [u for u in listed if u not in held]
             if unknown:
-                # what the run holds is let go as when its driver cannot list the units: on the container
-                # backend that includes the containers its driver or its doors started
-                for d in self.drivers:
-                    d.close()
-                if self.bench_relay is not None:
-                    self.bench_relay.stop()
-                if self.backend == "container" or self.relay_container:
-                    container.sweep(self.name)
-                # the record a refusal in ready() leaves, which the runs list reads (execution's refused):
-                # the job's folder with its progress.jsonl, the driver's working folders and logs taken out
-                work = os.path.join(self.job_dir, ".work")
-                for name in os.listdir(work):
-                    path = os.path.join(work, name)
-                    if name in ("driver", "driver-home"):
-                        shutil.rmtree(path, ignore_errors=True)
-                    elif name.startswith("driver-") and name.endswith(".log"):
-                        os.remove(path)
                 words = self.bench["units"]
-                why = (f"{self.units_file['name']} lists {len(unknown)} {words['noun'] if len(unknown) == 1 else words['nouns']} "
-                       f"that {self.bench['label']}'s dataset {self.ds['id']} does not hold: " + ", ".join(unknown))
-                p.emit("refused", detail=why)
-                raise Refused(why)
+                if self.units_file:
+                    why = (f"{self.units_file['name']} lists {len(unknown)} {words['noun'] if len(unknown) == 1 else words['nouns']} "
+                           f"that {self.bench['label']}'s dataset {self.ds['id']} does not hold: " + ", ".join(unknown))
+                elif self.task_set.get("version") and self.task_set["version"] != str(self.bench.get("_version") or ""):
+                    # made at another version of the benchmark, whose list may hold other tasks
+                    label = self.task_set.get("label") or self.task_set["name"]
+                    ours, theirs = (sets.version_label(self.bench, v) for v in (str(self.bench.get("_version") or ""), self.task_set["version"]))
+                    why = (f"the task set {label} was made at {self.bench['label']} {theirs}, and {unknown[0]} is not a task of "
+                           f"{self.ds['id']} at {ours}, the version this run is at"
+                           + (f" ({len(unknown) - 1} more are not either)" if len(unknown) > 1 else "")
+                           + f": run it at {theirs}, or make a set at {ours}")
+                else:
+                    # a set holds no option: its ids are checked against the listing under this run's own
+                    given = ", ".join(f"{k}={v}" for k, v in sorted(self.bench_options.items())) or "none"
+                    why = (f"{len(unknown)} of the {len(listed)} ids of the task set {self.task_set.get('label') or self.task_set['name']} "
+                           f"are not listed by {self.bench['label']}'s dataset {self.ds['id']} "
+                           f"under the run's options ({given}): " + ", ".join(unknown[:5]) + (", ..." if len(unknown) > 5 else ""))
         # the list and the shard, then the limit; each unit keeps its place in the whole dataset (its trial's tag)
         mine = shards.select(everything, *self.shard, by=self.shard_by) if self.shard else list(enumerate(everything))
         if listed is not None:
             wanted = set(listed)
             mine = [(i, u) for i, u in mine if u in wanted]
         mine = mine[: self.limit] if self.limit else mine
+        if why:
+            # what the run holds is let go as when its driver cannot list the units: on the container
+            # backend that includes the containers its driver or its doors started
+            for d in self.drivers:
+                d.close()
+            if self.bench_relay is not None:
+                self.bench_relay.stop()
+            if self.backend == "container" or self.relay_container:
+                container.sweep(self.name)
+            # the record a refusal in ready() leaves, which the runs list reads (execution's refused):
+            # the job's folder with its progress.jsonl, the driver's working folders and logs taken out
+            work = os.path.join(self.job_dir, ".work")
+            for name in os.listdir(work):
+                path = os.path.join(work, name)
+                if name in ("driver", "driver-home"):
+                    shutil.rmtree(path, ignore_errors=True)
+                elif name.startswith("driver-") and name.endswith(".log"):
+                    os.remove(path)
+            p.emit("refused", detail=why)
+            raise Refused(why)
         units = [u for _, u in mine]
         self.n_units = len(units)
         if getattr(self, "boat", None) is not None:
@@ -926,7 +949,7 @@ class Run:
                          options=self.options, launch=self.launch or "", bench_options=self.bench_options,
                          # a shard of a list splits the listed units: they are its whole
                          shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit, by=self.shard_by)
-                         if self.shard else None, units_file=self.units_file,
+                         if self.shard else None, units_file=self.units_file, task_set=self.task_set,
                          repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving,
                          timeouts=self.timeouts, max_turns=self.forced_turns, max_calls=self.max_calls,
                          simulator=self.simulator_model if self.other["_kind"] in ("agent", "upstream") and self.simulator_model else "")
