@@ -34,13 +34,14 @@ Long-term chat memory: questions over timestamped chat histories.
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `longmemeval` | Original · Original memory · Like the paper or Any of your choice | `expansion_join`, `history_format`, `merge_key_expansion`, `question_type`, `reading`, `retriever`, `separate_notes`, `session_expansion`, `topk`, `turn_expansion`, `useronly` |
+| `longmemeval` | Original · Original memory · Like the paper or Any of your choice | `expansion_join`, `gen_length`, `history_format`, `merge_key_expansion`, `question_type`, `reading`, `retriever`, `separate_notes`, `session_expansion`, `topk`, `turn_expansion`, `useronly` |
 
 ## Options
 
 | Option | Values, default in bold | What it sets | Setups |
 |---|---|---|---|
 | `expansion_join` | **`separate`**, `split-separate`, `merge`, `split-merge`, `replace`, `split-replace` | How cached expansions join retrieval keys when expansion is enabled: separate keys, merged text or replacement text. Split modes separate sentences or phrases first. | `original`, `model` |
+| `gen_length` | e.g. `4096`, default `upstream` | Reader output limit; larger values leave less room for history. | `original`, `model` |
 | `history_format` | **`json`**, `nl` | Whether conversation history is shown to the model as JSON or as lines of text labelled by speaker. | `original`, `model` |
 | `merge_key_expansion` | **`none`**, `merge`, `replace` | Whether retrieved conversations are shown in full, replaced by their user text, or combined with that text. | `original`, `model` |
 | `question_type` | **`all`**, `knowledge-update`, `temporal-reasoning`, `multi-session`, `single-session-user`, `single-session-assistant`, `single-session-preference` | Which memory ability the run measures: every question, or only the questions of one type. | `original`, `model`, `yours` |
@@ -78,7 +79,9 @@ Long-term chat memory: questions over timestamped chat histories.
 
 - Scores compare with the paper only with its reader, GPT-4o or GPT-4o-mini, and its judge, GPT-4o.
 - A reader you choose must take about 126,200 tokens. The history is not cut to fit, so a longer recall fails at the model.
-- An empty reply from the reader fails the question.
+- Original memory defaults to 800 reader output tokens. Larger limits reduce history space and differ from the paper.
+- Empty answers fail, including when reasoning consumes the reader's output budget.
+- Choose a judge that can return yes/no text within 10 output tokens.
 - Three combinations fail as published: merge expansion with a full-history retriever, user-only with flat-bm25-turn, and separate notes with chain-of-note reading and nl history.
 - The judge, a model, rejects about one right answer in twenty, and passes an empty answer now and then.
 - Time-aware query expansion fails as published.
