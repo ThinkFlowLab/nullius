@@ -506,21 +506,13 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 
 Follow [Add an agent manually](agents/add-manually.md).
 
-An agent may declare `prepare` for an own-image container: `run` (argv,
-`{here}` and `{install}`), optional `copy`, `write`, `seconds` and `network`.
-It runs as root before agent startup. Public access, when requested, ends
-and remaining processes stop before the agent starts. Failure refuses the
-unit. Evidence is in `agent/prepare.txt` and `agent/prepare-egress.log`; benchmark
-preparation remains separate. Other environments refuse agent preparation.
+Agent `prepare` runs as root in own-image containers only. Requested public
+access ends and leftover processes stop before startup; failure refuses the unit.
 
-For root-dependent workspace conformance, `conform --port agent.workspace/v1
---backend docker --fixture-image IMAGE@sha256:DIGEST` selects an explicit
-own-image fixture. Supply a root-default image with Python and git. The
-proof records the image digest and root user; default kits keep
-their existing permissions. Fixture conformance does not prove a benchmark
-instance. Benchmark-restricted catalogue agents may run their kits; a proof
-does not broaden their benchmark restriction. Capped conformance requires
-a successful price refresh and a price for every model it calls.
+Root workspace conformance uses `--fixture-image` with a digest-pinned image
+running as root, with Python and git. The proof records its image and root user; it does
+not prove a benchmark instance or broaden benchmark restrictions. Capped
+conformance requires current prices for every model called.
 
 ### A capability
 
