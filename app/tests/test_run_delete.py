@@ -79,6 +79,12 @@ class RunDelete(unittest.TestCase):
                     execution.delete(["r1", "live"], self.home, self.root)
                 self.assertTrue(os.path.isdir(os.path.join(self.root, "live")))
                 self.assertTrue(os.path.isdir(os.path.join(self.root, "r1")))                # nothing of the launch goes
+        self.run_("s1", host="ubuntu@10.0.0.4"); self.run_("s2", state="running", host="ubuntu@10.0.0.5")
+        calls = []
+        with self.assertRaisesRegex(ValueError, "^s2 is running: stop it before you delete it$"):
+            execution.delete(["s1", "s2"], self.home, self.root, copies={"ubuntu@10.0.0.4"}, run=lambda argv, timeout: calls.append(argv))
+        self.assertEqual(calls, [])                                                          # nor a host's copy
+        self.assertTrue(all(os.path.isdir(os.path.join(self.root, n)) for n in ("s1", "s2")))
 
     def test_the_registry_s_state_wins_over_the_record_s(self):
         ex = execution.Execution(execution.Plan(name="r1", script="true"), root=self.root, record={"state": "done"})
@@ -146,14 +152,6 @@ class RunDelete(unittest.TestCase):
         self.assertEqual(workspace.load(self.home, "d").roots, [])                     # both runs left it, neither wrote it back
         self.assertEqual(store.job_dirs(ws.dir, ["L-shard-1of2", "L-shard-2of2"]), [])
 
-    def test_a_launch_with_one_shard_still_going_is_refused_whole(self):
-        self.run_("s1", host="ubuntu@10.0.0.4"); self.run_("s2", state="running", host="ubuntu@10.0.0.5")
-        calls = []
-        with self.assertRaisesRegex(ValueError, "^s2 is running: stop it before you delete it$"):
-            execution.delete(["s1", "s2"], self.home, self.root, copies={"ubuntu@10.0.0.4"}, run=lambda argv, timeout: calls.append(argv))
-        self.assertEqual(calls, [])
-        self.assertTrue(all(os.path.isdir(os.path.join(self.root, n)) for n in ("s1", "s2")))
-
     def test_a_folder_that_cannot_go_is_said_and_its_run_kept_whole(self):
         self.run_("s1", host="ubuntu@10.0.0.4"); self.run_("s2", host="ubuntu@10.0.0.5")
         real = shutil.rmtree
@@ -178,7 +176,7 @@ class RunSize(unittest.TestCase):
         with open(os.path.join(self.jobs, "job-a", "tau3-bench__t0__abc", "result.json"), "a") as fh:
             fh.write(" " * 1000)
 
-    def test_an_ended_run_is_walked_again_once_it_moves_and_delete_always_asks_afresh(self):
+    def test_a_run_going_is_walked_at_each_ask_an_ended_one_once_it_moves_and_delete_always_afresh(self):
         ex = execution.Execution(execution.Plan(name="r1", script="true"), root=self.root, record={"state": "done"})
         first = execution.run_size(ex)
         self.assertEqual(first, execution.size_of(ex.dir))
@@ -187,11 +185,9 @@ class RunSize(unittest.TestCase):
         self.assertEqual(execution.deletion(["r1"], self.home, self.root)["bytes"], first + 1000)
         _write_json(os.path.join(ex.dir, "nullius.log"), {})    # its folder moves: walked again
         self.assertEqual(execution.run_size(ex), execution.size_of(ex.dir))
-
-    def test_a_run_still_going_is_walked_at_each_ask(self):
         ex = execution.Execution(execution.Plan(name="r1", script="true"), root=self.root, record={"state": "running"})
         first = execution.run_size(ex)
-        self._grow()
+        self._grow()                                            # still going: walked at each ask
         self.assertEqual(execution.run_size(ex), first + 1000)
 
 

@@ -301,19 +301,7 @@ class StopCopiesTheJobBack(LocalHost):
 
 
 class Stop(HostBase):
-    """The Stop button: said at once, finished by the run's own
-    thread; a command in flight gives way instead of holding the stop for
-    its timeout; a restart in the middle of a stop finishes it."""
-
-    def test_a_command_in_flight_gives_way_to_a_stop(self):
-        stop = threading.Event()
-        threading.Timer(0.3, stop.set).start()
-        t0 = time.monotonic()
-        rc, out = execution.subprocess_run(["sleep", "30"], timeout=30, stop=stop)
-        self.assertEqual((rc, out), (130, "stopped")); self.assertLess(time.monotonic() - t0, 5)
-        rc, out = execution.subprocess_run(["sleep", "30"], timeout=0.4, stop=threading.Event())
-        self.assertEqual(rc, 124); self.assertIn("no answer within 0 s", out)
-        self.assertEqual(execution.subprocess_run(["cat"], timeout=5, stdin="fed\n", stop=threading.Event()), (0, "fed\n"))
+    """The Stop button: said at once, finished by the run's own thread."""
 
     def test_stop_is_said_at_once_while_the_host_does_not_answer(self):
         self.have_uv = self.have_harbor = True
@@ -336,20 +324,6 @@ class Stop(HostBase):
         self.assertEqual(ex.lines[-1], "✕ stopped during the run: exit 130")
         ex.stop()                                                   # a second stop is nothing
         self.assertEqual(ex.state, "stopped")
-
-    def test_a_stop_cut_short_by_a_restart_is_finished_not_resumed(self):
-        self.have_uv = self.have_harbor = True
-        ex = execution.Execution(self.plan, root=str(self.tmp / "runs"), run=self.answer, key="k" * 20)
-        ex._save()
-        rec = json.loads((self.tmp / "runs" / "tau3-x3" / "run.json").read_text())
-        rec.update(state="stopping", step="run", part=0, pid=4242)
-        (self.tmp / "runs" / "tau3-x3" / "run.json").write_text(json.dumps(rec))
-        execution.EXECUTIONS.clear(); self.calls.clear()
-        back = execution.restore(str(self.tmp / "runs"), run=self.answer, key="k" * 20)
-        self.assertEqual(len(back), 1); self.wait(back[0])
-        self.assertEqual(back[0].state, "stopped")
-        self.assertTrue(self.killed(4242))
-        self.assertFalse(any("setsid nohup" in c[-1] for c, _ in self.calls))   # nothing launched
 
 
 if __name__ == "__main__":

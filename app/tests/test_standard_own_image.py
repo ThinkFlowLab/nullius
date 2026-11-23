@@ -149,6 +149,8 @@ class Runtime(unittest.TestCase):
             f.write("#!/usr/bin/env node\nconsole.log(1)\n")
         self.assertEqual(container.in_runtime([script, "--flag"], self.RT), ["/opt/nullius/node/bin/node", script, "--flag"])
         self.assertEqual(container.in_runtime([script], {}), [script])        # no runtime asked for: as it is
+        venv_py = "/inst/mini-swe-agent/.venv/bin/python"                     # an environment's interpreter is never swapped
+        self.assertEqual(container.in_runtime([venv_py, "/x/run.py"], self.RT), [venv_py, "/x/run.py"])
 
     def test_what_an_agent_needs_follows_its_install(self):
         r = run.Run.__new__(run.Run)
@@ -170,10 +172,6 @@ class Runtime(unittest.TestCase):
             f.write(f"home = {r.inst}/.python/cpython-3.12-linux-x86_64-gnu/bin\n")
         r.other = {"start": {"acp": ["python3", "{here}/agent.py"]}}
         self.assertEqual(r.runtimes_needed(), [])
-
-    def test_an_environments_interpreter_is_never_swapped_for_the_runtime(self):
-        venv_py = "/inst/mini-swe-agent/.venv/bin/python"
-        self.assertEqual(container.in_runtime([venv_py, "/x/run.py"], self.RT), [venv_py, "/x/run.py"])
 
     def test_the_box_runs_in_the_machines_user_namespace_on_a_docker_with_userns_remap_alone(self):
         self.enterContext(mock.patch.object(container, "DOCKER", "docker"))     # podman's box always runs so

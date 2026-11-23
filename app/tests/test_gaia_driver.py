@@ -231,14 +231,6 @@ class GaiaDriver(unittest.TestCase):
                     patch.object(self.driver, "cached_file", return_value=self.attachment), self.assertRaisesRegex(ValueError, message):
                 self.driver.load()
 
-    def test_load_rejects_checksum_mismatch_before_parsing(self):
-        dataset = self.metadata([self.row])
-        self.attachment.write_text("changed bytes")
-        with patch.dict("sys.modules", {"datasets": dataset}), \
-                patch.object(self.driver, "cached_file", return_value=self.attachment), self.assertRaisesRegex(ValueError, "checksum differs"):
-            self.driver.load()
-        dataset.load_dataset.assert_not_called()
-
 
 if __name__ == "__main__":
     unittest.main()

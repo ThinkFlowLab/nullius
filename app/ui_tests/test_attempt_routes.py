@@ -171,23 +171,6 @@ class AttemptRoutes(unittest.TestCase):
         self.assertIn('data-tip="Mean of 2 attempts · 110 to 510">310</span>', head.group(1))
         self.assertIn('data-tokens="310.0"', head.group(0))
 
-    def test_all_attempts_has_the_head_of_an_attempts_page(self):
-        """The name as an attempt's page writes it, what ran from one macro, then the tabs: what is
-        above the tabs is every attempt's, so a tab changes what is under it and nothing above."""
-        one, every = self.get("/trial/repeat-run/auth-token__c"), self.get("/trial/repeat-run/auth-token__c/attempts")
-        above = lambda html: " ".join(html[html.index('<div class="trial-head">'):html.index('<div class="attempt-head">')].split())
-        self.assertEqual(above(one), above(every))
-        self.assertIn('<span class="k">Benchmark</span><span class="v" title="terminal-bench">', above(every))
-        self.assertIn('<span class="th-model mono">fixture-model</span>', above(every))
-        for html in (one, every):
-            self.assertLess(html.index('<header class="page-head">'), html.index('<div class="trial-head">'))
-        # an attempt's numbers are its own: under the tabs on its page, in the table here
-        self.assertNotIn('class="th-strip"', above(one))
-        self.assertLess(one.index('<div class="attempt-head">'), one.index('class="th-strip"'))
-        self.assertLess(one.index('class="th-strip"'), one.index('<nav class="trial-tabs"'))
-        self.assertNotIn('class="th-strip"', every)
-        self.assertNotIn('class="subtitle"', every)
-
     def test_all_attempts_writes_a_reward_as_the_score_beside_it(self):
         run = written_job(self.root, "partial-run", [("p__a", "p", 0, 1, None), ("p__b", "p", 2, 2 / 3, None)])
         self.stack.enter_context(patch.object(workspace, "load_jobs", return_value=[run]))

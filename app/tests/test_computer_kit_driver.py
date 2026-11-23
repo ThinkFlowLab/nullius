@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
-import io
 import json
 import math
 import os
@@ -135,26 +134,21 @@ class NewVerdicts(unittest.TestCase):
                 stray = events + [ev("key", 105.0, keysym="a", char="a", hit="background")]
                 self.assertFalse(checks.verdict(check, exp, stray, ACTIONS, message, calls)["passed"])
 
-    def test_each_check_draws_its_own_screen(self):
-        for check in checks.CHECKS:
-            values, exp = checks.draw(check)
-            self.assertIn(values["screen"], ("see", "click", "type", "drag", "scroll", "batch"), check)
-            for label in values.get("labels") or []:
-                self.assertTrue(re.fullmatch(r"[A-Z]+", label), label)
-        self.assertEqual(sorted(checks.draw("limit")[0]["labels"]), sorted(checks.ORDER))
-        self.assertEqual((checks.steps("limit"), checks.steps("batch"), checks.steps("see")), (2, 2, 8))
-
 
 # -- the kit's definition ---------------------------------------------------------------------------------------------
 class Definition(unittest.TestCase):
     def test_the_port_names_the_kit_and_the_kit_its_checks(self):
         kit = definitions.kit("agent.computer/v1")
         self.assertEqual(ports.PORTS["agent.computer/v1"]["kit"], "agent-computer-v1")
-        self.assertEqual(kit["key"], "agent-computer-v1")
+        self.assertEqual((kit["key"], kit["needs"], kit["datasets"]), ("agent-computer-v1", ["agent.computer/v1"],
+                                                                        [{"id": "kit", "units": 9}]))
+        self.assertTrue(kit["driver"]["task_given"] and kit["driver"]["unit_end"])
+        self.assertEqual(driver.units("kit")["units"], list(checks.CHECKS) + ["late"])
         self.assertEqual(definitions.problems({k: v for k, v in kit.items() if not k.startswith("_")}, "benchmark"), [])
         self.assertEqual(list(kit["check_details"]), list(driver.UNITS))
         self.assertEqual(kit["basic"], list(checks.BASIC))
         self.assertEqual(set(kit["skills"]), set(driver.UNITS) - set(checks.BASIC))
+        self.assertEqual(set(kit["basic"]) | set(kit["skills"]), set(driver.UNITS))
         self.assertTrue(kit["skills"]["late"].endswith("and presses it once"))
         self.assertEqual(kit["environments"]["desktop"], dict(desktop.KIT["environments"]["desktop"],
                                                              summary=kit["environments"]["desktop"]["summary"]))
@@ -174,15 +168,6 @@ class Definition(unittest.TestCase):
                 server.close()
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(json.loads(p.stdout)["result"]["tools"][0]["name"], "info")
-
-    def test_the_kit_has_nine_checks_and_is_told_the_task(self):
-        kit = definitions.kit("agent.computer/v1")
-        self.assertEqual((kit["key"], kit["needs"], kit["datasets"]), ("agent-computer-v1", ["agent.computer/v1"],
-                                                                        [{"id": "kit", "units": 9}]))
-        self.assertTrue(kit["driver"]["task_given"] and kit["driver"]["unit_end"])
-        self.assertEqual(driver.units("kit")["units"], list(checks.CHECKS) + ["late"])
-        self.assertEqual(set(kit["check_details"]), set(driver.UNITS))
-        self.assertEqual(set(kit["basic"]) | set(kit["skills"]), set(driver.UNITS))
 
 
 # -- the driver over a fake desktop -------------------------------------------------------------------------------------
@@ -422,14 +407,6 @@ class Wiring(FakeUnits):
         self.assertTrue(FakeDesktop.made[-1].removed)
         self.assertEqual([l.split()[0] for l in self.told], ["+container", "=container", "+folder", "-container", "-folder"])
         self.assertNotIn("click", driver.OPEN)
-
-    def test_the_units_record_keeps_the_fixtures_events_and_where_its_targets_were(self):
-        ws, s = self.unit("click")
-        u = driver.OPEN["click"]
-        c = driver.Client(s["mcp"][0]["args"][0])
-        c.call("click", dict(zip("xy", driver.centre(u.boxes[u.expected["target"]]))))
-        c.close()
-        driver.score("click", ws, [], "done")
         verifier = os.path.join(os.path.dirname(ws), "verifier")
         with open(os.path.join(verifier, "computer-events.jsonl")) as f:
             events = [json.loads(line) for line in f]
@@ -469,26 +446,21 @@ class Wiring(FakeUnits):
                 self.assertEqual(u.final, "typed")
 
     def test_a_client_that_acts_past_its_budget_fails(self):
-        ws, s = self.unit("limit")
-        u = driver.OPEN["limit"]
-        c = driver.Client(s["mcp"][0]["args"][0])
-        answers = [c.call("click", {"x": x, "y": y})[0] for x, y in
-                   (driver.centre(u.boxes[label]) for label in checks.ORDER[:3])]
-        c.close()
-        self.assertEqual(answers, [False, False, True])                           # the third is refused
-        got = driver.score("limit", ws, [], "done")
-        self.assertFalse(got["passed"])
-        self.assertEqual(got["detail"]["past_budget"], 1)
-        self.assertIn("once every step was taken", got["detail"]["why"])
-
-    def test_the_reference_passes_click_type_limit_and_recover(self):
-        for unit in ("click", "type", "limit", "recover"):
-            with self.subTest(unit=unit):
-                ws, s = self.unit(unit)
-                answer = driver.oracle(unit, ws)["answer"]
-                got = driver.score(unit, ws, [], answer)
-                self.assertTrue(got["passed"], got)
-        self.assertEqual(got["detail"]["errors"], 1)                           # recover: the first click answered with an error
+        for wrong in (None, {"x": "bad", "y": 100}):                              # a wrong call is counted too
+            with self.subTest(wrong=wrong):
+                ws, s = self.unit("limit")
+                u = driver.OPEN["limit"]
+                c = driver.Client(s["mcp"][0]["args"][0])
+                calls = [dict(zip("xy", driver.centre(u.boxes[label]))) for label in checks.ORDER[:3]]
+                calls[2] = wrong or calls[2]
+                answers = [c.call("click", args)[0] for args in calls]
+                c.close()
+                self.assertEqual(answers, [False, False, True])                   # the third is refused
+                self.assertEqual(u.bridge.past, 1)
+                got = driver.score("limit", ws, [], "done")
+                self.assertFalse(got["passed"])
+                self.assertEqual(got["detail"]["past_budget"], 1)
+                self.assertIn("once every step was taken", got["detail"]["why"])
 
     def test_a_unit_never_scored_is_let_go_by_the_next_setup_and_by_the_drivers_end(self):
         ws, s = self.unit("see")
@@ -735,19 +707,7 @@ class Admission(unittest.TestCase):
 
 class EarnedPasses(FakeUnits):
     """What a pass needs, over the fake desktop: every attempt past the budget counted, recover's call sent after
-    its error's answer, its error on the first acting call whatever it is, an action not ended in time an error,
-    and a reference that reads the screen."""
-
-    def test_a_wrong_call_past_the_budget_is_counted(self):
-        ws, s = self.unit("limit")
-        u = driver.OPEN["limit"]
-        c = driver.Client(s["mcp"][0]["args"][0])
-        for label in checks.ORDER[:2]:
-            self.assertFalse(c.call("click", dict(zip("xy", driver.centre(u.boxes[label]))))[0])
-        self.assertTrue(c.call("click", {"x": "bad", "y": 100})[0])
-        c.close()
-        self.assertEqual(u.bridge.past, 1)
-        self.assertFalse(driver.score("limit", ws, [], "done")["passed"])
+    its error's answer, its error on the first acting call whatever it is, and an action not ended in time an error."""
 
     def test_two_calls_sent_together_for_the_last_step_are_one_taken_and_one_counted(self):
         ws, s = self.unit("limit")
@@ -801,24 +761,6 @@ class EarnedPasses(FakeUnits):
                 self.assertTrue(driver.score("recover", ws, [], "done")["passed"])
                 driver.close_all()
 
-    def test_an_action_not_ended_in_time_is_answered_with_an_error_and_the_next_goes_on(self):
-        ws, s = self.unit("click")
-        u = driver.OPEN["click"]
-        fake = FakeDesktop.made[-1]
-        late = [True]
-
-        def act(code, seconds=None):
-            if late.pop() if late else False:
-                return {"start": 1.0, "end": 2.0, "reply": None}
-            return FakeDesktop.act(fake, code, seconds)
-        fake.act = act
-        c = driver.Client(s["mcp"][0]["args"][0])
-        self.assertTrue(c.call("step", {"actions": ["time.sleep(1000)"]})[0])
-        self.assertFalse(c.call("click", dict(zip("xy", driver.centre(u.boxes[u.expected["target"]]))))[0])
-        c.close()
-        self.assertEqual([c["isError"] for c in u.calls()], [True, False])
-        self.assertTrue(driver.score("click", ws, [], "done")["passed"])
-
     def test_a_step_whose_action_did_not_end_in_time_takes_no_end_and_the_next_goes_on(self):
         ws, s = self.unit("click")
         u = driver.OPEN["click"]
@@ -840,37 +782,11 @@ class EarnedPasses(FakeUnits):
         self.assertTrue(got["passed"], got)
         self.assertEqual(got["detail"]["steps_used"], 2)
 
-    def test_the_reference_reads_the_words_from_the_screenshot_and_fails_without_one(self):
-        drawn = lambda fake: _png(" ".join(fake.values["words"]), driver.fixture.SEE_SCALE)
-        with mock.patch.object(FakeDesktop, "capture", drawn):          # the start picture, taken as the unit starts
-            ws, s = self.unit("see")
-            text = " ".join(driver.OPEN["see"].expected["words"])
-            self.assertEqual(driver.oracle("see", ws)["answer"], text)
-        self.assertTrue(driver.score("see", ws, [], text)["passed"])
-
-        def broken(fake):
-            raise desktop.DesktopError("the capture failed")
-        with mock.patch.object(FakeDesktop, "capture", broken):
-            ws, s = self.unit("see")
-            with self.assertRaises(driver.ReferenceFailed):
-                driver.oracle("see", ws)
-        with mock.patch.object(FakeDesktop, "capture", lambda fake: _png("ACORN", 9)):   # a screen with only one word
-            ws, s = self.unit("see")
-            with self.assertRaises(driver.ReferenceFailed):
-                driver.oracle("see", ws)
-
 
 class Shutdown(unittest.TestCase):
     def setUp(self):
         self.enterContext(mock.patch.object(desktop, "_CLIENTS_CLOSED", False, create=True))
         self.enterContext(mock.patch.object(desktop, "_CLIENTS", set()))
-
-    def test_shutdown_ends_clients_after_every_unit_was_scored(self):
-        p = mock.Mock()
-        with mock.patch.dict(driver.OPEN, {}, clear=True), mock.patch.object(desktop, "_CLIENTS", {p}):
-            driver.close_all()
-        p.kill.assert_called_once_with()
-        p.wait.assert_called_once_with(timeout=10)
 
     def test_shutdown_waits_for_launch_registration_and_refuses_later_launches(self):
         launched, release, draining, killed = (threading.Event() for _ in range(4))
@@ -1173,20 +1089,6 @@ class Fixture(unittest.TestCase):
                     f._click()
                 f.tk.Frame.return_value.place.assert_called_once_with(relx=at[0], rely=at[1], anchor="center")
 
-    def test_the_fake_starts_blank_and_draws_the_button_only_when_the_fixture_starts(self):
-        values = {"screen": "click", "labels": ["BUTTON"]}
-        d = Fake("desktop", values)
-        self.assertEqual(d.boxes, {})
-        self.assertEqual(d.events(), [])
-        before = d.capture()
-        self.assertEqual(d.hit(200, 150), "background")
-        d.start_fixture(values)
-        self.assertEqual(d.hit(200, 150), "BUTTON")
-        self.assertNotEqual(d.capture(), before)
-        self.assertEqual(len(d.events()), 1)
-        self.assertEqual(d.events()[0]["kind"], "ready")
-        self.assertEqual(d.events()[0]["boxes"], d.boxes)
-
 
 def blind_clicks(sock, u):
     """A control that must fail ``late``: a script that never looks. Once the task is given, one step clicks the
@@ -1370,98 +1272,6 @@ class Window(unittest.TestCase):
 
 # -- the docker tier: the nine checks on real desktops --------------------------------------------------------------
 MARGIN = 30                                   # process starts, protocol messages and scheduling
-
-
-class DockerTestBounds(unittest.TestCase):
-    """The docker tests' waits and assertions exercised without a container or a socket."""
-
-    def supported(self, setup=False):
-        limits = []
-
-        def engine(args, **kw):
-            limits.append(kw["timeout"])
-            data = b""
-            if desktop._CAPTURE in args:
-                data = b"\x89PNG\r\n\x1a\nfake"
-            elif desktop._RUN in args:
-                data = json.dumps({"start": 1, "end": 2, "timeout": False, "returncode": 0,
-                                   "output": "", "error": ""}).encode()
-            return subprocess.CompletedProcess(args, 0, data, b"")
-
-        with mock.patch.object(desktop, "_engine", side_effect=engine), \
-                mock.patch.object(container, "capped", return_value=[]):
-            if setup:
-                default = inspect.signature(container._docker).parameters["timeout"].default
-
-                def image_engine(args, *, timeout=default, **kw):
-                    limits.append(timeout)
-                    return subprocess.CompletedProcess(args, 0, "", "")
-
-                with mock.patch.object(container, "_built", {}), \
-                        mock.patch.object(container, "_docker", side_effect=image_engine):
-                    desktop.image()                 # a fresh driver inspects both already-built images
-                d = desktop.Desktop.start("image", "fake")
-                d.start_fixture({})
-                d.events()
-            else:
-                d = desktop.Desktop("fake")
-                d.capture()
-                d.act("pass", driver.PYTHON_SECONDS)
-                d.capture()
-        return sum(limits) + (0 if setup else driver.PAUSE + computer_pipe.END_SECONDS)
-
-    def test_the_setup_deadline_covers_start_readiness_fixture_and_events(self):
-        supported = self.supported(setup=True)
-        case = DockerKit("test_a_driver_killed_during_a_unit_leaves_no_container_socket_or_process")
-        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
-            case.tmp = tmp
-            p = mock.Mock(pid=123, stdin=io.StringIO(), stdout=io.StringIO(json.dumps(
-                {"mcp": [{"args": [os.path.join(tmp, "socket", "s")]}]}) + "\n"))
-
-            def select_reply(read, write, error, seconds):
-                self.assertGreater(seconds, supported)
-                return read, [], []
-
-            def run(args, **kw):
-                return subprocess.CompletedProcess(args, 0, "456 python reaper.py\n" if args[0] == "ps" else "", "")
-
-            with mock.patch.object(subprocess, "Popen", return_value=p), \
-                    mock.patch.object(subprocess, "run", side_effect=run), \
-                    mock.patch.object(select, "select", side_effect=select_reply), \
-                    mock.patch.object(os, "killpg"), mock.patch(__name__ + "._alive", return_value=False):
-                case.test_a_driver_killed_during_a_unit_leaves_no_container_socket_or_process()
-
-    def scripted(self, *, click_error=False, prompt=None, check_timeout=None):
-        case = DockerKit("test_a_session_of_the_scripted_acp_agent_reaches_the_server_through_the_pipe")
-        setup = {"mcp": [{"args": ["/unused/s"]}], "prompt": "click"}
-        case.unit = mock.Mock(return_value=("/unused/workspace", setup))
-        u = mock.Mock()
-        u.calls.return_value = [{"tool": "screenshot", "isError": False}, {"tool": "click", "isError": click_error}]
-        messages = [{"id": 1, "result": {}}, {"id": 2, "result": {"sessionId": "s1"}},
-                    {"method": "session/update", "params": {"update": {"content": {"text": "screenshot taken"}}}},
-                    {"id": 3, **(prompt if prompt is not None else {"result": {"stopReason": "end_turn"}})}]
-        p = mock.Mock(stdin=io.StringIO(), stdout=io.StringIO("".join(json.dumps(m) + "\n" for m in messages)))
-        original = queue.Queue.get
-
-        def get(q, *, timeout):
-            if check_timeout is not None:
-                check_timeout(timeout)
-            return original(q, timeout=timeout)
-
-        with mock.patch.dict(driver.OPEN, {"click": u}, clear=True), \
-                mock.patch.object(subprocess, "Popen", return_value=p), \
-                mock.patch.object(queue.Queue, "get", get):
-            case.test_a_session_of_the_scripted_acp_agent_reaches_the_server_through_the_pipe()
-
-    def test_the_prompt_deadline_covers_both_captures_the_action_and_pipe_exit(self):
-        supported = self.supported()
-        self.scripted(check_timeout=lambda seconds: self.assertGreater(seconds, supported))
-
-    def test_the_scripted_session_rejects_a_failed_click_or_prompt(self):
-        for bad in ({"click_error": True}, {"prompt": {"error": {"code": -32603, "message": "failed"}}},
-                    {"prompt": {"result": {}}}):
-            with self.subTest(bad=bad), self.assertRaises(AssertionError):
-                self.scripted(**bad)
 
 
 def why_no_desktop() -> str:

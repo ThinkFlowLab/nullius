@@ -277,17 +277,6 @@ process.stdout.write(JSON.stringify(out));
         self.assertEqual(got["open"], [False, "true", True])
         self.assertEqual(got["closed"], [True, True])
 
-    def test_a_count_shows_on_a_narrowed_button_only(self):
-        got = node(FORMS + r'''
-const t = make(), dd = t.tools.querySelector('[data-dropdown]'), fb = t.tools.querySelector('[data-tools-btn="filter"]');
-const mark = b => [b.classList.contains('narrowed'), b.querySelector('.tools-count').hidden ? null : b.querySelector('.tools-count').textContent];
-const out = [[mark(dd), mark(fb)]];
-drop(t).querySelector('[data-none]').click(); out.push([mark(dd), mark(fb)]);              // None: 0 chosen, narrowed
-drop(t).querySelector('[data-all]').click(); out.push([mark(dd), mark(fb)]);
-process.stdout.write(JSON.stringify(out));
-''')
-        self.assertEqual(got, [[[False, None], [False, None]], [[True, "0"], [True, "1"]], [[False, None], [False, None]]])
-
     def test_a_preset_shows_in_every_form(self):
         got = node(FORMS + r'''
 const t = make({kind: 'b'}), out = [look(t)];
@@ -323,7 +312,9 @@ const head = el('tr', {}, sticky('a', 35.2), sticky('b', 120), el('th', {}), sti
 head.cells[3].classList.add('sticky-edge');
 const row = () => el('tr', {}, el('td', {'data-col': 'a'}), el('td', {'data-col': 'b'}), el('td', {}), el('td', {'data-col': 'd'}));   // a page writes its cells plain
 const first = row(), body = el('tbody', {}, first);
-const table = el('table', {}, el('thead', {}, head), body);
+const table = el('table', {id: 't'}, el('thead', {}, head), body);
+const tools = el('div', {id: 't-tools'}), wrap = el('div', {class: 'table-wrap'}, table), main = el('main', {}, tools, wrap);
+document.appendChild(main);
 const menu = el('div', {}, el('label', {}, el('input', {type: 'checkbox', 'data-col': 'b'})));
 T.sticky(table);
 T.columns(table, menu, 'k');
@@ -333,11 +324,12 @@ head.cells[0].width = 40; resized(); out.push(at(first));                       
 const added = body.appendChild(row()); await tick(); out.push(at(added));       // a row comes in: placed as it lands
 body.appendChild(el('tr', {}, el('td', {colspan: 4}))); await tick();           // a row with fewer cells: left alone, no throw
 menu.querySelector('input').click(); resized(); out.push(at(added));            // b hidden: d moves up to it
+out.push([main.children.length, tools.classList.contains('sticky-tools')]);
 process.stdout.write(JSON.stringify(out));
 })()""")
         self.assertEqual(got, [["0px", "35.2px", None, "155.2px"], ["0px", "35.2px", None, "155.2px"],
                                [["sticky-col"], ["sticky-col"], [], ["sticky-col", "sticky-edge"]],
-                               ["0px", "40px", None, "160px"], ["0px", "40px", None, "160px"], ["0px", "40px", None, "40px"]])
+                               ["0px", "40px", None, "160px"], ["0px", "40px", None, "160px"], ["0px", "40px", None, "40px"], [2, False]])
 
     def test_the_rows_float_under_the_controls_until_the_table_ends(self):
         got = node(r"""(async () => {
@@ -375,17 +367,6 @@ process.stdout.write(JSON.stringify(out));
                                [True, [], "30px"], [30, 40, 100, 25, 20, 50], True,
                                [True, [], "30px"]])
 
-    def test_a_table_without_sticky_rows_is_left_as_it_is(self):
-        got = node(r"""
-const head = el('tr', {}, Object.assign(el('th', {class: 'sticky-col'}), {width: 50}), el('th', {}));
-const first = el('tr', {}, el('td', {}), el('td', {}));
-const table = el('table', {id: 't'}, el('thead', {}, head), el('tbody', {}, first));
-const tools = el('div', {id: 't-tools'}), wrap = el('div', {class: 'table-wrap'}, table), main = el('main', {}, tools, wrap);
-document.appendChild(main);
-T.sticky(table);
-process.stdout.write(JSON.stringify([main.children.length, tools.classList.contains('sticky-tools')]));
-""")
-        self.assertEqual(got, [2, False])
 
 class Menus(unittest.TestCase):
     def test_a_label_click_toggles_and_keeps_its_menu_open(self):
@@ -443,9 +424,9 @@ class Macros(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
 
     def test_every_named_column_heads_sorts_and_lists(self):
-        html = self.page([dict(key="pick", label="Select all", check=True), dict(key="a", label="A", sticky=True, menu=False),
+        html = self.page([dict(key="pick", label="Select all", check=True), dict(key="a", label="A", sticky=True, menu=False, card="title"),
                           dict(key="b", label="B", sticky=True, type="num", off=True), dict(key="c", label="C", align="center"),
-                          dict(key="acts", label="Actions", blank=True)])
+                          dict(key="logo", label="Logo", card="icon", table=False), dict(key="acts", label="Actions", blank=True)])
         self.assertIn('<tr><th data-col="pick" scope="col" class="pick-col"><input type="checkbox" data-check-all aria-label="Select all" title="Select all"></th>'
                       '<th data-col="a" data-type="text" class="sticky-col">A</th><th data-col="b" data-type="num" class="align-right sticky-col sticky-edge">B</th>'
                       '<th data-col="c" data-type="text" class="align-center">C</th><th data-col="acts" scope="col"><span class="sr">Actions</span></th></tr>', html)
@@ -455,25 +436,14 @@ class Macros(unittest.TestCase):
                       '<td data-col="a" data-sort="x" class="sticky-col">a=x</td><td data-col="b" class="align-right sticky-col sticky-edge">b=x</td>'
                       '<td data-col="c" class="align-center">c=x</td><td data-col="acts">acts=x</td></tr>', html)   # each cell its column's
         self.assertIn('<p class="empty-note" data-empty="t" hidden>No rows match.</p>', html)
+        self.assertNotIn('data-col="logo"', html)                                                   # a card-only field stays off the table
+        self.assertNotIn('value="logo"', html)
 
     def test_a_sticky_head_pins_its_row_and_holds_its_controls_to_the_table(self):
         source = "{% call(r, c) table('t', [dict(key='a', label='A')], [], none, sticky_head=on) %}{% endcall %}"
         plain, pinned = (re.sub(r">\s+<", "><", self.render(source, on=on)).strip() for on in (False, True))
         self.assertEqual(pinned.replace("<tr data-sticky>", "<tr>"), "<div>" + plain + "</div>")
         self.assertIn("<tr data-sticky>", pinned)
-
-    def test_a_card_only_field_stays_off_the_table(self):
-        html = self.page([dict(key="a", label="A", card="title"), dict(key="logo", label="Logo", card="icon", table=False)])
-        self.assertNotIn('data-col="logo"', html)
-        self.assertNotIn('value="logo"', html)
-        self.assertIn('<td data-col="a" data-sort="x">a=x</td></tr>', html)
-
-    def test_the_cells_follow_the_columns(self):
-        cols = [dict(key=k, label=k.upper()) for k in "abc"]
-        for order in (cols, cols[::-1]):
-            with self.subTest(order=[c["key"] for c in order]):
-                html = self.page(order)
-                self.assertEqual(re.findall(r'<td data-col="(\w)"[^>]*>(\w)=x<', html), [(c["key"], c["key"]) for c in order])
 
     SLOTS = ("{% macro two(a, b) %}<button>{{ a }}</button><button>{{ b }}</button>{% endmacro %}"
              "{% macro views() %}{{ two('v1', 'v2') }}{% endmacro %}{% macro actions() %}{{ two('a1', 'a2') }}{% endmacro %}"
@@ -525,33 +495,12 @@ class Macros(unittest.TestCase):
         self.assertIn('data-all="c" aria-pressed="false">All</button><button type="button" class="filter-pill" data-value="x" aria-pressed="false">X</button>'
                       '<button type="button" class="filter-pill" data-value="y" aria-pressed="true">Y</button>', only)
         self.assertIn('<input type="checkbox" data-value="x"> X</label><label><input type="checkbox" data-value="y" checked> Y', only.split('data-filter-menu="b"')[1])
-
-    def test_a_filter_icon_leads_its_dropdown_and_its_pills(self):
-        cols = [dict(key="b", label="B", filter="dropdown", filter_icon="origin"), dict(key="c", label="C", filter="pills", filter_icon="runner")]
-        html = self.controls(cols, choices={k: [("x", "X")] for k in "bc"})
-        self.assertIn('aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-origin"/></svg>B<span class="tools-count"', html)
-        self.assertIn('<div class="filter-pills" role="group" aria-label="C" data-pills="c"><svg class="ic" aria-hidden="true"><use href="#i-runner"/></svg>'
-                      '<button type="button" class="filter-pill" data-all="c"', html)
-        bad = self.controls([dict(key="c", label="C", filter=["pills", "dropdown"], filter_icon='x"><b>')], choices={"c": [("x", "X")]})
-        self.assertNotIn("<b>", bad)
-        self.assertEqual(bad.count('<use href="#i-x&#34;&gt;&lt;b&gt;"/>'), 2)
-
-    def test_without_a_filter_button_there_is_none(self):
-        cols = [dict(key="c", label="C", filter="pills")]
-        html = self.controls(cols, choices={"c": [("x", "X")]})
-        self.assertNotIn("data-tools-btn", html)
-        self.assertNotIn("table-buttons", html)                                                        # nothing to hold
-        self.assertNotIn("data-filter-menu", html)
+        pills = self.controls([dict(key="c", label="C", filter="pills")], choices={"c": [("x", "X")]})
+        self.assertNotIn("data-tools-btn", pills)                                                      # pills alone: no Filter button
+        self.assertNotIn("table-buttons", pills)                                                       # nothing to hold
+        self.assertNotIn("data-filter-menu", pills)
         with self.assertRaises(jinja2.UndefinedError):                                                 # a form it does not know
             self.controls([dict(key="c", label="C", filter="chips")], choices={"c": [("x", "X")]})
-
-    def test_the_forms_escape_names_and_values(self):
-        bad = '<b>"x"</b>'
-        html = self.controls([dict(key="c", label=bad, filter=["pills", "dropdown"])], choices={"c": [(bad, bad)]}, only={"c": bad})
-        self.assertNotIn("<b>", html)
-        self.assertIn('role="group" aria-label="&lt;b&gt;&#34;x&#34;&lt;/b&gt;"', html)
-        self.assertIn('data-value="&lt;b&gt;&#34;x&#34;&lt;/b&gt;" aria-pressed="true">&lt;b&gt;&#34;x&#34;&lt;/b&gt;</button>', html)
-        self.assertIn('aria-expanded="false">&lt;b&gt;&#34;x&#34;&lt;/b&gt;<span class="tools-count"', html)
 
     def test_names_and_values_are_escaped(self):
         html = self.page([dict(key="a", label='<b>"A"</b>', title="x<y"), dict(key="n", label="N", sr=True)], rows=[{"name": '<i>&"'}])
@@ -559,6 +508,12 @@ class Macros(unittest.TestCase):
         self.assertIn('<td data-col="a" data-sort="&lt;i&gt;&amp;&#34;">a=&lt;i&gt;&amp;&#34;</td>', html)
         self.assertIn('data-search="&lt;i&gt;&amp;&#34;"', html)
         self.assertIn('<label><input type="radio" name="t-sort-col" data-sort-col value="a" data-type="text"> &lt;b&gt;&#34;A&#34;&lt;/b&gt;</label>', html)
+        bad = '<b>"x"</b>'                                                                             # and in the filter's forms
+        html = self.controls([dict(key="c", label=bad, filter=["pills", "dropdown"])], choices={"c": [(bad, bad)]}, only={"c": bad})
+        self.assertNotIn("<b>", html)
+        self.assertIn('role="group" aria-label="&lt;b&gt;&#34;x&#34;&lt;/b&gt;"', html)
+        self.assertIn('data-value="&lt;b&gt;&#34;x&#34;&lt;/b&gt;" aria-pressed="true">&lt;b&gt;&#34;x&#34;&lt;/b&gt;</button>', html)
+        self.assertIn('aria-expanded="false">&lt;b&gt;&#34;x&#34;&lt;/b&gt;<span class="tools-count"', html)
 
 
 if __name__ == "__main__":

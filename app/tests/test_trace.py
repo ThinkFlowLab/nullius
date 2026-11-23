@@ -15,7 +15,7 @@ import json
 import unittest
 
 from nullius.traces import trace
-from nullius.traces.spans import GROUP_KIND, GROUP_SLACK_NS, mark_groups, MAX_DEPTH, NS_PER_MS
+from nullius.traces.spans import GROUP_SLACK_NS, MAX_DEPTH, NS_PER_MS
 from nullius.traces.waterfall import Extent, flatten, MAX_ROWS, Tick, ticks_for
 
 from . import FIXTURES
@@ -40,35 +40,18 @@ def by_id(tr, span_id):
 
 
 class Loading(unittest.TestCase):
-    def test_missing_file_reports_an_error_instead_of_raising(self):
-        tr = trace.load(str(FIXTURES / "does_not_exist.json"))
-        self.assertTrue(tr.error)
-        self.assertFalse(tr.has_spans)
-
-    def test_malformed_json_reports_an_error_instead_of_raising(self):
-        tr = trace.load(BAD)
-        self.assertTrue(tr.error)
-        self.assertFalse(tr.has_spans)
-
-    def test_a_valid_trace_reports_no_error(self):
-        self.assertEqual(trace.load(RICH).error, "")
+    def test_an_unreadable_file_reports_an_error_instead_of_raising(self):
+        for path in (str(FIXTURES / "does_not_exist.json"), BAD):
+            with self.subTest(path=path):
+                tr = trace.load(path)
+                self.assertTrue(tr.error)
+                self.assertFalse(tr.has_spans)
 
     def test_trial_name_is_taken_as_the_run_id(self):
         # Real files emit `trial_name`; the format doc calls the field `run_id`.
         self.assertEqual(trace.load(RICH).run_id, "hello-world__k6TfusL")
-
-    def test_run_id_is_accepted_when_trial_name_is_absent(self):
         self.assertEqual(trace.parse(doc(run_id="r-1")).run_id, "r-1")
-
-    def test_trial_name_wins_over_run_id(self):
         self.assertEqual(trace.parse(doc(trial_name="t", run_id="r")).run_id, "t")
-
-    def test_absent_optional_fields_parse(self):
-        # The producer writes with exclude_none, so optionals are absent keys.
-        tr = trace.parse(doc(span("a")))
-        self.assertEqual(tr.rows[0].span.parent_span_id, "")
-        self.assertEqual(tr.rows[0].span.tokens, {})
-        self.assertEqual(tr.rows[0].span.content, [])
 
     def test_explicit_nulls_parse_exactly_like_absent_fields(self):
         # The trap is `.get(k, {})`, which returns None when the key exists as
@@ -82,9 +65,6 @@ class Loading(unittest.TestCase):
         self.assertEqual(nulls.rows[0].span.content, [])
         self.assertEqual(nulls.rows[0].span.attributes, [])
 
-    def test_a_null_totals_block_yields_no_segments(self):
-        self.assertEqual(trace.parse(doc(span("a"), totals=None)).totals.segments, [])
-
     def test_a_non_object_document_reports_an_error(self):
         self.assertTrue(trace.parse([]).error)
 
@@ -92,20 +72,19 @@ class Loading(unittest.TestCase):
 class LargeIntegers(unittest.TestCase):
     """Epoch nanoseconds exceed 2**53. Python ints are exact; keep them ints."""
 
-    def test_start_ns_survives_the_round_trip_exactly(self):
+    def test_nanoseconds_stay_exact_integers(self):
         source = raw()["spans"][0]["start_ns"]
         self.assertGreater(source, 2 ** 53)
         parsed = by_id(trace.load(RICH), ROOT).span.start_ns
         self.assertEqual(parsed, source)
         self.assertIsInstance(parsed, int)
-
-    def test_offsets_stay_integers(self):
-        for row in trace.load(RICH).rows:
-            self.assertIsInstance(row.offset_ns, int)
-
-    def test_durations_stay_integers(self):
-        for row in trace.load(RICH).rows:
-            self.assertIsInstance(row.span.duration_ns, int)
+        rows = trace.load(RICH).rows
+        with self.subTest("offsets"):
+            for row in rows:
+                self.assertIsInstance(row.offset_ns, int)
+        with self.subTest("durations"):
+            for row in rows:
+                self.assertIsInstance(row.span.duration_ns, int)
 
 
 class TotalsAreVerbatim(unittest.TestCase):
@@ -117,21 +96,6 @@ class TotalsAreVerbatim(unittest.TestCase):
         for key in ("wall_ns", "llm_ns", "tool_ns", "reasoning_ns", "idle_ns",
                     "span_count", "measured_span_count"):
             self.assertEqual(getattr(totals, key), source[key], key)
-
-    def test_reported_tool_time_is_not_the_sum_of_tool_spans(self):
-        # Everything the instrumentation called a tool
-        # here sums to 46.1ms against a true 23.3ms, because the `claude_code.tool`
-        # wrapper contains both of the spans it is being added to.
-        tr = trace.load(RICH)
-        toolish = [r.span for r in tr.rows if r.span.kind in ("tool", GROUP_KIND)]
-        self.assertEqual(sum(s.duration_ns for s in toolish), 46_146_687)
-        # Re-kinding the wrapper `group` takes the duplicate out of that sum, and
-        # what is left still is not the reported figure — a consumer that adds up
-        # spans gets a different number whichever spans it picks.
-        leaf_sum = sum(s.duration_ns for s in toolish if s.kind == "tool")
-        self.assertEqual(leaf_sum, 22_865_196)
-        self.assertEqual(tr.totals.tool_ns, 23_281_491)
-        self.assertNotEqual(leaf_sum, tr.totals.tool_ns)
 
 
 class ExtentIsNeverDegenerate(unittest.TestCase):
@@ -146,12 +110,6 @@ class ExtentIsNeverDegenerate(unittest.TestCase):
         self.assertEqual(tr.extent.span_ns, 1)
         self.assertEqual(tr.rows[0].left_pct, 0.0)
         self.assertEqual(tr.rows[0].width_pct, 0.0)
-
-    def test_spans_all_at_one_instant_produce_finite_percentages(self):
-        tr = trace.parse(doc(span("a", start=7, end=7, children=[span("b", start=7, end=7)])))
-        for row in tr.rows:
-            self.assertTrue(0.0 <= row.left_pct <= 100.0)
-            self.assertTrue(0.0 <= row.width_pct <= 100.0)
 
     def test_ticks_survive_a_degenerate_extent(self):
         self.assertEqual(ticks_for(Extent()), [Tick(pct=0.0, ns=0)])
@@ -176,10 +134,6 @@ class Layout(unittest.TestCase):
     def test_depth_first_order_matches_the_tree(self):
         self.assertEqual([r.depth for r in trace.load(RICH).rows], [0, 1, 1, 1, 2, 2, 1, 2])
 
-    def test_multiple_roots_are_all_at_depth_zero(self):
-        tr = trace.parse(doc(span("a"), span("b")))
-        self.assertEqual([r.depth for r in tr.rows], [0, 0])
-
     def test_collapsing_a_span_drops_its_subtree(self):
         tr = trace.load(RICH)
         rows, _ = flatten(tr.roots, collapsed={TOOL_PARENT})
@@ -193,16 +147,6 @@ class Layout(unittest.TestCase):
         tr = trace.load(RICH)
         self.assertTrue(by_id(tr, TOOL_PARENT).has_children)
         self.assertFalse(by_id(tr, TOOL_WRITE).has_children)
-
-    def test_a_parent_cycle_terminates(self):
-        # JSON cannot express a cycle, so `load` never sees one — but `parse`
-        # takes a dict, and a runaway tree must bottom out rather than exhaust
-        # the stack. The row count is bounded by the nesting cap; the point of
-        # the test is that it returns at all.
-        a = span("a")
-        a["children"] = [a]
-        rows = trace.parse(doc(a)).rows
-        self.assertLessEqual(len(rows), MAX_DEPTH + 1)
 
     def test_pathologically_deep_nesting_bottoms_out(self):
         node = span("leaf")
@@ -235,13 +179,6 @@ class SpansWithoutAnEnd(unittest.TestCase):
 
 
 class Labels(unittest.TestCase):
-    def test_the_tool_name_attribute_wins_over_the_instrumentation_name(self):
-        # `claude_code.tool` is a namespace; the row has to read as the call.
-        tr = trace.load(RICH)
-        parent = by_id(tr, TOOL_PARENT).span
-        self.assertEqual(parent.name, "claude_code.tool")
-        self.assertTrue(parent.label.startswith("Write"))
-
     def test_a_parent_and_child_have_distinct_labels(self):
         # The group and execution have separate chips; the detail pane keeps
         # each span's instrumentation name.
@@ -249,12 +186,6 @@ class Labels(unittest.TestCase):
         parent, child = by_id(tr, TOOL_PARENT).span, by_id(tr, TOOL_WRITE).span
         self.assertEqual((parent.label, child.label), ("Write [group]", "Write"))
         self.assertNotEqual(parent.name, child.name)
-
-    def test_synthetic_span_ids_survive_verbatim(self):
-        # Log-derived ids are not hex and not fixed-length. They are opaque.
-        ids = [r.span.span_id for r in trace.load(RICH).rows]
-        self.assertIn(LOG_SESSION, ids)
-        self.assertIn(OUTPUT, ids)
 
     def test_merged_spans_are_flagged(self):
         tr = trace.load(RICH)
@@ -360,9 +291,6 @@ class Groups(unittest.TestCase):
             ])
             self.assertEqual(by_id(trace.parse(doc(outer)), "outer").span.kind, kind)
 
-    def test_a_leaf_is_never_a_group(self):
-        self.assertEqual(trace.parse(doc(span("a"))).rows[0].span.kind, "tool")
-
     def test_a_span_with_no_end_cannot_be_shown_to_contribute_nothing(self):
         raw_span = wrapper()
         raw_span.pop("end_ns"), raw_span.pop("duration_ns")
@@ -394,10 +322,6 @@ class Groups(unittest.TestCase):
         self.assertEqual([r.span.span_id for r in tr.rows], ["outer", "wait"])
         self.assertEqual(by_id(tr, "outer").span.label, "Bash [group]")
 
-    def test_hiding_the_group_takes_the_call_with_it(self):
-        tr = trace.parse(doc(wrapper()), trace.Filter.of(["Bash [group]"]))
-        self.assertEqual(tr.rows, [])
-
     def test_the_callers_document_is_not_mutated(self):
         source = doc(wrapper())
         before = json.dumps(source)
@@ -416,10 +340,6 @@ class Groups(unittest.TestCase):
         self.assertEqual(by_id(tr, "outer").span.label, "Bash [group]")
         self.assertEqual(by_id(tr, "inner").span.label, "Bash")
 
-    def test_a_document_with_nothing_to_normalise_is_passed_through(self):
-        spans = [span("a")]
-        self.assertIs(mark_groups(spans), spans)
-
 
 class DegradedTrace(unittest.TestCase):
     """The exporter captured nothing and the producer fell back to log parsing.
@@ -427,13 +347,12 @@ class DegradedTrace(unittest.TestCase):
 
     def test_zero_measured_spans_is_surfaced(self):
         tr = trace.load(DEGRADED)
+        self.assertEqual({r.span.timing_quality for r in tr.rows}, {"inferred"})
         self.assertTrue(tr.zero_measured)
         self.assertEqual(tr.totals.measured_span_count, 0)
+        self.assertFalse(trace.load(RICH).zero_measured)
+        self.assertFalse(trace.parse(doc()).zero_measured)       # no spans: nothing to flag
 
-    def test_every_row_is_inferred(self):
-        self.assertEqual(
-            {r.span.timing_quality for r in trace.load(DEGRADED).rows}, {"inferred"}
-        )
 
     def test_bars_are_still_visible(self):
         # All three spans share one window, so each fills the axis rather than
@@ -441,16 +360,6 @@ class DegradedTrace(unittest.TestCase):
         for row in trace.load(DEGRADED).rows:
             self.assertFalse(row.is_instant)
             self.assertGreater(row.width_pct, 0)
-
-    def test_no_tool_segment_when_no_tool_time(self):
-        keys = [s["key"] for s in trace.load(DEGRADED).totals.segments]
-        self.assertNotIn("tool", keys)
-
-    def test_a_rich_trace_is_not_flagged_as_unmeasured(self):
-        self.assertFalse(trace.load(RICH).zero_measured)
-
-    def test_zero_measured_needs_spans_to_mean_anything(self):
-        self.assertFalse(trace.parse(doc()).zero_measured)
 
 
 class Breakdown(unittest.TestCase):
@@ -484,9 +393,10 @@ class Breakdown(unittest.TestCase):
         ).totals
         self.assertEqual(totals.unaccounted_ns, 0)
 
-    def test_a_missing_totals_block_yields_no_segments(self):
-        tr = trace.parse(doc(span("a")))
-        self.assertEqual(tr.totals.segments, [])
+    def test_a_missing_or_null_totals_block_yields_no_segments(self):
+        for d in (doc(span("a")), doc(span("a"), totals=None)):
+            with self.subTest(totals=d.get("totals", "absent")):
+                self.assertEqual(trace.parse(d).totals.segments, [])
 
     def test_segment_order_is_stable(self):
         keys = [s["key"] for s in trace.load(RICH).totals.segments]

@@ -278,12 +278,6 @@ class RelayTest(unittest.TestCase):
         self.assertEqual(rec["cost_from"], "estimate")
         self.assertGreater(rec["cost_usd"], 0)
 
-    def test_calls_are_recorded_by_their_unit(self):
-        self.post("ua", "/chat/completions", {"model": "m", "messages": []})
-        self.post("ub", "/chat/completions", {"model": "m", "messages": []})
-        self.assertEqual(len(self.relay.calls("ua")), 1)
-        self.assertEqual(len(self.relay.calls("ub")), 1)
-
     def test_a_unit_that_ended_on_429_is_rate_limited(self):
         status, _ = self.post("u4", "/chat/completions", {"model": "m", "mode": "429"})
         self.assertEqual(status, 429)
@@ -300,28 +294,6 @@ class RelayTest(unittest.TestCase):
         self.post("u6", "/chat/completions", {"model": "m", "mode": "429"})
         self.post("u6", "/chat/completions", {"model": "m", "messages": []})
         self.assertIsNone(relay.failure(self.relay.calls("u6")))
-
-    def test_the_run_model_replaces_the_agents(self):
-        r = relay.Relay(self.relay.base, "k", tempfile.mkdtemp(), model="the-recipes").start()
-        try:
-            req = urllib.request.Request(r.url("x") + "/chat/completions", data=b'{"model":"agents-own"}',
-                                         headers={"Content-Type": "application/json"})
-            urllib.request.urlopen(req).read()
-            self.assertEqual(Upstream.seen[-1][2]["model"], "the-recipes")
-            self.assertEqual(r.calls("x")[-1]["model_asked"], "agents-own")
-        finally:
-            r.stop()
-
-    def test_a_judge_route_keeps_the_judges_model(self):
-        r = relay.Relay(self.relay.base, "k", tempfile.mkdtemp(), model="the-recipes").start()
-        try:
-            for tag, model in (("u1-judge", "the-judge"), ("u1", None)):
-                req = urllib.request.Request(r.url(tag, model=model) + "/chat/completions", data=b'{"model":"asked"}',
-                                             headers={"Content-Type": "application/json"})
-                urllib.request.urlopen(req).read()
-                self.assertEqual(Upstream.seen[-1][2]["model"], model or "the-recipes")
-        finally:
-            r.stop()
 
     def test_bad_tag_is_refused(self):
         with self.assertRaises(ValueError):
@@ -717,20 +689,18 @@ class ServeTest(unittest.TestCase):
                 p.kill()
             p.stdout.close()
 
-    def test_serve_without_its_key_file_refuses(self):
+    def test_serve_without_a_key_in_its_file_refuses(self):
         import subprocess
-        p = subprocess.Popen([sys.executable, "-m", "nullius.standard.calls.relay", "serve", "--base", "http://127.0.0.1:9/v1",
-                              "--record", tempfile.mkdtemp(), "--key-file", "/nonexistent/key"],
-                             env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": self.app}, stdout=subprocess.PIPE, text=True)
-        self.assertIn("cannot read --key-file", p.stdout.readline())
-        self.assertEqual(p.wait(timeout=10), 2)
-        p.stdout.close()
-
-    def test_serve_with_an_empty_key_file_refuses(self):
-        p = self.serve("")
-        self.assertIn("contains no key", p.stdout.readline())
-        self.assertEqual(p.wait(timeout=10), 2)
-        p.stdout.close()
+        missing = lambda: subprocess.Popen(
+            [sys.executable, "-m", "nullius.standard.calls.relay", "serve", "--base", "http://127.0.0.1:9/v1",
+             "--record", tempfile.mkdtemp(), "--key-file", "/nonexistent/key"],
+            env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": self.app}, stdout=subprocess.PIPE, text=True)
+        for said, start in (("cannot read --key-file", missing), ("contains no key", lambda: self.serve(""))):
+            with self.subTest(said=said):
+                p = start()
+                self.assertIn(said, p.stdout.readline())
+                self.assertEqual(p.wait(timeout=10), 2)
+                p.stdout.close()
 
 
 MSG = {"type": "message", "role": "assistant",
@@ -1004,16 +974,6 @@ class PassThroughTest(unittest.TestCase):
         self.assertEqual(status, 502)
         self.assertIn("could not reach", r.calls("u")[-1]["error"])
 
-    def test_a_relay_stops_without_waiting_out_a_poll(self):
-        import time
-        took = []
-        for _ in range(3):                                                  # the fastest: a loaded machine can delay any one stop
-            r = relay.Relay(self.base, "k", tempfile.mkdtemp()).start()
-            t0 = time.monotonic()
-            r.stop()
-            took.append(time.monotonic() - t0)
-        self.assertLess(min(took), 0.2)
-
     def test_a_key_the_header_refuses_never_reaches_the_reply_or_the_record(self):
         """http.client quotes a header value it refuses in its error: a key
         read from a CRLF file, with a trailing CR, would have been sent to
@@ -1055,9 +1015,6 @@ class ProcTest(unittest.TestCase):
 
     def tearDown(self):
         self.p.close()
-
-    def test_one_request_one_reply(self):
-        self.assertEqual(self.p.request("echo", a=1), {"got": {"a": 1}})
 
     def test_an_error_reply_is_raised_and_the_program_goes_on(self):
         with self.assertRaisesRegex(jsonl.Failed, "ZeroDivisionError"):

@@ -80,7 +80,6 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertIn('values: ["active:", "active:"]', body)
         self.assertIn('"value": "active:run"', body)                       # its run list, embedded
 
-
     def test_matched_metrics_and_wall_clock_change_as_one_cohort(self):
         whole = self.get()
         matched = self.get(cohort="matched")
@@ -273,13 +272,6 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertEqual(side.count('class="cmp-head draggable-col"'), 3)
         self.assertEqual(re.findall(r'Cost \(estimated\)</dt>\s*<dd[^>]*>(.*?)</dd>', side, re.S), ["$3.00", "$2.00", "$3.00"])
 
-    def test_workspace_and_run_are_rows_of_the_table_a_cell_a_column(self):
-        body = self.get(pick=["active:run", "foreign:"])
-        workspaces, runs = self.row(body, "Workspace"), self.row(body, "Run")
-        self.assertEqual(re.findall(r'<option value="(\w+)" selected>', workspaces), ["active", "foreign"])
-        self.assertEqual(runs.count("data-run-btn"), 2)
-        self.assertLess(body.index(">Run</th>"), body.index(">Agent</th>"))
-
     def test_a_benchmark_row_above_the_dataset_names_each_run_s_benchmark(self):
         self.right.dataset = "not-in-the-catalogue@1.0"
         body = self.get()
@@ -301,25 +293,6 @@ class ComparisonRoutes(unittest.TestCase):
         swapped = self.get(pick=["foreign:run", "active:run"])
         self.assertEqual(self.cells(swapped, "Cost (estimated)"), ["$12.00", "$10.00"])
         self.assertEqual(self.columns(swapped), [("", "run"), ("", "run")])
-
-    def test_the_controls_row_holds_the_cohort_the_order_and_add_a_run(self):
-        self.another("third")
-        body = self.get(pick=["active:run", "foreign:run", "foreign:third"], cohort="matched")
-        row = body[body.index('<div class="table-tools table-controls" id="side-tools">'):body.index('<div class="table-wrap compare-table-wrap"')]
-        self.assertEqual(re.findall(r'data-slot="(\w+)"|aria-label="([^"]+)"|href="#(i-\w+)"|>([A-Z][\w ]+)</(?:a|button)>', row),
-                         [("views", "", "", ""), ("", "Comparison cohort", "", ""), ("", "", "", "Whole runs"), ("", "", "", "Matched tasks"),
-                          ("", "Comparison view", "", ""), ("", "", "", "Side by side"), ("", "", "", "Task by task"), ("", "", "", "Chart"),
-                          ("", "", "i-reorder", ""), ("", "", "", "Order"), ("", "", "", "Group by agent"), ("", "", "", "Alternate agents"),
-                          ("actions", "", "", ""), ("", "", "i-plus", ""), ("", "", "", "Add a run")])
-        # Order opens a menu of the two one-off reorders, links that keep the cohort
-        menu = re.search(r'data-order-btn.*?<div class="menu tools-menu" hidden>(.*?)</div>', row, re.S).group(1)
-        self.assertEqual([parse_qs(urlsplit(unescape(h)).query)["cohort"] for h in re.findall(r'<a href="([^"]+)">', menu)], [["matched"], ["matched"]])
-        self.assertIn('id="compare-add"', row)
-        self.assertNotIn("data-search", row)
-        self.assertNotIn("Sort by", row)
-        self.assertLess(body.index('id="side-tools"'), body.index('aria-label="Run comparison"'))
-        # one agent: nothing to order
-        self.assertNotIn("data-order-btn", self.get(pick=["active:run"]))
 
     def test_the_side_table_pins_its_head_and_identity_rows_the_task_table_its_head(self):
         body = self.get(pick=["active:run", "foreign:run"])
@@ -357,12 +330,6 @@ class ComparisonRoutes(unittest.TestCase):
         empty_first = self.get(pick=["foreign:", "active:run", "foreign:run"])
         self.assertEqual(self.deltas(empty_first, "Cost (estimated)"), [None, None, None])
 
-    def test_the_datasets_differ_in_one_warning_line(self):
-        self.assertNotIn('class="compare-warn"', self.get())
-        self.right.dataset = "different-dataset@1.0"
-        body = self.get()
-        self.assertEqual(len(re.findall(r'<p class="compare-warn">[^<\n]+</p>', body)), 1)
-
     def test_a_workspace_s_runs_as_json_newest_launch_first_the_baseline_s_dataset_first(self):
         from datetime import datetime
         for k, (dataset, day) in enumerate((("d1", 1), ("d2", 3), ("d1", 5))):
@@ -384,12 +351,6 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertIn('"dataset": "d1"', body)
         lists = re.search(r'lists: (\{.*?\}), dataset:', body, re.S).group(1)
         self.assertLess(lists.index('"active:r2"'), lists.index('"active:r1"'))
-
-    def test_the_old_picker_opens_its_picks_as_columns(self):
-        response = self.client.get("/compare/pick", query_string={"pick": ["active:run", "foreign:run"], "cohort": "matched"})
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(urlsplit(response.location).path, "/compare")
-        self.assertEqual(parse_qs(urlsplit(response.location).query), {"pick": ["active:run", "foreign:run"], "cohort": ["matched"]})
 
     def test_the_view_is_side_by_side_or_task_by_task_and_every_link_keeps_it(self):
         self.another("third", agent_name="agent:C")

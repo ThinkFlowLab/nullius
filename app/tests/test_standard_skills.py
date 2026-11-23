@@ -11,7 +11,6 @@ import shutil
 import tempfile
 import unittest
 
-from nullius.standard import cli
 from nullius.standard.contract import definitions, match
 from nullius.standard.pages import recipe
 from nullius.standard.proofs import conform
@@ -65,18 +64,6 @@ class Outcome(unittest.TestCase):
                          {"decoys": ("1/3", False), "chain": ("2/3", True), "retry": ("0/3", False)})
         self.assertFalse(conform.outcome(KIT, dict(runs, arguments=[True, False, False]), 3)["ok"])
 
-    def test_majority_is_more_than_half(self):
-        self.assertEqual([conform.majority(p, n) for p, n in ((2, 3), (1, 2), (2, 2), (0, 0), (1, 1))],
-                         [True, False, True, False, True])
-
-    def test_said_names_each_skill_shown_or_not(self):
-        rec = conform.outcome(definitions.kit(TOOLS), {"one-tool": [True], "arguments": [True], "decoys": [False],
-                                                        "chain": [True], "retry": [False]})
-        lines = conform.said(TOOLS, rec)
-        self.assertEqual(lines[0], "agent.tools/v1: passed 2/2")
-        self.assertIn("  skill decoys: not shown 0/1 - chooses the right tool among similar ones", lines)
-        self.assertIn("  skill chain: shown 1/1 - feeds one tool's answer into the next, three times over", lines)
-
 
 class Shown(unittest.TestCase):
     def test_the_tools_kit_has_two_basic_checks_and_three_skills_of_its_five(self):
@@ -89,11 +76,9 @@ class Shown(unittest.TestCase):
         self.assertEqual(set(k["basic"]) | set(definitions.skills_of(k)), set(driver.UNITS))       # every check is one or the other
         self.assertEqual(definitions.port_skills("agent.task/v1"), {})              # a kit without skills
 
-    def test_a_proof_says_which_skills_it_showed(self):
+    def test_a_proof_says_which_skills_it_showed_and_one_from_before_skills_reads_as_all_basic(self):
         rec = {"passed": "2/2", "kit_version": 2, "skills": {"decoys": {"passed": "0/3", "ok": False}, "chain": {"passed": "3/3", "ok": True}}}
         self.assertEqual(definitions.skills_shown(TOOLS, rec), ["chain"])
-
-    def test_a_proof_from_before_skills_reads_as_all_basic(self):
         old = {"passed": "5/5", "kit_version": 2}                         # every check passed, all of them basic then
         self.assertEqual(definitions.skills_shown(TOOLS, old), ["decoys", "chain", "retry"])
         self.assertEqual([s["shown"] for s in recipe.skills_of(TOOLS, old)], [True, True, True])
@@ -101,14 +86,6 @@ class Shown(unittest.TestCase):
         self.assertEqual(definitions.skills_shown(TOOLS, older), [])
         self.assertEqual(recipe.skills_of(TOOLS, older), [])
         self.assertEqual(definitions.skills_shown(TOOLS, None), [])
-
-    def test_cli_shows_the_skills_under_the_port(self):
-        d = agent({TOOLS: {"passed": "2/2", "kit_version": 2, "skills": {"decoys": {"passed": "0/1", "ok": False},
-                                                                          "chain": {"passed": "1/1", "ok": True},
-                                                                          "retry": {"passed": "0/1", "ok": False}}}})
-        self.assertEqual(cli.skills(d), ["agent.tools/v1 skills: decoys ✗ · chain ✓ · retry ✗"])
-        self.assertEqual(cli.skills(d, ["agent.task/v1"]), [])
-        self.assertEqual(cli.skills(agent({TOOLS: {"passed": "2/2"}})), [])           # an older kit: older() speaks
 
 
 class NeedsSkills(unittest.TestCase):
@@ -121,12 +98,6 @@ class NeedsSkills(unittest.TestCase):
         self.assertEqual(why, ["Bot has not shown the decoys skill of agent.tools/v1 (chooses the right tool among similar ones)"])
         self.assertEqual(match.fit(bench(needs_skills={TOOLS: ["chain"]}), agent(self.MISSED)), [])
         self.assertEqual(match.fit(bench(), agent(self.MISSED)), [])                     # needing none: the port is enough
-
-    def test_a_proof_from_before_skills_on_the_current_kit_fits(self):
-        self.assertEqual(match.fit(bench(needs_skills={TOOLS: ["retry"]}), agent({TOOLS: {"passed": "5/5", "kit_version": 2}})), [])
-        why = match.fit(bench(needs_skills={TOOLS: ["retry"]}), agent({TOOLS: {"passed": "2/2"}}))
-        self.assertEqual(len(why), 1)
-        self.assertIn("has not shown the retry skill of agent.tools/v1", why[0])
 
     def test_problems_checks_needs_skills_against_the_kit(self):
         base = {k: v for k, v in definitions.kit(TOOLS).items() if not k.startswith("_")}

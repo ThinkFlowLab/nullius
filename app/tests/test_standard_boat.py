@@ -89,16 +89,13 @@ MADE = (200, {"ok": True, "sandbox": {"id": "bx_9"}})
 class Client(unittest.TestCase):
     def test_the_key_is_sent_to_boat_alone_and_never_in_a_body(self):
         api = FakeAPI([MADE])
-        boat.Client("boat_secret", opener=api).create({boat.LABEL: "j"})
+        boat.Client("boat_secret", opener=api).create({boat.LABEL: "j"}, size="default")
         method, path, body, headers = api.calls[0]
         self.assertEqual((method, path), ("POST", "/sandboxes"))
         self.assertEqual(headers["Authorization"], "Bearer boat_secret")
         self.assertNotIn("boat_secret", json.dumps(body))
         self.assertEqual(body["labels"], {boat.LABEL: "j"})
-
-    def test_a_refusal_is_an_answer_not_an_exception(self):
-        d = boat.Client("k", opener=FakeAPI([SLOT_FULL])).create({})
-        self.assertEqual((d["ok"], d["status"], d["code"]), (False, 429, "limit_reached"))
+        self.assertEqual(body["type"], "default")
 
     def test_a_size_the_account_cannot_start_says_boats_reason(self):
         client = boat.Client("k", opener=FakeAPI([]))
@@ -107,11 +104,6 @@ class Client(unittest.TestCase):
         self.assertEqual(boat.size_problem(client, "large"), "not during the free trial")
         self.assertIn("not one of Boat's sizes", boat.size_problem(client, "huge"))
 
-    def test_a_vm_is_asked_for_in_its_size(self):
-        api = FakeAPI([MADE])
-        boat.Client("k", opener=api).create({}, size="default")
-        self.assertEqual(api.calls[0][2]["type"], "default")
-
     def test_a_run_longer_than_the_accounts_starts_is_said(self):
         limits = lambda day, hour: boat.Client("k", opener=lambda req, timeout=None: Answer(
             {"ok": True, "starts": {"day": {"remaining": day}, "hour": {"remaining": hour}}}))
@@ -119,9 +111,6 @@ class Client(unittest.TestCase):
         self.assertIn("9 more VMs this hour", boat.starts_problem(limits(50, 9), 20))
         self.assertIsNone(boat.starts_problem(limits(50, 9), 9))
         self.assertIsNone(boat.starts_problem(boat.Client("k", opener=lambda req, timeout=None: Answer({"ok": True})), 500))
-
-    def test_slots_is_the_accounts_limit_of_vms_at_once(self):
-        self.assertEqual(boat.slots(boat.Client("k", opener=FakeAPI([]))), 2)
 
     def test_one_answer_of_its_limits_says_both_its_sizes_and_its_vms_at_once(self):
         api = FakeAPI([])

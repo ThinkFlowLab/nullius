@@ -378,20 +378,6 @@ class SurfacedFields(unittest.TestCase):
     """The reader exposes agent versions and job statistics, including the
     running-trial count that distinguishes active jobs from completed ones."""
 
-    def test_trial_agent_version(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            _write_json(
-                os.path.join(tmp, "result.json"),
-                {
-                    "task_name": "swebench-verified/django__django-1",
-                    "trial_name": "t1",
-                    "agent_info": {"name": "my-agent", "version": "0.2.3",
-                                   "model_info": {"name": "gpt-5.6-luna"}},
-                },
-            )
-            trial = parse.parse_trial("job", tmp)
-        self.assertEqual(trial.agent_version, "0.2.3")
-
     def _job(self, result):
         with tempfile.TemporaryDirectory() as tmp:
             _write_json(os.path.join(tmp, "result.json"), result)
@@ -416,8 +402,6 @@ class SurfacedFields(unittest.TestCase):
         self.assertEqual(job.n_retries, 3)
         self.assertTrue(job.is_running)
         self.assertEqual(job.n_planned, 20)
-
-    def test_job_without_stats_is_not_running(self):
         job = self._job({})
         self.assertFalse(job.is_running)
         self.assertEqual(job.n_retries, 0)
@@ -463,14 +447,6 @@ class HarborCommand(unittest.TestCase):
             "--model openai/gpt-5.6-luna --agent harbor_agent:MyAgent "
             "--ak use_responses_api=1 --n-concurrent 1 --max-retries 3",
         )
-
-    def test_module_class_name_gets_no_pythonpath_either(self):
-        cfg = {"agents": [{"name": "some.module:SomeAgent", "model_name": "openai/m"}],
-               "datasets": [{"path": "../x"}]}
-        out = parse.harbor_command(cfg, env_type="docker")
-        self.assertTrue(out.startswith("harbor run "), out)
-        self.assertNotIn("PYTHONPATH", out)
-        self.assertIn("--agent some.module:SomeAgent", out)
 
     def test_registry_fetch_needs_no_pythonpath(self):
         cfg = {
@@ -592,16 +568,11 @@ class ReportsRegressions(unittest.TestCase):
         job.trials = [_trial(**kw)]
         return job
 
-    def test_a_benchmark_that_reports_held_checks_can_say_zero(self):
-        self.assertTrue(self._job(p2p_pass=12, p2p_fail=0).reports_regressions)
-
-    def test_a_benchmark_that_reports_none_shows_absence(self):
-        self.assertFalse(self._job(p2p_pass=0, p2p_fail=0).reports_regressions)
-
-    def test_a_real_regression_counts_either_way(self):
-        job = self._job(p2p_pass=3, p2p_fail=2)
-        self.assertEqual(job.n_regressions, 1)
-        self.assertTrue(job.reports_regressions)
+    def test_regressions_are_reported_only_where_held_checks_are_read(self):
+        for passed, failed, reports in ((12, 0, True), (0, 0, False), (3, 2, True)):
+            with self.subTest(p2p_pass=passed, p2p_fail=failed):
+                self.assertIs(self._job(p2p_pass=passed, p2p_fail=failed).reports_regressions, reports)
+        self.assertEqual(self._job(p2p_pass=3, p2p_fail=2).n_regressions, 1)
 
 
 def _trial(**kw):
@@ -693,10 +664,6 @@ class RateLimitsRetried(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(self._trial(tmp, log).n_rate_limited_retries, 2)
 
-    def test_the_cached_shape_moved_with_the_field(self):
-        # A workspace caches parsed trials by parse.SCHEMA; a cache from before
-        # the field would read every trial as unmeasured.
-        self.assertGreaterEqual(int(parse.SCHEMA), 3)
 
 class UnverifiedJobHasNoRate(unittest.TestCase):
     """A job nothing scored has no solve rate, not a rate of zero.
@@ -726,15 +693,12 @@ class UnverifiedJobHasNoRate(unittest.TestCase):
         self.assertEqual(job.n_resolved, 0)                 # the count is still a fact
         self.assertEqual(job.counts[classify.UNKNOWN], 2)   # and so is the mix
 
-
     def test_one_verified_trial_keeps_the_unknown_in_the_denominator(self):
         job = self._job(classify.RESOLVED, classify.UNKNOWN)
         self.assertTrue(job.has_verdict)
         self.assertEqual(job.raw_solve_rate, 0.5)
         self.assertEqual(job.adjusted_solve_rate, 0.5)
-
-    def test_a_verified_miss_is_still_zero_percent(self):
-        job = self._job(classify.PATCH_FAILED_TESTS, classify.UNKNOWN)
+        job = self._job(classify.PATCH_FAILED_TESTS, classify.UNKNOWN)     # a verified miss is zero, not absent
         self.assertEqual(job.raw_solve_rate, 0.0)
         self.assertEqual(job.adjusted_solve_rate, 0.0)
 

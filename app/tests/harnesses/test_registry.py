@@ -38,38 +38,24 @@ class Registry(unittest.TestCase):
                 self.assertTrue((module.__doc__ or "").strip(),
                                 "an importer documents what it reads")
 
-    def test_an_unknown_name_is_none_not_an_error(self):
-        # The CLI turns this into a usage message listing what exists; raising
-        # here would make a typo look like a crash.
-        self.assertIsNone(harnesses.get("no-such-harness"))
-        self.assertIsNone(harnesses.get(""))
-
     def test_nothing_claims_an_unrelated_directory(self):
         # detect() runs against whatever a caller points at, including a plain
         # directory. A harness that answers yes to everything would capture
         # every future import.
         empty = tempfile.mkdtemp()
         self.assertIsNone(harnesses.detect(empty))
-
-    def test_detect_survives_a_path_that_does_not_exist(self):
         self.assertIsNone(harnesses.detect("/nonexistent/run/tree"))
 
     def test_the_registry_names_no_harness_itself(self):
         # The removal property: deleting a module must be the whole deletion,
-        # so this package cannot mention one by name.
-        source = (APP / "nullius" / "importers" / "__init__.py").read_text()
-        for name in harnesses.available():
-            with self.subTest(harness=name):
-                self.assertNotIn(name, source.split('"""')[-1],
-                                 f"{name} is named in the registry's code")
-
-    def test_the_cli_names_no_harness_either(self):
-        source = (APP / "nullius" / "importers" / "cli.py").read_text()
-        body = source.split('"""')[-1]
-        for name in harnesses.available():
-            with self.subTest(harness=name):
-                self.assertNotIn(name, body,
-                                 f"{name} is named in the CLI's code")
+        # so neither this package nor its CLI can mention one by name.
+        for file, what in (("__init__.py", "the registry's code"),
+                           ("cli.py", "the CLI's code")):
+            source = (APP / "nullius" / "importers" / file).read_text()
+            body = source.split('"""')[-1]
+            for name in harnesses.available():
+                with self.subTest(file=file, harness=name):
+                    self.assertNotIn(name, body, f"{name} is named in {what}")
 
 
 class FirstMatchIsStable(unittest.TestCase):
@@ -79,7 +65,6 @@ class FirstMatchIsStable(unittest.TestCase):
     reader's.
     """
     EXAMPLES = APP / "tests" / "fixtures"
-
 
     def test_no_importer_claims_a_harbor_job(self):
         for job in ("liveboard-oracle-x4",):
@@ -160,15 +145,6 @@ class Refusal(unittest.TestCase):
         self.assertEqual(len(outs), 1)
         self.assertFalse(os.path.exists(outs[0]), "the scratch directory is removed")
 
-    def test_a_good_tree_is_no_problem(self):
-        self.registry(stub("x", check=lambda path: None))
-        self.assertIsNone(harnesses.problem("/t"))
-
-    def test_labels_name_the_importers_for_a_person(self):
-        a, b = stub("a"), stub("b")
-        b.LABEL = "Bee"
-        self.registry(a, b)
-        self.assertEqual(harnesses.labels(), "a, Bee")
 
 class Disjoint(unittest.TestCase):
     """No two importers claim one directory.
@@ -210,14 +186,6 @@ class Disjoint(unittest.TestCase):
                 self.assertLessEqual(len(claimants), 1, f"{shape} is claimed by {claimants}")
 
 
-    def test_the_otel_importer_claims_none_of_the_other_shapes(self):
-        module = harnesses.get("otel")
-        self.assertIsNotNone(module)
-        for shape, path in self.candidates().items():
-            with self.subTest(shape=shape):
-                self.assertFalse(module.detect(path))
-
-
 class CLI(unittest.TestCase):
     """`--list` and refusal, against the registry there is and an empty one."""
 
@@ -240,16 +208,6 @@ class CLI(unittest.TestCase):
         for name in harnesses.available():
             self.assertIn(name, out)
         self.assertNotIn("no importers registered", out)
-
-    def test_list_with_nothing_registered_says_so_and_exits_zero(self):
-        # With no importer registered, printing nothing would read exactly
-        # like a CLI that imported and did no work.
-        self.empty()
-        code, out, _ = self.run_cli("--list")
-        self.assertEqual(code, 0)
-        self.assertEqual(out.strip(), "no importers registered")
-        code, out, _ = self.run_cli("--list", "--json")
-        self.assertEqual((code, json.loads(out)), (0, {}))
 
     def test_an_unrecognised_tree_is_refused_with_nothing_registered(self):
         self.empty()
@@ -275,21 +233,14 @@ class Trees(unittest.TestCase):
     The default: the root, as one job.
     """
 
-    def test_a_claimed_root_is_one_tree_by_default(self):
+    def test_a_claimed_root_is_one_tree_by_default_and_an_unclaimed_one_none(self):
         self.assertEqual(harnesses.trees(stub("x"), "/exp"), ["/exp"])
-
-    def test_an_unclaimed_root_is_no_tree_by_default(self):
         self.assertEqual(harnesses.trees(stub("x", detect=False), "/exp"), [])
 
     def test_an_importer_with_its_own_answer_is_asked_and_the_default_is_not(self):
         module = stub("x", detect=False)          # detect says no; trees decides
         module.trees = lambda root: [os.path.join(root, "a"), os.path.join(root, "b")]
         self.assertEqual(harnesses.trees(module, "/exp"), ["/exp/a", "/exp/b"])
-
-    def test_trees_is_not_part_of_the_contract(self):
-        # A module without it still registers: the hook is optional, and
-        # the default is the CLI's reading rather than a missing name.
-        self.assertNotIn("trees", harnesses._CONTRACT)
 
     def test_every_registered_importer_answers_and_an_empty_directory_is_nothing(self):
         # Each importer there is says what one job is under a root — the

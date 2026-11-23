@@ -192,13 +192,9 @@ class Migration(unittest.TestCase):
         self.assertNotIn("sk-gpu-fixture", out.getvalue())
         return code, out.getvalue()
 
-    def test_an_old_name_as_long_as_it_could_be_moves_whole(self):
-        self.target.write_text(json.dumps({"MODEL_GPU_NAME": "N" * 400, "MODEL_GPU_API_URL": "http://gpu:8000/v1"}))
-        self.assertEqual(self.cli("--apply")[0], 0)
-        self.assertEqual(json.loads(json.loads(self.target.read_text())["MODEL_GPU"])["name"], "N" * 400)    # never cut
 
     def test_old_names_move_into_records_on_apply_only(self):
-        before = {"MODEL_GPU_NAME": "GPU box", "MODEL_GPU_API_URL": "http://gpu:8000/v1", "MODEL_GPU_API_KEY": "sk-gpu-fixture",
+        before = {"MODEL_GPU_NAME": "N" * 400, "MODEL_GPU_API_URL": "http://gpu:8000/v1", "MODEL_GPU_API_KEY": "sk-gpu-fixture",
                   "MODEL_NEW": json.dumps({"base": "http://new/v1"}), "MODEL_NEW_NAME": "ignored name", "MODEL_API_URL": "http://box/v1"}
         self.target.write_text(json.dumps(before))
         code, said = self.cli()
@@ -206,7 +202,7 @@ class Migration(unittest.TestCase):
         code, said = self.cli("--apply")
         self.assertEqual(code, 0)
         after = json.loads(self.target.read_text())
-        self.assertEqual(json.loads(after["MODEL_GPU"]), {"name": "GPU box", "base": "http://gpu:8000/v1"})
+        self.assertEqual(json.loads(after["MODEL_GPU"]), {"name": "N" * 400, "base": "http://gpu:8000/v1"})
         self.assertEqual(json.loads(after["MODEL_NEW"]), {"base": "http://new/v1", "name": "ignored name"})
         self.assertEqual(after["MODEL_GPU_API_KEY"], "sk-gpu-fixture"); self.assertEqual(after["MODEL_API_URL"], "http://box/v1")   # keys keep their names
         self.assertFalse({"MODEL_GPU_NAME", "MODEL_GPU_API_URL", "MODEL_NEW_NAME"} & set(after))

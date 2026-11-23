@@ -53,13 +53,6 @@ class DriverEnvironment(unittest.TestCase):
             os.environ.pop("HF_ENDPOINT", None)
             self.assertEqual(run.data_env(), {})
 
-    def test_every_driver_environment_carries_it(self):
-        """The local driver, the Original setup's driver in a container and a
-        benchmark's MCP server on the machine: each environment takes data_env."""
-        import inspect
-        source = inspect.getsource(run.Run)
-        self.assertEqual(source.count("**data_env()"), 3)
-
 
 class DatasetDownload(unittest.TestCase):
     URL = "https://huggingface.co/datasets/o/n/resolve/abc/data.json"

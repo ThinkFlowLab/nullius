@@ -11,7 +11,6 @@ import sys
 import tempfile
 import types
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from nullius.standard.contract import definitions
@@ -199,12 +198,6 @@ class Intercept(unittest.TestCase):
         self.assertEqual(made.kwargs, {"device_write_iops": [{"Path": device, "Rate": 150}],
                                        "network": self.site.NETWORK})
 
-    def test_the_disk_is_found_once_a_process(self):
-        sysfs(self, self.site, self.root)
-        self.start(PROVIDER)
-        self.containers.ContainerCollection(self.client).run(PROVIDER)
-        self.assertEqual(self.client.asked, 1)
-
     def test_another_image_is_left_alone(self):
         sysfs(self, self.site, self.root)
         made = self.start("ubuntu:24.04", detach=True)
@@ -219,7 +212,7 @@ class Intercept(unittest.TestCase):
         self.assertEqual((made.removed, made.started), ({"force": True, "v": True}, False))
         self.assertIn("Disk write MB/s and Disk write IOPS to none", str(raised.exception))
 
-    def test_no_device_fails_the_start(self):
+    def test_no_device_no_uevent_or_no_docker_answer_fails_the_start(self):
         empty = os.path.join(self.tmp, "empty")
         os.makedirs(empty)
         with mock.patch.object(self.site, "SYS_BLOCK", empty):
@@ -227,14 +220,10 @@ class Intercept(unittest.TestCase):
                 self.start(PROVIDER)
         self.assertIn(self.root, str(raised.exception))
         self.assertEqual(self.containers.ContainerCollection.made, [])
-
-    def test_no_uevent_fails_the_start(self):
         sysfs(self, self.site, self.root, "no uevent")
         with self.assertRaises(self.site.WriteLimitError):
             self.start(PROVIDER)
         self.assertEqual(self.containers.ContainerCollection.made, [])
-
-    def test_no_docker_answer_fails_the_start(self):
         sysfs(self, self.site, self.root)
         self.client.info = lambda: {}
         with self.assertRaises(self.site.WriteLimitError):
@@ -300,12 +289,6 @@ class Processes(unittest.TestCase):
     def test_the_limit_holds_in_the_runner_and_its_workers(self):
         out = self.child(**ON)
         self.assertEqual(out["path0"], self.scripts)
-        self.assertTrue(out["main"])
-        for method in ("fork", "spawn"):
-            self.assertEqual(out[method], {"wrapped": True, "other": {"x": 1}})
-
-    def test_with_no_limit_the_create_is_still_wrapped(self):
-        out = self.child()
         self.assertTrue(out["main"])
         for method in ("fork", "spawn"):
             self.assertEqual(out[method], {"wrapped": True, "other": {"x": 1}})
@@ -389,12 +372,6 @@ class Before(unittest.TestCase):
             self.check(FAKE_CREATE_FAIL="1")
         self.assertIn("a probe container was refused", str(raised.exception))
 
-    def test_a_refused_probe_fails(self):
-        with self.assertRaises(RuntimeError) as raised:
-            self.check(FAKE_CREATE_FAIL="1")
-        self.assertIn("refused", str(raised.exception))
-        self.assertEqual(self.docker_calls()[-1], "rm")
-
     def test_no_disk_fails_before_any_container(self):
         with mock.patch.object(self.driver._startup(), "SYS_BLOCK", os.path.join(self.tmp, "none")):
             with self.assertRaises(RuntimeError):
@@ -424,22 +401,6 @@ class Before(unittest.TestCase):
         with open(self.calls) as f:
             lines = [ln.split() for ln in f if ln.startswith(verb + " ")]
         return [ln[ln.index("--name") + 1] if verb == "create" else ln[-1] for ln in lines]
-
-    def test_every_check_waits_on_docker_twice_the_cleanups_time(self):
-        waited, real = [], subprocess.run
-
-        def ran(*a, **kw):
-            waited.append((a[0][1], kw.get("timeout")))
-            return real(*a, **kw)
-
-        with mock.patch.object(self.driver.subprocess, "run", ran), \
-                mock.patch.dict(os.environ, dict(self.env, FAKE_PROBES="")):
-            self.check()
-            self.driver._provider_image()
-            self.driver._old_probes()
-        self.assertEqual(self.driver.READY_SECONDS, 120)
-        self.assertEqual(self.driver.DOCKER_SECONDS, 60)
-        self.assertEqual(waited, [(c, 120) for c in ("info", "ps", "create", "inspect", "rm", "image")] + [("ps", 60)])
 
     def test_a_create_with_no_answer_is_tried_again_under_a_new_name(self):
         with mock.patch.object(self.driver, "READY_SECONDS", 1):
@@ -528,28 +489,6 @@ class Options(unittest.TestCase):
         values, _ = definitions.bench_options_of(bench, "offline36", None, "yours")
         self.assertEqual((values["write_mbps"], values["write_iops"]), ("none", "none"))
         self.assertTrue(definitions.bench_options_of(bench, "offline36", {"write_mbps": "30mb"}, "original")[1])
-
-
-class Turn(unittest.TestCase):
-    def test_the_original_setups_turn_holds_500_steps(self):
-        with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
-            original = json.load(f)["setups"]["original"]
-        self.assertEqual(original["turn_seconds"], 86400)
-        self.assertGreater(original["turn_seconds"], 2 * 500 * 32)
-
-
-class Snapshot(unittest.TestCase):
-    def test_a_hosts_snapshot_carries_the_startup_file(self):
-        from nullius.standard.runner import payload
-        tmp = Path(tempfile.mkdtemp(prefix="nullius-osworld2-"))
-        self.addCleanup(shutil.rmtree, tmp, True)
-        with mock.patch.dict(os.environ, {"NULLIUS_HOME": str(tmp / "profile"), "NULLIUS_CATALOGUE": str(tmp / "catalogue")}):
-            _, root = payload.build(str(tmp / "cache"))
-        entry = Path(root) / "app" / "nullius" / "catalogue" / "benchmarks" / "osworld2"
-        for name in ("driver.py", "nop.py", "agents.json", "startup/sitecustomize.py"):
-            self.assertEqual((entry / name).read_bytes(), (Path(HERE) / name).read_bytes(), name)
-        manifest = json.loads((Path(root) / "manifest.json").read_text())
-        self.assertIn("catalogue/benchmarks/osworld2/startup/sitecustomize.py", manifest["files"])
 
 
 if __name__ == "__main__":

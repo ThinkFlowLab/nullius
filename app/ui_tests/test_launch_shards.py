@@ -155,14 +155,14 @@ class LaunchShards(unittest.TestCase):
         compare = re.search(r'href="/compare\?([^"]+)"', block).group(1)
         self.assertNotIn("nop", compare); self.assertNotIn("oracle", compare)
         self.assertLess(block.index('aria-label="Shards of oracle"'), block.index('aria-label="Shards of terminus-2"'))
+        # a control stopped on one shard is named with its shard
+        shutil.rmtree(self.root); os.makedirs(self.root)
+        block = self.block(stopped="nop", written=("nop",))
+        self.assertIn("Task checks incomplete: nop stopped on shard 2, oracle not run on shard 2.", text_of(block))
 
     def test_a_nop_that_passes_a_task_on_any_shard_is_flagged(self):
         block = self.block(nop=lambda place: float(place == 3))
         self.assertIn("A control did not behave", text_of(block))
-
-    def test_a_control_stopped_on_one_shard_is_named_with_its_shard(self):
-        block = self.block(stopped="nop", written=("nop",))
-        self.assertIn("Task checks incomplete: nop stopped on shard 2, oracle not run on shard 2.", text_of(block))
 
     def test_a_participant_of_one_shard_is_its_plain_row(self):
         self.jobs, _ = write_launch(self.root, self.runs, written=())

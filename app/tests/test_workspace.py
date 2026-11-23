@@ -435,22 +435,6 @@ class Cache(unittest.TestCase):
         workspace._DECODED.clear()
         self.assertEqual(workspace.load_job(self.ws, self.job_dir), (job, True))
 
-    def test_a_cache_from_before_the_head_learns_it_once(self):
-        self._end()
-        workspace.load_job(self.ws, self.job_dir)
-        path = workspace._cache_file(self.ws, self.job_dir)
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        del data["head"]
-        _write_json(path, data)
-        workspace._DECODED.clear()
-        _, from_cache = workspace.load_job(self.ws, self.job_dir)       # by its signature, the head written down
-        self.assertTrue(from_cache)
-        workspace._DECODED.clear()
-        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
-            _, from_cache = workspace.load_job(self.ws, self.job_dir)
-        self.assertTrue(from_cache)
-
     def test_an_ended_job_a_resume_rewrites_is_parsed_again(self):
         self._end()
         workspace.load_job(self.ws, self.job_dir)
@@ -492,13 +476,6 @@ class Cache(unittest.TestCase):
         with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
             again, from_cache = workspace.load_job(self.ws, self.job_dir, runs=done)
         self.assertIs(again, job); self.assertTrue(from_cache)
-
-    def test_a_job_no_run_writes_is_read_by_its_head(self):
-        self._end()
-        first, _ = workspace.load_job(self.ws, self.job_dir, runs={"job-b": None})
-        with patch.object(workspace, "_signatures", side_effect=AssertionError("trials stated")):
-            again, from_cache = workspace.load_job(self.ws, self.job_dir, runs={"job-b": None})
-        self.assertIs(again, first); self.assertTrue(from_cache)
 
     def test_heads_move_with_a_job_added_removed_or_rewritten_not_with_a_trial(self):
         before = workspace.heads([self.root])

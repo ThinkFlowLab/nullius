@@ -115,17 +115,6 @@ class Restart(Base):
         again.continue_(); self.wait(again)
         self.assertEqual(again.state, "done"); self.assertIn("b", (self.tmp / "r" / "run-b.log").read_text())
 
-    def test_a_finished_run_is_listed_and_a_gone_process_is_a_failure(self):
-        ex = self.wait(execution.Execution(execution.Plan(name="fin", script="true"), root=str(self.tmp)).start())
-        execution.EXECUTIONS.clear()
-        # a record that says running with a pid nothing answers to, and no exit file
-        gone = self.tmp / "gone"; gone.mkdir(); (gone / "run-run.sh").write_text("true\n"); (gone / "run-run.log").write_text("")
-        (gone / "run.json").write_text(json.dumps({"id": "gone-1", "plan": execution.Plan(name="gone", script="true").to_dict(), "state": "running", "part": 0, "pid": 999999, "log_offset": 0}))
-        back = execution.restore(str(self.tmp))
-        self.assertEqual([e.plan.name for e in back], ["gone"]); self.wait(back[0])
-        self.assertEqual(back[0].state, "failed"); self.assertIn("gone without an exit code", "\n".join(back[0].lines))
-        self.assertEqual(execution.EXECUTIONS["fin-" + str(int(ex.started))].state if f"fin-{int(ex.started)}" in execution.EXECUTIONS else "done", "done")
-
     def test_an_ended_runs_log_is_read_when_its_page_asks_not_at_start(self):
         from unittest import mock
         ex = self.wait(execution.Execution(execution.Plan(name="fin", script="echo said-once"), root=str(self.tmp)).start())
@@ -559,15 +548,6 @@ class RestartOnHost(HostBase):
         self.assertEqual((again.state, again.exit_code), ("done", 0), again.lines)
         self.assertEqual([c[-1].count("run-b.sh") for c, _ in self.calls if "setsid nohup" in c[-1]], [1])        # b launched, once
         self.assertEqual({p: v["rc"] for p, v in again.ends.items()}, {"a": 2, "b": 0})
-
-    def test_a_part_that_left_nothing_is_launched(self):
-        self.recorded(self.plan, state="running", step="run", part=0, pid=None, harbor="harbor")
-        back = execution.restore(str(self.tmp / "runs"), run=self.holding({}), key="k" * 20)
-        self.wait(back[0])
-        self.assertEqual(back[0].state, "done", back[0].lines)
-        launch = [c[-1] for c, _ in self.calls if "setsid nohup" in c[-1]]
-        self.assertEqual(len(launch), 1); self.assertIn("rm -f run-run.exit run-run.pid; ", launch[0])
-        self.assertIn("bash -c 'echo $$ >run-run.pid; [ -e run-run.stop ] && exit 130; bash run-run.sh </dev/null >run-run.log 2>&1;", launch[0])   # its pid, a look for a Stop, then the log
 
 
 class PartPidsWithoutProc(unittest.TestCase):

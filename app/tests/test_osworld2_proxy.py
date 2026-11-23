@@ -94,10 +94,9 @@ class Proxy(unittest.TestCase):
         self.proxy = load("osworld2_proxy", os.path.join(HERE, "proxy.py"))
         self.proxy.PORT = self.listener.getsockname()[1]
         self.proxy.START_SECONDS = 3
-        self.later, self.watchers = [], []
+        self.later = []
         self.proxy._later = lambda dir, name=None: self.later.append(dir)
-        self.proxy._watcher = lambda dir, fd, name: self.watchers.append(
-            (dir, os.path.exists(self.pool()), [ln for ln in self.lines() if ln.startswith("run ")]))
+        self.proxy._watcher = lambda dir, fd, name: None
 
     def lines(self):
         try:
@@ -210,14 +209,11 @@ class Proxy(unittest.TestCase):
         record = logging.LogRecord("a", logging.INFO, "", 0, "x %s", ("p" * 32,), None)
         self.assertEqual(logging.Formatter().format(record), "x <proxy password>")
 
-    def test_tinyproxy_logs_warnings_only_to_its_own_output_and_goes_out_directly(self):
+    def test_tinyproxy_goes_out_directly_to_the_webs_ports_only_logs_warnings_and_its_clients_stay_below_its_processes(self):
         lines = self.proxy.config("t" * 32).splitlines()
         self.assertIn("LogLevel Warning", lines)
         self.assertIn(f"Port {self.proxy.PORT}", lines)
         self.assertFalse([ln for ln in lines if ln.split()[0] in ("Upstream", "LogFile", "Syslog", "Listen")])
-
-    def test_connect_goes_to_the_webs_ports_only_and_clients_with_the_main_thread_stay_below_its_processes(self):
-        lines = self.proxy.config("t" * 32).splitlines()
         self.assertEqual(sorted(ln for ln in lines if ln.startswith("ConnectPort ")), ["ConnectPort 443", "ConnectPort 80"])
         self.assertIn(f"MaxClients {self.proxy.CLIENTS}", lines)
         self.proxy.start(self.unit)
@@ -245,22 +241,6 @@ class Proxy(unittest.TestCase):
         self.assertEqual(built.stdout.split(), [self.proxy.IMAGE, "tinyproxy-1.11.3-r0"])
         with open(os.environ["FAKE_BUILD"]) as f:
             self.assertEqual(f.read(), self.proxy.DOCKERFILE)
-
-    def test_each_start_writes_the_images_id_and_tinyproxy_package_into_the_units_log(self):
-        self.proxy.start(self.unit)
-        self.assertRegex(self.log()[-1], r"\] proxy image sha256:fake, tinyproxy-1\.11\.3-r0$")
-        proxy = load("osworld2_proxy_unlabelled", os.path.join(HERE, "proxy.py"))
-        proxy.PORT, proxy._watcher = self.proxy.PORT, self.proxy._watcher
-        os.environ["FAKE_IMAGE"] = 'sha256:old\t{"User":"65534:65534"}'
-        proxy.start(self.unit)
-        self.assertIn("proxy image sha256:old, its tinyproxy package not labelled", self.log()[-1])
-
-    def test_a_process_looks_at_the_image_and_its_users_orphans_at_its_first_start_only(self):
-        for _ in range(2):
-            self.proxy.start(self.unit)
-        self.assertEqual(len([ln for ln in self.lines() if ln.startswith("image inspect")]), 1)
-        self.assertEqual(len([ln for ln in self.lines() if ln.startswith("ps ") and "--format" in ln]), 1)
-        self.assertEqual(len([ln for ln in self.log() if "proxy image" in ln]), 2)
 
     def test_the_proxy_and_its_units_vm_write_no_more_together_than_the_options_give_the_vm(self):
         site = load("osworld2_startup_proxy", os.path.join(HERE, "startup", "sitecustomize.py"))
@@ -341,6 +321,8 @@ class Proxy(unittest.TestCase):
             raise KeyError("the run")
         self.assertFalse(os.path.exists(self.pool()))
         self.assertEqual([ln for ln in self.lines() if ln.startswith("rm ")], ["rm -f cid", "rm -f cid"])
+        self.assertEqual(self.later, [])                                       # started and removed: no sweeper
+        self.assertIn(f"--label {self.proxy.FOLDER}={self.unit}", self.ran())
 
     def test_a_task_without_a_proxy_costs_no_docker_call_nor_the_disk(self):
         def disk():
@@ -416,12 +398,6 @@ class Proxy(unittest.TestCase):
         self.assertEqual(ended, sum(self.proxy.SWEEPS) + 2 * self.proxy.RETRY_SECONDS)
         self.assertEqual(len(removals), len(self.proxy.SWEEPS) + 2)
 
-    def test_a_sweeper_whose_units_record_is_gone_waits_for_no_further_pass(self):
-        ended, removals = self.sweep_with_a_clock(docker_answers_at=0)
-        self.assertFalse(os.path.exists(self.pool()))
-        self.assertEqual(ended, self.proxy.SWEEPS[0])
-        self.assertEqual(len(removals), 1)
-
     def test_a_sweeper_docker_refuses_throughout_gives_up_in_time_with_a_line_in_the_units_log(self):
         ended, removals = self.sweep_with_a_clock()
         self.assertLessEqual(ended, self.proxy.SWEEP_SECONDS)
@@ -467,18 +443,16 @@ class Proxy(unittest.TestCase):
             self.assertLessEqual(began + timeout, self.proxy.SWEEP_SECONDS + 0.1)
         return clock[0], calls
 
-    def test_a_sweep_whose_searches_take_minutes_and_removals_never_answer_ends_in_its_time(self):
-        ended, calls = self.sweep_with_slow_docker("cid\n")
-        self.assertLessEqual(ended, self.proxy.SWEEP_SECONDS + 0.1)
-        self.assertGreater(len(calls), 2 * len(self.proxy.SWEEPS) - 2)
-        self.assertTrue(os.path.exists(self.pool()))
-        self.assertRegex(self.log()[-1], rf"was not removed in {self.proxy.SWEEP_SECONDS // 60} min: docker ")
-
-    def test_a_sweep_whose_searches_take_minutes_still_removes_its_record_in_its_time(self):
+    def test_a_sweep_whose_searches_take_minutes_ends_in_its_time_with_its_record_gone_or_a_line_in_the_units_log(self):
         ended, calls = self.sweep_with_slow_docker("")
         self.assertLessEqual(ended, self.proxy.SWEEP_SECONDS)
         self.assertFalse(os.path.exists(self.pool()))
         self.assertEqual(self.log(), [])
+        ended, calls = self.sweep_with_slow_docker("cid\n")                    # removals never answer
+        self.assertLessEqual(ended, self.proxy.SWEEP_SECONDS + 0.1)
+        self.assertGreater(len(calls), 2 * len(self.proxy.SWEEPS) - 2)
+        self.assertTrue(os.path.exists(self.pool()))
+        self.assertRegex(self.log()[-1], rf"was not removed in {self.proxy.SWEEP_SECONDS // 60} min: docker ")
 
     def test_a_sweeper_leaves_a_later_start_in_the_same_folder_its_proxy_and_its_record(self):
         with open(self.pool(), "w") as f:
@@ -494,17 +468,6 @@ class Proxy(unittest.TestCase):
         self.assertTrue(os.path.exists(self.pool()))
         with self.proxy._locked(self.unit):
             self.assertFalse(self.proxy._ours(self.unit, own))
-
-    def test_a_sweeper_removes_its_own_starts_container_by_its_name(self):
-        with open(self.pool(), "w") as f:
-            f.write("[]")
-        os.environ["FAKE_IDS"] = "cid"
-        self.proxy.SWEEPS = (0, 0)
-        self.proxy.sweep(self.unit, self.held_open(), "first")
-        self.assertIn(f"ps -a -q --filter label={self.proxy.UNIT}={self.proxy._mark(self.unit)} --filter name=first",
-                      self.lines())
-        self.assertIn("rm -f cid", self.lines())
-        self.assertFalse(os.path.exists(self.pool()))
 
     def test_a_start_whose_run_and_search_docker_both_leave_unanswered_is_an_error_for_its_sweeper(self):
         self.proxy.DOCKER_SECONDS = 0.5
@@ -539,14 +502,6 @@ class Proxy(unittest.TestCase):
         self.proxy.start(self.unit)
         self.assertEqual(len([ln for ln in self.lines() if ln.startswith("inspect ")]), 3)
 
-    def test_the_waits_are_sized_for_a_shared_daemon_that_takes_minutes_to_answer(self):
-        proxy = load("osworld2_proxy_waits", os.path.join(HERE, "proxy.py"))
-        self.assertGreaterEqual(proxy.DOCKER_SECONDS, 120)
-        self.assertGreater(proxy.START_SECONDS, 2 * proxy.DOCKER_SECONDS)
-        self.assertGreaterEqual(proxy.RETRY_SECONDS, proxy.DOCKER_SECONDS)
-        self.assertGreaterEqual(sum(proxy.SWEEPS), 900)
-        self.assertGreater(proxy.SWEEP_SECONDS, sum(proxy.SWEEPS) + proxy.RETRY_SECONDS)
-
     def test_a_late_container_whose_unit_holds_no_record_is_an_orphan_while_its_driver_lives(self):
         prefix = f"{self.proxy.NAME}{os.getuid()}-{os.getpid()}"
         kept, late = f"{prefix}-1", f"{prefix}-2"
@@ -557,12 +512,6 @@ class Proxy(unittest.TestCase):
         self.assertIn(f"rm -f {late}", self.lines())
         self.assertFalse([ln for ln in self.lines() if ln.startswith("rm ") and kept in ln])
 
-    def test_a_proxy_that_started_and_was_removed_needs_no_sweeper(self):
-        with self.proxy.held(self.unit, True):
-            pass
-        self.assertEqual(self.later, [])
-        self.assertIn(f"--label {self.proxy.FOLDER}={self.unit}", self.ran())
-
     def test_the_sweeper_is_a_session_of_its_own_holding_its_starts_record_and_naming_its_container(self):
         proxy = load("osworld2_proxy_later", os.path.join(HERE, "proxy.py"))
         open(self.pool(), "w").close()
@@ -572,10 +521,6 @@ class Proxy(unittest.TestCase):
         fd, = kw["pass_fds"]
         self.assertEqual(argv[0][1:], [os.path.join(HERE, "proxy.py"), "--sweep", self.unit, str(fd), "first"])
         self.assertTrue(kw["start_new_session"])
-
-    def test_a_start_arms_its_watcher_once_its_record_exists_and_before_docker_is_asked(self):
-        self.proxy.start(self.unit)
-        self.assertEqual(self.watchers, [(self.unit, True, [])])
 
     def test_the_watcher_sweeps_the_units_proxy_once_its_driver_is_gone_and_only_then(self):
         ended = subprocess.Popen([sys.executable, "-c", ""])

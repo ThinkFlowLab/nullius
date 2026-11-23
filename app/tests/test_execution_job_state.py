@@ -32,12 +32,10 @@ class SharedStep(unittest.TestCase):
                 self.assertEqual(self.ex.job_state("kit-next"), None if state == "running" else
                                  ("failed", datetime.fromtimestamp(3, timezone.utc)))
                 self.assertEqual(self.ex.state, state)  # the launch's state is untouched
-
-    def test_a_restored_run_reads_each_job_end_from_disk(self):
-        ex = execution.Execution(self.plan, root=self.temp.name,
-                                 record={"state": "failed", "finished": 3, "ends": {"run": {"rc": 1, "at": 3}}})
-        self.assertEqual(ex.job_state("kit-ok")[0], "done")
-        self.assertEqual(ex.job_state("kit-next")[0], "failed")
+        restored = execution.Execution(self.plan, root=self.temp.name,
+                                       record={"state": "failed", "finished": 3, "ends": {"run": {"rc": 1, "at": 3}}})
+        self.assertEqual(restored.job_state("kit-ok")[0], "done")
+        self.assertEqual(restored.job_state("kit-next")[0], "failed")
 
     def test_incomplete_errored_or_unreadable_results_keep_the_runner_state(self):
         path = self.folder / "result.json"

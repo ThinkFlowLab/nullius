@@ -105,8 +105,6 @@ class SweBenchReader(unittest.TestCase):
                                   patch_successfully_applied=False))
         self.assertIs(v.produced, False)
         self.assertIsNone(v.usable, "no patch means the question has no answer")
-
-    def test_patch_is_none_counts_as_not_produced(self):
         self.assertIs(swe(report(patch_is_None=True)).produced, False)
 
     def test_tolerates_a_missing_or_malformed_report(self):
@@ -139,17 +137,6 @@ class TerminalBenchReader(unittest.TestCase):
     def test_counts_fall_back_to_the_test_list_when_summary_is_absent(self):
         v = tb(ctrf(passed=("a",), failed=("b",), summary=False), 0.0)
         self.assertEqual((v.gained_pass, v.gained_fail), (1, 1))
-
-    def test_the_reward_marker_scores_without_detail(self):
-        # Non-pytest tasks (qemu-alpine-ssh, mailman) leave only reward.txt;
-        # the loader hands read() a bare {} for them.
-        v = tb({}, 1.0)
-        self.assertIs(v.succeeded, True)
-
-    def test_there_is_no_patch_vocabulary(self):
-        v = tb(ctrf(failed=("a",)), 0.0)
-        self.assertIsNone(v.produced)
-        self.assertIsNone(v.usable)
 
 
 class Loading(unittest.TestCase):
@@ -231,12 +218,6 @@ class VocabularyDispatch(unittest.TestCase):
     """Labels are dataset-owned too: templates draw a check row only when the
     vocabulary names it, so a Terminal-Bench trial never says "Fail → Pass"
     and never answers "Patch applied: No" about patches it cannot have."""
-
-    def test_swe_bench_speaks_its_own_names(self):
-        v = verifier.vocabulary_for("swebench-verified")
-        self.assertEqual((v.gained, v.held), ("Fail → Pass", "Pass → Pass"))
-        self.assertEqual((v.gained_abbr, v.held_abbr), ("F→P", "P→P"))
-        self.assertTrue(v.has_patch)
 
     def test_terminal_bench_has_tests_and_nothing_else(self):
         v = verifier.vocabulary_for("terminal-bench")

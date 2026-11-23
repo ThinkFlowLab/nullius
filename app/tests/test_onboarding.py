@@ -20,11 +20,9 @@ def url_for(endpoint):
 
 
 class Facts(unittest.TestCase):
-    def test_nothing_set_is_nothing_done(self):
+    def test_each_fact_is_read_from_its_own_source(self):
         f = onboarding.facts({}, [], False, docker=NO_DOCKER)
         self.assertEqual(f, dict.fromkeys(["provider", "where", "judge", "control_run", "agent_run", "judged"], False))
-
-    def test_each_fact_is_read_from_its_own_source(self):
         env = {"OPENROUTER_API_KEY": "sk-or-1", "HOSTS": "box", "TYPESAFE_API_KEY": "ts-1"}
         f = onboarding.facts(env, [{"agent": "oracle"}, {"agent": "Claude-Code"}], True, docker=NO_DOCKER)
         self.assertTrue(all(f.values()), f)

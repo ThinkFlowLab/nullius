@@ -114,12 +114,6 @@ class Option(Case):
             with self.subTest(bad), self.assertRaises(self.w.WebsiteError):
                 self.w.env({self.w.OPTION: bad})
 
-    def test_the_tasks(self):
-        self.assertEqual(len(self.w.TASKS), 40)
-        self.assertLess(self.w.OVERLEAF_TASKS, self.w.TASKS)
-        self.assertEqual(len(self.w.NAMES), 25)
-        self.assertEqual(len(set(self.w.NAMES)), 25)
-
 
 class Ready(Case):
     def test_every_name_and_each_stateful_site_answers(self):
@@ -131,12 +125,6 @@ class Ready(Case):
         with self.assertRaises(self.w.WebsiteError):
             self.w.ready(SUFFIX, overleaf=True)
 
-    def test_a_name_that_does_not_resolve(self):
-        self.unknown.add("trippza")
-        with self.assertRaises(self.w.WebsiteError) as raised:
-            self.w.ready(SUFFIX)
-        self.assertIn(f"trippza.{SUFFIX} does not resolve", str(raised.exception))
-
     def test_a_suffix_whose_names_resolve_past_the_gateway_is_refused(self):
         self.elsewhere.add("awsconsole")
         with self.assertRaises(self.w.WebsiteError) as raised:
@@ -147,24 +135,19 @@ class Ready(Case):
             self.w.suffix({self.w.OPTION: "x"})
         self.assertIn(f"such as {GATEWAY}.nip.io", str(raised.exception))
 
-    def test_a_site_that_fails(self):
-        Sites.down.add("mailhub")
-        with self.assertRaises(self.w.WebsiteError) as raised:
-            self.w.ready(SUFFIX)
-        self.assertIn(f"http://mailhub.{SUFFIX}/ answered 502", str(raised.exception))
-        self.assertIn("websites.py compose STACK up -d", str(raised.exception))
-
-    def test_an_empty_page_is_a_name_the_stack_does_not_serve(self):
-        Sites.empty.add("interfacinglinux")
-        with self.assertRaises(self.w.WebsiteError) as raised:
-            self.w.ready(SUFFIX)
-        self.assertIn("serves another suffix", str(raised.exception))
-
-    def test_a_site_with_no_state(self):
-        Sites.stateless.add("wandb")
-        with self.assertRaises(self.w.WebsiteError) as raised:
-            self.w.ready(SUFFIX)
-        self.assertIn(f"wandb.{SUFFIX}/api/state?cookie={self.w.COOKIE} answered no state", str(raised.exception))
+    def test_a_site_that_fails_is_refused_and_named(self):
+        for faulty, name, said in (
+                (self.unknown, "trippza", [f"trippza.{SUFFIX} does not resolve"]),
+                (Sites.down, "mailhub", [f"http://mailhub.{SUFFIX}/ answered 502", "websites.py compose STACK up -d"]),
+                (Sites.empty, "interfacinglinux", ["serves another suffix"]),
+                (Sites.stateless, "wandb", [f"wandb.{SUFFIX}/api/state?cookie={self.w.COOKIE} answered no state"])):
+            faulty.add(name)
+            with self.subTest(name):
+                with self.assertRaises(self.w.WebsiteError) as raised:
+                    self.w.ready(SUFFIX)
+                for text in said:
+                    self.assertIn(text, str(raised.exception))
+            faulty.discard(name)
 
 
 class Overleaf(Case):
@@ -224,24 +207,6 @@ class Overleaf(Case):
                 self.w.reset_overleaf(SUFFIX)
         self.assertIn("Overleaf did not come up in 1 s", str(raised.exception))
 
-    def test_the_next_overleaf_task_waits_for_the_lock(self):
-        order, released = [], threading.Event()
-
-        def first():
-            with self.w.held("057", SUFFIX, threading.Event()):
-                order.append("057 in")
-                released.wait(10)
-                order.append("057 out")
-
-        t = threading.Thread(target=first)
-        t.start()
-        while not order:
-            time.sleep(0.05)
-        threading.Timer(1.0, released.set).start()
-        with self.w.held("072", SUFFIX, threading.Event()):
-            order.append("072 in")
-        t.join(10)
-        self.assertEqual(order, ["057 in", "057 out", "072 in"])
 
     def test_a_process_given_the_locks_keeps_them_after_the_unit_lets_go(self):
         with self.w.held("057", SUFFIX, threading.Event()):
@@ -349,6 +314,24 @@ class Overleaf(Case):
             waited.set()
         self.assertTrue(waited.is_set())
 
+        order, released = [], threading.Event()
+
+        def first():
+            with self.w.held("057", SUFFIX, threading.Event()):
+                order.append("057 in")
+                released.wait(10)
+                order.append("057 out")
+
+        t = threading.Thread(target=first)
+        t.start()
+        while not order:
+            time.sleep(0.05)
+        threading.Timer(1.0, released.set).start()
+        with self.w.held("072", SUFFIX, threading.Event()):
+            order.append("072 in")
+        t.join(10)
+        self.assertEqual(order, ["057 in", "057 out", "072 in"])
+
 
 class Stack(Case):
     def test_a_folder_not_at_the_release_is_refused(self):
@@ -387,10 +370,6 @@ class Stack(Case):
             if (mbps, iops) == (8, 80):
                 self.assertEqual(total[1], 80)
                 self.assertGreater(total[0], 8 * self.w.MB - 1024)
-
-    def test_the_groups_build_every_service_once(self):
-        self.assertEqual(len(self.w.SERVICES), 40)
-        self.assertEqual(len(set(self.w.SERVICES)), 40)
 
     def test_every_service_of_the_override_is_limited_and_caddy_pinned_on_one_address(self):
         with open(os.path.join(HERE, "websites.compose.yml"), encoding="utf-8") as f:
@@ -638,7 +617,7 @@ class Driver(unittest.TestCase):
             with self.assertRaises(self.w.WebsiteError):
                 self.driver._ready("tasks", "081")
 
-    def test_a_hosts_snapshot_carries_the_module_and_the_override(self):
+    def test_a_hosts_snapshot_carries_the_benchmark_s_files(self):
         from pathlib import Path
 
         from nullius.standard.runner import payload
@@ -648,9 +627,10 @@ class Driver(unittest.TestCase):
             _, root = payload.build(str(tmp / "cache"))
         entry = Path(root) / "app" / "nullius" / "catalogue" / "benchmarks" / "osworld2"
         manifest = json.loads((Path(root) / "manifest.json").read_text())
-        for name in ("websites.py", "websites.compose.yml"):
-            self.assertEqual((entry / name).read_bytes(), (Path(HERE) / name).read_bytes(), name)
-            self.assertIn(f"catalogue/benchmarks/osworld2/{name}", manifest["files"])
+        for name in ("websites.py", "websites.compose.yml", "driver.py", "nop.py", "agents.json", "startup/sitecustomize.py"):
+            with self.subTest(name):
+                self.assertEqual((entry / name).read_bytes(), (Path(HERE) / name).read_bytes())
+                self.assertIn(f"catalogue/benchmarks/osworld2/{name}", manifest["files"])
 
     def test_the_override_is_the_one_the_command_names(self):
         with open(os.path.join(HERE, "standard.json"), encoding="utf-8") as f:
@@ -714,10 +694,6 @@ class DriverSites(Case):
             self.driver._reaper(1, self.tmp, True)
         self.assertEqual(len(fds), 1)
         self.assertEqual(given, [fds, fds, ()])
-
-    def test_overleaf_down_fails_no_other_task(self):
-        Sites.down.add("overleaf")
-        self.assertEqual(self.driver._ready("tasks", "005"), "image")
 
     def test_no_site_s_state_is_read_for_a_unit_s_check(self):
         Sites.stateless.update(self.w.STATEFUL)

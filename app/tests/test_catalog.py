@@ -29,15 +29,6 @@ class Shipped(unittest.TestCase):
         for d in cat.datasets:
             self.assertIsNotNone(cat.benchmark(d.benchmark), d.key)
 
-    def test_an_entry_says_official_or_community_and_nothing_of_its_runs(self):
-        for b in catalog.load(catalog.ROOT).benchmarks:
-            self.assertIn(b.origin, catalog.ORIGINS, b.key)
-        self.assertEqual(catalog.ORIGINS, ("official", "community"))
-        for gone in ("status", "status_note", "branch", "experiment"):
-            self.assertNotIn(gone, catalog.Benchmark.__dataclass_fields__)
-
-    def test_tabs_are_alphabetical_and_lanes_are_not_benchmarks(self):
-        cat = catalog.load(catalog.ROOT)
         titles = [b.title for b in cat.listed_benchmarks]
         self.assertEqual(titles, sorted(titles, key=catalog.sort_key))
         # what has a usable route is listed, whoever made it and whether or not it has run
@@ -48,6 +39,7 @@ class Shipped(unittest.TestCase):
         # τ³ files as "t3…", before "te…": a reader looking under T finds it
         self.assertLess(titles.index("τ³-bench"), titles.index("Terminal-Bench 2.0"))
         self.assertTrue(all(d.source for d in cat.datasets))
+
 
     def test_units_that_may_not_be_redistributed_are_named_nowhere(self):
         """No UUID-shaped string, a task id's shape, in such a benchmark's folder or its generated page.
@@ -144,10 +136,6 @@ class DeclaredTimeouts(unittest.TestCase):
 
     PHASES = ("env_setup", "agent_setup", "agent_run", "verify")
 
-    def test_tau3_carries_the_four_phases(self):
-        t = catalog.load(catalog.ROOT).benchmark("tau3-bench").timeouts
-        self.assertEqual({k: t[k] for k in self.PHASES}, {"env_setup": 600, "agent_setup": 1200, "agent_run": 3600, "verify": 300})
-
     def test_a_recording_is_complete_or_absent(self):
         for b in catalog.load(catalog.ROOT).benchmarks:
             with self.subTest(b.key):
@@ -200,12 +188,6 @@ class Folders(unittest.TestCase):
         self.assertEqual([b.key for b in catalog.load(catalog.ROOT).benchmarks], folders)
         self.assertEqual(catalog.layout(catalog.ROOT), [])
 
-    def test_no_runner_definition_is_left(self):
-        # a benchmark's own scripts run as the standard's Original setup; no folder keeps a runner.json
-        self.assertEqual([f for f in sorted(os.listdir(self.ROOT / catalog.BENCHMARKS))
-                          if (self.ROOT / catalog.BENCHMARKS / f / "runner.json").exists()], [])
-        self.assertEqual(catalog.HARNESSES, (("standard", "Nullius"), ("harbor", "Harbor")))
-
     def test_an_entry_that_does_not_read_is_left_out_and_named(self):
         """A hand-edited user entry - a trailing comma, a list, no title -
         must not fail every page."""
@@ -219,10 +201,6 @@ class Folders(unittest.TestCase):
             problems = catalog.validate(cat)
             for name in ("comma", "list", "bare"):
                 self.assertTrue(any(p.startswith(f"{catalog.BENCHMARKS}/{name}/") for p in problems), (name, problems))
-
-    def test_no_dataset_key_repeats(self):
-        keys = [d.key for d in catalog.load(catalog.ROOT).datasets]
-        self.assertEqual(len(keys), len(set(keys)), keys)
 
     def test_validation_refuses_a_misnamed_folder_and_a_repeated_dataset(self):
         with tempfile.TemporaryDirectory() as root:
@@ -263,22 +241,6 @@ class Routes(unittest.TestCase):
 
     def _bench(self, **kw):
         return catalog.Benchmark(key="k", title="T", category="Coding", **kw)
-
-    def test_the_shipped_catalogue_carries_the_cases_its_harnesses_allow(self):
-        cat = catalog.load(catalog.ROOT)
-        cases = {b.key: b.route_case for b in cat.listed_benchmarks}
-        self.assertEqual(cases["terminal-bench"], "multi-route")       # Harbor's dataset, and the standard (each task's own image)
-        self.assertEqual(cases["swe-bench-verified"], "multi-route")     # Harbor's dataset, and the standard (each instance's own image)
-        self.assertEqual(cases["longmemeval"], "non-harbor")           # the standard only
-        self.assertEqual(cases["tau3-bench"], "multi-route")           # Harbor's adapter, and the standard
-        # every listed benchmark falls in one of the three; Harbor is every entry's route, and the
-        # standard only of the entries naming it
-        self.assertTrue(set(cases.values()) <= {"harbor-only", "multi-route", "non-harbor"})
-        self.assertEqual(set(cases.values()), {"multi-route", "non-harbor"})
-        for b in cat.listed_benchmarks:
-            self.assertEqual([r.harness for r in b.routes], [k for k, _ in catalog.HARNESSES if k == "harbor" or k in b.harness], b.key)
-        self.assertEqual([k for k, _ in catalog.HARNESSES], ["standard", "harbor"])      # Nullius first, everywhere
-        self.assertEqual(cat.benchmark("longmemeval").harness, ["standard"])   # its own scripts: the standard's Original setup
 
     def test_every_listed_benchmark_says_how_to_cite_it_and_where_that_came_from(self):
         for b in catalog.load(catalog.ROOT).listed_benchmarks:

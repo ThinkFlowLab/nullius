@@ -115,13 +115,13 @@ class ControlsApart(unittest.TestCase):
         broken = feasibility.summary_of(self.broken_oracle)
         self.assertEqual((broken.n_unexpected, broken.state, broken.label), (1, "warn", "1 reference rejected ⚠"))
 
-    def test_a_control_that_failed_before_the_verifier_is_a_setup_failure(self):
         with tempfile.TemporaryDirectory() as root:
             nop = write_job(root, "z-nop", "nop", {"a": 0, "env": "EnvironmentSetupError"})
             summary = feasibility.summary_of(nop)
             self.assertEqual((summary.n_failed, summary.state, summary.label), (1, "warn", "1 setup failure ⚠"))
             empty = write_job(root, "e-nop", "nop", {})
             self.assertEqual((feasibility.summary_of(empty).state, feasibility.summary_of(empty).label), ("pending", "no trials"))
+
 
     def test_the_header_the_chips_and_the_mix_bar_count_the_agent_only(self):
         html = self.get("/runs")
@@ -134,8 +134,6 @@ class ControlsApart(unittest.TestCase):
         bar = re.search(r'<div class="bar">.*?</div>', html, re.S).group(0)
         self.assertEqual(sorted(re.findall(r'style="flex:(\d+)" data-outcome="([a-z_]+)"', bar)),
                          [("1", "failed_verification"), ("1", "rate_limited"), ("2", "resolved")])
-
-    def test_the_header_counts_the_checks_apart_and_only_when_there_are_some(self):
         # each job is a launch of its own here: no start time is recorded
         for jobs, header in (([self.nop, self.oracle], "2 launches · 0 runs · 0 trials · 2 checks"),
                              ([self.nop], "1 launch · 0 runs · 0 trials · 1 check"),

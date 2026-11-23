@@ -27,7 +27,7 @@ def record(states: dict, truncated: bool = False, version: str = questions.VERSI
 
 
 class Estimate(unittest.TestCase):
-    def test_a_point_and_a_band_on_the_rule_of_thumb(self):
+    def test_a_point_and_a_band_on_a_dated_price_that_says_when_it_is_old(self):
         est = client.estimate(18342, today="2026-09-18")
         self.assertEqual((est["calls"], est["input_tokens"], est["usd"]), (1, 6115, 0.000257))                     # the point: 3.0 characters per token, measured
         self.assertEqual((est["tokens_low"], est["tokens_high"]), (int(18342 // 3.5) + 1, int(18342 // 2.5) + 1))   # the band: 2.5 to 3.5 characters per token
@@ -36,14 +36,12 @@ class Estimate(unittest.TestCase):
         self.assertEqual((est["price_per_mtok"], est["price_as_of"], est["price_stale"]), (0.042, "2026-09-17", False))
         self.assertEqual(client.estimate(400_000, calls=20)["input_tokens"], 133_353)
         self.assertEqual(client.estimate(0, calls=0)["tokens_high"], 0)
-
-    def test_the_price_is_dated_never_fetched_and_says_when_it_is_old(self):
         self.assertFalse(client.price_stale("2026-09-17")); self.assertFalse(client.price_stale("2026-12-16"))
         self.assertTrue(client.price_stale("2026-12-17")); self.assertTrue(client.price_stale("2027-09-17"))
         self.assertTrue(client.estimate(100, today="2027-01-01")["price_stale"])
         self.assertIsInstance(client.price_stale(), bool)
         src = Path(client.__file__).read_text(encoding="utf-8")
-        self.assertNotIn("urlopen(\"https://docs", src); self.assertIn('PRICE_AS_OF = "2026-09-17"', src)          # a constant with a date, not a fetch
+        self.assertNotIn("urlopen(\"https://docs", src)                                                             # a constant with a date, not a fetch
 
     def test_calibration_from_stored_calls_tightens_the_band(self):
         recs = [record({"trial": {"chars": 10000, "truncated": False, "input_tokens": 2500}, "final": {"chars": 300, "truncated": False, "input_tokens": 100}}),

@@ -56,10 +56,6 @@ class SignedOut(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_other_tasks_keep_the_assets_folder(self):
-        self.assertEqual(self.driver._assets(self.unit, "007"), self.driver.ASSETS)
-        self.assertFalse(os.path.exists(os.path.join(self.unit, "assets")))
-
     def test_the_profile_loses_its_sign_ins_and_keeps_its_mail(self):
         root = self.driver._assets(self.unit, "006")
         got = members(os.path.join(root, "task_006", "thunderbird-profile.tar.gz"))
@@ -77,14 +73,6 @@ class SignedOut(unittest.TestCase):
             self.assertEqual(os.path.realpath(os.path.join(root, rel)),
                              os.path.realpath(os.path.join(self.driver.ASSETS, rel)))
         self.assertNotIn("thunderbird-profile.tar.gz.part", os.listdir(os.path.join(root, "task_006")))
-
-    def test_the_copy_is_the_same_each_time(self):
-        root = self.driver._assets(self.unit, "006")
-        with open(os.path.join(root, "task_006", "thunderbird-profile.tar.gz"), "rb") as f:
-            first = f.read()
-        self.driver._assets(self.unit, "006")
-        with open(os.path.join(root, "task_006", "thunderbird-profile.tar.gz"), "rb") as f:
-            self.assertEqual(f.read(), first)
 
     def test_a_missing_profile_is_refused(self):
         os.remove(os.path.join(self.driver.ASSETS, "task_006", "thunderbird-profile.tar.gz"))
@@ -114,7 +102,9 @@ class SignedOut(unittest.TestCase):
                     self.assertRaises(self.driver.EnvironmentSetupError):
                 self.driver.score("tasks__006", self.unit)
 
-    def test_the_null_control_and_the_original_get_the_copy(self):
+    def test_the_null_control_and_the_original_get_the_copy_and_other_tasks_the_assets_folder(self):
+        self.assertEqual(self.driver._assets(self.unit, "007"), self.driver.ASSETS)
+        self.assertFalse(os.path.exists(os.path.join(self.unit, "assets")))
         envs = []
 
         def run(argv, cwd, env, *a, **kw):

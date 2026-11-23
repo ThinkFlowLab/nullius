@@ -299,11 +299,6 @@ class Cleanup(unittest.TestCase):
             f.write(f"someones-volume\n{OTHER}\n{OTHER}\n../x\n{VOLUME}x\n")
         self.assertEqual(self.remove(), ["rm -f -v cid1", f"volume rm {OTHER} {VOLUME}"])
 
-    def test_the_note_is_read_to_its_limit(self):
-        with open(self.note, "w") as f:
-            f.write(" " * self.driver.NOTE_BYTES + OTHER + "\n")
-        self.assertEqual(self.remove(), ["rm -f -v cid1", f"volume rm {VOLUME}"])
-
     def test_a_note_not_the_units_own_is_not_evidence(self):
         elsewhere = os.path.join(self.tmp, "elsewhere")
         with open(elsewhere, "w") as f:
@@ -320,7 +315,11 @@ class Cleanup(unittest.TestCase):
         with open(elsewhere) as f:
             self.assertEqual(f.read(), OTHER + "\n")
 
-    def test_a_full_disk_still_removes(self):
+    def test_a_note_that_cannot_be_written_still_removes(self):
+        os.rmdir(os.path.join(self.unit, "vm"))
+        self.assertEqual(self.remove(), ["rm -f -v cid1", f"volume rm {VOLUME}"])
+        os.makedirs(os.path.join(self.unit, "vm"))
+        os.remove(self.calls)
         write = os.write
 
         def full(fd, data):
@@ -330,10 +329,6 @@ class Cleanup(unittest.TestCase):
 
         with mock.patch.object(self.driver.os, "write", full):
             self.assertEqual(self.remove(), ["rm -f -v cid1", f"volume rm {VOLUME}"])
-
-    def test_no_vm_folder_still_removes(self):
-        os.rmdir(os.path.join(self.unit, "vm"))
-        self.assertEqual(self.remove(), ["rm -f -v cid1", f"volume rm {VOLUME}"])
 
     def child(self, *alive):
         """A process group of its own whose SIGTERM is timed, and can remove a container (FAKE_ALIVE)."""

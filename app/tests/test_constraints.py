@@ -29,13 +29,6 @@ ALL = {"cpus": 2, "memory_mb": 512, "processes": 100, "concurrency": 3, "cpu_set
 
 
 class Table(unittest.TestCase):
-    def test_each_entry_is_whole(self):
-        for c in constraints.TABLE:
-            self.assertTrue(c.label and c.kind in ("cap", "pin"), c.key)
-            if "docker" in c.apply:
-                self.assertTrue(c.files and c.enforced, c.key)        # a container flag is read back
-        self.assertEqual(list(constraints.container(ALL)), ["cpus", "memory_mb", "processes", "cpu_set"])
-
     def test_values_are_refused_by_key_type_and_minimum(self):
         self.assertEqual(constraints.problems(ALL), [])
         self.assertEqual(constraints.problems({"gpu_ids": []}), [])

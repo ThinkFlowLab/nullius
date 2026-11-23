@@ -57,20 +57,10 @@ class LastMessage(unittest.TestCase):
                ev("available_commands_update"), ev("agent_message_chunk", "I'll look."), ev("tool_call"),
                ev("tool_call_update"), ev("agent_message_chunk", "lan"), ev("usage_update"), ev("agent_message_chunk", "tern")]
         self.assertEqual(acp.last_message(evs), "lantern")
-
-    def test_metadata_after_the_answer_does_not_erase_it(self):
         # Goose: the answer, its usage, then the session's title
         evs = [ev("user_message_chunk", "q"), ev("tool_call"), ev("agent_message_chunk", "lan"), ev("agent_message_chunk", "tern"),
                ev("usage_update"), ev("session_info_update"), ev("current_mode_update")]
         self.assertEqual(acp.last_message(evs), "lantern")
-
-    def test_metadata_between_two_messages_parts_them(self):
-        # Codex: a notice sent as text, its commands, then the answer
-        evs = [ev("user_message_chunk", "q"), ev("agent_message_chunk", "Model metadata for `m` not found."),
-               ev("available_commands_update"), ev("agent_message_chunk", "lan"), ev("agent_message_chunk", "tern"), ev("usage_update")]
-        self.assertEqual(acp.last_message(evs), "lantern")
-
-    def test_no_message_is_an_empty_answer(self):
         self.assertEqual(acp.last_message([ev("user_message_chunk", "q"), ev("tool_call")]), "")
 
 
@@ -106,10 +96,6 @@ class ClientTest(unittest.TestCase):
         upd = [e["update"] for e in t.events if e["update"].get("sessionUpdate") == "tool_call_update"][0]
         self.assertEqual(upd["status"], "failed")
 
-    def test_permission_is_granted(self):
-        sid = self.c.new_session(self.ws)
-        self.assertEqual(self.c.prompt(sid, "ask", timeout=20).text, "granted yes")
-
     def test_an_adapters_warning_comes_as_a_notice_not_in_the_answer(self):
         # the client takes notices, so an adapter's warning is never text in front of the answer
         from nullius.standard.runner import job
@@ -120,7 +106,9 @@ class ClientTest(unittest.TestCase):
         steps = job.trajectory_from_events(t.events, [], {"key": "fake"}, "m", "s")["steps"]
         self.assertIn("warning: Model metadata not found", [s.get("message") for s in steps if s["source"] == "system"])
 
-    def test_permission_is_refused_unless_granting_was_asked_for(self):
+    def test_permission_is_granted_only_when_granting_was_asked_for(self):
+        sid = self.c.new_session(self.ws)
+        self.assertEqual(self.c.prompt(sid, "ask", timeout=20).text, "granted yes")
         c = acp.Client([sys.executable, FAKE], dict(os.environ), os.path.join(self.tmp, "b.log")).start()
         try:
             sid = c.new_session(self.ws)

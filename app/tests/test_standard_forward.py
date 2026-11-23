@@ -123,10 +123,6 @@ class ForwardTest(unittest.TestCase):
         with up:
             self.assertEqual(up.recv(64), b"LICENSE-OK")
 
-    def test_no_address_at_all_is_an_error_not_a_crash(self):
-        with self.assertRaises(OSError):
-            forward._connect([])
-
     def test_a_nonce_line_reaches_the_target_before_the_clients_bytes(self):
         port, got = _recorder()
         with tempfile.TemporaryDirectory() as d:

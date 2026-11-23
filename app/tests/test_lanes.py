@@ -42,9 +42,7 @@ class Lanes(unittest.TestCase):
         self.assertEqual([(g["lane"], g["status"]) for g in rows["setup_error"]["lines"]], [("agree", "agree")])
         self.assertEqual([(g["lane"], g["status"], g["status_label"]) for g in rows["rate_limited"]["lines"]],
                          [("disagree", "other", "Cause outside the list")])
-
-    def test_what_is_not_a_finding_stays_in_the_gutter(self):
-        rows = self.by_outcome(L.board(self.job, self.records()))
+        # what is not a finding stays in the gutter
         self.assertEqual([(g["lane"], g["status"], g["word"]) for g in rows["resolved"]["lines"]], [("gutter", "not_asked", "not asked")])
         self.assertEqual([(g["status"], g["word"], g["cause"]) for g in rows["unknown"]["lines"]],
                          [("suggestion", "suggests Setup error", None), ("not_comparable", "not comparable", None)])

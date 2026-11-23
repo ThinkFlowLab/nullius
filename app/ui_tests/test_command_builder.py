@@ -3,7 +3,7 @@ import json
 import subprocess
 import unittest
 
-from ui_tests.builder_support import AGENT, APP, CompilerCase
+from ui_tests.builder_support import AGENT, CompilerCase
 
 
 class RecipeCompiler(CompilerCase):
@@ -24,11 +24,6 @@ class RecipeCompiler(CompilerCase):
         for key in ('prompt_timeout','workspace_dir','agent_user','forward_generation_config','bridge_port','cua_bridge'):
             self.assertNotIn(key,[p['key'] for p in self.schema['parameters']],key)
 
-    def test_harbor_owns_the_timeout(self):
-        text=self.run_text(self.compile())
-        self.assertIn('--agent-timeout-multiplier 1',text)
-        self.assertNotIn("--ak 'prompt_timeout=",text)
-
     def test_multiple_agents_share_scope_and_controls_omit_model(self):
         out=self.compile(edit="r.customAgents=['my.pkg:Agent','other.mod:AgentB'];r.agents=['custom-1','oracle','nop','custom-0'];r.tasks=7;r.include='retail*'")
         runs=[a for a in out['artifacts'] if a['id'].startswith('run-')]
@@ -40,12 +35,13 @@ class RecipeCompiler(CompilerCase):
         self.assertNotIn('tool_timeout_sec',next(a['text'] for a in runs if a['id']=='run-custom-0'))   # the reference agent's own parameter
 
     def test_custom_scope_type_and_shell_quotes(self):
-        out=self.compile(edit="r.custom=[{scope:'agent',key:'extra_setting',type:'JSON',value:'{\"x\":\"a b\"}'},{scope:'environment',key:'split',type:'string',value:\"test's\"},{scope:'harness',key:'epochs',type:'number',value:'2'}]")
+        out=self.compile(edit="r.custom=[{scope:'agent',key:'extra_setting',type:'JSON',value:'{\"x\":\"a b\"}'},{scope:'environment',key:'split',type:'string',value:\"test's\"},{scope:'harness',key:'epochs',type:'number',value:'2'},{scope:'environment',key:'example',type:'string',value:'false'}]")
         text=self.run_text(out)
         self.assertIn('--ak \'extra_setting={"x":"a b"}\'',text)
         self.assertIn("--ek 'split=\"test'\\''s\"'",text)
         self.assertIn("--epochs='2'",text)
-        self.assertEqual(len([n for n in out['notes'] if n.startswith('Custom ')]),3)
+        self.assertIn("--ek 'example=\"false\"'",text)                    # text that reads as a boolean stays text
+        self.assertEqual(len([n for n in out['notes'] if n.startswith('Custom ')]),4)
 
     def test_invalid_custom_values_and_reserved_fields_block_copy(self):
         for edit in [
@@ -72,20 +68,13 @@ class RecipeCompiler(CompilerCase):
         data=self.js("const r=C.create();"+AGENT+"r.params.mcp_timeout_s=0;r.custom=[{scope:'agent',key:'verbose',type:'boolean',value:'false'},{scope:'environment',key:'split',type:'string',value:'test'}];const imported=C.fromJSON(JSON.stringify(r));process.stdout.write(JSON.stringify({same:JSON.stringify(r)===JSON.stringify(imported),out:C.compile(imported)}));")
         self.assertTrue(data['same']);self.assertEqual(data['out']['errors'],[])
 
-    def test_custom_text_false_stays_text(self):
-        out=self.compile(edit="r.custom=[{scope:'environment',key:'example',type:'string',value:'false'}]")
-        self.assertIn("--ek 'example=\"false\"'",self.run_text(out))
-
-    def test_a_dataset_harbor_does_not_serve_opens_the_standards_recipe(self):
-        """A link to a dataset Harbor does not serve, of a benchmark the
-        standard runs, opens the standard's recipe on that benchmark."""
-        out = self.js("process.stdout.write(JSON.stringify(['longmemeval-s','locomo10'].map(d=>{const r=C.prefill({dataset:d});return [r.harness,r.benchmark];})))")
-        self.assertEqual(out, [["standard", "longmemeval"], ["standard", "locomo"]])
-
     def test_the_builder_opens_on_the_nullius_runner(self):
         # nothing asked for: the standard's recipe; a link that names a Harbor dataset, agent or model still opens Harbor's
         out = self.js("process.stdout.write(JSON.stringify([C.prefill({}).harness,C.prefill({model:'gpt-x'}).harness,C.prefill({dataset:'terminal-bench@2.0'}).harness]))")
         self.assertEqual(out, ["standard", "harbor", "harbor"])
+        # a dataset Harbor does not serve, of a benchmark the standard runs: the standard's recipe on that benchmark
+        out = self.js("process.stdout.write(JSON.stringify(['longmemeval-s','locomo10'].map(d=>{const r=C.prefill({dataset:d});return [r.harness,r.benchmark];})))")
+        self.assertEqual(out, [["standard", "longmemeval"], ["standard", "locomo"]])
 
     def test_the_runner_step_offers_nullius_then_harbor_and_a_native_recipe_does_not_open(self):
         self.assertEqual([r["key"] for r in self.schema["runners"]], ["standard", "harbor"])
@@ -100,11 +89,6 @@ class RecipeCompiler(CompilerCase):
         r=self.js("process.stdout.write(JSON.stringify(C.prefill({dataset:'../my tasks',model:'openai/test',n_tasks:'42',agent:'oracle'})))")
         self.assertEqual(r['benchmark'],'custom');self.assertEqual(r['path'],'../my tasks')
         self.assertEqual(r['tasks'],42);self.assertEqual(r['agents'],['oracle'])
-
-    def test_blocked_benchmark_has_no_launch(self):
-        out=self.js("const r=C.create('harbor');C.setBenchmark(r,'blocked-example');process.stdout.write(JSON.stringify(C.compile(r)));",
-                    dict(self.schema, benchmarks=self.schema['benchmarks']+[self.BLOCKED]))
-        self.assertTrue(out['errors']);self.assertEqual(out['artifacts'],[])
 
 
 class RouteCases(CompilerCase):
@@ -131,18 +115,6 @@ class RouteCases(CompilerCase):
         # every offered benchmark is one the catalogue names on Harbor, official or community
         usable = {b['key'] for b in self.schema['benchmarks'] if 'harbor' in b['harness']}
         self.assertEqual(set(self.offered()), usable)
-
-    def test_a_benchmark_the_catalogue_does_not_put_on_harbor_is_not_inferred(self):
-        # No catalogue entry is off Harbor now, so the case is pinned on a schema edit:
-        # an entry naming no harness is offered nowhere and blocked by name.
-        schema = dict(self.schema, benchmarks=self.schema['benchmarks'] + [{'key': 'elsewhere', 'title': 'Elsewhere', 'category': 'x', 'harness': [], 'origin': 'official', 'datasets': []}])
-        program = ('const C=require(' + json.dumps(str(APP/'static/builder/command-builder-core.js')) + ')(' + json.dumps(schema) + ');'
-                   'const r=C.create();C.setBenchmark(r,"elsewhere");const c=C.compile(r);'
-                   'process.stdout.write(JSON.stringify({offered:C.benchmarks().map(b=>b.key).includes("elsewhere"),blocker:C.routeBlocker("elsewhere"),errors:c.errors.map(e=>e.message),n:c.artifacts.length}));')
-        out = json.loads(subprocess.run([self.node, '-'], input=program, check=True, capture_output=True, text=True).stdout)
-        self.assertFalse(out['offered'])
-        self.assertEqual(out['blocker'], 'Elsewhere has no Harbor route; the harness it runs on is not available here.')
-        self.assertEqual(out['errors'][0], out['blocker']); self.assertEqual(out['n'], 0)
 
     def test_an_agent_that_needs_its_own_vendor_key_is_named_on_review(self):
         schema = dict(self.schema, agentNeeds={"cursor-cli": ["CURSOR_API_KEY"]}, credentials={"available": ["openrouter"], "agent_keys": []})

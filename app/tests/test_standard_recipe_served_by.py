@@ -64,10 +64,17 @@ class TheRecipe(unittest.TestCase):
         self.assertIn("--served-by openai/gpt-4o-mini=prov-j", scripts[1])
         row = next(r for r in out["review"] if r[1] == "Model")[2]
         self.assertIn("judge served by prov-j", row)
+        # the model field's model is also the judge's: the control calls it as its judge, and its job takes the pin too
+        out = recipe.compile(a_recipe(others=["fake", "nop"], model="openai/gpt-4o-mini", served_by={"model": ["prov-a"]}), d)
+        self.assertEqual(out["errors"], [])
+        for part in out["parts"]:
+            self.assertIn("--served-by openai/gpt-4o-mini=prov-a", part["script"])
 
     def test_a_pin_is_refused_as_the_option_is(self):
         for kw, said in (({"provider": "openai", "model": "gpt-5-mini", "served_by": {"model": ["deepinfra"]}}, "needs OpenRouter"),
                          ({"served_by": {"model": ["bad slug"]}}, "not a serving provider's slug"),
+                         ({"served_by": {"model": ["deepinfra", "bad slug"]}}, "not a serving provider's slug"),
+                         ({"served_by": {"model": ["deepinfra", ""]}}, "not a serving provider's slug"),
                          ({"served_by": {"model": ["deepinfra", "deepinfra"]}}, "named twice"),
                          ({"served_by": {"agent": ["deepinfra"]}}, "Served by names"),
                          ({"served_by": ["deepinfra"]}, "Served by names"),
@@ -88,20 +95,6 @@ class TheRecipe(unittest.TestCase):
         self.assertTrue(lines and all(line.count("--served-by") == 1 for line in lines))      # each way of starting it: once
         other = recipe.compile(a_recipe(model="openai/gpt-4o-mini", served_by={"model": ["a"], "judge": ["b"]}), d)
         self.assertIn("pins openai/gpt-4o-mini twice", other["errors"][0]["message"])
-
-    def test_a_pin_is_its_models_on_every_job_that_calls_it(self):
-        """The model field's model is also the judge's: the control beside the agent calls it as its judge, and its job
-        takes the pin too."""
-        out = recipe.compile(a_recipe(others=["fake", "nop"], model="openai/gpt-4o-mini", served_by={"model": ["prov-a"]}), defs(judged()))
-        self.assertEqual(out["errors"], [])
-        for part in out["parts"]:
-            self.assertIn("--served-by openai/gpt-4o-mini=prov-a", part["script"])
-
-    def test_a_list_with_an_empty_or_a_bad_slug_is_refused_in_sight(self):
-        for slugs in (["deepinfra", ""], ["deepinfra", "bad slug"]):
-            with self.subTest(slugs=slugs):
-                out = recipe.compile(a_recipe(served_by={"model": slugs}), defs())
-                self.assertTrue(any("not a serving provider's slug" in e["message"] for e in out["errors"]), out["errors"])
 
     def test_each_fields_model_is_given_as_the_run_sends_it(self):
         """Like the paper, LongMemEval's gpt-4o is sent as openai/gpt-4o-2024-08-06 on OpenRouter: its providers are that

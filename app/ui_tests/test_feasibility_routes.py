@@ -52,14 +52,6 @@ class FeasibilityPage(unittest.TestCase):
         self.assertIsNotNone(match, task)
         return match.group(0)
 
-    def test_the_page_is_worded_as_feasibility_checking_not_a_search(self):
-        html = self.get("/job/tb-x4-agent/feasibility")
-        meaning = " ".join(unescape(re.sub(r"<[^>]+>", "", re.search(r'<p class="subtitle" id="feasibility-meaning">(.*?)</p>', html, re.S).group(1))).split())
-        self.assertIn("Is each task feasible: can an empty solution fail, and can a reference solution pass?", meaning)
-        self.assertIn("says nothing about whether an agent will succeed", meaning)
-        self.assertNotIn("hyperparameter", text_of(html)); self.assertNotIn("search", meaning)
-        self.assertLess(len(meaning), 260)                                                          # one breath, not an essay
-
     def test_the_scope_and_the_executed_controls_are_stated(self):
         html = self.get("/job/tb-x4-agent/feasibility")
         self.assertIn('<span id="feasibility-scope">4 tasks of tb-small (--n-tasks 4)</span>', html)

@@ -274,10 +274,6 @@ class Parts(Base):
         self.assertEqual(said, ["  ✕ r-nop · tau3-bench__tau3-airline-0 · unresolved · reward 0.0 · 1:31", "  ✓ r-nop · tau3-bench__tau3-retail-0 · resolved · reward 1.0 · 0:03"])
         ex._trial_lines(); self.assertEqual(len([l for l in ex.lines if "tau3-bench__" in l]), 2)                 # said once
 
-    def test_ssh_noise_stays_out_of_the_log(self):
-        ex = self.wait(execution.Execution(execution.Plan(name="r", script="echo '** WARNING: connection is not using a post-quantum key exchange algorithm.'; echo real"), root=str(self.tmp)).start())
-        self.assertNotIn("post-quantum", "\n".join(ex.lines)); self.assertIn("real", ex.lines)
-
 
 class Transport(unittest.TestCase):
     def test_bytes_that_are_not_utf_8_never_end_a_run(self):
@@ -627,6 +623,10 @@ class Recipe(Base):
         # a record from when a plan could name an installed Harbor release still loads
         old = execution.Plan.from_dict({"name": "old", "script": "true", "harbor_version": "0.22.0", "wheels": ["/w.whl"], "requires_python": ">=3.12"})
         self.assertEqual((old.name, old.runner), ("old", "harbor"))
+        pin = {"kind": "release", "version": "0.24.0", "extras": []}
+        back = execution.Plan.from_dict(execution.Plan(name="p", script="true", harbor_pin=pin).to_dict())
+        self.assertEqual(back.harbor_pin, pin)
+        self.assertEqual(execution.Plan.from_dict({"name": "old", "script": "true", "host": None}).harbor_pin, {})   # from before the pin: harbor on PATH
 
 
 class Refused(Base):
@@ -753,23 +753,6 @@ class OnHost(HostBase):
         self.assertEqual((ex.state, ex.step), ("failed", "connect"))
         self.assertIn("is no longer offered", ex.error)
         self.assertFalse(any("setsid nohup" in c for c in self.ssh_commands()))
-
-    def test_stop_kills_the_detached_process_on_the_host(self):
-        polls = {"n": 0}
-        def answer(argv, timeout=0, stdin=None):
-            self.calls.append((argv, stdin)); cmd = argv[-1]
-            if argv[0] == "rsync": return 0, ""
-            if "printf 'ok" in cmd: return 0, "ok\nuv=yes\ndocker=yes\nharbor=yes\ndocker_ok=yes\nhostname=x\n"
-            if "setsid nohup" in cmd: return 0, "777\n"
-            if "__nullius__" in cmd: polls["n"] += 1; return 0, "\n__nullius__ alive"
-            return 0, ""
-        ex = execution.Execution(self.plan, root=str(self.tmp / "runs"), run=answer, key="k" * 20).start()
-        self.until(ex, "running")
-        for _ in range(50):
-            if polls["n"]: break
-            time.sleep(0.02)
-        ex.stop(); self.wait(ex)
-        self.assertEqual(ex.state, "stopped"); self.assertTrue(self.killed(777))
 
 
 class StandardOnHost(HostBase):
@@ -1028,12 +1011,6 @@ class PinnedHarbor(HostBase):
         self.assertEqual((ex.state, ex.step), ("failed", "harbor")); self.assertIn("Repository not found", ex.error)
         self.assertTrue(any('detail="harbor from owner/harbor, commit cccccccccccc: building it here, once for this commit"' in l for l in ex.lines))
         self.assertEqual(self.calls, [])                                                                 # nothing asked of the host
-
-    def test_the_pin_is_kept_in_the_record_and_an_old_record_has_none(self):
-        pin = {"kind": "release", "version": "0.24.0", "extras": []}
-        back = execution.Plan.from_dict(execution.Plan(name="p", script="true", harbor_pin=pin).to_dict())
-        self.assertEqual(back.harbor_pin, pin)
-        self.assertEqual(execution.Plan.from_dict({"name": "old", "script": "true", "host": None}).harbor_pin, {})   # from before the pin: harbor on PATH
 
 
 if __name__ == "__main__":

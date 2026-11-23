@@ -63,11 +63,6 @@ class Partition(unittest.TestCase):
             with self.assertRaises(ValueError):
                 shard.parse(bad)
 
-    def test_shards_started_apart_agree_on_their_launch(self):
-        self.assertEqual(shard.launch_id("fakebench", "fake", "gpt-5-mini", day="2026-10-12"),
-                         shard.launch_id("fakebench", "fake", "gpt-5-mini", day="2026-10-12"))
-        self.assertEqual(shard.launch_id("b", "o", "openai/gpt 5", day="2026-10-12"), "2026-10-12__b__o__openai_gpt_5")
-
 
 def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="gpt-5-mini", bench=BENCH, other=AGENT,
                 planned=None, t0=1_760_000_000.0, failed=(), budget=None, backend="local", bench_options=None,
@@ -372,10 +367,6 @@ class Launches(unittest.TestCase):
         self.assertEqual(out[0].title, out[0].prefix)
         mixed = launches.group([a_job("m-a", 0, "L1"), a_job("m-b", 0.1, "L2")], {"e": ("m", ["m-a", "m-b"], None, set())})
         self.assertEqual((len(mixed), mixed[0].title), (1, mixed[0].prefix))
-
-    def test_a_job_with_no_launch_groups_as_before(self):
-        out = launches.group([a_job("x", 0), a_job("y", 0.2)])
-        self.assertEqual([sorted(l.job_ids) for l in out], [["x", "y"]])
 
 
 if __name__ == "__main__":

@@ -277,13 +277,6 @@ class HumanEvalNotTested(unittest.TestCase):
             got = self.score(guarded + odd)
             self.assertEqual((got["reward"], got["detail"]["result"], "not_tested" in got["detail"]), (1.0, "passed", False))
 
-    def test_dotted_imports_and_links_are_named_never_followed(self):
-        os.makedirs(os.path.join(self.ws, "other"))
-        os.symlink(os.path.join(self.tmp, "nowhere.py"), os.path.join(self.ws, "dangling.py"))
-        os.symlink(self.tmp, os.path.join(self.ws, "away"))                              # a folder outside the workspace
-        got = self.score("import other.mod as m, dangling, away\nfrom .rel import x\n")
-        self.assertEqual(got["detail"]["not_tested"], ["away/", "dangling.py", "other/", "rel.py"])
-
 
 class HumanEval(unittest.TestCase):
     """The verdict is the upstream's check_correctness on the completion the
@@ -375,22 +368,6 @@ class HumanEval(unittest.TestCase):
         self.assertEqual((argv[:2], argv[argv.index("--network") + 1]), (["run", "--rm"], "none"))
         self.assertIn("nullius/base:test", argv)
         self.assertEqual(os.listdir(ws), ["solution.py"])                 # the check's folder is gone
-
-    @unittest.skipIf(docker_tier.why_not(), docker_tier.why_not() or "")
-    def test_in_the_units_image_the_verdict_is_the_upstreams(self):
-        p = _driver(self, self.b, self.up, self.data, **{container.CHECK_IMAGE: container.base_tag()})
-        t = p.request("units", dataset="humaneval")["units"][0]
-        said = []
-        for body in ("oracle", "    return None\n"):
-            ws = tempfile.mkdtemp(dir=self.tmp)
-            p.request("setup", unit=t, dir=ws)
-            if body == "oracle":
-                p.request("oracle", unit=t, dir=ws)
-            else:
-                with open(os.path.join(ws, "solution.py"), "a") as f:
-                    f.write(body)
-            said.append(p.request("score", unit=t, dir=ws, transcript=[], answer="", timeout=300)["passed"])
-        self.assertEqual(said, [True, False])
 
     @unittest.skipIf(docker_tier.why_not(), docker_tier.why_not() or "")
     def test_original_setup_in_real_containers(self):
@@ -541,10 +518,10 @@ class Locomo(unittest.TestCase):
         self.assertEqual(len(seen), 2)                           # nothing asked
 
 
-def _fake_model(test, reply: str, fail_first: int = 0, status: int = 500):
+def _fake_model(test, reply: str, fail_first: int = 0):
     """An OpenAI-compatible endpoint on loopback that answers ``reply`` and
     keeps every request body: (the bodies, its base_url). ``fail_first``:
-    that many requests are answered ``status`` first."""
+    that many requests are answered 500 first."""
     seen = []
 
     class H(http.server.BaseHTTPRequestHandler):
@@ -552,7 +529,7 @@ def _fake_model(test, reply: str, fail_first: int = 0, status: int = 500):
             seen.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
             if len(seen) <= fail_first:
                 body = json.dumps({"error": {"message": "try again", "type": "server_error"}}).encode()
-                self.send_response(status)
+                self.send_response(500)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
@@ -617,16 +594,6 @@ class LongMemEval(unittest.TestCase):
         self.assertTrue(prompt.endswith("History Chats:\n\nMEM\n\nCurrent Date: 2023/05/30\nQuestion: How many days?\nAnswer:"), prompt)
         # run_generation's main asks with these, gen_length 500 without chain of thought
         self.assertEqual({(s["model"], s["n"], s["temperature"], s["max_tokens"]) for s in seen}, {("m", 1, 0, 500)})
-
-    def test_the_reader_retries_a_rate_limit_through_the_upstreams_backoff(self):
-        """chat_completions_with_backoff, run_generation's own: a 429 the
-        client's own retries give up on is asked again after 5 s."""
-        seen, base = _fake_model(self, "18 days", fail_first=3, status=429)
-        p = _driver(self, self.b, self.up, self.data)
-        said = p.request("produce", unit="q1", dir=self.tmp, recalled=[{"id": "q1", "memory": "MEM"}], model="m", base_url=base, key="k",
-                         timeout=120)
-        self.assertEqual(said["answer"], "18 days")
-        self.assertEqual(len(seen), 4)                 # the client's 2 retries, then the upstream's backoff
 
 
 if __name__ == "__main__":

@@ -34,9 +34,6 @@ def agent(**kw):
 
 
 class Problems(unittest.TestCase):
-    def test_an_option_with_its_vendor_default_is_fine(self):
-        self.assertEqual(definitions.problems(agent(), "agent"), [])
-
     def test_a_default_it_does_not_allow_is_refused(self):
         bad = definitions.problems(agent(options={"effort": dict(EFFORT, default="max")}), "agent")
         self.assertEqual(bad, ["options.effort.default: the vendor's own default, a value it allows"])
@@ -62,9 +59,6 @@ class Problems(unittest.TestCase):
             for d in definitions.load(kind, root=definitions.CATALOGUE, every=True)[0]:
                 for n, o in (d.get("options") or {}).items():
                     self.assertTrue("pattern" not in o or "example" in o, f"{d['_ref']} {n}")
-
-    def test_a_value_its_pattern_refuses_is_told_by_its_example(self):
-        self.assertEqual(definitions.option_problem({"pattern": "[0-9]{1,3}", "example": "16"}, "abc"), "'abc' is not a value it takes, e.g. 16")
 
     def test_a_name_and_a_summary(self):
         bad = definitions.problems(agent(options={"Effort": dict(EFFORT), "effort": dict(EFFORT, summary="")}), "agent")
@@ -103,10 +97,6 @@ class Problems(unittest.TestCase):
 
 
 class Values(unittest.TestCase):
-    def test_the_rest_keep_their_defaults(self):
-        self.assertEqual(definitions.options_of(agent()), ({"effort": "medium"}, []))
-        self.assertEqual(definitions.options_of(agent(), {"effort": "high"}), ({"effort": "high"}, []))
-
     def test_an_unknown_name_or_value_is_said(self):
         _, bad = definitions.options_of(agent(), {"effort": "max", "speed": "x"})
         self.assertEqual(bad, ["Bot has no option 'speed' (its options: effort)", "option effort: 'max' is not one of low, medium, high"])

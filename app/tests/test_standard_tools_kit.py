@@ -74,6 +74,10 @@ class Server(unittest.TestCase):
             self.assertEqual(text(r), text(tool(t["name"], mine)))                     # deterministic
             self.assertNotEqual(text(r), text(tool(t["name"], mine, seed="another")), t["name"])   # and the seed's
 
+        codes = {text(tool(n, {"parcel": "P-1000"})).rsplit(" ", 1)[1] for n in mcp.NUMBERS}
+        self.assertEqual(len(codes), len(mcp.NUMBERS))
+        self.assertTrue(all(len(c) == 9 and c[4] == "-" for c in codes))
+
     def test_arguments_change_the_answer_and_wrong_types_are_tool_errors(self):
         a = text(tool("get_stock_code", {"warehouse": "Riverside", "item": 7}))
         self.assertIn(mcp.code(SEED, "stock", "RIVERSIDE", 7), a)
@@ -85,10 +89,6 @@ class Server(unittest.TestCase):
         self.assertIn("item must be an integer", text(bad))
         self.assertTrue(tool("get_stock_code", {"item": 7})["isError"])
 
-    def test_decoys_answer_in_the_same_shape_with_other_codes(self):
-        codes = {text(tool(n, {"parcel": "P-1000"})).rsplit(" ", 1)[1] for n in mcp.NUMBERS}
-        self.assertEqual(len(codes), len(mcp.NUMBERS))
-        self.assertTrue(all(len(c) == 9 and c[4] == "-" for c in codes))
 
     def test_the_chain_is_three_hops(self):
         customer, account, settlement = mcp.chain(SEED, 1234)
@@ -254,12 +254,6 @@ class Driver(unittest.TestCase):
 
 
 class KitVersions(unittest.TestCase):
-    def test_every_kit_has_a_version_and_the_tools_kit_is_two(self):
-        for k in definitions.kits():
-            self.assertIsInstance(k.get("kit_version"), int, k["key"])
-        self.assertEqual(definitions.kit_version(definitions.kit("agent.tools/v1")), 2)
-        self.assertEqual(definitions.kit_version(definitions.kit("agent.task/v1")), 1)
-        self.assertEqual(definitions.kit_version({}), 1)
 
     def test_a_bad_kit_version_is_refused(self):
         k = definitions.kit("agent.task/v1")

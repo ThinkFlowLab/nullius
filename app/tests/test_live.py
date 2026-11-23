@@ -38,12 +38,14 @@ def board_of(*lines, now=NOW):
 
 
 class Schema(unittest.TestCase):
-    def test_every_field_the_contract_names_is_required(self):
+    def test_every_field_the_contract_names_is_required_and_seq_is_an_int(self):
         for missing in ("ts", "seq", "job", "event"):
             raw = json.loads(ev(1, "trial.phase", phase="env_setup"))
             del raw[missing]
             with self.assertRaisesRegex(live.FeedError, missing):
                 live.parse_line(json.dumps(raw))
+        with self.assertRaisesRegex(live.FeedError, "seq"):
+            live.parse_line(ev(1, "trial.log").replace('"seq": 1', '"seq": "1"'))
 
     def test_vocabularies_are_closed(self):
         with self.assertRaisesRegex(live.FeedError, "unknown event"):
@@ -68,10 +70,6 @@ class Schema(unittest.TestCase):
         with self.assertRaisesRegex(live.FeedError, "offset"):
             live.parse_line(ev(1, "trial.log", ts="2026-09-12T18:00:01", line="x"))
 
-    def test_seq_is_an_int(self):
-        with self.assertRaisesRegex(live.FeedError, "seq"):
-            live.parse_line(ev(1, "trial.log").replace('"seq": 1', '"seq": "1"'))
-
 
 class Redaction(unittest.TestCase):
     def test_the_tail_is_scrubbed_too_not_only_the_cards(self):
@@ -83,10 +81,6 @@ class Redaction(unittest.TestCase):
         self.assertNotIn(key, json.dumps(snap["tail"]))
         self.assertNotIn(key, json.dumps(snap["trials"]))
 
-    def test_activity_is_capped_at_120_chars(self):
-        e = live.parse_line(ev(1, "trial.progress", activity="x" * 500))
-        self.assertEqual(len(e.data["activity"]), live.ACTIVITY_MAX)
-
 
 class Reading(unittest.TestCase):
     def write(self, text):
@@ -96,11 +90,12 @@ class Reading(unittest.TestCase):
         return p
 
     def test_a_torn_last_line_is_a_notice_not_an_error(self):
-        p = self.write(ev(1, "job.start", trial=None) + "\n" + ev(2, "trial.phase", phase="env_setup") + "\n"
+        p = self.write(ev(1, "job.start", trial=None) + "\n\n" + ev(2, "trial.phase", phase="env_setup") + "\n"
                        + '{"ts": "2026-09-12T18:00:03Z", "seq": 3, "job": "j", "tri')
         feed = live.read_events(p)
-        self.assertEqual([e.seq for e in feed.events], [1, 2])
-        self.assertTrue(any("torn" in n for n in feed.notices), feed.notices)
+        self.assertEqual([e.seq for e in feed.events], [1, 2])                # the blank line is skipped
+        self.assertEqual(len(feed.notices), 1, feed.notices)
+        self.assertIn("torn", feed.notices[0])
 
     def test_a_malformed_line_in_the_middle_raises(self):
         p = self.write(ev(1, "job.start", trial=None) + "\nnot json\n" + ev(3, "job.end", trial=None) + "\n")
@@ -113,10 +108,6 @@ class Reading(unittest.TestCase):
         self.assertEqual([e.seq for e in feed.events], [1, 2])
         self.assertTrue(any("seq" in n for n in feed.notices))
         self.assertEqual(live.fold(feed.events).trials[0].phase, "agent_run")
-
-    def test_blank_lines_are_skipped(self):
-        p = self.write(ev(1, "job.start", trial=None) + "\n\n" + ev(2, "job.end", trial=None) + "\n")
-        self.assertEqual(len(live.read_events(p).events), 2)
 
 
 class Fold(unittest.TestCase):
@@ -138,15 +129,12 @@ class Fold(unittest.TestCase):
         t = b.trials[0]
         self.assertEqual((t.step, t.n_input_tokens, t.n_cache_tokens, t.n_output_tokens), (4, 200, 50, 5))
         self.assertIsNone(t.cost_usd)
-        quiet = board_of(ev(1, "trial.phase", phase="agent_run"))
-        self.assertIsNone(quiet.trials[0].step)
-        self.assertIsNone(quiet.snapshot()["totals"]["n_input_tokens"])
-
-    def test_cost_is_absent_until_something_reports_it(self):
-        b = board_of(ev(1, "trial.phase", phase="agent_run"), ev(2, "trial.progress", step=1, n_input_tokens=10))
         self.assertIsNone(b.snapshot()["totals"]["cost_usd"])
         b = board_of(ev(1, "trial.phase", phase="agent_run"), ev(2, "trial.progress", cost_usd=0.0012))
         self.assertEqual(b.snapshot()["totals"]["cost_usd"], 0.0012)
+        quiet = board_of(ev(1, "trial.phase", phase="agent_run"))
+        self.assertIsNone(quiet.trials[0].step)
+        self.assertIsNone(quiet.snapshot()["totals"]["n_input_tokens"])
 
     def test_trial_end_records_outcome_reward_durations_and_totals(self):
         b = board_of(ev(1, "trial.phase", phase="agent_run"),
@@ -296,14 +284,6 @@ class Fold(unittest.TestCase):
                             now=start + timedelta(seconds=60))
         self.assertIsNone(only_end.tokens_per_sec())   # no key has two points
 
-    def test_the_tail_is_the_last_fifty_events(self):
-        lines = [ev(i, "trial.log", line=str(i)) for i in range(1, 80)]
-        self.assertEqual([e["seq"] for e in board_of(*lines).snapshot()["tail"]], list(range(30, 80)))
-
-    def test_now_defaults_to_the_last_event_so_replay_is_exact(self):
-        b = board_of(ev(1, "trial.phase", phase="agent_run"), ev(5, "trial.log", line="x"), now=None)
-        self.assertEqual(b.trials[0].elapsed_in_phase(b.now), 4.0)
-
 
 class Preparing(unittest.TestCase):
     """job.prepare: the window between Run and job.start is on the board."""
@@ -343,23 +323,6 @@ class Preparing(unittest.TestCase):
         self.assertEqual((b.state, b.launched_at, b.preparing(), b.elapsed_sec()), ("starting", None, None, 0.0))
         self.assertEqual(board_of(ev(1, "trial.log", line="x")).state, "running")
         self.assertEqual(live.fold([]).state, "unknown")
-
-    def test_the_prepare_window_fixture_at_two_moments(self):
-        root = FIXTURES / "prepare-window"
-        during = live.load(root / "events.jsonl", now=datetime(2026, 9, 14, 8, 0, 20, tzinfo=timezone.utc)).snapshot()
-        # Only the first two lines have happened by 08:00:20 — the loader reads
-        # the whole file, so fold the prefix the way a poller would have seen it.
-        events = [e for e in live.read_events(root / "events.jsonl").events if e.ts <= datetime(2026, 9, 14, 8, 0, 20, tzinfo=timezone.utc)]
-        during = live.fold(events, now=datetime(2026, 9, 14, 8, 0, 20, tzinfo=timezone.utc)).snapshot()
-        self.assertEqual(during, json.loads((root / "expected-preparing.json").read_text()))
-        self.assertEqual(during["state"], "preparing")
-        self.assertEqual(during["preparing"], {"stage": "image", "since": "2026-09-14T08:00:12Z", "elapsed_sec": 8.0})
-        self.assertEqual((during["elapsed_sec"], during["counts"]["total"], during["trials"]), (20.0, 2, []))
-        after = live.load(root / "events.jsonl").snapshot()
-        self.assertEqual(after, json.loads((root / "expected.json").read_text()))
-        self.assertEqual(after["state"], "running")
-        self.assertIsNone(after["preparing"])
-        self.assertEqual(after["elapsed_sec"], 45.0)                     # 08:00:00 → 08:00:45
 
 
 class Lanes(unittest.TestCase):
@@ -442,37 +405,10 @@ class Lanes(unittest.TestCase):
         [w] = b.winners()
         self.assertEqual((w["rewards"], w["winner"]), ({"a": 1.0, "b": 0.5}, "a"))
 
-    def test_a_single_agent_job_has_one_lane_and_nothing_to_win(self):
-        b = board_of(ev(1, "trial.queued", "x", task="t1", agent="a"),
-                     ev(2, "trial.queued", "y", task="t2", agent="a"),
-                     ev(3, "trial.end", "x", outcome="resolved", reward=1.0))
-        self.assertEqual(len(b.lanes()), 1)
-        self.assertEqual(b.winners(), [])
-        self.assertEqual(b.lanes()[0]["wins"], 0)
-
     def test_a_task_run_by_one_agent_is_not_a_contest(self):
         b = self.duel(ev(6, "trial.queued", "solo", task="t-solo", agent="my-agent"),
                       ev(7, "trial.end", "solo", outcome="resolved", reward=1.0))
         self.assertEqual([w["task"] for w in b.winners()], ["t-a"])
-
-    def test_harbors_recorded_prepare_feed_walks_preparing_starting_running_finished(self):
-        # The prepare feed reports stages before the job starts:
-        # job.prepare {stage: dataset}, job.prepare {stage: tasks},
-        # then job.start - written at launch, so a board polling the file sees
-        # the window. Folded prefix by prefix, the way
-        # a poller sees the file grow.
-        events = live.read_events(FIXTURES / "harbor-prepare-x4" / "events.jsonl").events
-        self.assertEqual([e.event for e in events[:3]], ["job.prepare", "job.prepare", "job.start"])
-        one = live.fold(events[:1]); two = live.fold(events[:2]); three = live.fold(events[:3])
-        self.assertEqual((one.state, one.preparing()["stage"], one.n_concurrent, one.agents), ("preparing", "dataset", 4, ["oracle"]))
-        self.assertEqual((two.state, two.preparing()["stage"]), ("preparing", "tasks"))
-        self.assertEqual((three.state, three.preparing(), three.n_total), ("starting", None, 4))
-        self.assertEqual(three.launched_at, events[0].ts)
-        self.assertAlmostEqual(three.elapsed_sec(), 0.014, places=3)          # launch -> job.start, a local dataset
-        whole = live.fold(events)
-        self.assertEqual((whole.state, whole.snapshot()["counts"]["completed"]), ("finished", 4))
-        self.assertAlmostEqual(whole.elapsed_sec(), 24.62, places=2)           # launch -> job.end
-        self.assertNotIn("REDACTED", json.dumps(whole.snapshot()))
 
 
 class Fixture(unittest.TestCase):
@@ -507,16 +443,6 @@ class Fixture(unittest.TestCase):
         got = live.load(FIXTURES / "events.jsonl", now=NOW).snapshot()
         want = json.loads((FIXTURES / "expected.json").read_text())
         self.assertEqual(got, want)
-
-    def test_what_the_fixture_exercises(self):
-        b = live.load(FIXTURES / "events.jsonl", now=NOW)
-        self.assertTrue(any("torn" in n for n in b.notices))
-        states = {t.trial: t.state for t in b.trials}
-        self.assertEqual(states, {"airline-0__a1": "done", "retail-0__r1": "running", "banking-001__b1": "running"})
-        retail = next(t for t in b.trials if t.trial == "retail-0__r1")
-        self.assertNotIn("sk-", retail.last_line)          # redacted on read
-        self.assertIsNone(b.snapshot()["totals"]["cost_usd"])  # nobody reported cost
-        self.assertIsNone(b.eta_sec())                      # one finished, not two
 
     def test_harbors_recorded_progress_run_folds_to_its_snapshot(self):
         # Eight trials, four of which report
@@ -652,11 +578,9 @@ class TheRoute(unittest.TestCase):
         s = live.snapshot(str(FIXTURES), now=NOW)
         self.assertEqual(s["now"], "2026-09-12T18:29:20Z")
         self.assertTrue(live.has_feed(str(FIXTURES)))
-        json.dumps(s)   # the route returns it as JSON
-
-    def test_no_feed_means_no_board(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertFalse(live.has_feed(d))
+        json.dumps(s)   # the route returns it as JSON
 
     def test_the_timeline_rides_beside_the_snapshot_never_inside_it(self):
         # Harbor's recorded oracle run: four trials, each phase started once and

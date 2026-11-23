@@ -44,7 +44,7 @@ class PreparedInstallTests(unittest.TestCase):
             file.parent.mkdir(parents=True, exist_ok=True)
             file.touch()
 
-    def test_runtime_must_be_installed_before_a_process_starts(self):
+    def test_runtime_and_product_launcher_must_be_installed_before_a_process_starts(self):
         with patch.object(adapter.subprocess, "Popen") as launch:
             with self.assertRaisesRegex(RuntimeError, "missing its runtime"):
                 adapter.run(self.install, "question")
@@ -52,12 +52,8 @@ class PreparedInstallTests(unittest.TestCase):
             (self.install / "runtime/bin/python").unlink()
             with self.assertRaisesRegex(RuntimeError, "missing its runtime"):
                 adapter.run(self.install, "question")
-            launch.assert_not_called()
-
-    def test_product_entry_points_must_exist(self):
-        self.prepare()
-        (self.install / "src/harness/personal-agent/services/agent_bridge/src/server_engine/workswarm_launcher.py").unlink()
-        with patch.object(adapter.subprocess, "Popen") as launch:
+            self.prepare()
+            (self.install / "src/harness/personal-agent/services/agent_bridge/src/server_engine/workswarm_launcher.py").unlink()
             with self.assertRaisesRegex(RuntimeError, "product launcher"):
                 adapter.run(self.install, "question")
             launch.assert_not_called()
