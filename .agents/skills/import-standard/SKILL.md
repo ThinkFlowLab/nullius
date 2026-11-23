@@ -219,8 +219,8 @@ prints the writable folder under the active user catalogue. Work there, then:
     setup: then the one that needs neither, said in the `summary` with the
     upstream's. A value that calls an embedding model names it in `needs`
     (its calls go through the run's relay); one that needs programs on the
-    machine names a `host` requirement (`{summary, check, install: {apt,
-    npm}}`, the upstream's own pins) - the builder checks and installs it;
+    machine names a `host` requirement (`{label, summary, check, install:
+    {apt, npm}}`, the upstream's own pins; `label` when the key does not read) - the builder checks and installs it;
     the machine's own hardware (a CUDA GPU) is a `host` requirement with a
     `check` (`nvidia-smi`) and no `install`. An option's `setups` says which
     ways of running it belongs to (`original`, `model`, or `yours`, the agent

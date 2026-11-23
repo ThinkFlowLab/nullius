@@ -173,6 +173,7 @@
   },
   "host": {
     "cuda_gpu": {
+      "label": "NVIDIA GPU",
       "summary": "An NVIDIA GPU with CUDA, for LoCoMo's retrievers: the upstream loads their encoders with .cuda(). Its driver's nvidia-smi on PATH; the driver's own torch (2.0.1, CUDA 11.7) brings the rest.",
       "check": [
         "nvidia-smi"

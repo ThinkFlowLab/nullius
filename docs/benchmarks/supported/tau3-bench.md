@@ -50,9 +50,9 @@ Customer service with domain tools and a simulated user: airline, retail, teleco
 |---|---|---|
 | `retrieval` | `openai_embeddings` | embeddings: text-embedding-3-large |
 | `retrieval` | `openai_embeddings_grep` | embeddings: text-embedding-3-large |
-| `retrieval` | `alltools` | embeddings: text-embedding-3-large; host: sandbox |
-| `retrieval` | `terminal_use` | host: sandbox |
-| `retrieval` | `terminal_use_write` | host: sandbox |
+| `retrieval` | `alltools` | embeddings: text-embedding-3-large; host: Sandbox runtime |
+| `retrieval` | `terminal_use` | host: Sandbox runtime |
+| `retrieval` | `terminal_use_write` | host: Sandbox runtime |
 | `retrieval` | `bm25_reranker` | reranker: gpt-5.2 |
 | `retrieval` | `bm25_reranker_grep` | reranker: gpt-5.2 |
 | `retrieval` | `openai_embeddings_reranker` | reranker: gpt-5.2; embeddings: text-embedding-3-large |
@@ -61,7 +61,7 @@ Customer service with domain tools and a simulated user: airline, retail, teleco
 | `retrieval` | `qwen_embeddings_grep` | embeddings: qwen/qwen3-embedding-8b |
 | `retrieval` | `qwen_embeddings_reranker` | embeddings: qwen/qwen3-embedding-8b; reranker: gpt-5.2 |
 | `retrieval` | `qwen_embeddings_reranker_grep` | embeddings: qwen/qwen3-embedding-8b; reranker: gpt-5.2 |
-| `retrieval` | `alltools-qwen` | embeddings: qwen/qwen3-embedding-8b; host: sandbox |
+| `retrieval` | `alltools-qwen` | embeddings: qwen/qwen3-embedding-8b; host: Sandbox runtime |
 
 ## Good to know
 

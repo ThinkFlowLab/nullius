@@ -372,7 +372,7 @@ class Recipe(unittest.TestCase):
 
     def test_a_gpu_option_is_refused_for_a_container_setup_and_asked_of_the_host_locally(self):
         boxed = self.compiled(others=["original"], model="vendor/model", backend="container", bench_options={"retrieval": "dialog"})
-        self.assertIn("cuda_gpu cannot be provided in a container: choose local processes.", [e["message"] for e in boxed["errors"]])
+        self.assertIn("NVIDIA GPU cannot be provided in a container: choose local processes.", [e["message"] for e in boxed["errors"]])
         self.assertEqual(boxed["host"]["needs"], [])
         here = self.compiled(others=["original"], model="vendor/model", bench_options={"retrieval": "dialog"})
         self.assertEqual([n["name"] for n in here["host"]["needs"]], ["cuda_gpu"])
