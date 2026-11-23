@@ -163,6 +163,25 @@ class KeysOntoHosts(unittest.TestCase):
         self.assertTrue(mine.exists())                                    # the user's own file, not save_key's
         self.assertEqual(hosts.forget_keys("not a host", "", key_dir=str(k)), [])
 
+    def test_two_ports_of_one_address_keep_a_key_each(self):
+        k, head = self.tmp / "k", b"-----" + b"BEGIN OPENSSH PRIVATE" + b" KEY-----\n"
+        a, b = (hosts.save_key("ci", "10.0.0.5", head + f"dummy {p}\n".encode(), key_dir=str(k), port=p) for p in (2201, 2202))
+        self.assertEqual((os.path.basename(a), os.path.basename(b)), ("ci@10.0.0.5_2201", "ci@10.0.0.5_2202"))
+        self.assertTrue(Path(a).read_bytes().endswith(b"dummy 2201\n")); self.assertTrue(Path(b).read_bytes().endswith(b"dummy 2202\n"))
+        self.assertEqual([hosts.parse(f"ci@10.0.0.5:{p}:{path}").key for p, path in ((2201, a), (2202, b))], [a, b])
+        self.assertNotEqual(hosts._key_name("u", "h-1"), hosts._key_name("u", "h", 1))      # an address never ends in _<port>
+
+    def test_an_entry_naming_the_key_file_of_before_keeps_it_and_forget_takes_both_names(self):
+        k, head = self.tmp / "k", b"-----" + b"BEGIN OPENSSH PRIVATE" + b" KEY-----\n"
+        before = hosts.save_key("ci", "10.0.0.5", head, key_dir=str(k))     # the name a key with a port was given before
+        new = hosts.save_key("ci", "10.0.0.5", head, key_dir=str(k), port=2202)
+        old_entry, new_entry = f"ci@10.0.0.5:2201:{before}", f"ci@10.0.0.5:2202:{new}"
+        self.assertEqual(hosts.parse(old_entry).key, before)
+        self.assertEqual(hosts.forget_keys(f"{old_entry}, {new_entry}", old_entry, key_dir=str(k)), [])
+        self.assertEqual(sorted(p.name for p in k.iterdir()), ["ci@10.0.0.5"])           # still named: kept
+        self.assertEqual(hosts.forget_keys(old_entry, "", key_dir=str(k)), [])
+        self.assertEqual(list(k.iterdir()), [])
+
     def test_a_key_that_cannot_be_deleted_is_said_and_the_others_still_go(self):
         k = self.tmp / "k"
         a, b = (hosts.save_key("u", h, b"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n", key_dir=str(k)) for h in ("a", "b"))

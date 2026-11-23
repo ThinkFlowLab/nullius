@@ -912,8 +912,14 @@ class SettingsPage(unittest.TestCase):
         with patch.object(hosts, "KEY_DIR", str(self.tmp / "keys")):
             r = self.client.post("/settings/hosts/key", data={"user": "ubuntu", "host": "10.0.0.4", "port": "2222", "key": (BytesIO(b"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n"), "id_bench")}, headers=headers); self.addCleanup(r.close)
         self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
-        key = str(self.tmp / "keys" / "ubuntu@10.0.0.4")
+        key = str(self.tmp / "keys" / "ubuntu@10.0.0.4_2222")
         self.assertEqual(r.json["entry"], f"ubuntu@10.0.0.4:2222:{key}"); self.assertEqual(oct(os.stat(key).st_mode & 0o777), "0o600")
+        # a second port of the same address keeps a key of its own
+        dummy = b"-----" + b"BEGIN OPENSSH PRIVATE" + b" KEY-----\nsecond\n"
+        with patch.object(hosts, "KEY_DIR", str(self.tmp / "keys")):
+            r = self.client.post("/settings/hosts/key", data={"user": "ubuntu", "host": "10.0.0.4", "port": "2223", "key": (BytesIO(dummy), "id_other")}, headers=headers); self.addCleanup(r.close)
+        self.assertEqual(r.json["entry"], f"ubuntu@10.0.0.4:2223:{self.tmp / 'keys' / 'ubuntu@10.0.0.4_2223'}")
+        self.assertTrue(Path(key).read_bytes().endswith(b"-----\n")); self.assertNotIn(b"second", Path(key).read_bytes())
         bad = self.client.post("/settings/hosts/key", data={"user": "ubuntu", "host": "10.0.0.4", "key": (BytesIO(b"ssh-ed25519 AAAA"), "id.pub")}, headers=headers); self.addCleanup(bad.close)
         self.assertEqual(bad.status_code, 400); self.assertIn("not a private key", bad.json["error"])
         # a password goes to ssh once, through the enrolment, and is not in the answer, the file or the entry
