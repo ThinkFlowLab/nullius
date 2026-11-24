@@ -161,5 +161,32 @@ class JudgementsKeptBefore(unittest.TestCase):
         self.assertIn("cannot be read", self.get("/workspaces").get_data(as_text=True))
 
 
+class EachTryItsOwn(unittest.TestCase):
+    """A retried trial's earlier try is judged, and shown, apart from its last
+    try, even when the try recorded no start."""
+    def test_two_tries_each_show_and_keep_their_own_record(self):
+        from nullius.runs import parse
+        tmp = Path(tempfile.mkdtemp(prefix="nullius-judge-tries-")); self.addCleanup(shutil.rmtree, tmp, True)
+        d = copy_job(tmp / "runs" / "job-x")
+        res = json.loads((d / TRIAL / "result.json").read_text())
+        (d / TRIAL / "result.json").write_text(json.dumps(dict(res, standard={"retries": 1})))
+        shutil.copytree(d / TRIAL, d / "retried" / f"{TRIAL}.try-1")
+        (d / "retried" / f"{TRIAL}.try-1" / "result.json").write_text(json.dumps({k: v for k, v in res.items() if k != "started_at"}))
+        job = parse.parse_job(str(d))
+        (n1, first), (n2, last) = parse.tries(next(t for t in job.trials if t.trial_name == TRIAL))
+        self.assertEqual((n1, n2), (1, 2))
+        self.assertIsNone(first.started_at)
+        asked = lambda choice: lambda *a, **k: {"questions": Q.VERSION, "answers": {"failure_cause": {"choice": choice}}}
+        with patch.object(web.judge.store, "home", return_value=str(tmp / "data")), \
+                patch.object(web.judge.trajectory, "load", return_value=SimpleNamespace(error=None)), \
+                patch.object(web.judge, "_trial_ids_and_states", return_value={}), \
+                web.app.test_request_context("/"):
+            for trial, choice in ((last, "last"), (first, "first"), (last, "last")):
+                with patch.object(web.judge.batch, "ask_states", asked(choice)):
+                    web.judge.judge_trial(job, trial, "k", calibration={})
+            shown = [web.judge.judgement_of(job, t)["answers"]["failure_cause"]["choice"] for t in (first, last)]
+        self.assertEqual(shown, ["first", "last"])
+
+
 if __name__ == "__main__":
     unittest.main()

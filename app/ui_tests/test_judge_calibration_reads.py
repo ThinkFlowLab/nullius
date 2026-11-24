@@ -26,7 +26,7 @@ class CalibrationReads(unittest.TestCase):
     def setUp(self):
         stack = ExitStack()
         self.addCleanup(stack.close)
-        tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="nullius-judge-calib-")))
+        self.tmp = tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="nullius-judge-calib-")))
         stack.enter_context(patch.object(web.shared, "WS_HOME", str(tmp / "workspaces")))
         stack.enter_context(patch.object(web.judge.store, "home", return_value=str(tmp / "data")))
         stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}, clear=True))
@@ -42,7 +42,7 @@ class CalibrationReads(unittest.TestCase):
         web.shared.open_workspace(workspace.create(web.shared.WS_HOME, [], f"w{n}"))
         job_id = "job"
         trials = [NS(trial_name=f"t{i}", key=f"t{i}", has_trajectory=True, trajectory_path="-", started_at=None, outcome="resolved") for i in range(n)]
-        job = NS(job_id=job_id, uid=f"uid-{n}", dir=f"/jobs/{n}", dataset="", dataset_path="", trials=trials)
+        job = NS(job_id=job_id, uid=f"uid-{n}", dir=str(self.tmp), dataset="", dataset_path="", trials=trials)
         real_open, reads = builtins.open, [0]
 
         def counting_open(path, mode="r", *a, **k):

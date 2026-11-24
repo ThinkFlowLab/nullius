@@ -1,6 +1,6 @@
 """Where a judgement lives: the user's own store, by the job it judges -
 ``<data>/judgements/<job uid>/<trial key>.json`` (each name spelled by
-`key`; ``Job.uid``, ``Trial.key``) for System One's,
+`key`; ``Job.uid``, ``Trial.trial_name``) for System One's,
 ``<data>/judgements-llm/...`` for the LLM judge's (a trial has both,
 apart, ``lane``), ``<data>/judgements-tasks/<dataset>/...`` for task
 instructions - keyed by question version inside. ``<data>`` is
@@ -11,14 +11,15 @@ leaves it.
 
 Every function takes the store's base first: ``home()``, or a workspace's
 folder for the store judgements were kept in before (``<workspace>/
-judgements{,-llm}/<job id>/``). Until `move` has copied every workspace's
-into the user's store, a read merges a job's older records in memory
+judgements{,-llm}/<job id>/``). Until `move` has copied a workspace's into
+the user's store, a read merges a job's older records from it in memory
 (`overlay`, passed as ``old``) and writes nothing; a save copies in those of
 the file it writes (`adopt`). The older files are never deleted or rewritten.
 
-Every version is kept, and under each every try of a retried trial: the
-try judged last under the version, each earlier one under
-``<version>@<its start>``. A read without a version asks for the current one
+A try of a retried trial is a trial of its own, by its folder's name
+(``<trial>.try-N``). Every version is kept, and under each every run of
+one trial name: the one judged last under the version, each earlier one
+under ``<version>@<its start>``. A read without a version asks for the current one
 and falls back to the earlier ones the vocabulary still names
 (``questions.EARLIER``), newest first, so an earlier judgement is still shown, and a write always lands under the version the record names."""
 from __future__ import annotations
@@ -27,6 +28,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 from typing import Optional
 
 from nullius import ondisk, paths
@@ -39,7 +41,7 @@ _SAFE = re.compile(r"[^A-Za-z0-9._@+-]")
 ROOTS = {"decision": "judgements", "llm": "judgements-llm"}     # one directory per judge
 TASKS = "task"                       # the lane of task-instruction judgements, by dataset (`task_dataset`)
 ADOPTED = "~adopted"                 # in a file: the digests of the older records copied in, so none is copied twice
-MOVED = ".moved"                     # in ``<home>/judgements/``: every workspace's older records are in the user's store
+MOVED = ".moved"                     # in ``<home>/judgements/``: a file per workspace whose older records are all in the user's store
 
 
 class Unreadable(client.JudgeError, ValueError):
@@ -58,8 +60,38 @@ def _root(base: str, lane: str) -> str:
 
 
 def _locked(path: str):
-    """One save at a time to a judgement file, across threads and processes: a save reads, merges and writes it whole."""
+    """One save at a time to a judgement file, across threads and processes: a save reads, merges and writes it whole.
+    A delete of the folder takes it too (`remove`)."""
     return ondisk.locked(os.path.join(os.path.dirname(path), ".lock"))
+
+
+class Gone(client.JudgeError, ValueError):
+    """The job a judgement was being written for was deleted meanwhile: nothing is written."""
+    def __init__(self, job_dir: str):
+        super().__init__(0, f"{job_dir} was deleted; its judgement is not kept.")
+
+
+def _open_for(path: str, job_dir: Optional[str]):
+    """The folder of `path` made, unless the job `job_dir` is gone already (`Gone`)."""
+    if job_dir and not os.path.isdir(job_dir):
+        raise Gone(job_dir)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+
+def _still(path: str, job_dir: Optional[str]) -> None:
+    """Under the lock: `Gone` when the job was deleted since `_open_for`, the folder it made removed again."""
+    if job_dir and not os.path.isdir(job_dir):
+        d = os.path.dirname(path)
+        if not any(n.endswith(".json") for n in (os.listdir(d) if os.path.isdir(d) else ())):
+            shutil.rmtree(d, ignore_errors=True)
+        raise Gone(job_dir)
+
+
+def remove(folder: str) -> None:
+    """A job's judgement folder deleted, under the lock its saves take, so none writes into it meanwhile."""
+    if os.path.isdir(folder):
+        with ondisk.locked(os.path.join(folder, ".lock")):
+            shutil.rmtree(folder, ignore_errors=True)
 
 
 def key(name: str) -> str:
@@ -143,7 +175,12 @@ def load(base: str, job_id: str, trial_name: str, version: Optional[str] = None,
     if not job_id:                   # a job with no identity yet (Job.uid_source "pending") has no judgement
         return None
     found = _paths(base, job_id, trial_name, lane)
-    return _pick(_with(_read(found), (old or {}).get(found[0])), version, started)
+    return _pick(_with(_read(found), _olds(old, found)), version, started)
+
+
+def _olds(old: Optional[dict], found) -> list:
+    """The older records `old` holds for any of the spellings `found` of one file."""
+    return [d for p in found for d in (old or {}).get(p) or ()]
 
 
 def is_current(record: Optional[dict]) -> bool:
@@ -152,20 +189,22 @@ def is_current(record: Optional[dict]) -> bool:
 
 
 def save(base: str, job_id: str, trial_name: str, record: dict, lane: str = "decision",
-         started: Optional[str] = None, old: Optional[dict] = None) -> dict:
+         started: Optional[str] = None, old: Optional[dict] = None, job_dir: Optional[str] = None) -> dict:
     """The record under its question version, returned as stored; other versions kept. A
     record's answers and hygiene readings merge over the version's earlier
     ones, so judging one question later does not drop the others. Saves to
     one file take turns, across processes; each writes through a temporary file of its own.
     `old`: the job's older records (`overlay`), those of this file copied in first.
-    `Unreadable` when the file is there and cannot be read: nothing is written."""
+    `Unreadable` when the file is there and cannot be read, `Gone` when the
+    job's folder `job_dir` is no longer there: nothing is written."""
     if not job_id:
         raise ValueError("a judgement needs the job's identity")
     found = _paths(base, job_id, trial_name, lane)
     path = found[0]
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    _open_for(path, job_dir)
     with _locked(path):
-        data = _with(_read(found, strict=True), (old or {}).get(path))
+        _still(path, job_dir)
+        data = _with(_read(found, strict=True), _olds(old, found))
         version = record.get("questions", Q.VERSION)
         earlier = data.get(version) or {}
         if not _of(earlier, started):        # another try's: kept beside, and none of its answers are this one's
@@ -311,48 +350,71 @@ def _merged(cur: dict, data: dict) -> dict:
     return cur
 
 
-def _merge_into(path: str, old) -> None:
+def _merge_into(path: str, old, job_dir: Optional[str] = None) -> None:
     """The older records `old` (a list of files' contents) into the file at `path` (`_merged`),
-    under its lock; nothing written when nothing is new. `Unreadable` when the file cannot be read."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    under its lock; nothing written when nothing is new. `Unreadable` when the file cannot be read,
+    `Gone` when the job `job_dir` was deleted."""
+    _open_for(path, job_dir)
     with _locked(path):
+        _still(path, job_dir)
         cur = _read([path], strict=True)
         got = _with(cur, old)
         if got != cur:
             ondisk.write_whole(path, json.dumps(got, indent=1), mode=0o600)
 
 
-def moved(into: Optional[str] = None) -> bool:
-    """Whether `move` has copied every workspace's older records into the user's store."""
-    return os.path.exists(os.path.join(_root(into or home(), "decision"), MOVED))
+def _old_files(ws_dir: str) -> list:
+    """The files of a workspace's store from before, by their path in it."""
+    return sorted(os.path.relpath(os.path.join(d, f), ws_dir) for r in ROOTS.values()
+                  for d, _, fs in os.walk(os.path.join(ws_dir, r)) for f in fs if f.endswith(".json"))
 
 
-def _try_file(data: dict, n: int) -> dict:
-    """An older store's record of try `n` of a trial (``<trial>.try-N.json``), filed under its try:
-    each version's under ``<version>@<its start>``, as `save` keeps an earlier try."""
-    return {k if "@" in k or not isinstance(rec, dict) else _try(k, rec.get("trial_started_at") or f"try-{n}"): rec
-            for k, rec in data.items()}
+def _marker(ws_dir: str, into: str) -> str:
+    return os.path.join(_root(into, "decision"), MOVED, os.path.basename(ws_dir))
 
 
-def overlay(ws_dir: Optional[str], job, into: Optional[str] = None) -> dict:
-    """What the workspace's store from before (`ws_dir`) holds for `job` -
-    under its job id, its trials' (a try's ``<trial>.try-N`` under its trial,
-    filed under its try) and its dataset's task records - as {the file of the
-    user's store (`into`, `home()` by default) it belongs in: [its contents]}.
-    Read only. Two jobs of one id in that workspace each get the same
-    records, as each showed them before. {} once `move` is done."""
-    into = into or home()
-    if not ws_dir or not job.uid or moved(into):
-        return {}
+def _signature(files) -> str:
+    # shortcut: names only, so a file rewritten in place under the same name is not seen; stat each if that matters
+    return hashlib.sha256("\n".join(files).encode("utf-8")).hexdigest()
+
+
+def moved(ws_dir: Optional[str], into: Optional[str] = None) -> bool:
+    """Whether `move` copied every record of the workspace's store from before into the user's
+    store, and it holds no file since: one added, by a restore or an older Nullius, is read again."""
+    if not ws_dir:
+        return False
+    try:
+        with open(_marker(ws_dir, into or home()), encoding="utf-8") as fh:
+            return fh.read() == _signature(_old_files(ws_dir))
+    except OSError:
+        return False
+
+
+def _mark(ws_dir: str, into: str, files) -> None:
+    os.makedirs(os.path.dirname(_marker(ws_dir, into)), exist_ok=True)
+    ondisk.write_whole(_marker(ws_dir, into), _signature(files))
+
+
+def forget(ws_dir: str, folders) -> None:
+    """A workspace's older folders of a deleted job removed, the workspace still `moved` if it was."""
+    was = moved(ws_dir)
+    for d in folders:
+        shutil.rmtree(d, ignore_errors=True)
+    if was:
+        _mark(ws_dir, home(), _old_files(ws_dir))
+
+
+def _places(ws_dir: str, job, into: str):
+    """(an older file, the file of the user's store it belongs in) for each the workspace's store
+    from before holds for `job`: under its job id its trials' and tries' (each by its own name), and
+    its dataset's task records."""
     names = {}
     for t in job.trials:
-        names.update((n, (key(t.key), 0)) for n in _names(t.trial_name))
-        for i in range(1, min(getattr(t, "n_retries", 0) or 0, 99) + 1):
-            names.update((n, (key(t.key), i)) for n in _names(f"{t.trial_name}.try-{i}"))
+        for name in (t.trial_name, *(f"{t.trial_name}.try-{i}" for i in range(1, min(getattr(t, "n_retries", 0) or 0, 99) + 1))):
+            names.update((n, key(name)) for n in _names(name))
     places = [(lane, j, job.uid, names) for lane in ROOTS for j in _names(job.job_id)]
     # before, a dataset's task records were a job of their own, named `task:<dataset>`, and a job naming none its id
     places += [(TASKS, j, task_dataset(job), {}) for j in _names("task:" + (job.dataset_path or job.dataset or "job:" + job.job_id))]
-    out: dict = {}
     for lane, old, new, rename in places:
         src = os.path.join(_root(ws_dir, "decision" if lane == TASKS else lane), old)
         try:
@@ -360,10 +422,32 @@ def overlay(ws_dir: Optional[str], job, into: Optional[str] = None) -> dict:
         except OSError:
             continue
         for f in files:
-            data = _read([os.path.join(src, f)])
-            name, n = rename.get(f[:-5], (f[:-5], 0))
-            if data:
-                out.setdefault(os.path.join(_root(into, lane), key(new), name + ".json"), []).append(_try_file(data, n) if n else data)
+            yield os.path.join(src, f), os.path.join(_root(into, lane), key(new), rename.get(f[:-5], f[:-5]) + ".json")
+
+
+def _old(path: str) -> Optional[dict]:
+    """An older file's records; None when it cannot be read or holds no JSON object."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return {} if data is None else data if isinstance(data, dict) else None
+
+
+def overlay(ws_dir: Optional[str], job, into: Optional[str] = None) -> dict:
+    """What the workspace's store from before (`ws_dir`) holds for `job` (`_places`), as {the file
+    of the user's store (`into`, `home()` by default) it belongs in: [its contents]}. Read only; a
+    file that cannot be read is left out. Two jobs of one id in that workspace each get the same
+    records, as each showed them before. {} once the workspace is `moved`."""
+    into = into or home()
+    if not ws_dir or not job.uid or moved(ws_dir, into):
+        return {}
+    out: dict = {}
+    for src, dest in _places(ws_dir, job, into):
+        data = _old(src)
+        if data:
+            out.setdefault(dest, []).append(data)
     return out
 
 
@@ -371,7 +455,7 @@ def adopt(ws_dir: str, job, into: Optional[str] = None) -> None:
     """Copy `overlay` into the user's store, file by file under each file's lock. The workspace's files are
     left as they are."""
     for path, old in overlay(ws_dir, job, into).items():
-        _merge_into(path, old)
+        _merge_into(path, old, getattr(job, "dir", None))
 
 
 def records_of(base: str, uids, olds=()) -> int:
@@ -383,35 +467,60 @@ def records_of(base: str, uids, olds=()) -> int:
 
 
 def old_stores(home_dir: str, into: Optional[str] = None) -> list:
-    """[(workspace, its count of older records)] for each workspace whose store from before holds any,
-    until `move` is done."""
+    """[(workspace, its count of older records)] for each workspace whose store from before holds
+    any, until it is `moved`."""
     from nullius import workspace
-    if moved(into):
-        return []
     out = []
     for ws in workspace.list_all(home_dir):
-        n = sum(f.endswith(".json") for r in ROOTS.values() for _, _, fs in os.walk(os.path.join(ws.dir, r)) for f in fs)
-        if n:
+        n = len(_old_files(ws.dir))
+        if n and not moved(ws.dir, into):
             out.append((ws, n))
     return out
 
 
+def _plural(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
+
+
 def move(home_dir: str, into: Optional[str] = None) -> list:
-    """Copy every workspace's older records into the user's store (`adopt`, for every job its
-    roots hold) and record that it is done (`moved`), so reads stop consulting the older stores.
-    The older files stay as they are. A workspace with a root that cannot be read is left for a
-    later move, which is then not done: its labels are returned. Safe to run again."""
+    """Copy every workspace's older records into the user's store, the older files left as they
+    are, and mark each workspace whose every file went (`moved`), so reads stop consulting it.
+    A workspace is left for a later move, as one line in the list returned, while one of its roots
+    cannot be read, or one of its files cannot be read, belongs to no job its roots hold, or belongs
+    to several (a job id two jobs share): such a file is copied nowhere, and still read as before.
+    Safe to run again."""
     from nullius import workspace
     into = into or home()
-    unread = []
+    left = []
     for ws, _ in old_stores(home_dir, into):
+        files = _old_files(ws.dir)                       # first: one added during the move leaves the workspace unmarked
         roots = ws.job_roots or ws.roots
         if not all(os.path.isdir(r) for r in roots):
-            unread.append(ws.label)
+            left.append(f"{ws.label} (a root cannot be read)")
             continue
+        owners: dict = {}
         for job in workspace.load_jobs(ws, roots):
-            adopt(ws.dir, job, into)
-    if not unread:
-        os.makedirs(_root(into, "decision"), exist_ok=True)
-        ondisk.write_whole(os.path.join(_root(into, "decision"), MOVED), "")
-    return unread
+            if job.uid:
+                for src, dest in _places(ws.dir, job, into):
+                    owners.setdefault(src, {}).setdefault(dest, job.dir)
+        unread, shared, by_dest = 0, 0, {}
+        for src, dests in owners.items():
+            data = _old(src)
+            if data is None:
+                unread += 1
+            elif len(dests) > 1:                         # unresolved: whose it is cannot be told
+                shared += 1
+            elif data:
+                [(dest, job_dir)] = dests.items()
+                by_dest.setdefault(dest, (job_dir, []))[1].append(data)
+        for dest, (job_dir, old) in by_dest.items():
+            _merge_into(dest, old, job_dir)
+        orphans = len({os.path.join(ws.dir, f) for f in files} - set(owners))
+        why = [_plural(n, *w) for n, w in ((unread, ("file cannot be read", "files cannot be read")),
+                                           (orphans, ("record of no job found", "records of no job found")),
+                                           (shared, ("record two jobs share", "records several jobs share"))) if n]
+        if why:
+            left.append(f"{ws.label} ({', '.join(why)})")
+        else:
+            _mark(ws.dir, into, files)
+    return left

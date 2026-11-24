@@ -1267,7 +1267,7 @@ class WorkspacesPage(unittest.TestCase):
         self.assertEqual(html.count("<template"), 1)
         self.assertIn('<h2 id="ws-dialog-h">Delete workspace </h2>', ask)
         self.assertIn(f'<input type="hidden" name="csrf" value="{self.csrf}">', ask)
-        self.assertIn("<p>Its run folders stay on disk.</p>", ask)
+        self.assertIn("<p>Its roots and judgements stay; its converted imports go.</p>", ask)
         self.assertNotIn("Its judgements", html)                                                       # its jobs keep theirs
         for ws in (self.ws, self.other()):
             self.assertIn(f'data-ask="ws-ask-delete" data-label="{ws.label}" data-action="/workspaces/delete/{ws.name}" aria-haspopup="dialog"', self.row(ws, html))

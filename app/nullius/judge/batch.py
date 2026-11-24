@@ -98,14 +98,15 @@ def ask_states(states: dict, key: str, post: Optional[Callable] = None, calibrat
 
 def ask_and_store(base: str, job_id: str, trial_name: str, states: dict, key, post: Optional[Callable] = None,
                   calibration: Optional[dict] = None, started: Optional[str] = None,
-                  lane: Optional[str] = None, old: Optional[dict] = None) -> Optional[dict]:
+                  lane: Optional[str] = None, old: Optional[dict] = None, job_dir: Optional[str] = None) -> Optional[dict]:
     """`ask_states`, then the merged record saved under the trial's key -
     its answers over the version's earlier ones - in the store at `base`
     (`store.home`). Returns the record as stored. The pre-flight reads the
     job's own calibration unless one is given. `started`: the trial's own
     start, which the record keeps (`store.save`). `lane`: where it is kept,
     the judge's own lane unless named (`store.TASKS`). `old`: the job's
-    older records (`store.overlay`), the file's copied in by the save."""
+    older records (`store.overlay`), the file's copied in by the save. `job_dir`: the
+    job's folder, nothing saved once it is deleted (`store.Gone`)."""
     if calibration is None:
         calibration = store.calibration(base, [job_id])
     rec = ask_states(states, key, post=post, calibration=calibration)
@@ -114,5 +115,5 @@ def ask_and_store(base: str, job_id: str, trial_name: str, states: dict, key, po
         # earlier readings for the others, as the answers are kept (`store.save`), and returns them
         lane = lane or getattr(key, "lane", "decision")
         rec.setdefault("hygiene", {})
-        rec["hygiene"] = store.save(base, job_id, trial_name, rec, lane=lane, started=started, old=old)["hygiene"]
+        rec["hygiene"] = store.save(base, job_id, trial_name, rec, lane=lane, started=started, old=old, job_dir=job_dir)["hygiene"]
     return rec

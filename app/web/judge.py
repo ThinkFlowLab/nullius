@@ -97,11 +97,11 @@ def started_of(trial) -> str | None:
 
 def started_by_name(job) -> dict:
     """{trial name: start} for every trial of a job: what `store.for_job` reads its records for."""
-    return {t.key: started_of(t) for t in job.trials}
+    return {t.trial_name: started_of(t) for t in job.trials}
 
 
 def judgement_of(job, trial, lane: str = "decision") -> dict | None:
-    return store.load(store.home(), job_key(job), trial.key, lane=lane, started=started_of(trial), old=old_of(job))
+    return store.load(store.home(), job_key(job), trial.trial_name, lane=lane, started=started_of(trial), old=old_of(job))
 
 
 def panel(job, trial, lane: str = "decision") -> dict:
@@ -279,8 +279,8 @@ def judge_trial(job, trial, api_key: str, post=None, calibration=None) -> dict:
     traj = trajectory.load(trial.trajectory_path)
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
-    return batch.ask_and_store(store.home(), job_key(job), trial.key, _trial_ids_and_states(trial, traj), api_key, post=post,
-                               calibration=calibration, started=started_of(trial), old=old_of(job))
+    return batch.ask_and_store(store.home(), job_key(job), trial.trial_name, _trial_ids_and_states(trial, traj), api_key, post=post,
+                               calibration=calibration, started=started_of(trial), old=old_of(job), job_dir=job.dir)
 
 
 def _guard():
@@ -321,7 +321,7 @@ def judge_job_route(job_id):
         abort(404)
     lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "decision"
     judged = store.for_job(store.home(), job_key(job), started_by_name(job), lane=lane, old=old_of(job))
-    todo = [t for t in job.trials if t.has_trajectory and t.key not in judged]
+    todo = [t for t in job.trials if t.has_trajectory and t.trial_name not in judged]
     k, cal = key(lane), batch_calibration()
     done, failed = run_batch(todo, lambda t: judge_trial(job, t, k, calibration=cal), lambda t: t.trial_name)
     from flask import flash
@@ -406,7 +406,7 @@ def side_of(job, trial, column) -> dict | None:
     """One side's score as the compare page shows it, from the trial's own
     current record, the job opened from its column's workspace `column`: the expectation, the level it rounds to, the judge's
     confidence, the provenance. None until scored under the current vocabulary."""
-    rec = store.load(store.home(), job_key(job, column), trial.key, started=started_of(trial), old=old_of(job, column))
+    rec = store.load(store.home(), job_key(job, column), trial.trial_name, started=started_of(trial), old=old_of(job, column))
     if not rec or not store.is_current(rec):
         return None
     a = (rec.get("answers") or {}).get(SIDE_QUESTION)
@@ -465,7 +465,7 @@ def judge_side(job, trial, column, api_key: str, post=None, calibration=None) ->
     when it has them all."""
     if not trial.has_trajectory:
         raise client.JudgeError(0, "this trial has no trajectory to judge")
-    rec = store.load(store.home(), job_key(job, column), trial.key, started=started_of(trial), old=old_of(job, column))
+    rec = store.load(store.home(), job_key(job, column), trial.trial_name, started=started_of(trial), old=old_of(job, column))
     have = (rec.get("answers") or {}) if store.is_current(rec) else {}
     ids = [q for q in side_ids(trial) if q not in have]
     if not ids:
@@ -473,8 +473,8 @@ def judge_side(job, trial, column, api_key: str, post=None, calibration=None) ->
     traj = trajectory.load(trial.trajectory_path)
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
-    return batch.ask_and_store(store.home(), job_key(job, column), trial.key, _states_for(trial, traj, ids), api_key, post=post,
-                               calibration=calibration, started=started_of(trial), old=old_of(job, column))
+    return batch.ask_and_store(store.home(), job_key(job, column), trial.trial_name, _states_for(trial, traj, ids), api_key, post=post,
+                               calibration=calibration, started=started_of(trial), old=old_of(job, column), job_dir=job.dir)
 
 
 def _sides_todo(view) -> list:
@@ -559,8 +559,8 @@ def judge_control(side, jobs, api_key: str, post=None, calibration=None) -> dict
     job, trial = _control_trial(side, jobs)
     if trial is None:
         raise client.JudgeError(0, f"{side.control} trial {side.trial_name} is not in this workspace")
-    return batch.ask_and_store(store.home(), job_key(job), trial.key, control_states(side, trial), api_key, post=post,
-                               calibration=calibration, started=started_of(trial), old=old_of(job))
+    return batch.ask_and_store(store.home(), job_key(job), trial.trial_name, control_states(side, trial), api_key, post=post,
+                               calibration=calibration, started=started_of(trial), old=old_of(job), job_dir=job.dir)
 
 
 def triage_summary(report, jobs) -> dict:
@@ -677,26 +677,25 @@ def judge_task(job, trial, api_key: str, post=None, calibration=None) -> dict | 
 
 @app.template_global()
 def judgements_unmoved() -> bool:
-    """Whether the judgements workspaces kept before may still wait to be moved (`store.moved`)."""
-    return not store.moved()
+    """Whether a workspace's judgements kept before still wait to be moved (`store.old_stores`)."""
+    return bool(store.old_stores(shared.WS_HOME))
 
 
 @app.route("/judgements/move", methods=["GET", "POST"])
 def judgements_move():
     """GET: the workspaces whose store from before holds judgements, and how
     many each (`store.old_stores`). POST: every one of them copied into the
-    user's store (`store.move`), the old files kept; ``unread``, the
-    workspaces left for a later move."""
+    user's store (`store.move`), the old files kept; the error names the
+    workspaces left for a later move, and why."""
     if request.method == "GET":
         return jsonify(workspaces=[{"label": ws.label, "n": n} for ws, n in store.old_stores(shared.WS_HOME)])
     shared._require_csrf()
     if not shared._local_client():
         abort(403)
     try:
-        unread = store.move(shared.WS_HOME)
+        left = store.move(shared.WS_HOME)
     except store.Unreadable as e:
         return jsonify(ok=False, error=str(e)), 409
-    if unread:
-        return jsonify(ok=False, error="Not moved: " + ", ".join(unread) + (" has" if len(unread) == 1 else " have")
-                       + " a root that cannot be read."), 409
+    if left:
+        return jsonify(ok=False, error="Left for later: " + "; ".join(left) + "."), 409
     return jsonify(ok=True)

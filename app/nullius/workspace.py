@@ -242,7 +242,7 @@ def _check_roots(ws: Workspace) -> None:
     """ValueError while *ws* holds judgements kept before by job id, not yet copied into the
     user's store, and one of its roots cannot be read: its jobs, and so their records, are unknown."""
     from nullius.judge import store
-    if store.moved() or not any(os.path.isdir(os.path.join(ws.dir, r)) for r in store.ROOTS.values()):
+    if store.moved(ws.dir) or not any(os.path.isdir(os.path.join(ws.dir, r)) for r in store.ROOTS.values()):
         return
     unread = [r for r in ws.job_roots or ws.roots if not os.path.isdir(r)]
     if unread:
@@ -253,20 +253,28 @@ def _keep_judgements(ws: Workspace) -> None:
     """The judgements a workspace kept before they were kept by job
     (``<workspace>/judgements{,-llm}/``): copied into the user's store under
     each job its roots hold, then its files moved there whole, so none is
-    lost with it - a job its roots no longer reach included. Refused while a
-    root cannot be read, since its jobs' records could not be copied."""
+    lost with it - a job its roots no longer reach included - and the User
+    judge's failure analyses of its converted imports beside them, under
+    ``imported/`` by their job folder's path. Refused while a root cannot be
+    read, since its jobs' records could not be copied."""
     from nullius.judge import store
+    from nullius.runs import failure_analysis
     old = [d for r in store.ROOTS.values() if os.path.isdir(d := os.path.join(ws.dir, r))]
-    if not old:
+    made = [os.path.join(d, n) for d, _, names in os.walk(ws.imports_dir) for n in names if n.startswith(failure_analysis.FILE)]
+    if not old and not made:
         return
     _check_roots(ws)
-    if not store.moved():
+    if old and not store.moved(ws.dir):
         for job in load_jobs(ws, ws.job_roots or ws.roots):
             store.adopt(ws.dir, job)
     keep = os.path.join(store.home(), "judgements-of-deleted-workspaces", f"{ws.name}~{datetime.now(timezone.utc):%Y%m%dT%H%M%S%fZ}")
     os.makedirs(keep)
     for d in old:
         shutil.move(d, keep)
+    for f in made:
+        to = os.path.join(keep, os.path.relpath(f, ws.dir))
+        os.makedirs(os.path.dirname(to), exist_ok=True)
+        shutil.move(f, to)
 
 
 def holding(home_dir: str, folder: str) -> list:
