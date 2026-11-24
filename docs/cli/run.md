@@ -38,7 +38,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--max-calls N` | The most model calls a unit's agent may make: [below](#a-cap-on-model-calls) |
 | `--constraint KEY=VALUE` | What the machine allows the run (repeatable): `cpus`, `memory_mb`, `processes`, `cpu_set`, `concurrency`, `gpu_ids` (indices, empty for none); [constraints](../settings/run-hosts.md#constraints). A recipe passes each machine's own |
 | `--served-by [MODEL=]SLUG[,SLUG...]` | On OpenRouter, the serving providers that may answer a model (repeatable): [below](#serving-providers) |
-| `--exchanges MODE`, `--exchanges-max-mb N` | What each unit's relay keeps of its agent's calls (`whole`, `text`, `off`), and its bound: [below](#the-exchange-record) |
+| `--exchanges MODE`, `--exchanges-max-mb N` | What each unit's relay keeps of its agent's calls, and its bound ([below](#the-exchange-record)) |
 | `--attempts K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--retries N` | Run a failed attempt again, up to N times: [below](#retries) |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--attempts`); by default they stay for the next run |
@@ -88,21 +88,15 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 
 ## The exchange record
 
-Each unit's relay keeps every call of its agent whole, its side calls included: the request as sent and the reply as it arrived. `--exchanges off` keeps the call record alone.
+Each unit's relay keeps every call of its agent whole in the trial's `.work/relay/exchanges/`, each part and picture once. Prompts and pictures are stored as sent, unredacted; only the relay's key is cut out.
 
 | Rule | Detail |
 | --- | --- |
-| Where | The trial's `.work/relay/exchanges/`: a line per call (`<unit>.jsonl`), each distinct message, tool or system text once (`parts.jsonl`), each distinct inline picture once (`blobs/`: PNG, JPEG, WebP, GIF) |
-| Its version | Each `.jsonl` file's first line names its format, `{"schema": "nullius.exchanges/v1"}`; a file without it is version 1. A later version is refused, never guessed: the message names both, and a later Nullius reads it |
-| What a call keeps | The request after the relay's changes (the model it sends, a pin) and its sha256, the headers sent without the credentials, the reply's status and body. `agent/calls.jsonl` numbers the same calls (`n`) |
-| Stored as sent | Prompts and pictures are not redacted: a secret the agent typed or a screenshot showed is in the job's folder. Only the relay's key is cut out; a request that held it no longer rebuilds to its hash |
-| `text` | The same without the pictures' bytes: their hash, type and size |
-| The bound | `--exchanges-max-mb`, 256 MB a unit by default. Past it, a call's line and every later one say `cut`; the call record goes on |
-| Never in the way | A failure to write it (a full disk) leaves the agent's reply as it was; the call's line says what failed |
-| Not kept | The judge's and the simulated user's calls, and an option's embeddings: their call record alone |
-| Retries | A retried try's record goes with it under `retried/`; the next try starts its own |
-| A request rebuilt | `nullius runs show <root> <job> <trial> --call N --request` prints call N's request as sent and says whether its sha256 is the recorded one ([Read jobs](read-jobs.md)) |
-| The result | `config.json`: `standard.exchanges` and `standard.exchanges_max_mb`; a recipe's `exchanges` and `exchanges_max_mb` |
+| `text` | Every call without the pictures' bytes, kept by their hash, type and size. |
+| `off` | No exchange record: the call record in `agent/calls.jsonl` alone. |
+| The bound | `--exchanges-max-mb`, 256 MB a unit by default; later calls are marked `cut`. |
+| Not kept | The judge's and the simulated user's calls: their call record alone. |
+| The result | `config.json`: `standard.exchanges` and `standard.exchanges_max_mb`. |
 
 ## A spending cap
 
