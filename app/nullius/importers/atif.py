@@ -331,7 +331,7 @@ def _source_in(trial_dir: str):
         return None
 
 
-def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str) -> str:
+def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str, sid=None) -> str:
     """The read documents, as one job directory of one trial each."""
     # Flattening can give two paths one name (a/b.json, a__b.json): those take
     # a digest of their path, so each document keeps a trial of its own.
@@ -380,6 +380,7 @@ def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str
         "tasks": [{"name": f"{NAME}/{s['trial_dir']}"} for s in summaries],
         "trial_documents": importers.reservations(
             job_dir, ((name, os.path.realpath(path)) for (path, _doc), name in zip(docs, names)), *existing),
+        **importers.recorded_as(sid, root),
     })
     return job_dir
 
@@ -390,9 +391,17 @@ def convert(root: str, out_root: str, job_name: str = "",
     into one job. Every document is read before anything is written, so a
     refused tree leaves no half-written job behind."""
     docs = _read_all(root)
-    if not job_name:
-        base = os.path.basename(os.path.normpath(root))
-        if os.path.isfile(root):
-            base = _trial_name(root, root)
-        job_name = f"{NAME}__{base}"
-    return [_write_job(docs, root, out_root, job_name, command)]
+    base = os.path.basename(os.path.normpath(root))
+    if os.path.isfile(root):
+        base = _trial_name(root, root)
+    job_name, sid = importers.place(out_root, root, f"{NAME}__{base}", job_name, _recorded)
+    return [_write_job(docs, root, out_root, job_name, command, sid)]
+
+
+def _recorded(cfg: dict):
+    """The tree a conversion from before ids was made from: the one its default command names."""
+    try:
+        words = shlex.split(str(cfg.get("command") or ""))
+        return words[words.index("nullius.importers.cli") + 1]
+    except (ValueError, IndexError):
+        return None

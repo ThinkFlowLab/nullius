@@ -28,6 +28,13 @@ the directories under a root the app opened that are one `convert` each.
 Without it a claimed root is one tree, which is how the CLI reads it. The
 picker uses the same boundaries so both surfaces produce the same jobs.
 
+**One source, one job folder.** A tree is a source, known by its absolute
+path. Its first conversion gives it an id of its own (:func:`place`), written
+in the job's ``config.json`` as ``nullius.source`` and read back on every
+reconversion, so the folder and the identity stay its own: a second source of
+one basename gets a folder of its own. A folder converted before the id is
+kept as it is, without one.
+
 **Refusing a tree** is `convert` raising ``SystemExit`` with a message
 that names the file and what is wrong with it — never a job with no trials or a traceback. The message is what a person sees, on the picker or from
 the CLI, so it is redacted at construction: a tree is arbitrary bytes from
@@ -45,6 +52,7 @@ import os
 import pkgutil
 import shutil
 import tempfile
+import uuid
 from collections import Counter
 from types import ModuleType
 
@@ -243,6 +251,61 @@ def mark_changed(job_dir: str, summaries: list) -> None:
     an ended job's cached parse is checked by that file, not trial by trial."""
     if any(s["changed"] for s in summaries):
         os.utime(os.path.join(job_dir, "result.json"))
+
+
+def _config(job_dir: str) -> dict:
+    try:
+        with open(os.path.join(job_dir, "config.json"), encoding="utf-8") as fh:
+            cfg = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _source(cfg: dict) -> tuple:
+    """``(id, path)`` a conversion recorded in ``nullius``, or ``(None, None)``."""
+    own = cfg.get("nullius") if isinstance(cfg.get("nullius"), dict) else {}
+    try:
+        return str(uuid.UUID(str(own["source"]))), own.get("source_path")
+    except (KeyError, ValueError, TypeError):
+        return None, None
+
+
+def place(out_root: str, root: str, default: str, job_name: str = "", recorded=None) -> tuple:
+    """``(job_name, source id)``: the folder under *out_root* the tree at *root*
+    is converted into, and its id, None for a folder converted before ids.
+
+    The folder that already records this source is its own. Otherwise *default*,
+    then ``<default>-2``, ``-3``…, skipping a folder that belongs to another
+    source: one recording another path, or an older one whose
+    ``recorded(config)`` names another path. A named *job_name* is used as it is.
+    """
+    src = os.path.abspath(root)
+    names = sorted(os.listdir(out_root)) if not job_name and os.path.isdir(out_root) else []
+    for name in names:
+        sid, path = _source(_config(os.path.join(out_root, name)))
+        if sid and path == src:
+            return name, sid
+    n = 1
+    while True:
+        name = job_name or (default if n == 1 else f"{default}-{n}")
+        job_dir = os.path.join(out_root, name)
+        if not os.path.isdir(job_dir):
+            return name, str(uuid.uuid4())
+        cfg = _config(job_dir)
+        sid, path = _source(cfg)
+        if job_name:                     # named: written there as asked; an older folder keeps having no id
+            return name, (sid if path == src else str(uuid.uuid4())) if sid else None
+        if not sid:
+            old = recorded(cfg) if recorded and cfg else None
+            if not old or os.path.abspath(old) == src or os.path.normpath(old) == os.path.normpath(root):
+                return name, None
+        n += 1
+
+
+def recorded_as(sid, root: str) -> dict:
+    """What a job's ``config.json`` carries of its source: nothing for a folder converted before ids."""
+    return {"nullius": {"source": sid, "source_path": os.path.abspath(root)}} if sid else {}
 
 
 def labels() -> str:

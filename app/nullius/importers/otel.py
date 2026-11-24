@@ -222,7 +222,7 @@ def _trace_id_in(trial_dir: str):
 
 
 def _write_job(documents: list, out_root: str, job_name: str, command: str,
-               root: str, skipped: list) -> str:
+               root: str, skipped: list, sid=None) -> str:
     job_dir = os.path.join(out_root, job_name)
     ids = [str(doc.get("session_id") or "") for doc in documents]
     existing = importers.existing_trials(job_dir, _trace_id_in)
@@ -262,6 +262,7 @@ def _write_job(documents: list, out_root: str, job_name: str, command: str,
         "import": {"format": reader.FORMAT, "conventions": reader.CONVENTIONS,
                    "skipped": skipped},
         "trial_documents": importers.reservations(job_dir, zip(names, ids), *existing),
+        **importers.recorded_as(sid, root),
     })
     return job_dir
 
@@ -286,5 +287,13 @@ def convert(root: str, out_root: str, job_name: str = "",
         raise SystemExit(str(exc)) from None
     if not documents:
         raise SystemExit(redact(f"the OTLP/JSON exports in {root} carry no spans"))
-    name = job_name or f"{NAME}__{os.path.basename(os.path.abspath(root)) or 'export'}"
-    return [_write_job(documents, out_root, name, command, root, skipped)]
+    name, sid = importers.place(out_root, root, f"{NAME}__{os.path.basename(os.path.abspath(root)) or 'export'}",
+                                job_name, _recorded)
+    return [_write_job(documents, out_root, name, command, root, skipped, sid)]
+
+
+def _recorded(cfg: dict):
+    """The export a conversion from before ids was made from."""
+    datasets = cfg.get("datasets")
+    first = datasets[0] if isinstance(datasets, list) and datasets and isinstance(datasets[0], dict) else {}
+    return first.get("path") if isinstance(first.get("path"), str) else None
