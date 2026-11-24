@@ -72,20 +72,23 @@ def places(step: float, least: int = 0) -> int:
 
 
 def number(v: float, step: float, top: float) -> str:
-    """A plain axis's tick: the decimals its step needs, the same for every tick."""
-    return f"{v:.{places(step)}f}"
+    """A plain axis's tick: the decimals its step needs, the same for every tick; none at the origin."""
+    return f"{v:.{0 if v == 0 else places(step)}f}"
 
 
 @dataclass(frozen=True)
 class Metric:
     """``fmt(v, step, top)`` writes the tick ``v`` of an axis whose ticks are ``step`` apart and reach ``top`` at most
-    in size: one unit and one precision for the whole axis, so that every label is its own. ``bounds`` (low, high),
-    either None, is the range the metric cannot leave (a rate's 0 and 1); the axis keeps to it."""
+    in size: one unit and one precision for the whole axis, so that every label is its own; the origin may drop its
+    decimals. ``bounds`` (low, high), either None, is the range the metric cannot leave (a rate's 0 and 1); the axis
+    keeps to it. ``size(top)``, when given, is the unit ``fmt`` writes such an axis in: a step that needs a decimal
+    more in it than twice the step does is doubled, so the axis shows the fewest decimals (95%, not 92.5%)."""
 
     label: str
     values: tuple
     fmt: Callable = number
     bounds: tuple = (None, None)
+    size: Callable | None = None
 
 
 @dataclass(frozen=True)
@@ -167,13 +170,18 @@ class _Scale:
         return round(self.a + (v - self.lo) / (self.hi - self.lo) * (self.b - self.a), 2)
 
 
-def _ticks_for(values: list, with_zero: bool, bounds: tuple = (None, None)) -> tuple:
+def _ticks_for(values: list, with_zero: bool, metric: Metric) -> tuple:
     """A metric's ticks: around its present values, from zero when its marks grow from zero."""
     if with_zero:
         values = values + [0]
     lo, hi = (min(values), max(values)) if values else (0, 1)
     whole = values and all(isinstance(v, int) for v in values)
-    return nice_ticks(lo, hi, step_min=1 if whole else 0, bounds=bounds)
+    ticks = nice_ticks(lo, hi, step_min=1 if whole else 0, bounds=metric.bounds)
+    if metric.size and len(ticks) > 1:
+        step, unit = ticks[1] - ticks[0], metric.size(max(abs(t) for t in ticks))
+        if places(2 * step / unit) < places(step / unit):
+            ticks = nice_ticks(lo, hi, step_min=2 * step, bounds=metric.bounds)
+    return ticks
 
 
 def _x_labels(scale: _Scale, fmt: Callable, y: float) -> list:
@@ -197,7 +205,7 @@ def _rows(metric: Metric, with_zero: bool, mark: Callable) -> Panel:
     gives the marks of ``v`` at the row's centre ``y``, none for a gap, and the x its reading starts at. The
     gridlines and the baseline's reference cross each row's band only, never a name."""
     present = [v.value for v in metric.values if v.value is not None]
-    scale = _Scale(_ticks_for(present, with_zero, metric.bounds), _LEFT, WIDTH - _RIGHT)
+    scale = _Scale(_ticks_for(present, with_zero, metric), _LEFT, WIDTH - _RIGHT)
     base = next((v for v in metric.values if v.baseline and v.value is not None), None)
     base = base if len(present) > 1 else None
     marks, texts, y = [], [], 4.0
@@ -271,8 +279,8 @@ def scatter(x: Metric, y: Metric) -> Panel:
     shown = [(t, a, b) for t, (a, b) in zip(tags, pairs) if a.value is not None and b.value is not None]
     left, right, top, bottom = _S_LEFT, WIDTH - 8, _S_TOP, _S_HEIGHT - _S_BOTTOM
     # the scales inset from the frame, so a dot on the last tick is whole
-    sx = _Scale(_ticks_for([a.value for _, a, _ in shown], False, x.bounds), left + 12, right - 12)
-    sy = _Scale(_ticks_for([b.value for _, _, b in shown], False, y.bounds), bottom - 12, top + 12)
+    sx = _Scale(_ticks_for([a.value for _, a, _ in shown], False, x), left + 12, right - 12)
+    sy = _Scale(_ticks_for([b.value for _, _, b in shown], False, y), bottom - 12, top + 12)
     marks = [Mark("line", sx(t), top, x2=sx(t), y2=bottom, cls="grid") for t in sx.ticks]
     marks += [Mark("line", left, sy(t), x2=right, y2=sy(t), cls="grid") for t in sy.ticks]
     texts = _x_labels(sx, x.fmt, bottom + 14)

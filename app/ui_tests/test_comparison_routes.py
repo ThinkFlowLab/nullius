@@ -618,13 +618,17 @@ class ScoredRunsCompared(unittest.TestCase):
 
 
 class ChartAxes(unittest.TestCase):
-    """Every axis of every chart kind writes its ticks in one format, each label its own, within the metric's range."""
+    """Every axis of every chart kind writes its ticks in one format, each label its own, within the metric's range;
+    the origin keeps its unit and drops its decimals, and a rate or a token count takes the fewest decimals."""
 
     def test_an_axis_s_tick_labels_are_distinct_in_one_format_inside_the_metric_s_range(self):
         from types import SimpleNamespace
         from web import compare as web_compare, filters
         units = {"cost": filters._usd, "tokens": filters._tokens, "minutes": web_compare.MINUTES,
                  "rate": web_compare.POINTS, "score": web_compare.SCORE}
+        exact = {("rate", "dots", (1.0, 1.0)): ["90%", "95%", "100%"], ("tokens", "dots", (1000, 1100)): ["1.00k", "1.05k", "1.10k"],
+                 ("tokens", "bars", (1000,)): ["0k", "0.5k", "1.0k"], ("cost", "bars", (0.5,)): ["$0", "$0.20", "$0.40", "$0.60"],
+                 ("minutes", "bars", (2.0,)): ["0m", "0.5m", "1.0m", "1.5m", "2.0m"]}
         cases = [   # (unit, style, values)
             ("cost", "dots", (0.01, 0.03)), ("cost", "dots", (0.02,)), ("tokens", "dots", (1000, 1100)),
             ("minutes", "dots", (1.0, 3.0)), ("score", "dots", (0.001, 0.004)),
@@ -646,10 +650,14 @@ class ChartAxes(unittest.TestCase):
                 for labels in filter(None, axes):
                     self.assertEqual(len(set(labels)), len(labels), labels)                                     # each its own
                     self.assertEqual(len({re.sub(r"[\d.]", "", t) for t in labels}), 1, labels)                 # one unit
-                    self.assertEqual(len({len(t.partition(".")[2].rstrip("kMms%")) for t in labels}), 1, labels)  # one precision
+                    origin = [t for t in labels if not re.sub(r"[^1-9]", "", t)]
+                    self.assertFalse([t for t in origin if "." in t], labels)                                 # a bare origin
+                    self.assertLessEqual(len({len(t.partition(".")[2].rstrip("kMms%")) for t in labels if t not in origin}), 1, labels)  # one precision
                     self.assertFalse([t for t in labels if "-" in t], labels)                                  # never below zero
                     if unit == "rate":
                         self.assertLessEqual(max(float(t.rstrip("%")) for t in labels), 100, labels)
+                if (unit, style, values) in exact:
+                    self.assertEqual(axes[0], exact[unit, style, values])
 
 
 if __name__ == "__main__":
