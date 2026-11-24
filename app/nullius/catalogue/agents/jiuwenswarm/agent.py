@@ -32,8 +32,7 @@ changes, each taken from the protocol itself:
   Requests for the unit's own JiuwenSwarm home are served by this wrapper
   on both backends, so its config and todo files remain accessible.
 
-For fidelity, ``--cli PROMPT`` starts the same services and configuration, then
-runs the vendor's ``jiuwenswarm chat --mode agent`` instead of the ACP bridge.
+``--cli PROMPT`` runs the vendor's own CLI in place of the ACP bridge (fidelity).
 
 The resident worker uses a short, private socket path. When the bridge ends,
 the servers and worker are stopped.
@@ -147,9 +146,7 @@ def mcp_into_config(servers):
             env = {e["name"]: e["value"] for e in env}
         entries.append({"name": s["name"], "enabled": True, "transport": "stdio",
                         "command": s["command"], "args": list(s.get("args") or []), "env": env})
-    # Match upstream config_write_lock: startup migrations can still write
-    # config.yaml after the gateway starts listening. Lock before reading so
-    # neither writer can replace the other's update with an older snapshot.
+    # Upstream's own lock: its startup can still write config.yaml here.
     with portalocker.Lock(os.path.join(CONFIG, "config.lock"), timeout=10):
         with open(path) as f:
             data = yaml.safe_load(f) or {}
@@ -342,7 +339,6 @@ def run(runtime_socket, cli_prompt=None):
                                        f"ws://127.0.0.1:{ports[1]}/tui", "--cwd", os.getcwd(),
                                        "--", cli_prompt], stdin=subprocess.DEVNULL, env=env)
             return bridge.wait()
-        # The console entry point follows upstream's gateway package move in 0.2.9.
         bridge = subprocess.Popen([os.path.join(os.path.dirname(PY), "jiuwenswarm-acp"),
                                    "--gateway-url", f"ws://127.0.0.1:{ports[1]}/acp"],
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, env=env, bufsize=0)
