@@ -17,7 +17,8 @@ The cache is keyed by a *signature* of the job directory (every result.json
 and trajectory.json under it, with size and mtime), never by time: a run
 still going changes its files, the signature moves, the job is parsed again.
 A cached job that was parsed by an older version of ``parse`` is refreshed
-too — the signature carries ``parse.SCHEMA`` so a change there invalidates.
+too — the signature carries ``parse.SCHEMA`` and the Job and Trial field names, so a
+change of either invalidates.
 
 A job that has ended (``_ended``) is checked by its *head* alone: its own result.json and
 config.json, and its folder, whose mtime moves when a trial folder comes or
@@ -276,6 +277,13 @@ def _drop(ws: Workspace, index: dict, job_dir: str, keep=()) -> None:
         pass
 
 
+def _schema() -> str:
+    """The cached shape: both SCHEMAs and the Job and Trial field names, so a cache written
+    with another field set is never current, even when two changes bumped SCHEMA alike."""
+    shape = hashlib.sha256(" ".join(_JOB_FIELDS + ("/",) + _TRIAL_FIELDS).encode()).hexdigest()[:12]
+    return f"schema={SCHEMA}/{parse.SCHEMA}/{shape}"
+
+
 def signature(job_dir: str) -> str:
     """What the parse of *job_dir* depends on: the files it reads, by size
     and mtime."""
@@ -286,7 +294,7 @@ def _signatures(job_dir: str) -> tuple:
     """(the job's signature, {trial folder: its own part of it}): a trial whose
     part is unchanged parses the same, so a running job re-reads only the
     trials that moved (load_job), not all of them at each one that ends."""
-    parts = [f"schema={SCHEMA}/{parse.SCHEMA}"]
+    parts = [_schema()]
     trials = {}
     try:
         names = sorted(os.listdir(job_dir))
@@ -318,7 +326,7 @@ def _signatures(job_dir: str) -> tuple:
 def _head(job_dir: str) -> str:
     """What an ended job's parse can change by without a trial changing in place:
     its own records, and its folder's mtime (a trial folder added or removed)."""
-    parts = [f"schema={SCHEMA}/{parse.SCHEMA}"]
+    parts = [_schema()]
     for path in (job_dir, os.path.join(job_dir, "result.json"), os.path.join(job_dir, "config.json")):
         try:
             st = os.stat(path)
