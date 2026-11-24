@@ -150,8 +150,9 @@ class RunFactsOnTheJobPage(unittest.TestCase):
         result = Path(standard_job(str(jobs), "unserved", [1.0], served_by=None)) / "result.json"      # a run that kept no serving record
         result.write_text(json.dumps({k: v for k, v in json.loads(result.read_text()).items() if k != "served"}))
         standard_job(str(jobs), "scored", [1.0, 0.5, 0.0, None], bench=SCORED)
-        standard_job(str(jobs), "constrained", [1], constraints={"cpus": 2, "memory_mb": 512, "processes": 128,
-                                                                  "cpu_set": "0-1", "gpu_ids": [], "concurrency": 2})
+        standard_job(str(jobs), "every", [1], concurrency=2, repeat=3, max_turns=30, max_calls=100, retries=2,
+                     timeouts={"score": 30, "verify": 90, "agent": 7200, "image": 3600, "setup": 600},
+                     constraints={"cpus": 2, "memory_mb": 512, "processes": 128, "cpu_set": "0-1", "gpu_ids": [], "concurrency": 2})
         standard_job(str(jobs), "nop", [0.0], other=NOP, model="", options={}, served_by=None)
         harbor = jobs / "harbor"
         (harbor / "t__1").mkdir(parents=True)
@@ -194,7 +195,7 @@ class RunFactsOnTheJobPage(unittest.TestCase):
             "Benchmark": [("Temperature", "0.2")],
             "fake": [("Reasoning effort", "high"), ("Max tokens", "4096"), ("Api key", "[REDACTED]"), ("Note", "from [REDACTED]"),
                      ("Provider", "OpenRouter"), ("Requested", "deepinfra/fp8, together"), ("Answered by", "DeepInfra · 3 calls")],
-            "Trials": [("Agent limit", "10.00m"), ("Turns", "30"), ("Model calls", "100"), ("Retries", "2"), ("At a time", "3")]})
+            "Trials": [("Concurrent", "3"), ("Retries", "2"), ("Turns", "30"), ("Model calls", "100"), ("Agent limit", "10 min")]})
         self.assertNotIn(SECRET, html)
         self.assertEqual(self.text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap $0.50")    # the cap stays under Run totals
         self.assertIn("Benchmark fakebench 2 Dataset all", self.text(self.header(html), r".*"))             # the names on the cards
@@ -206,12 +207,13 @@ class RunFactsOnTheJobPage(unittest.TestCase):
         html = self.page("named")
         self.assertIn("Benchmark LoCoMo", self.text(self.header(html), r".*"))
         self.assertEqual(self.cards(html), {"Benchmark": [("RAG mode", "dialog")], "fake": [("Provider", "OpenRouter"), ("Answered by", "DeepInfra · 1 call")],
-                                            "Trials": [("Retries", "0"), ("At a time", "3")]})
+                                            "Trials": [("Concurrent", "3"), ("Retries", "0")]})
         self.assertEqual(list(self.cards(self.page("nop"))), ["Benchmark", "Trials"])                     # a control asks no model
         self.assertNotIn("dd-chev", self.header(self.page("harbor")))                                    # nothing recorded: no card opens
-        self.assertEqual(self.cards(self.page("constrained"))["Trials"][-6:], [
-            ("CPUs", "2"), ("Memory (MB)", "512"), ("Processes and threads", "128"), ("CPUs Nullius may use", "0-1"),
-            ("GPUs Nullius may use", "none"), ("Concurrent units", "2")])
+        self.assertEqual(self.cards(self.page("every"))["Trials"], [
+            ("Concurrent", "2"), ("Attempts", "3"), ("Retries", "2"), ("Turns", "30"), ("Model calls", "100"),
+            ("Setup limit", "10 min"), ("Image limit", "60 min"), ("Agent limit", "120 min"), ("Verifier limit", "1.5 min"),
+            ("Score limit", "0.5 min")])
 
     def test_with_no_serving_record_the_provider_stays_and_requested_and_answered_by_go(self):
         self.assertEqual([name for name, _ in self.cards(self.page("unserved"))["fake"]],

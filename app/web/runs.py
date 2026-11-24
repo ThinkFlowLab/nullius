@@ -19,7 +19,7 @@ from flask import (
     url_for,
 )
 from markupsafe import Markup, escape
-from nullius import constraints, execution
+from nullius import execution
 from nullius import importers as harnesses
 from nullius.redact import redact
 from nullius.runs import attempts, classify, failure_analysis, feasibility, launches, live, parse
@@ -644,7 +644,6 @@ def _identity_names(identity: dict) -> dict:
         declared = (d or {}).get("options") or {}
         return {k: (declared.get(k) or {}).get("label") or k.replace("_", " ").capitalize() for k in given}
     return {"benchmark": standard_definitions.title(bench) if bench else " ".join(w for w in (key, version) if w),
-            "constraints": {c.key: c.label + (f" ({c.unit})" if c.unit else "") for c in constraints.TABLE},
             "benchmark_options": labels(bench, identity.get("benchmark_options") or {}),
             "agent_options": labels(other, identity.get("agent_options") or {})}
 

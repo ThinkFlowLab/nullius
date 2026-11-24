@@ -20,13 +20,8 @@
 {%- if facts.provider %}{% set _ = agent_rows.append(('Provider', facts.provider|provider)) %}{% endif %}
 {%- if facts.served_by %}{% set requested %}{% for m, slugs in facts.served_by.items() %}{% if not loop.first %} · {% endif %}{% if facts.served_by|length > 1 %}{{ m }}: {% endif %}{{ slugs|join(', ') }}{% endfor %}{% endset %}{% set _ = agent_rows.append(('Requested', requested)) %}{% endif %}
 {%- if facts.served and (facts.served.calls or facts.served.unnamed) %}{% set answered %}{% for name, n in facts.served.calls.items() %}{% if not loop.first %}, {% endif %}{{ name }} · {{ calls(n) }}{% endfor %}{% if facts.served.unnamed %}{% if facts.served.calls %}, {% endif %}unnamed · {{ calls(facts.served.unnamed) }}{% endif %}{% endset %}{% set _ = agent_rows.append(('Answered by', answered)) %}{% endif %}
-{%- for phase, s in (lim.timeouts or {}).items() %}{% set _ = limit_rows.append((phase|capitalize ~ ' limit', s|secs)) %}{% endfor %}
-{%- if lim.max_turns %}{% set _ = limit_rows.append(('Turns', lim.max_turns)) %}{% endif %}
-{%- if lim.max_calls %}{% set _ = limit_rows.append(('Model calls', lim.max_calls)) %}{% endif %}
-{%- if lim.repeat %}{% set _ = limit_rows.append(('Attempts each', lim.repeat)) %}{% endif %}
-{%- if 'retries' in lim %}{% set _ = limit_rows.append(('Retries', lim.retries)) %}{% endif %}
-{%- if lim.concurrency %}{% set _ = limit_rows.append(('At a time', lim.concurrency)) %}{% endif %}
-{%- for k, v in (lim.constraints or {}).items() %}{% set _ = limit_rows.append((names.constraints.get(k, k|replace('_', ' ')|capitalize), 'none' if v == [] else fact_value(v))) %}{% endfor %}
+{%- for key, name in [('concurrency', 'Concurrent'), ('repeat', 'Attempts'), ('retries', 'Retries'), ('max_turns', 'Turns'), ('max_calls', 'Model calls')] if key in lim %}{% set _ = limit_rows.append((name, lim[key])) %}{% endfor %}
+{%- for key, name in [('setup', 'Setup limit'), ('image', 'Image limit'), ('agent', 'Agent limit'), ('verify', 'Verifier limit'), ('score', 'Score limit')] if key in (lim.timeouts or {}) %}{% set _ = limit_rows.append((name, '%g min'|format(lim.timeouts[key] / 60))) %}{% endfor %}
 {#- A card with rows has a chevron and opens them beneath it, by click or keyboard; `name` keeps one open at a time,
     and `pop` keeps the sliding disclosures off a panel laid over the page. A card with none is as it was. -#}
 {%- macro identity_card(rows) %}{% if rows %}<details class="pop run-identity-more" name="run-identity">
