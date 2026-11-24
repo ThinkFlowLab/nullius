@@ -51,6 +51,7 @@ class PartRunPage(unittest.TestCase):
         self.open(d.parent)
         html = self.page("/job/r1?view=results")
         self.assertEqual(text(html, r'<span id="plan-run".*?</span>'), "3 of 6 planned tasks run")
+        self.assertEqual(text(html, r'<span class="k">Trials</span>.*?</div>'), "Trials 3 of 6 planned tasks run")   # the head's Trials cell
         self.assertEqual(text(html, r'<dt>tasks run</dt><dd id="tasks-run".*?</dd>'), "tasks run 3 of 6")
         self.assertIn('id="tasks-run" class="warn"', html)
         self.assertEqual(text(html, r'<div class="row tot">.*?</div>'), "3 Trials of 6 planned")
