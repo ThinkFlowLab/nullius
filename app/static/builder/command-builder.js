@@ -1229,7 +1229,7 @@
     else if(d.harborChoice!==undefined){const rec=r(),v=el.value;if(v==='path')rec.harborDev='';else if(v==='dev')rec.harborDev=rec.harborDev||'~/harbor-dev/.venv/bin/harbor';renderForm();refreshPlan();if(v==='dev')root.querySelector('[data-field="harborDev"]')?.select();}
     else if(el.id==='nb-import-file'){
       const file=el.files[0];if(!file)return;
-      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());savedId='';step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Review the recipe before copying commands.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
+      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());savedId='';step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Check it, then Run.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
     }
   });
   { const dl=document.getElementById('nb-models'); if(dl){const seen=new Set(); for(const o of [...dl.options]){const v=C.bareModel(o.value); if(!v||seen.has(v)){o.remove();continue;} seen.add(v); o.value=v;}} }
