@@ -4,6 +4,7 @@ file at all - so the wrapper, in the agent's container, answers them itself,
 inside the workspace or the unit's own JiuwenSwarm home."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 import importlib.util
 import io
 import json
@@ -11,8 +12,10 @@ import os
 import shutil
 import socket
 import tempfile
+import threading
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from tests import APP
 
@@ -35,7 +38,116 @@ def read(buf):
     return [json.loads(x) for x in buf.getvalue().decode().splitlines()]
 
 
+class McpConfiguration(unittest.TestCase):
+    def test_waits_for_upstream_writer_and_preserves_its_update(self):
+        # JSON is also YAML: keep this suite independent of the agent's
+        # packages while exercising the whole read/modify/replace boundary.
+        yaml = SimpleNamespace(safe_load=json.load,
+                               safe_dump=lambda data, stream, **kw: json.dump(data, stream))
+        attempted, finished = threading.Event(), threading.Event()
+        mutex = threading.Lock()
+        errors, locks = [], []
+
+        @contextmanager
+        def lock(path, timeout):
+            locks.append((path, timeout))
+            attempted.set()
+            with mutex:
+                yield
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "config.yaml")
+            with open(path, "w") as f:
+                json.dump({"mcp": {"servers": []}, "startup": "old"}, f)
+            servers = [{"name": "kit", "command": "python3", "args": ["kit.py"],
+                        "env": [{"name": "KIT_SEED", "value": "test"}]}]
+
+            def write():
+                try:
+                    agent.mcp_into_config(servers)
+                except BaseException as e:
+                    errors.append(e)
+                finally:
+                    finished.set()
+
+            with patch.object(agent, "CONFIG", directory), \
+                    patch.dict("sys.modules", {"yaml": yaml, "portalocker": SimpleNamespace(Lock=lock)}):
+                mutex.acquire()          # upstream startup has read an old snapshot
+                worker = threading.Thread(target=write, daemon=True)
+                worker.start()
+                try:
+                    self.assertTrue(attempted.wait(2), "wrapper did not acquire upstream's lock")
+                    self.assertFalse(finished.is_set())
+                    with open(path, "w") as f:
+                        json.dump({"mcp": {"servers": []}, "startup": "updated"}, f)
+                finally:
+                    mutex.release()
+                    worker.join(2)
+                self.assertFalse(worker.is_alive())
+                self.assertEqual(errors, [])
+            self.assertEqual(locks, [(os.path.join(directory, "config.lock"), 10)])
+            with open(path) as f:
+                data = json.load(f)
+            self.assertEqual(data["startup"], "updated")
+            self.assertEqual(data["mcp"]["servers"], [{"name": "kit", "enabled": True,
+                             "transport": "stdio", "command": "python3", "args": ["kit.py"],
+                             "env": {"KIT_SEED": "test"}}])
+
+
+class SearchOption(unittest.TestCase):
+    def test_vendor_default_range_and_environment_are_version_specific(self):
+        from nullius.standard.contract import definitions
+        from nullius.standard.runner import run
+        path = os.path.join(APP, "nullius", "catalogue", "agents", "jiuwenswarm", "agent.json")
+        with open(path) as f:
+            raw = json.load(f)
+        current = definitions.resolve(raw, "0.2.9")
+        current["_here"] = os.path.dirname(path)
+        option = current["options"]["web_max_fetches"]
+        self.assertEqual(option["default"], "3")
+        for value in ("1", "3", "6", "100"):
+            self.assertFalse(definitions.option_problem(option, value))
+        for value in ("0", "101", "-1", "1.5", "6; echo bad"):
+            self.assertTrue(definitions.option_problem(option, value))
+        for version in ("0.2.7", "0.2.8"):
+            self.assertNotIn("web_max_fetches", definitions.resolve(raw, version)["options"])
+        with tempfile.TemporaryDirectory() as home:
+            for value in ("3", "6"):
+                env = run.agent_env(current, "/install", home, "http://127.0.0.1:1", "fixture",
+                                    {"reasoning_effort": "default", "web_max_fetches": value})
+                self.assertEqual(env["WEB_RESEARCH_MAX_FETCHES"], value)
+
+
 class RuntimeSocket(unittest.TestCase):
+    def test_startup_uses_the_installed_acp_entry_point(self):
+        # Upstream moved the bridge module into agent_gateway in 0.2.9;
+        # its installed command remains the same across supported versions.
+        server = Mock()
+        server.poll.return_value = 0
+        bridge = Mock()
+        bridge.wait.return_value = 0
+        bridge.poll.return_value = 0
+        with tempfile.TemporaryDirectory() as home, \
+                patch.object(agent, "HOME", home), \
+                patch.object(agent, "PY", "/install/.venv/bin/python"), \
+                patch.object(agent.os.path, "isfile", return_value=True), \
+                patch.object(agent, "reasoning_level"), \
+                patch.object(agent, "write_env"), \
+                patch.object(agent, "free_ports", return_value=[8001, 8002, 8003, 8004]), \
+                patch.object(agent, "listening", return_value=True), \
+                patch.object(agent, "stop_worker"), \
+                patch.object(agent.signal, "signal"), \
+                patch.object(agent.threading, "Thread"), \
+                patch.object(agent.subprocess, "Popen", side_effect=[server, bridge, server, bridge]) as start:
+            self.assertEqual(agent.run("/tmp/test-worker.sock"), 0)
+            self.assertEqual(agent.run("/tmp/test-worker.sock", cli_prompt="write a file; $(literal)"), 0)
+        self.assertEqual(start.call_args_list[1].args[0], [
+            "/install/.venv/bin/jiuwenswarm-acp", "--gateway-url", "ws://127.0.0.1:8002/acp"])
+        self.assertEqual(start.call_args_list[3].args[0], [
+            "/install/.venv/bin/jiuwenswarm", "chat", "--mode", "agent", "--gateway-url",
+            "ws://127.0.0.1:8002/tui", "--cwd", os.getcwd(), "--", "write a file; $(literal)"])
+        self.assertEqual(start.call_args_list[3].kwargs["stdin"], agent.subprocess.DEVNULL)
+
     def test_each_unit_gets_a_short_private_socket_directory_that_is_cleaned(self):
         paths = []
 
@@ -75,8 +187,8 @@ class FilesWithoutTheClient(unittest.TestCase):
         init = {"jsonrpc": "2.0", "id": 0, "method": "initialize",
                 "params": {"clientCapabilities": {"fs": {"readTextFile": fs, "writeTextFile": fs}}}}
         new = {"jsonrpc": "2.0", "id": 1, "method": "session/new", "params": {"cwd": self.ws, "mcpServers": []}}
-        agent.mcp_into_config = lambda servers: None
-        agent.to_agent(lines(init, new), bridge, ses)
+        with patch.object(agent, "mcp_into_config"):
+            agent.to_agent(lines(init, new), bridge, ses)
         out = io.BytesIO()
         agent.to_client(lines({"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "s1"}}), out, ses)
         return ses, bridge, out

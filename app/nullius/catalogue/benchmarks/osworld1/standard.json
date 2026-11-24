@@ -175,6 +175,7 @@
         "yours"
       ],
       "default": "default",
+      "yours": "100",
       "pattern": "default|[1-9][0-9]{0,3}",
       "example": "50",
       "limit": true,
@@ -223,8 +224,8 @@
       }
     },
     "pause": {
-      "label": "Pause",
-      "summary": "run_single_example's sleep_after_execution for an agent: the seconds env.step waits after each action, 3.0 as in run_multienv_m3.py's default.",
+      "label": "Pause after each action (seconds)",
+      "summary": "Seconds to wait after each action before taking the next screenshot.",
       "pattern": "[0-9]{1,2}(\\.[0-9]{1,2})?",
       "example": "5.0",
       "default": "3.0",
@@ -235,7 +236,8 @@
   },
   "host": {
     "docker": {
-      "summary": "Docker on the machine the driver runs on, usable without sudo, for the upstream's docker provider; /dev/kvm makes the VMs fast, and the upstream runs them without it, slowly.",
+      "label": "Docker for the tasks' VMs",
+      "summary": "Docker on the machine, usable without sudo: OSWorld starts each task's VM in it. /dev/kvm makes the VMs fast; without it they run slowly.",
       "check": [
         "docker"
       ]

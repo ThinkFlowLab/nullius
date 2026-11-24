@@ -67,8 +67,8 @@
 <text x="380" y="310" text-anchor="middle" class="lbl">RUN-PART.SH</text>
 <rect x="470" y="340" width="64" height="12" rx="2" fill="#f7f8fa" class="paper"/>
 <text x="502" y="350" text-anchor="middle" class="lbl">MODEL CALLS</text>
-<rect x="334" y="380" width="92" height="12" rx="2" fill="#f7f8fa" class="paper"/>
-<text x="380" y="390" text-anchor="middle" class="lbl">JOBS/, EVERY 10 S</text>
+<rect x="336" y="380" width="88" height="12" rx="2" fill="#f7f8fa" class="paper"/>
+<text x="380" y="390" text-anchor="middle" class="lbl">JOBS/, 1 S PAUSE</text>
 <rect x="218" y="444" width="84" height="12" rx="2" fill="#f7f8fa" class="paper"/>
 <text x="260" y="454" text-anchor="middle" class="lbl accent">JOB PAGE · LIVE</text>
 <rect x="20" y="24" width="120" height="48" rx="6" fill="#f7f8fa" class="paper"/>

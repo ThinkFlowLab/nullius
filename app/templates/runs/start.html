@@ -11,13 +11,13 @@
 
   <div class="start-ways">
     <section class="start-card" aria-labelledby="start-build">
-      <span class="start-ic" aria-hidden="true"><svg class="ic"><use href="#i-newrun"/></svg></span>
+      <span class="start-ic" aria-hidden="true"><svg class="ic ic-lg"><use href="#i-newrun"/></svg></span>
       <h2 class="start-t" id="start-build">Build a run</h2>
       <p class="start-d">Choose a benchmark, an agent and a model. Follow the results here.</p>
       <a class="start-action start-primary" href="{{ url_for('new_run') }}">Open run builder <span aria-hidden="true">→</span></a>
     </section>
     <section class="start-card" aria-labelledby="start-bring">
-      <span class="start-ic" aria-hidden="true"><svg class="ic"><use href="#i-import"/></svg></span>
+      <span class="start-ic" aria-hidden="true"><svg class="ic ic-lg"><use href="#i-import"/></svg></span>
       <h2 class="start-t" id="start-bring">Import results</h2>
       <p class="start-d">Bring in ATIF trajectories or OpenTelemetry exports.</p>
       <a class="start-action" href="{{ url_for('import_page', new=1) }}">Choose files or folder <span aria-hidden="true">↗</span></a>

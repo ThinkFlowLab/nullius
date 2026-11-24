@@ -173,21 +173,31 @@ class RunRoutes(unittest.TestCase):
         self.assertEqual((dict(execution.EXECUTIONS), self.adopted), ({}, []))                   # nothing started, the free name included
         self.assertFalse((self.tmp / "runs" / "fresh").exists())
 
-    def test_the_run_opens_runs_by_launch_and_its_job_page_before_harbor_writes_the_job(self):
+    def test_a_single_run_opens_its_job_page_before_harbor_writes_the_job(self):
         r = self.post({"name": "tau3-x3", "script": "true", "where": "local", "jobs": [{"name": "tau3-x3", "agent": "oracle", "dataset": "tau3-x3"}]})
-        self.assertEqual(r.status_code, 200, r.get_data(as_text=True)); self.assertEqual(r.json["open"], "/runs?view=launch")
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True)); self.assertEqual(r.json["open"], "/job/tau3-x3")
         from nullius import workspace                                                              # the run's root, adopted into a workspace
         self.stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}))
         web.shared.open_workspace(workspace.create(str(self.tmp / "ws"), list(self.adopted), label="here"))
-        runs = self.client.get(r.json["open"]); self.addCleanup(runs.close)                      # its launch, before any job is written
+        runs = self.client.get("/runs?view=launch"); self.addCleanup(runs.close)                      # its launch, before any job is written
         self.assertIn('data-launch="run:', runs.get_data(as_text=True)); self.assertIn("tau3-x3", runs.get_data(as_text=True))
-        page = self.client.get("/job/tau3-x3"); self.addCleanup(page.close)                       # no job dir yet: the run's own page
+        page = self.client.get(r.json["open"]); self.addCleanup(page.close)                       # no job dir yet: the run's own page
         html = page.get_data(as_text=True)
         self.assertEqual(page.status_code, 200); self.assertIn('id="execution"', html); self.assertIn('data-waiting="yes"', html); self.assertIn("this machine", html)
         self.assertEqual(self.client.head("/job/tau3-x3").status_code, 404)                          # HEAD says whether Harbor's job is there yet
         self.wait()
         lst = self.client.get("/runs"); self.addCleanup(lst.close)
         self.assertEqual(self.client.get("/job/nothing-like-it").status_code, 404)
+
+    def test_a_launch_without_one_job_opens_the_launches_list(self):
+        for jobs in ([], [{"name": "first"}, {"name": "second"}]):
+            with self.subTest(jobs=jobs):
+                ex = unittest.mock.Mock()
+                ex.summary.return_value = {"job_ids": [j["name"] for j in jobs]}
+                with patch.object(web.execute, "begin", return_value=([ex], "", 200)):
+                    response = self.post({"name": "several", "script": "true", "jobs": jobs})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json["open"], "/runs?view=launch")
 
     def test_the_run_s_page_shows_its_stages_and_its_units(self):
         """What the run said in stages (nullius/progress.py) - done with its

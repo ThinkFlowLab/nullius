@@ -42,7 +42,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 |---|---|---|---|
 | `agent` | **`m3` (M3 Agent)**, `prompt` (PromptAgent), `claude` (Claude computer use), `gpt54` (GPT-5.4), `openai_cua` (OpenAI CUA), `qwen` (Qwen), `os_symphony` (OS-Symphony), `evocua` (EvoCUA), `autoglm` (AutoGLM), `autoglm_v` (AutoGLM-V), `mano` (Mano), `muse_spark` (Muse Spark) | Which of OSWorld's own agents runs: each its script as published, with its own prompts, action format and step limit. | `original`, `model` |
 | `max_steps` | e.g. `50`, default `default` | The most actions per task. default: each OSWorld agent script's own documented invocation; 100 through the computer port. | `original`, `model`, `yours` |
-| `pause` | e.g. `5.0`, default `3.0` | run_single_example's sleep_after_execution for an agent: the seconds env.step waits after each action, 3.0 as in run_multienv_m3.py's default. | `agent` |
+| `pause` | e.g. `5.0`, default `3.0` | Seconds to wait after each action before taking the next screenshot. | `agent` |
 | `thinking` | **`adaptive`**, `off` | M3_THINKING_MODE: adaptive, as run_multienv_m3.py's own documented invocation exports it (the model decides whether to think; temperature 1, no top_p), or off, the agent's code default when the variable is unset. | `original`, `model` |
 | `vm_provider` | **`docker`** | --provider_name: where the task's VM runs. docker only: the upstream's other providers need cloud accounts or a hypervisor of their own. | `original`, `model`, `yours` |
 
@@ -52,7 +52,6 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 ## Good to know
 
-- An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. A step's observation is the screenshot that loop hands its agent for the next decision, with no capture added; the files a step names are read once its actions and their pauses have run. Steps (100) and Pause (3.0 seconds) set that loop.
 - A task an agent's time (2 hours) or a run's cap of model calls cuts short is scored as the desktop then stands, as OSWorld scores a task at its step limit; so is one whose agent goes on a minute after the task ended. The trial says what ended the work.
 - Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.
 - Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.

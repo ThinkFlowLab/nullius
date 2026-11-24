@@ -9,7 +9,6 @@
   ],
   "origin": "official",
   "good_to_know": [
-    "An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. A step's observation is the screenshot that loop hands its agent for the next decision, with no capture added; the files a step names are read once its actions and their pauses have run. Steps (100) and Pause (3.0 seconds) set that loop.",
     "A task an agent's time (2 hours) or a run's cap of model calls cuts short is scored as the desktop then stands, as OSWorld scores a task at its step limit; so is one whose agent goes on a minute after the task ended. The trial says what ended the work.",
     "Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.",
     "Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.",
@@ -59,7 +58,6 @@
   "versions": {
     "044bc33": {
       "good_to_know": [
-        "An agent runs it through the computer port: the agent's tool calls drive OSWorld's own loop, one step for each acting call. A step's observation is the screenshot that loop hands its agent for the next decision, with no capture added; the files a step names are read once its actions and their pauses have run. Steps (100) and Pause (3.0 seconds) set that loop.",
         "A task an agent's time (2 hours) or a run's cap of model calls cuts short is scored as the desktop then stands, as OSWorld scores a task at its step limit; so is one whose agent goes on a minute after the task ended. The trial says what ended the work.",
         "Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.",
         "Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.",
@@ -90,5 +88,6 @@
         }
       }
     }
-  }
+  },
+  "evidence": []
 }

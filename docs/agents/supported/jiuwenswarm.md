@@ -2,7 +2,7 @@
 
 # JiuwenSwarm
 
-openJiuwen's agent.
+openJiuwen's WorkSwarm agent.
 
 <table>
 <tbody>
@@ -21,6 +21,7 @@ openJiuwen's agent.
 <tbody>
 <tr><td><code>jiuwenswarm@0.2.7</code></td><td><code>0.2.7</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 <tr><td><code>jiuwenswarm@0.2.8</code> (default)</td><td><code>0.2.8</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>jiuwenswarm@0.2.9</code></td><td><code>0.2.9</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 </tbody></table>
 
 - `key@version`: a revision of the definition and driver; a recipe pins one, the builder offers the default.
@@ -30,6 +31,7 @@ openJiuwen's agent.
 | Option | Values, default in bold | What it sets | Versions |
 |---|---|---|---|
 | `reasoning_effort` | **`default`**, `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` | How much reasoning the model uses before answering, with `default` leaving the choice to the provider. | every version |
+| `web_max_fetches` | e.g. `6`, default `3` | Pages fetched per invocation. | `jiuwenswarm@0.2.9` |
 
 ## Benchmarks it fits
 
@@ -38,6 +40,7 @@ openJiuwen's agent.
 <tbody>
 <tr><td><code>jiuwenswarm@0.2.7</code></td><td><abbr class="mark no" title="lacks `agent.search/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><abbr class="mark no" title="lacks `agent.computer/v1`">✗</abbr></td><td><abbr class="mark no" title="lacks `agent.computer/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 <tr><td><code>jiuwenswarm@0.2.8</code></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><abbr class="mark no" title="lacks `agent.computer/v1`">✗</abbr></td><td><abbr class="mark no" title="lacks `agent.computer/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><code>jiuwenswarm@0.2.9</code></td><td><abbr class="mark no" title="lacks `agent.search/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><abbr class="mark no" title="lacks `agent.computer/v1`">✗</abbr></td><td><abbr class="mark no" title="lacks `agent.computer/v1`">✗</abbr></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 </tbody></table>
 
 - ✗: the missing port, on hover.
