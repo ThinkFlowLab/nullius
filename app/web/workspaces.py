@@ -10,7 +10,6 @@ from markupsafe import Markup, escape
 from nullius.runs import parse
 from nullius import execution, workspace
 from nullius.catalogue import catalog
-from nullius.judge import store
 
 from .core import app
 from . import shared
@@ -100,7 +99,7 @@ def workspaces_page():
     held = [w.name for _, _, holders in launched[0] for w in holders]
     recs, cat = tuple((e.id, e.state) for e in execution.EXECUTIONS.values()), catalog.signature()
     return render_template("workspaces/workspaces.html", workspaces=wss, csrf=shared._csrf_token(),
-                           counts={ws.name: _counts(ws, recs, cat) for ws in wss}, n_judged={ws.name: store.count(ws.dir) for ws in wss}, n_launches={ws.name: held.count(ws.name) for ws in wss})
+                           counts={ws.name: _counts(ws, recs, cat) for ws in wss}, n_launches={ws.name: held.count(ws.name) for ws in wss})
 
 
 @app.route("/workspaces/open/<name>", methods=["POST"])

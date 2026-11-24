@@ -69,8 +69,9 @@ Follow the evidence: a recorded rate limit is a provider's failure whatever the 
 
 | What | Detail |
 | --- | --- |
-| Where | `workspaces/<name>/judgements/<job>/<trial>.json` below the user data directory (`WORKSPACES_DIR` can override it), never in the job tree |
-| Deleted | With the launch they judge (*Delete launch* in Runs, [Run](builder.md#run)) |
+| Where | `judgements/<job id>/<trial>.json` below the user data directory, by the job's identity, never in the job tree. One record per trial, in every workspace that holds the job; a renamed Harbor or imported job folder is a new job |
+| Before | Records under `workspaces/<name>/judgements/` are still read; of two for one trial, the newer is shown |
+| Deleted | With the launch they judge (*Delete launch* in Runs, [Run](builder.md#run)), unless a copy of the job is found or a root cannot be read. Deleting a workspace keeps them |
 | Version | `judgement.questions.v2`; v1 records marked *earlier* |
 | Cost | A batch button names its calls; each is checked against the token budget |
 | Noise floors | Each yes/no's run-to-run spread |

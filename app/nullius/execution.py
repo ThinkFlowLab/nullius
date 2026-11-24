@@ -1838,14 +1838,38 @@ def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, 
     held = []
     for ws, roots in holding(path):
         dirs = parse.find_job_dirs(roots)
-        ids = [j.job_id for j in workspace.load_jobs(ws, roots, ends)]
+        jobs = workspace.load_jobs(ws, roots, ends)
+        for j in jobs:                       # the workspace's records from before, in the user's store first: they are counted there
+            judgements.adopt(ws.dir, j)
+        ids = [j.job_id for j in jobs]
         # a job of the same id from another root shares these judgements: they stay
         others = {e.get("job_id") for d, e in workspace.job_index(ws).items() if d not in dirs}
         judged = judgements.job_dirs(ws.dir, [i for i in ids if i.split("~")[0] not in others])
-        held.append({"ws": ws, "roots": roots, "jobs": dirs,
-                     "judged": judged, "judgements": sum(len(os.listdir(d)) for d in judged)})
-    return {"name": name, "dir": path, "bytes": size_of(path), "host": host, "workspaces": held,
-            "judgements": sum(w["judgements"] for w in held)}
+        held.append({"ws": ws, "roots": roots, "jobs": dirs, "judged": judged})
+    uids = {parse.parse_job(d, trials=False).uid for d in parse.find_job_dirs([os.path.join(path, "jobs")])} - {""}
+    judged = judgements.job_dirs(judgements.home(), sorted(uids))
+    if judged:
+        judged = judgements.job_dirs(judgements.home(), sorted(uids - _judged_elsewhere(home, path, uids)))
+    return {"name": name, "dir": path, "bytes": size_of(path), "host": host, "workspaces": held, "judged": judged,
+            "judgements": judgements.count_in(judged)}
+
+
+def _judged_elsewhere(home: str, path: str, uids: set) -> set:
+    """Which of the jobs *uids* of the run folder *path* keep their
+    judgements when it goes: those with another folder of the same identity
+    outside it - a copy - under a root of any workspace or another run, and
+    all of them when one of those roots cannot be read, since who owns them
+    is then unknown."""
+    outside = lambda d: os.path.commonpath([os.path.realpath(d), path]) != path
+    kept = set()
+    for ws in workspace.list_all(home):
+        roots = ws.job_roots or ws.roots
+        if not all(os.path.isdir(r) for r in roots):
+            return set(uids)
+        kept |= {j.uid for j in workspace.load_jobs(ws, roots) if outside(j.dir)} & uids
+    others = [j for e in os.scandir(os.path.dirname(path))
+              if e.is_dir(follow_symlinks=False) and e.path != path and os.path.isdir(j := os.path.join(e.path, "jobs"))]
+    return kept | ({parse.parse_job(d, trials=False).uid for d in parse.find_job_dirs(others)} & uids)
 
 
 def deletion(names: List[str], home: str, root: Optional[str] = None, holding: Optional[Callable] = None) -> dict:
@@ -1884,6 +1908,8 @@ def delete(names: List[str], home: str, root: Optional[str] = None, copies=(), r
             continue
         for key in [k for k, e in EXECUTIONS.items() if os.path.realpath(e.dir) == r["dir"]]:
             del EXECUTIONS[key]
+        for d in r["judged"]:
+            shutil.rmtree(d, ignore_errors=True)
         for w in r["workspaces"]:
             for d in w["judged"]:
                 shutil.rmtree(d, ignore_errors=True)

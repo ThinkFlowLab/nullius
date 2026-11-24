@@ -44,7 +44,7 @@
   {%- set _ = items.append(dict(open=open, name=dict(text=ws.label, class='ws-name', after=pencil(ws) ~ rename(ws, 'cards')), disk=ws.name if labels.count(ws.label) > 1 else '', runs=counts[ws.name].runs, checks=counts[ws.name].checks,
         opened=dict(text=ws.opened[:16]|replace('T', ' '), value=opened(ws)), launches=dict(text=launches(ws), value=n_launches[ws.name]),
         roots=dict(text=roots(ws), value=ws.roots|length),
-        actions=dict(title='Delete workspace', attrs={'data-ask': 'ws-ask-delete', 'data-label': ws.label, 'data-action': url_for('workspace_delete', name=ws.name), 'data-judged': n_judged[ws.name], 'aria-haspopup': 'dialog', 'aria-label': 'Delete workspace ' ~ ws.label}),
+        actions=dict(title='Delete workspace', attrs={'data-ask': 'ws-ask-delete', 'data-label': ws.label, 'data-action': url_for('workspace_delete', name=ws.name), 'aria-haspopup': 'dialog', 'aria-label': 'Delete workspace ' ~ ws.label}),
         search=ws.label ~ ' ' ~ ws.name)) %}
 {%- endfor %}
 {{ cards('workspaces', cols, items, search='Search by name', empty='No workspace matches.', noun='workspaces', sort=true, layout='cards') }}
@@ -65,7 +65,7 @@
     {%- elif c.key == 'launches' %}{% call cell(c) %}{{ launches(ws) }}{% endcall %}
     {%- elif c.key == 'roots' %}{% call cell(c, sort=ws.roots|length) %}{{ roots(ws) }}{% endcall %}
     {%- elif c.key == 'actions' %}{% call cell(c, class='acts-col') %}
-        <button type="button" class="icon-btn danger" data-ask="ws-ask-delete" data-label="{{ ws.label }}" data-action="{{ url_for('workspace_delete', name=ws.name) }}" data-judged="{{ n_judged[ws.name] }}" aria-haspopup="dialog" aria-label="Delete workspace {{ ws.label }}" title="Delete workspace">{{ trash }}</button>
+        <button type="button" class="icon-btn danger" data-ask="ws-ask-delete" data-label="{{ ws.label }}" data-action="{{ url_for('workspace_delete', name=ws.name) }}" aria-haspopup="dialog" aria-label="Delete workspace {{ ws.label }}" title="Delete workspace">{{ trash }}</button>
       {% endcall %}
     {%- endif %}
 {% endcall %}
@@ -90,10 +90,9 @@
   // a template of the page, or, for an address, the server's answer: what a Delete takes is worked out only now
   const content = async b => {
     if (b.dataset.ask === 'ws-ask-delete') {
-      const c = document.getElementById('ws-ask-delete').content.cloneNode(true), n = +b.dataset.judged;
+      const c = document.getElementById('ws-ask-delete').content.cloneNode(true);
       c.querySelector('h2').append(b.dataset.label);
       c.querySelector('form').action = b.dataset.action;
-      if (n) c.querySelector('p').prepend(`Its judgements (${n}) are deleted. `);
       return c;
     }
     if (!b.dataset.ask.startsWith('/')) return b.closest('[data-holder]').querySelector('template.' + b.dataset.ask).content.cloneNode(true);

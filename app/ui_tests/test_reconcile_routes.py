@@ -30,6 +30,7 @@ class ReconcilePage(unittest.TestCase):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
         self.stack.enter_context(patch.dict(web.app.config, TESTING=True))
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
+        self.stack.enter_context(patch.object(store, "home", return_value=self.tmp.name + "/data"))
         self.job = write_job(self.tmp.name, "r-agent", "my-agent", {
             "solved": 1, "failed": 0, "setup": "EnvironmentSetupError", "limited": "ApiRateLimitError", "odd": "SomethingNobodyKnowsError", "weak": 0})
         self.nop = write_job(self.tmp.name, "r-nop", "nop", {"a": 0})

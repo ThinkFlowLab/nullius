@@ -1,0 +1,8 @@
+{
+ "judgement.questions.v2": {
+  "questions": "judgement.questions.v2",
+  "judge": {"model": "llm-judge"},
+  "asked_at": "2026-11-01T10:05:00Z",
+  "answers": {"failure_cause": {"choice": "environment_error"}}
+ }
+}

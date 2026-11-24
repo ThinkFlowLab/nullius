@@ -543,6 +543,7 @@ class WorkspaceDelete(unittest.TestCase):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
         self.tmp = Path(tempfile.mkdtemp(prefix="nullius-wsdel-")); self.addCleanup(shutil.rmtree, self.tmp, True)
         self.stack.enter_context(patch.object(web.shared, "WS_HOME", str(self.tmp / "ws")))
+        self.stack.enter_context(patch.object(web.judge.store, "home", return_value=str(self.tmp / "data")))
         self.stack.enter_context(patch.dict(web.app.config, TESTING=True))
         self.stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}))
         root = self.tmp / "jobs"; root.mkdir()
@@ -574,7 +575,7 @@ class WorkspaceDelete(unittest.TestCase):
         self.assertRegex(card, r'<dt>Launches</dt><dd>.*?</dd></div><div><dt>Roots</dt><dd><button type="button" class="btn ghost sm count-btn ws-roots-btn" data-ask="/workspaces/[^"]+/roots"')
         self.assertNotIn('bench-card-actions', card)                                                     # its delete in the corner, no action line
         self.assertRegex(card, r'<span class="bench-card-corner"><button type="button" class="icon-btn danger" title="Delete workspace" data-ask="ws-ask-delete" '
-                               r'data-label="gone soon" data-action="/workspaces/delete/[^"]+" data-judged="0" aria-haspopup="dialog" aria-label="Delete workspace gone soon">')
+                               r'data-label="gone soon" data-action="/workspaces/delete/[^"]+" aria-haspopup="dialog" aria-label="Delete workspace gone soon">')
         self.assertIn('<div class="bench-card-title ws-name"><span class="bench-card-name"><a class="card-link">gone soon</a>'          # the table's rename, after the name
                       '<button type="button" class="icon-btn ws-edit" aria-label="Rename workspace gone soon"', card)
         self.assertIn(f'<input type="hidden" name="name" value="{self.ws.name}"><input type="hidden" name="view" value="cards">', card)
@@ -660,6 +661,7 @@ class RunDelete(unittest.TestCase):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
         self.tmp = Path(tempfile.mkdtemp(prefix="nullius-rundel-")); self.addCleanup(shutil.rmtree, self.tmp, True)
         self.home = str(self.tmp / "ws")
+        self.stack.enter_context(patch.object(store, "home", return_value=str(self.tmp / "data")))
         self.stack.enter_context(patch.dict(os.environ, {"RUNS_DIR": str(self.tmp / "runs")}))
         self.stack.enter_context(patch.dict(web.app.config, TESTING=True))
         self.stack.enter_context(patch.dict(execution.EXECUTIONS, clear=True))
@@ -1260,16 +1262,15 @@ class WorkspacesPage(unittest.TestCase):
                 self.assertEqual(set(boxes(self.get(f"/launches{q}").get_data(as_text=True)).values()), {" checked"})
 
     def test_delete_workspace_says_what_is_lost(self):
-        from nullius.judge import store
-        store.save(self.ws.dir, "r1-b", "t0", {"questions": "v", "answers": {}}, lane="llm")            # beside the one setUp saved
         html = self.get("/workspaces").get_data(as_text=True)
         ask = html.split('<template id="ws-ask-delete">', 1)[1].split("</template>", 1)[0]                # one, filled from the row's button
         self.assertEqual(html.count("<template"), 1)
         self.assertIn('<h2 id="ws-dialog-h">Delete workspace </h2>', ask)
         self.assertIn(f'<input type="hidden" name="csrf" value="{self.csrf}">', ask)
         self.assertIn("<p>Its run folders stay on disk.</p>", ask)
-        for ws, n in ((self.ws, 2), (self.other(), 0)):                                               # none: nothing lost but the cache
-            self.assertIn(f'data-ask="ws-ask-delete" data-label="{ws.label}" data-action="/workspaces/delete/{ws.name}" data-judged="{n}"', self.row(ws, html))
+        self.assertNotIn("Its judgements", html)                                                       # its jobs keep theirs
+        for ws in (self.ws, self.other()):
+            self.assertIn(f'data-ask="ws-ask-delete" data-label="{ws.label}" data-action="/workspaces/delete/{ws.name}" aria-haspopup="dialog"', self.row(ws, html))
 
     def test_a_shard_s_folder_stays_while_another_shard_of_its_launch_runs(self):
         for i, state in ((1, "done"), (2, "running")):

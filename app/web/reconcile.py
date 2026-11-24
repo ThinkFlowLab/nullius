@@ -25,8 +25,7 @@ def threshold_requested() -> float:
 
 
 def view_of(job, threshold: float) -> dict:
-    d = judge.ws_dir()
-    records = store.for_job(d, job.job_id, judge.started_by_name(job)) if d else {}
+    records = store.for_job(store.home(), judge.job_key(job), judge.started_by_name(job))
     return reconcile.reconcile(job, records, threshold)
 
 

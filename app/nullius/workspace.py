@@ -219,12 +219,31 @@ def touch(ws: Workspace) -> None:
 
 def delete(home_dir: str, name: str) -> bool:
     """Remove a workspace: its record, its parse cache and its converted
-    imports. The job roots it pointed at are not touched. True when something was removed."""
+    imports. The job roots it pointed at are not touched, nor the
+    judgements of their jobs (`_keep_judgements`). True when something was removed."""
     ws = load(home_dir, name)
     if ws is None:
         return False
+    _keep_judgements(ws)
     shutil.rmtree(ws.dir, ignore_errors=True)
     return True
+
+
+def _keep_judgements(ws: Workspace) -> None:
+    """The judgements a workspace kept before they were kept by job
+    (``<workspace>/judgements{,-llm}/``): copied into the user's store under
+    each job its roots hold, then its files moved there whole, so none is
+    lost with it - a job its roots no longer reach included."""
+    from nullius.judge import store
+    old = [d for r in store.ROOTS.values() if os.path.isdir(d := os.path.join(ws.dir, r))]
+    if not old:
+        return
+    for job in load_jobs(ws, ws.job_roots or ws.roots):
+        store.adopt(ws.dir, job)
+    keep = os.path.join(store.home(), "judgements-of-deleted-workspaces", f"{ws.name}~{datetime.now(timezone.utc):%Y%m%dT%H%M%S%fZ}")
+    os.makedirs(keep)
+    for d in old:
+        shutil.move(d, keep)
 
 
 def holding(home_dir: str, folder: str) -> list:

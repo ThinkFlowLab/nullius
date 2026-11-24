@@ -192,13 +192,13 @@ class Store(unittest.TestCase):
         self.assertEqual(store.load(self.ws.dir, "job-1", "task__abc/def")["answers"]["task_completed"], {"noul": 0.9})
 
     def test_count_is_one_per_trial_and_lane_every_version_inside(self):
-        self.assertEqual(store.count(self.ws.dir), 0)
+        count = lambda: store.count_in(store.job_dirs(self.ws.dir, ["job-1", "job-2"]))
+        self.assertEqual(count(), 0)
         for version in ("judgement.questions.v1", questions.VERSION):
             store.save(self.ws.dir, "job-1", "t0", {"questions": version, "answers": {}})              # two versions: one judgement
         store.save(self.ws.dir, "job-1", "t1", {"questions": "v", "answers": {}})
         store.save(self.ws.dir, "job-2", "t0", {"questions": "v", "answers": {}}, lane="llm")
-        (Path(self.ws.jobs_dir)).mkdir(parents=True, exist_ok=True); (Path(self.ws.jobs_dir) / "x.json").write_text("{}")   # the cache: not one
-        self.assertEqual(store.count(self.ws.dir), 3)
+        self.assertEqual(count(), 3)                                                                   # the lock beside them: not one
 
 
 class Versions(unittest.TestCase):
