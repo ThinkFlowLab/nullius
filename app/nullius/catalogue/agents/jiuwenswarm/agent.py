@@ -32,6 +32,9 @@ changes, each taken from the protocol itself:
   Requests for the unit's own JiuwenSwarm home are served by this wrapper
   on both backends, so its config and todo files remain accessible.
 
+For fidelity, ``--cli PROMPT`` starts the same services and configuration, then
+runs the vendor's ``jiuwenswarm chat --mode agent`` instead of the ACP bridge.
+
 The resident worker uses a short, private socket path. When the bridge ends,
 the servers and worker are stopped.
 """
@@ -132,10 +135,9 @@ def reasoning_level():
 
 def mcp_into_config(servers):
     """ACP's stdio MCP servers as JiuwenSwarm's ``mcp.servers`` entries."""
+    import portalocker
     import yaml
     path = os.path.join(CONFIG, "config.yaml")
-    with open(path) as f:
-        data = yaml.safe_load(f) or {}
     entries = []
     for s in servers or []:
         if not s.get("command"):
@@ -145,13 +147,19 @@ def mcp_into_config(servers):
             env = {e["name"]: e["value"] for e in env}
         entries.append({"name": s["name"], "enabled": True, "transport": "stdio",
                         "command": s["command"], "args": list(s.get("args") or []), "env": env})
-    data.setdefault("mcp", {})
-    if not isinstance(data["mcp"], dict):
-        data["mcp"] = {}
-    data["mcp"]["servers"] = entries
-    with open(path + ".part", "w") as f:
-        yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
-    os.replace(path + ".part", path)
+    # Match upstream config_write_lock: startup migrations can still write
+    # config.yaml after the gateway starts listening. Lock before reading so
+    # neither writer can replace the other's update with an older snapshot.
+    with portalocker.Lock(os.path.join(CONFIG, "config.lock"), timeout=10):
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+        data.setdefault("mcp", {})
+        if not isinstance(data["mcp"], dict):
+            data["mcp"] = {}
+        data["mcp"]["servers"] = entries
+        with open(path + ".part", "w") as f:
+            yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+        os.replace(path + ".part", path)
     say("mcp servers:", [e["name"] for e in entries])
 
 
@@ -285,7 +293,7 @@ def stop_worker(env):
         say("runtime worker shutdown failed:", e)
 
 
-def run(runtime_socket):
+def run(runtime_socket, cli_prompt=None):
     os.makedirs(HOME, exist_ok=True)
     if not os.path.isfile(os.path.join(CONFIG, "config.yaml")):
         r = subprocess.run([PY, "-c", "from jiuwenswarm.common.utils import prepare_workspace\n"
@@ -327,7 +335,15 @@ def run(runtime_socket):
                 return 1
             time.sleep(0.25)
         say(f"ready in {time.time() - t0:.1f} s: agent server :{ports[0]}, gateway :{ports[1]}")
-        bridge = subprocess.Popen([PY, "-m", "jiuwenswarm.gateway.channel_manager.protocol.acp.acp_connect",
+        if cli_prompt is not None:
+            # The vendor CLI uses /tui; select the same agent mode as ACP.
+            bridge = subprocess.Popen([os.path.join(os.path.dirname(PY), "jiuwenswarm"),
+                                       "chat", "--mode", "agent", "--gateway-url",
+                                       f"ws://127.0.0.1:{ports[1]}/tui", "--cwd", os.getcwd(),
+                                       "--", cli_prompt], stdin=subprocess.DEVNULL, env=env)
+            return bridge.wait()
+        # The console entry point follows upstream's gateway package move in 0.2.9.
+        bridge = subprocess.Popen([os.path.join(os.path.dirname(PY), "jiuwenswarm-acp"),
                                    "--gateway-url", f"ws://127.0.0.1:{ports[1]}/acp"],
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, env=env, bufsize=0)
         ses = Sessions()
@@ -343,12 +359,17 @@ def run(runtime_socket):
         stop_worker(env)
 
 
-def main():
+def main(cli_prompt=None):
     # A long job path exceeds the Unix socket limit. Each unit owns a short,
     # private directory, including on the local backend where /tmp is shared.
     with tempfile.TemporaryDirectory(prefix="nj-", dir="/tmp") as runtime:
+        if cli_prompt is not None:
+            return run(os.path.join(runtime, "worker.sock"), cli_prompt=cli_prompt)
         return run(os.path.join(runtime, "worker.sock"))
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cli", metavar="PROMPT", help="run the vendor CLI for fidelity")
+    sys.exit(main(parser.parse_args().cli))

@@ -2,7 +2,7 @@
   "schema": "nullius.agent/v1",
   "key": "jiuwenswarm",
   "label": "JiuwenSwarm",
-  "summary": "openJiuwen's agent.",
+  "summary": "openJiuwen's WorkSwarm agent.",
   "start": {
     "acp": [
       "{install}/.venv/bin/python",
@@ -38,6 +38,232 @@
   },
   "default": "0.2.8",
   "versions": {
+    "0.2.9": {
+      "upstream": {
+        "repository": "https://github.com/openJiuwen-ai/jiuwenswarm",
+        "tag": "v0.2.9",
+        "tested": "453dce3054babf7f3a7000c8e57e068de01d8d2e",
+        "package": "workswarm",
+        "license": "Apache-2.0",
+        "core": "openjiuwen 0.1.21 and openjiuwen-agent-gateway 0.1.0, pinned by upstream"
+      },
+      "install": {
+        "python": "3.12",
+        "wheels": [
+          {
+            "url": "https://github.com/openJiuwen-ai/jiuwenswarm/releases/download/v0.2.9/workswarm-0.2.9-py3-none-any.whl",
+            "sha256": "241ed07f9a23f989984b68474e2b5147ad6907323c92fb8d139be8da6705130f"
+          }
+        ]
+      },
+      "proven": {
+        "agent.task/v1": {
+          "passed": "3/3",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "0.2.9",
+          "kit_version": 1,
+          "backend": "container"
+        },
+        "agent.workspace/v1": {
+          "passed": "2/2",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "0.2.9",
+          "kit_version": 1,
+          "backend": "container"
+        },
+        "agent.tools/v1": {
+          "passed": "2/2",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "0.2.9",
+          "kit_version": 2,
+          "backend": "container",
+          "repeat": 3,
+          "checks": {
+            "one-tool": "3/3",
+            "arguments": "3/3"
+          },
+          "skills": {
+            "decoys": {
+              "passed": "3/3",
+              "ok": true
+            },
+            "chain": {
+              "passed": "3/3",
+              "ok": true
+            },
+            "retry": {
+              "passed": "3/3",
+              "ok": true
+            }
+          }
+        },
+        "agent.conversation/v1": {
+          "passed": "2/2",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "0.2.9",
+          "kit_version": 1,
+          "backend": "container"
+        },
+        "fidelity": {
+          "verdict": "differs",
+          "model": "openai/gpt-5-mini",
+          "provider": "openrouter",
+          "version": "0.2.9",
+          "passes": 2,
+          "differs": [
+            {
+              "field": "tools",
+              "acp": [
+                "[\"fetch_webpage\", \"glob\", \"grep\", \"skill_tool\", \"subagent_spawn\", \"subagent_wait\", \"subagent_list\", \"subagent_send_input\", \"subagent_close\", \"subagent_resume\", \"tool_search\", \"tool_call\", \"todo_create\", \"todo_list\", \"todo_get\", \"todo_modify\", \"ask_user\"]",
+                "\u2014"
+              ],
+              "cli": [
+                "[\"fetch_webpage\", \"read_file\", \"write_file\", \"edit_file\", \"glob\", \"grep\", \"bash\", \"subagent_spawn\", \"subagent_wait\", \"subagent_list\", \"subagent_send_input\", \"subagent_close\", \"subagent_resume\", \"skill_tool\", \"tool_search\", \"tool_call\", \"todo_create\", \"todo_list\", \"todo_get\", \"todo_modify\"]",
+                "\u2014"
+              ]
+            },
+            {
+              "field": "tools[ask_user]",
+              "acp": [
+                "sha256:b9b6b54f1f4fe625",
+                "\u2014"
+              ],
+              "cli": [
+                "\u2014"
+              ]
+            },
+            {
+              "field": "tools[bash]",
+              "acp": [
+                "\u2014"
+              ],
+              "cli": [
+                "sha256:9b5ef025b334ca8e",
+                "\u2014"
+              ]
+            },
+            {
+              "field": "tools[edit_file]",
+              "acp": [
+                "\u2014"
+              ],
+              "cli": [
+                "sha256:41761b2c2ba6f0c7",
+                "\u2014"
+              ]
+            },
+            {
+              "field": "tools[read_file]",
+              "acp": [
+                "\u2014"
+              ],
+              "cli": [
+                "sha256:e29b1ed9e6495ec3",
+                "\u2014"
+              ]
+            },
+            {
+              "field": "tools[subagent_spawn]",
+              "acp": [
+                "sha256:beaac04f5542bda5",
+                "\u2014"
+              ],
+              "cli": [
+                "sha256:7bbb49b31256390b",
+                "\u2014"
+              ]
+            },
+            {
+              "field": "tools[todo_create]",
+              "acp": [
+                "sha256:5e7b55e5694bdfe6",
+                "\u2014"
+              ],
+              "cli": [
+                "sha256:af5750590cd95e75",
+                "\u2014"
+              ]
+            },
+            {
+              "field": "tools[todo_get]",
+              "acp": [
+                "sha256:ebcca129352595fc",
+                "\u2014"
+              ],
+              "cli": [
+                "sha256:c99d336992aa6228",
+                "\u2014"
+              ]
+            },
+            {
+              "field": "tools[todo_list]",
+              "acp": [
+                "sha256:faf553fb35d71dfe",
+                "\u2014"
+              ],
+              "cli": [
+                "sha256:afaf3ad08441f12b",
+                "\u2014"
+              ]
+            },
+            {
+              "field": "tools[todo_modify]",
+              "acp": [
+                "sha256:6661c6391a3e744a",
+                "\u2014"
+              ],
+              "cli": [
+                "sha256:774dc52d3a1d43f1",
+                "\u2014"
+              ]
+            },
+            {
+              "field": "tools[write_file]",
+              "acp": [
+                "\u2014"
+              ],
+              "cli": [
+                "sha256:a5b46ab6c208ac80",
+                "\u2014"
+              ]
+            }
+          ]
+        }
+      },
+      "options": {
+        "web_max_fetches": {
+          "label": "Page fetch limit",
+          "summary": "Pages fetched per invocation; openJiuwen defaults WEB_RESEARCH_MAX_FETCHES to 3.",
+          "pattern": "(?:[1-9]|[1-9][0-9]|100)",
+          "example": "6",
+          "default": "3"
+        }
+      },
+      "model": {
+        "apis": [
+          "chat"
+        ],
+        "env": {
+          "NULLIUS_BASE_URL": "{base_url}",
+          "NULLIUS_KEY": "{key}",
+          "NULLIUS_MODEL": "{model}",
+          "NULLIUS_REASONING": "{opt_reasoning_effort}",
+          "WEB_RESEARCH_MAX_FETCHES": "{opt_web_max_fetches}"
+        }
+      },
+      "fidelity": {
+        "command": [
+          "{install}/.venv/bin/python",
+          "{here}/agent.py",
+          "--cli",
+          "{prompt}"
+        ]
+      }
+    },
     "0.2.7": {
       "upstream": {
         "repository": "https://github.com/openJiuwen-ai/jiuwenswarm",
