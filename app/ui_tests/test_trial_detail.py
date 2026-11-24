@@ -58,13 +58,14 @@ class TrialDetail(unittest.TestCase):
         return html.split('id="trial-detail">', 1)[1].split('</section>', 1)[0].split('\n</div>\n', 1)[0]
 
     def test_plain_values_are_a_table_and_flags_a_list_under_the_drivers_names(self):
-        html = self.panel(self.page({"variant": "the second", "result": 0.0, "by": "run.py, evaluate", "tool_calls": 21,
-                                     "rank": 42, "cached": False,
+        html = self.panel(self.page({"variant": "the second", "result": 0.5, "by": "run.py, evaluate", "tool_calls": 21,
+                                     "steps": 2, "score": 0.5, "rank": 42, "cached": False,
                                      "checks": {"saved": True, "closed": False}, "notes": {"cursor": "not taken"}}))
         said = text_of(html)
         self.assertIn("The benchmark's detail variant the second rank 42 cached no", said)   # nothing the page says elsewhere
         self.assertNotIn("tool_calls", said); self.assertNotIn("run.py", said)
-        self.assertIn("result timed out", text_of(self.panel(self.page({"result": "timed out"}))))   # a text result stays
+        self.assertIn("result timed out steps 15 score 0.25",       # text, or a number the head does not show
+                      text_of(self.panel(self.page({"result": "timed out", "steps": 15, "score": 0.25}))))
         self.assertIn("checks ✓ saved × closed notes · cursor: not taken", said)
         self.assertRegex(html, r'<span class="ok">✓</span> saved')
         self.assertRegex(html, r'<span class="bad">×</span> closed')
@@ -95,7 +96,7 @@ class TrialDetail(unittest.TestCase):
         self.assertIn("✓</span> held", self.panel(html))
 
     def test_a_score_without_a_detail_has_no_panel(self):
-        for detail in ({}, None, ["a"], {"result": 0.0, "by": "run.py, evaluate", "tool_calls": 3}):
+        for detail in ({}, None, ["a"], {"result": 0.5, "by": "run.py, evaluate", "tool_calls": 3, "steps": 2}):
             with self.subTest(detail=detail):
                 self.assertNotIn('id="trial-detail"', self.page(detail))
         os.remove(os.path.join(self.root, "t1", "verifier", "score.json"))
