@@ -14,9 +14,6 @@
       const b = C.standardBench(rec) || {}, lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
       return (!paper && rec[role + '_model']) || lb && lb[role] || b[role] || '';
     };
-    // the roles whose model is being typed: their providers are asked once it is picked or the field is left
-    const typing = new Set();
-    const type = (field, on) => { const role = field.replace('_model', ''); if (typing.has(role) === on) return; typing[on ? 'add' : 'delete'](role); sync(); };
     // the server's compile, while what decides the models it names has not changed since
     const known = rec => { const c = compiled(); return c && c.out && c.key === C.servedKey(rec) ? c.out : null; };
     providers.subscribe(model => {
@@ -31,7 +28,7 @@
       served: C.servedKey(JSON.parse(key)) === C.servedKey(rec) ? C.servedCompiled(last, out, key) : last,
     });
     const row = (rec, role) => {
-      const out = typing.has(role) ? null : known(rec), model = C.servedModelOf(role, '', out);
+      const out = known(rec), model = C.servedModelOf(role, '', out);
       const entry = C.servedRoles(rec).includes(role) && model ? providers(model) : null;
       return C.servedRow(rec, role, shown(rec, role), out, entry && entry.result);
     };
@@ -52,7 +49,7 @@
         if (list && list.dataset.of !== JSON.stringify(s.chosen)) { list.dataset.of = JSON.stringify(s.chosen); list.innerHTML = chips(role, s.chosen); }
       });
     }
-    return {field, sync, type, acceptCompile};
+    return {field, sync, acceptCompile};
   }
   // Saved recipes are the server's (/new-run/recipes, nullius/recipes/store.py); a browser on its host alone writes them.
   // move() sends what this browser kept before (nullius.recipes.v1, and the older nullius.recipes.v1.<workspace> lists)
@@ -223,9 +220,8 @@
   // The standard's recipe as the server compiles it from the definitions (POST
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
   let runnerOut = null, runnerKey = '', runnerTimer, runnerServed = null;
-  const MODEL_FIELDS = ['model', 'simulator_model', 'judge_model'];
   // Served by's rows (servedRows above), given the models the server last named and what decided them (C.servedCompiled)
-  const {field: servedField, sync: syncServed, type: typeServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders});
+  const {field: servedField, sync: syncServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders});
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
@@ -979,6 +975,30 @@
     $('#nb-next').textContent=step===REVIEW?'Export recipe JSON':stepName(steps[nextShown(step,1)],nextShown(step,1))+' →';
     placeThumb();
   }
+  // The open step's errors. The Model step says none over a model being typed, nor before one is chosen or its field left.
+  let modelActed=false;
+  function localErrors() {
+    const rec=r(),el=document.activeElement,typing=root.contains(el)&&el.dataset.providerModel&&el.value!==(rec[el.dataset.field]||'');
+    if(step===REVIEW)modelActed=true;
+    const quiet=step===S.model&&(typing||!modelActed&&!rec.model&&!rec.userModel);
+    $('#nb-localerrors').textContent=fieldErrors($('#nb-form'),quiet?[]:compiled.errors.filter(e=>e.step===step&&!e.shown),esc).map(e=>e.message).join(' ');
+  }
+  // A model picked, entered, or left in its field: the recipe takes it at once. What the page shows of it waits for a
+  // press to end, so a button pressed to leave the field does not move from under the pointer.
+  let pressing=false;
+  document.addEventListener('pointerdown',()=>{pressing=true;},true);
+  for(const end of ['pointerup','pointercancel'])document.addEventListener(end,()=>{pressing=false;},true);
+  function commitModel(el) {
+    const rec=r(),key=el.dataset.field,value=el.value.trim(),changed=value!==(rec[key]||'');
+    modelActed=true;
+    if(changed){
+      if(rec.modelFormat!=='provider-id'){for(const k of ['model','userModel','evalModel'])if(typeof rec[k]==='string')rec[k]=C.bareModel(rec[k]);rec.modelFormat='provider-id';}
+      C.setModelOf(rec,key,value);saveDraft();   // the field's pin goes with its model
+    }
+    const show=()=>{if(changed){syncServed();refreshPlan();}else localErrors();};
+    if(pressing)for(const end of ['pointerup','pointercancel'])document.addEventListener(end,()=>setTimeout(show),{once:true});
+    else queueMicrotask(show);
+  }
   function refreshPlan() {
     const rec=r();
     if(C.isStandard(rec)){
@@ -986,7 +1006,7 @@
       const out=runnerOut||{errors:[],notes:[]};
       compiled={errors:out.errors||[],notes:out.notes||[]};
     }else{compiled=C.compile(rec);}
-    $('#nb-localerrors').textContent=fieldErrors($('#nb-form'),compiled.errors.filter(e=>e.step===step&&!e.shown),esc).map(e=>e.message).join(' ');
+    localErrors();
     const errors=$('#nb-errors');
     if(errors){
       errors.hidden=!compiled.errors.length;
@@ -1195,7 +1215,7 @@
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
     if(d.servedBy!==undefined)return;   // what is typed in a Served by filters its menu: a pick, or Enter, adds it (nb-pick)
     if(d.stdUnsandboxed!==undefined)return;   // a box's value is no tick: its change sets the recipe
-    if(d.providerModel && rec.modelFormat !== 'provider-id'){for(const key of ['model','userModel','evalModel'])if(typeof rec[key]==='string')rec[key]=C.bareModel(rec[key]);rec.modelFormat='provider-id';}
+    if(d.providerModel){localErrors();return;}   // what is typed in a model field filters its list: a pick, Enter or leaving the field sets it
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
       const value=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;
       if(p)rec.params[p.key]=p.type==='optional-boolean'?(value==='__default__'?null:value==='true'):value;
@@ -1204,7 +1224,6 @@
       else if(!d.providerModel&&['model','userModel','evalModel'].includes(d.field)&&/^(openrouter|openai)\//.test(String(value))){rec.provider=C.providerOf(rec,value);rec[d.field]=C.bareModel(value);
         renderForm();refreshPlan();const f=root.querySelector(`[data-field="${d.field}"]`);if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);}return;}   // the provider the prefix named, and whether it is set
       else if(d.field==='provider'){C.setChoice(rec,value);renderForm();refreshPlan();return;}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
-      else if(MODEL_FIELDS.includes(d.field)){C.setModelOf(rec,d.field,value);typeServed(d.field,true);syncServed();}   // the field's pin goes with its model; its Served by follows, in place
       else rec[d.field]=value;
       if(el.list?.id==='nb-paths')completeDirectory(el.value);
     }else if(d.stdMinutes){const t=Object.assign({},rec.timeouts);if(el.value===''||!(Number(el.value)>0))delete t[d.stdMinutes];else t[d.stdMinutes]=Number(el.value);if(Object.keys(t).length)rec.timeouts=t;else delete rec.timeouts;refreshPlan();return;
@@ -1221,15 +1240,15 @@
   // no cap, unsaid. It is said, and the field emptied, so that it shows what the recipe holds
   root.addEventListener('focusout',event=>{
     const el=event.target;
-    if(MODEL_FIELDS.includes(el.dataset.field))typeServed(el.dataset.field,false);
+    if(el.dataset.providerModel)commitModel(el);      // a change undone by hand since the focus fires no change event
     if(el.type==='number'&&(el.dataset.field||el.dataset.stdMinutes||el.dataset.benchOptSelect)&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
   });
   // a provider picked in a Served by, or slugs typed there and Enter: they join its list, after the ones there
   root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail);syncServed();refreshPlan();});
   root.addEventListener('change',async event=>{
     const el=event.target,d=el.dataset;
-    if(MODEL_FIELDS.includes(d.field))typeServed(d.field,false);
-    if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
+    if(d.providerModel)commitModel(el);
+    else if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
     else if(d.stdVersion!==undefined){   // in place: only the card's count changes on this step, so nothing else is drawn again
       C.setStandardBenchmark(r(),el.value);benchTasks();render(false,false);}

@@ -75,6 +75,9 @@ class TheStep(unittest.TestCase):
                   'model': 'gpt-4o', 'limit': 1, 'concurrency': 1, 'where': 'local'}
         response = client.post('/new-run/runner', json={'recipe': recipe}, headers={'X-CSRF-Token': 'served-test-token'})
         self.assertEqual(response.json['served_models']['model'], 'openai/gpt-4o-2024-08-06')
+        recipe.update(model_choice='any', model='qwen 3')       # no model ID: there is nothing to ask the providers of
+        response = client.post('/new-run/runner', json={'recipe': recipe}, headers={'X-CSRF-Token': 'served-test-token'})
+        self.assertIsNone(response.json['served_models']['model'])
 
 
 class TheRows(CompilerCase):
@@ -156,15 +159,6 @@ class TheRows(CompilerCase):
                 self.assertEqual(out, {'changed': [True, '', []], 'pending': [True, next_model],
                                        'stale': [[], old_first, next_model], 'final': [False, next_model],
                                        'requests': ['openai/gpt-4o-2024-08-06', next_model], 'pins': None})
-
-    def test_a_models_providers_are_asked_once_it_is_chosen_not_as_it_is_typed(self):
-        out = self.js(self.SETUP + 'const got=[];const step=m=>{C.setModelOf(r,"model",m);rows.type("model",true);rows.sync();'
-                      'compiled={out:{served_models:{model:m}},key:C.servedKey(r)};rows.sync();got.push([label.hidden,seen().model,requests.slice()]);};'
-                      'step("openai/g");step("openai/gpt-4o");got.push(/ hidden>/.test(rows.field(r,"model")));'
-                      'rows.type("model",false);endpoints.get(requests[0])?.answer({ok:true,models:[{id:"a"},{id:"b"}]});'
-                      'got.push([label.hidden,seen().model,requests]);process.stdout.write(JSON.stringify(got));')
-        chosen = 'openai/gpt-4o'
-        self.assertEqual(out, [[True, '', []], [True, '', []], True, [False, chosen, [chosen]]])
 
     def test_a_failed_compile_keeps_the_model_the_server_named(self):
         """A compile that failed names no model: the row keeps the one the server last named for the same recipe (a pin

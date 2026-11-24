@@ -767,7 +767,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                 add("model", f"Served by pins {m} twice, with different providers: give its fields the same ones.")
             by_model[m] = list(slugs)
     # each field's model as the run sends it, for the builder to ask its providers under that name
-    out["served_models"] = {role: next((sent_of(p)[role] for p in sorted(picks, key=lambda q: q["control"]) if sent_of(p)[role]), None)
+    out["served_models"] = {role: next((sent_of(p)[role] for p in sorted(picks, key=lambda q: q["control"]) if _MODEL.match(sent_of(p)[role] or "")), None)
                             for role in roles}
 
     def pinned(p: dict) -> Dict[str, List[str]]:

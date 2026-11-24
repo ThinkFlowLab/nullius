@@ -169,8 +169,8 @@
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if(active?.input !== input)void open(input, true); else highlight(active.index + (e.key === 'ArrowDown' ? 1 : -1)); }
         if (e.key === 'Enter') {
           const pick = entered(active?.input === input ? active.items : [], active?.input === input ? active.index : -1, input.value, severalOf(input));
-          // the first Enter puts an open menu away; it never submits a half-typed search
-          if (!pick) { if (active?.input === input) { e.preventDefault(); close(); } return; }
+          // the first Enter puts an open menu away (in the builder it takes the id as typed); it never submits a half-typed search
+          if (!pick) { if (active?.input === input) { e.preventDefault(); close(); if (root) input.dispatchEvent(new Event('change', {bubbles: true})); } return; }
           e.preventDefault(); choose(pick, input);
         }
       });
