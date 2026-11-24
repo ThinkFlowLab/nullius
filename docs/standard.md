@@ -382,7 +382,7 @@ The [builder](builder.md) runs the standard; what it adds:
 | Surface | What it does |
 | --- | --- |
 | The builder | Each dataset with each choice is a `cli run --from-run` and a job (`<name>-<dataset>-<agent>`); each machine a shard and a job (`<name>-shard-<I>of<N>`) |
-| A run on a host | Runs the running backend and effective catalogue: source edits, user entries and catalogue-local dataset files are included, configuration and credential stores excluded; needs `python3`, `git` and, for the container backend, Docker or Podman; `uv` is installed when missing. On the local backend a host without `npm` is refused. The job is mirrored back every 10 s |
+| A run on a host | Runs the running backend and effective catalogue: source edits, user entries and catalogue-local dataset files are included, configuration and credential stores excluded; needs `python3`, `git` and, for the container backend, Docker or Podman; `uv` is installed when missing. On the local backend a host without `npm` is refused. The job is mirrored back with a 1 s pause between looks |
 | Agents and Capabilities tabs | Each definition's ports proven and the benchmarks it runs; *Prove its ports* runs `cli conform --from-run` here, with local processes or a container, and updates its proofs |
 | A benchmark's page | Its proofs per dataset; *Run control checks* runs `cli prove --from-run` here, handed no key unless the benchmark is judged. A failed check is kept under `proven.<dataset>.failed` until it passes |
 
