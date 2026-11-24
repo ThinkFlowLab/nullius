@@ -472,8 +472,8 @@ class BuilderStandard(unittest.TestCase):
         self.stack.enter_context(patch.object(prerequisites, "check_host", lambda host, needs, setups=None, standard=False: []))
         self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into_="": into.append(into_)))
         store.save(self.recipe(name="fake", title="fake on two"))
-        got = recipes.launch(Here("http://localhost"), store.listing()[0]["recipe"], ["me@bench"], "planner", now=datetime.datetime(2026, 1, 1, 12, 0, 0))
-        self.assertEqual((got["launch"], into), ("run:fake-0101-120000-1", ["planner"]))
+        got = recipes.launch(Here("http://localhost"), store.listing()[0]["recipe"], ["me@bench"], "trials", now=datetime.datetime(2026, 1, 1, 12, 0, 0))
+        self.assertEqual((got["launch"], into), ("run:fake-0101-120000-1", ["trials"]))
         self.assertEqual(self.post("/run", {"name": "fake-0101-120000", "where": "me@bench", "recipe": self.recipe(where="me@bench", title="fake on two")}).get_json()["ok"], True)
         shell, page = self.started
         self.assertEqual(shell.to_dict(), page.to_dict())                                  # the same launch

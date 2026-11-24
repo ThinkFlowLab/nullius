@@ -529,14 +529,14 @@ class ResumeIntoWorkspace(unittest.TestCase):
                 execution.EXECUTIONS[r.json["id"]].thread.join(10)
             return r
         first, second = (str(self.tmp / "runs" / n / "jobs") for n in ("q1", "q2"))
-        self.assertEqual(post("q1", "planner").status_code, 200)
-        made = workspace.load(self.home, "planner")
-        self.assertEqual((made.label, made.roots), ("planner", [first]))
+        self.assertEqual(post("q1", "trials").status_code, 200)
+        made = workspace.load(self.home, "trials")
+        self.assertEqual((made.label, made.roots), ("trials", [first]))
         self.assertEqual(web.shared.STATE["workspace"].name, self.ws.name)
         self.assertEqual(workspace.load(self.home, self.ws.name).roots, self.held + [self.jobs])
-        self.assertEqual(json.loads((self.tmp / "runs" / "q1" / "run.json").read_text())["workspace"], "planner")
-        self.assertEqual(post("q2", "planner").status_code, 200)                                  # one there already: added to
-        self.assertEqual(workspace.load(self.home, "planner").roots, [first, second])
+        self.assertEqual(json.loads((self.tmp / "runs" / "q1" / "run.json").read_text())["workspace"], "trials")
+        self.assertEqual(post("q2", "trials").status_code, 200)                                  # one there already: added to
+        self.assertEqual(workspace.load(self.home, "trials").roots, [first, second])
         before = sorted(w.name for w in workspace.list_all(self.home))
         r = post("q3", "Not a name")
         self.assertEqual((r.status_code, r.json), (400, {"ok": False, "error": "A workspace's name is lowercase letters, digits and dashes."}))
