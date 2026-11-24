@@ -338,10 +338,13 @@ class CompareFilters(unittest.TestCase):
     def test_the_switches_count_flags_over_all_runs_and_name_the_tasks_flagged_differently(self):
         html = self.page(self.base)
         self.assertIn('id="compare-filter-flawed"', html)
-        self.assertIn('>1 flawed</a>', html)
-        self.assertIn('>1 ambiguous</a>', html)
+        self.assertIn('aria-label="Exclude 1 flawed task"', html)
+        self.assertIn('aria-label="Exclude 1 ambiguous task"', html)
+        self.assertIn('>Exclude:</span>', html)
+        self.assertIn('> Flawed</label>', html)
+        self.assertNotIn(' checked> Flawed', html)
         self.assertNotIn('id="compare-set-aside"', html)
-        self.assertIn('data-tip="t3">Flags differ on 1 task</span>', html)
+        self.assertIn('title="t3">Flags differ on 1 task</span>', html)
 
     def test_a_task_flagged_in_any_run_is_set_aside_in_every_column(self):
         from nullius.compare import comparison
@@ -379,7 +382,7 @@ class CompareFilters(unittest.TestCase):
             html = self.page(f"/compare?pick={ws.name}:run-c&pick={ws.name}:run-d&flawed=1")
             web.shared.open_workspace(self.ws)
         self.assertIn('id="compare-set-aside">Filtered: 0 tasks set aside', html)
-        self.assertIn('data-tip="t5">Flags differ on 1 task</span>', html)
+        self.assertIn('title="t5">Flags differ on 1 task</span>', html)
 
     def test_an_unreadable_flag_file_is_named(self):
         tmp = Path(self.temp.name)
@@ -393,12 +396,15 @@ class CompareFilters(unittest.TestCase):
             web.shared.open_workspace(self.ws)
         self.assertIn('id="compare-flags-unreadable">Flags unreadable: run-e</span>', html)
 
-    def test_the_comparisons_links_keep_the_filters_and_each_switch_turns_itself_off(self):
+    def test_the_comparisons_links_keep_the_filters_and_the_form_keeps_its_runs(self):
         html = self.page(self.base + "&flawed=1")
+        form = re.search(r'<form[^>]*id="compare-flags".*?</form>', html, re.S).group(0)
+        self.assertIn('id="compare-filter-flawed" name="flawed" value="1" checked>', form)
+        self.assertIn('id="compare-filter-ambiguous" name="ambiguous" value="1">', form)
+        self.assertEqual(re.findall(r'type="hidden" name="([^"]*)" value="([^"]*)"', form),        # every run, no filter
+                         [("pick", f"{self.ws.name}:run-a"), ("pick", f"{self.ws.name}:run-b")])
         self.assertIn("cohort=matched", html)
         self.assertRegex(html, r'href="/compare\?[^"]*cohort=matched[^"]*flawed=1')
-        off = re.search(r'id="compare-filter-flawed" href="([^"]*)"', html).group(1)
-        self.assertNotIn("flawed=1", off)
 
 
 if __name__ == "__main__":
