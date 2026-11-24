@@ -13,7 +13,7 @@ server makes the launch and follows it, as one it started from the page: one pro
 recipe file as the builder exports it.
 
 The exit codes are the contract in ``docs/cli/exit-codes.md``: 0 done, 2 usage, 3 no such recipe, 4 refused (by the
-compile, a machine, the question Run asks, the server, or a launch that ended otherwise than done with ``--wait``).
+compile, a machine, the question Run asks, the server, or with ``--wait`` a launch that ended otherwise than done or paused).
 """
 from __future__ import annotations
 
@@ -132,7 +132,8 @@ def launch(server: Server, recipe: dict, where=None, into: str = "", yes: bool =
 
 
 def wait(server: Server, run_ids, every: float = POLL_SECONDS) -> dict:
-    """{run id: its summary} once none of the runs is alive (``GET /run/<id>``, the route the page polls)."""
+    """{run id: its summary} once none of the runs is going (``GET /run/<id>``, the route the page polls): each has
+    ended, or is paused on the question the page answers, which a shell cannot."""
     ended = {}
     while True:
         for rid in run_ids:
@@ -140,7 +141,7 @@ def wait(server: Server, run_ids, every: float = POLL_SECONDS) -> dict:
                 status, s = server.json("GET", f"/run/{urllib.parse.quote(rid)}")
                 if status != 200:
                     raise Refused(f"GET /run/{rid}: HTTP {status}")
-                if s.get("state") not in execution.ALIVE:
+                if s.get("state") not in execution.ALIVE or s.get("state") == "paused":
                     ended[rid] = {k: v for k, v in s.items() if k != "log"}
         if len(ended) == len(run_ids):
             return ended
@@ -203,7 +204,7 @@ def main(argv=None) -> int:
     la.add_argument("--workspace", metavar="NAME", help="the workspace the launch goes into, made when there is none (default: the open one, as Run)")
     la.add_argument("--server", metavar="URL", help="the Nullius server on this machine (default http://127.0.0.1:APP_PORT, else 5057)")
     la.add_argument("--yes", action="store_true", help="answer yes to the question Run asks before a run of every unit")
-    la.add_argument("--wait", action="store_true", help="return when the launch has ended; exit 4 when it ended otherwise than done")
+    la.add_argument("--wait", action="store_true", help="return when the launch has ended or paused on a question; exit 4 unless it ended done")
     la.add_argument("--json", action="store_true", help="one JSON document: the server's answer to the launch")
     a = ap.parse_args(argv)
     return {"list": _list, "launch": _launch}[a.cmd](a)

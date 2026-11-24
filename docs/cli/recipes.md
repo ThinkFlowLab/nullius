@@ -19,7 +19,7 @@ nullius recipes launch recipe.json --wait --json
 | `--workspace NAME` | The workspace the launch goes into, made when there is none; the open workspace stays open. Default: the open one, as Run |
 | `--server URL` | The Nullius server on this machine (default `http://127.0.0.1:` and `APP_PORT`, else 5057) |
 | `--yes` | Answers the question Run asks before a run of every unit |
-| `--wait` | Returns when the launch has ended; exits 4 when it ended otherwise than done |
+| `--wait` | Returns when the launch has ended, or paused on the question its page asks; exits 4 unless it ended done |
 | `--json` | The server's answer as one document |
 
 | Rule | Detail |
