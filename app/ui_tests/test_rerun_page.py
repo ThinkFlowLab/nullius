@@ -483,7 +483,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         d = self.run_of()
         self.open(d.parent)
         html = self.page("/job/r1?view=results")
-        for absent in ('id="reruns"', ">Retries<", "run-retries", "again-now", "running again", "no_result", "data-first"):
+        for absent in ('id="reruns"', 'class="num">Retries<', "run-retries", "again-now", "running again", "no_result", "data-first"):
             self.assertNotIn(absent, html)
         trial = self.page(f"/trial/r1/{trial_name(1)}")
         self.assertNotIn("try-tabs", trial); self.assertNotIn("try-why", trial)

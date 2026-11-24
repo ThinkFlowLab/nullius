@@ -43,7 +43,7 @@ and its resources.
   and Capabilities tabs and conformance Kits catalogue). Cross-module names are reached as
   attributes (`shared.STATE`, `traces._trial_evidence`): patch one, patched for all.
 - `app/nullius/` — its backend, one package per purpose: `runs/` (reading one
-  Harbor job tree: `parse`, `classify`, `live`, `artifacts`,
+  Harbor job tree: `parse`, `classify`, `live`, `artifacts`, `evidence`,
   `feasibility`, `failure_analysis` - a job's failure labels and task flags, beside its result.json, written by `flags_cli` too -, `launches`, `verifier` - a verifier's report read by its
   benchmark's report block - `attempts`, a task's attempts in one job with
   their pass count and pass@k, and the `cli`), `traces/` (`trace`, the reader, with its span tree `spans`,

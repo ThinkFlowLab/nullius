@@ -523,7 +523,8 @@ def _bench_options(d: dict) -> List[str]:
     ``embeddings`` model called through the run's relay, ``host`` requirements or ``files`` by name - and
     ``when`` it applies: another option's values (a retriever's, only with a retrieval). ``limit``:
     a bound the upstream has of its own (its steps, its errors), offered with the run's limits; ``by``:
-    its default under each value of another option (an agent's own steps), for a default of ``default``. ``names``: a name for some of its values, shown in their place. ``step``: ``where`` for a choice of where the work runs, ``dataset`` for one its datasets need, the builder step that asks it."""
+    its default under each value of another option (an agent's own steps), for a default of ``default``; ``yours``: the value
+    an agent's or a capability's run gets for it (the steps of a port's loop). ``names``: a name for some of its values, shown in their place. ``step``: ``where`` for a choice of where the work runs, ``dataset`` for one its datasets need, the builder step that asks it."""
     opts = d.get("options")
     if opts is None:
         return []
@@ -548,6 +549,8 @@ def _bench_options(d: dict) -> List[str]:
                 k != name and k in opts and isinstance(m, dict) and set(m) == set(opts[k].get("values") or [None])
                 and all(option_problem(o, v) is None for v in m.values()) for k, m in by.items())):
             bad.append(f"{w}.by: another option -> its every value -> this one's default under it")
+        if "yours" in o and (by is None or o["yours"] == o.get("default") or option_problem(o, o["yours"])):
+            bad.append(f"{w}.yours: beside by, the value an agent's or a capability's run gets for a default of default")
         # agent: an agent's run alone, on a benchmark agents run, and never beside another scope
         if on is not None and (not isinstance(on, list) or not on or any(x not in SETUPS + ("yours", "agent") for x in on)
                                or "agent" in on and (on != ["agent"] or d.get("family") != "agent")):

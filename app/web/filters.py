@@ -1,4 +1,4 @@
-"""Template filters and the context every page renders with."""
+"""Template filters, the context every page renders with, and the pages for a 404 and a 500."""
 from __future__ import annotations
 
 import json
@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from flask import url_for
+from flask import g, render_template, url_for
 
 from nullius import importers as harnesses, providers
 from nullius.judge import client as judge_client
@@ -242,7 +242,7 @@ def _inject():
         "INFRA": classify.INFRA_OUTCOMES,
         "ORDER": classify.ORDER,
         "workspace": shared.STATE["workspace"],
-        "record_workspace": shared._record_workspace(),
+        "record_workspace": None if g.get("error_page") else shared._record_workspace(),
         # For the rail's switcher: the most recent few, and a stable hue per
         # name so a workspace keeps its colour across pages and restarts.
         "workspaces": workspace.list_all(shared.WS_HOME)[:8],
@@ -264,3 +264,18 @@ def _inject():
         # The runs list's Columns menu; the template reads it by this name.
         "COLUMNS": shared.COLUMNS,
     }
+
+
+def _error_page(title, status):
+    g.error_page = True     # an unknown ?workspace= may be what failed: the page does not read it again
+    return render_template("error.html", title=title), status
+
+
+@app.errorhandler(404)
+def _not_found(_):
+    return _error_page("Not found", 404)
+
+
+@app.errorhandler(500)
+def _server_error(_):
+    return _error_page("Server error", 500)

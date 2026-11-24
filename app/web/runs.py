@@ -591,7 +591,8 @@ def job(job_id):
                            trial_rows=attempts.grouped(j), pass_k=attempts.for_job(j),
                            filtered=_filtered_of(j, analysis, versions), marks=_marks_of(analysis, versions),
                            again=execute.again_offer(j, ex), running_again=running_again, rerunning=again is not None,
-                           waiting=waiting, plan_sets=plan_sets(j, waiting), job_cap=execute.job_cap(j, ex))
+                           waiting=waiting, plan_sets=plan_sets(j, waiting), job_cap=execute.job_cap(j, ex),
+                           names=_identity_names(j.identity))
 
 
 def _analysis_of(j):
@@ -633,6 +634,25 @@ def _filtered_of(j, analysis, versions):
     views = [failure_analysis.filtered(j, analysis, combo, versions)
              for n in range(1, len(offered) + 1) for combo in combinations(offered, n)]
     return {"view": f, "views": views}
+
+
+def _identity_names(identity: dict) -> dict:
+    """The names the job page gives what identifies a run (``Job.identity``):
+    its benchmark's title and each option's label, from the definitions the
+    catalogue holds now; where it holds none, the key, its underscores as spaces."""
+    if not identity:
+        return {}
+    key, version = identity.get("benchmark", ""), identity.get("benchmark_version", "")
+    bench = standard_definitions.get("benchmark", f"{key}@{version}" if version else key) if key else None
+    ref = identity.get("agent", "")
+    other = next((d for d in (standard_definitions.get(kind, ref) for kind in ("agent", "capability")) if d), None) if ref else None
+
+    def labels(d, given):
+        declared = (d or {}).get("options") or {}
+        return {k: (declared.get(k) or {}).get("label") or k.replace("_", " ").capitalize() for k in given}
+    return {"benchmark": standard_definitions.title(bench) if bench else " ".join(w for w in (key, version) if w),
+            "benchmark_options": labels(bench, identity.get("benchmark_options") or {}),
+            "agent_options": labels(other, identity.get("agent_options") or {})}
 
 
 def waiting_of(j, running=()) -> list:

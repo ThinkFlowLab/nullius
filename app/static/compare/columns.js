@@ -90,10 +90,13 @@ window.NulliusCompare = {
     });
     list.addEventListener('click', e => { const o = e.target.closest('[role="option"]'); if (o && o.getAttribute('aria-disabled') !== 'true') pick(o); });
     // fixed under its button (the table's scroll box would clip it), placed before it opens and takes the focus,
-    // so the focus never scrolls the table
+    // so the focus never scrolls the table; above it when there is more room there, its height kept to the room
     const place = () => {
       const b = btn.getBoundingClientRect(), w = Math.min(Math.max(b.width, 320), innerWidth - 16);
-      Object.assign(menu.style, {top: `${b.bottom + 4}px`, left: `${Math.max(8, Math.min(b.left, innerWidth - w - 8))}px`, width: `${w}px`});
+      const below = innerHeight - b.bottom - 12, above = b.top - 12, up = above > below;
+      Object.assign(menu.style, {top: up ? 'auto' : `${b.bottom + 4}px`, bottom: up ? `${innerHeight - b.top + 4}px` : 'auto',
+                                 maxHeight: `${Math.max(up ? above : below, 0)}px`,
+                                 left: `${Math.max(8, Math.min(b.left, innerWidth - w - 8))}px`, width: `${w}px`});
     };
     btn.addEventListener('click', place);
     NulliusTable.menu(btn, menu);

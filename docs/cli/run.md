@@ -29,7 +29,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--provider` | `anthropic`, `custom`, `openai` or `openrouter` |
 | `--dataset`, `--limit`, `-j` | One dataset, the first N units, N at a time |
 | `--units FILE` | Only the units the file lists: [below](#a-list-of-units) |
-| `--set NAME` | Only the units of a [task set](task-sets.md); its dataset is the run's, the options the run's own |
+| `--set NAME` | Only the units of a [task set](task-sets.md), in its dataset |
 | `--start-with N\|FILE\|set:NAME\|ids:ID,ID...` | Plan the whole, begin with a part: [below](#plan-the-whole-begin-with-a-part) |
 | `--unsandboxed` | An agent runs as you; else `--backend container` |
 | `--backend` | `local` (default); `container`, each unit in a container with its relay; or [`boat`](../standard.md#the-boat-backend), a VM per unit |

@@ -144,6 +144,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `filtered_score` | The adjusted solve rate without the trials of tasks with an accepted flag of the kinds switched on; shown only with a switch on. See [User judge](#user-judge). | derived | any |
 | `n_infra` | Trials removed from the adjusted denominator as infrastructure failures or run-imposed interruptions. | derived | any |
 | `mean_score` | The mean graded score, weighted by each trial's number of scored parts when present. When no trial passes or fails, it is the headline and the rates read —. | derived | mixed |
+| `mean_score_planned` | Each trial's score, averaged over every planned trial; unscored: 0. Whole runs only. | derived | mixed |
 | `score_by_group · parts_by` | The mean score per value of the field the benchmark breaks it down by (a question's category), from `verifier/parts.json`. | derived | mixed |
 | `n_regressions` | Trials whose patch broke a previously passing test. | derived | swe-bench |
 | `counts` | Trials per outcome. | derived | any |
@@ -160,6 +161,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Repeated attempts are separate trials, not retries. | measured | any |
 | `n_tasks_run · start_with` | Tasks with a trial, of `n_tasks` planned; `start_with`, how a standard job begun on a part of its plan named the part. Its rates are over the tasks run. | measured | any |
 | `retries` | Retries a standard run allows each attempt (`--retries`); 0 elsewhere. | measured | any |
+| `identity` | A standard run's setup: benchmark, agent, model, provider, limits. Empty elsewhere. | measured | any |
 | `dataset` | The dataset folder, `name@version` for a registry fetch, or the task names' shared prefix. | measured | any |
 
 ## Trial metrics, one row per task attempt {#trials}
@@ -192,7 +194,7 @@ These fields are stored in the standard's job and trial files ([Run a benchmark]
 | Field | What it is | Source | Works on |
 | --- | --- | --- | --- |
 | `standard.units_file` | In `config.json`: the units file's name, sha256 and ordered ids, before sharding and the limit. | measured | standard |
-| `standard.task_set` | In the same config: the task set the units came from, its id, name, label, the number and content hash of its list, its ids, and the version it was made at. Merging shards of two sets requires `--force`, and keeps the first shard's record. | measured | standard |
+| `standard.task_set` | In the same config: the task set run, with its id, name, hash, ids and version. | measured | standard |
 | `standard.constraints` | In the same config: what the machine allowed the run, when set. Shards may have different machine constraints; merging keeps the first shard's config values. | measured | standard |
 | `standard.served_by` | In the same config: the allowed OpenRouter provider slugs by model, in the order tried. | measured | standard |
 | `served / standard.served` | In the job's `result.json` and each trial's `result.json`, respectively: answered calls by provider (`calls`), calls naming none (`unnamed`), and each pinned model's `held`. Counts cover every relay route; the job also includes the benchmark's own relay. Tokens and cost are the agent's own calls'. | measured | standard |

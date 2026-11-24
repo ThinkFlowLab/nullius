@@ -138,7 +138,7 @@ URL_NAMES = ("API_URL", "OPENAI_BASE_URL", "LLM_BASE_URL")
 # The line the launcher's stdin ends with, after the key and the endpoint:
 # either may be empty, so only this line says the two arrived whole.
 STDIN_END = "@end"
-SYNC_EVERY = 10.0                             # seconds between looks at a running part (mirror, log, exit)
+SYNC_EVERY = 1.0                             # seconds between looks at a running part (mirror, log, exit)
 STOP_POLL = 0.5                               # how often a running command looks for a Stop
 STOP_WAIT = 20.0                              # seconds a Stop's own commands on the target take at most: the kill and the last copy back, together
 LAUNCH_GRACE = 5.0                            # seconds a restart waits for a part a launcher claimed to start (_settle)

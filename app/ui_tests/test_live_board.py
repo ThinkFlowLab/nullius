@@ -420,6 +420,38 @@ class LiveBoard(unittest.TestCase):
                 self.assertIn('aria-controls="view-logs" aria-selected="true"', body)
                 self.assertIn('id="view-live" aria-labelledby="tab-live" hidden', body)
 
+    def test_feed_readiness_switches_to_live_unless_another_tab_was_chosen(self):
+        if not self.node:
+            self.skipTest("node not available")
+        script = r"""
+const vm = require('vm'), fs = require('fs'), assert = require('assert');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+for (const query of ['', '?view=live', '?view=logs', '?view=results']) {
+  for (const click of [null, 'logs', 'results']) {
+    const panels = {}, events = {};
+    const tabs = ['live', 'logs', 'results'].map(view => {
+      panels['view-' + view] = {hidden: view !== (query === '?view=results' ? 'results' : 'logs')};
+      return {dataset: {viewTab: view}, events: {},
+        setAttribute() {}, getAttribute() { return 'view-' + view; },
+        addEventListener(k, f) { this.events[k] = f; }};
+    });
+    const location = {href: 'http://localhost/job/demo' + query};
+    const doc = {readyState: 'complete',
+      querySelectorAll() { return tabs; },
+      getElementById(id) { return panels[id] || null; },
+      addEventListener(k, f) { events[k] = f; }};
+    vm.runInNewContext(source, {document: doc, URL, location,
+      history: {replaceState(a, b, url) { location.href = String(url); }}});
+    if (click) tabs.find(t => t.dataset.viewTab === click).events.click();
+    events['live-ready']();
+    const chosen = click || (query === '?view=logs' ? 'logs' : query === '?view=results' ? 'results' : 'live');
+    assert.equal(panels['view-' + chosen].hidden, false, query + ' click=' + click);
+  }
+}
+"""
+        subprocess.run([self.node, "-e", script, str(APP_DIR / "static/runs/live-board.js")],
+                       capture_output=True, text=True, check=True)
+
     # -- the renderer, executed --------------------------------------------
     def render(self, snapshot, **opts):
         if not self.node:

@@ -72,10 +72,12 @@ class StandardWhere(CompilerCase):
             with self.subTest(key):
                 hosts = self.draw(None)[key + " local"]
                 self.assertNotIn("data-std-backend", hosts)
-                self.assertIn('<span>Each task in its own VM</span><small>VM provider: Docker</small>', hosts)
+                label = "OSWorld1" if key == "osworld1" else "OSWorld2"
+                self.assertIn("<span>As you, on the machine</span><small>A container that Nullius starts cannot start the tasks' VMs</small>", hosts)
+                self.assertIn(f'<span>Each task in its own VM</span><small>VM provider: Docker, used by {label} itself</small>', hosts)
                 self.assertEqual(hosts.count("VM provider"), 1)
                 boxes = self.draw(None, backends=("boat",))[key + " boat"]
-                label = "OSWorld1" if key == "osworld1" else "OSWorld2"
+                self.assertNotIn("As you, on the machine", boxes)
                 self.assertIn(f'data-std-boat-size="small" aria-pressed="false" disabled aria-disabled="true" title="Too small for {label}&#39;s 4 GB VM"', boxes)
                 self.assertIn('data-std-boat-size="default" aria-pressed="true"', boxes)     # the smallest that fits, chosen for it
                 self.assertIn("<span>Each task in its own VM</span><small>Docker, inside the task's Boat VM</small>", boxes)
@@ -87,8 +89,19 @@ class StandardWhere(CompilerCase):
         # an agent's run still asks the yes to running as you: its process is on the machine, only the desktop in a VM
         agent = self.draw(None, "r.others=[C.standardOthers(r).find(o=>!o.setup&&!o.control&&!o.why.length).key];")["osworld1 local"]
         self.assertIn("data-std-unsandboxed", agent)
+        self.assertNotRegex(agent, r"data-std-unsandboxed[^>]*checked")             # never ticked for the person
+        self.assertIn('class="nb-field nb-consent"><span><input type="checkbox" data-field="unsandboxed"', agent)   # its error is said under it
+        self.assertIn("<h3>Docker for the tasks&#39; VMs</h3>", agent)               # the requirement under its label
         # a saved container recipe is brought back to the machine: a container cannot start the VMs
         self.assertNotIn("data-std-backend", self.draw(None)["osworld2 docker"])
+
+    def test_a_machine_known_to_lack_a_requirement_is_refused_on_the_step_with_what_it_lacks(self):
+        lacks = self.draw(None, host={"osworld1": {"docker": ["docker not on PATH"]}})["osworld1 local"]
+        self.assertIn("This machine lacks Docker for the tasks&#39; VMs (docker not on PATH)", lacks)
+        self.assertEqual(lacks.count("std-hostreq-lacks"), 1)
+        for name, html in self.draw(None).items():          # nothing known to be missing: nothing said
+            with self.subTest(name):
+                self.assertNotIn("std-hostreq-lacks", html)
 
     def test_every_standard_benchmark_draws_its_where_step_and_says_why_docker_is_not_offered_once(self):
         missing, here = self.draw("docker is not installed"), self.draw(None)

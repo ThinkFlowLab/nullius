@@ -875,7 +875,7 @@ class Run:
         HELD[lck] = held
         self.say(f"job {self.job_dir}")
         p, control = self.progress, self.other["_kind"] == "control"
-        p.emit("plan", stages=",".join((["image"] if self.backend == "container" or self.relay_container or self.container_check else [])
+        p.emit("plan", stages=",".join((["models"] if self.base else []) + ["requirements"] + (["image"] if self.backend == "container" or self.relay_container or self.container_check else [])
                                       + (["upstream"] if install.upstream_dir(self.bench) else [])
                                       + (["dataset"] if self.ds.get("url") else [])
                                       + (["driver"] if install.driver_dir(self.bench) else [])
@@ -886,7 +886,9 @@ class Run:
         if self.cap_dropped:
             self.say(f"warning: {self.cap_dropped} ({self.cap_why})")
         try:
-            self.known_models()
+            if self.base:
+                with p.stage("models", start="checking the provider’s model list"):
+                    self.known_models()
             self.ready()
         except Refused as e:
             # said in the job, which holds nothing else: the runs list reads why there (progress.refusal)
@@ -1297,11 +1299,12 @@ class Run:
         when it declares one (``driver.install``), the agent's or capability's
         packages. Refused when one cannot be had."""
         from ..requirements import network_requirements
-        why = network_requirements.check(self.bench, self.other)
-        if why:
-            raise BenchmarkRefused("; ".join(why))
         p = self.progress
-        self.scope_limits = self.scope_ready(limits.scoped(self.constraints), refuse=self.backend == "local")
+        with p.stage("requirements", start="checking network access and machine limits"):
+            why = network_requirements.check(self.bench, self.other)
+            if why:
+                raise BenchmarkRefused("; ".join(why))
+            self.scope_limits = self.scope_ready(limits.scoped(self.constraints), refuse=self.backend == "local")
         owns = any(definitions.own_image(e) for e in (self.bench.get("environments") or {}).values())
         if self.backend == "container" or self.relay_container or self.container_check:
             try:

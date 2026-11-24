@@ -83,5 +83,22 @@
     }
   },
   "citation": "@inproceedings{\n    jimenez2024swebench,\n    title={{SWE}-bench: Can Language Models Resolve Real-world Github Issues?},\n    author={Carlos E Jimenez and John Yang and Alexander Wettig and Shunyu Yao and Kexin Pei and Ofir Press and Karthik R Narasimhan},\n    booktitle={The Twelfth International Conference on Learning Representations},\n    year={2024},\n    url={https://openreview.net/forum?id=VTF8yNQM66}\n}",
-  "citation_source": "https://github.com/SWE-bench/SWE-bench"
+  "citation_source": "https://github.com/SWE-bench/SWE-bench",
+  "evidence": [
+    {
+      "label": "Why",
+      "path": "why"
+    },
+    {
+      "label": "Infrastructure failure",
+      "path": "infra_failure"
+    },
+    {
+      "label": "Timed out",
+      "path": "timed_out",
+      "unless": [
+        "no"
+      ]
+    }
+  ]
 }
