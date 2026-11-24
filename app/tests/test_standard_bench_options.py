@@ -178,7 +178,7 @@ class Recipe(unittest.TestCase):
         self.assertNotIn("--bench-option retrieval", airline)
         self.assertIn("--bench-option retrieval=openai_embeddings", banking)
         self.assertFalse(out["keyless"])                                  # the embeddings call a model, with the key
-        self.assertIn("openai_embeddings · banking_knowledge", [r[2] for r in out["review"]])
+        self.assertIn("openai_embeddings · Banking knowledge", [r[2] for r in out["review"]])   # the dataset by its label
         self.assertEqual(out["host"]["needs"], [])
 
     def test_a_shell_search_says_its_machine_setup_and_embeddings_want_openai(self):
@@ -476,6 +476,37 @@ class GPURequirements(unittest.TestCase):
             query.assert_called_once_with(None)
             rows = prerequisites.check_here([], {"gpu": GPU}, which=lambda p: True)
             self.assertTrue(prerequisites.ready([{"rows": rows}]))
+
+
+
+GSM8K = {"version": 1, "harness": "standard", "name": "gsm8k-experiment", "title": "GSM8K experiment",
+         "benchmark": "gsm8k", "datasets": ["platinum"], "others": ["original", "codex@2.2.2"],
+         "model_choice": "any", "provider": "openai", "model": "gpt-5-mini", "limit": "", "concurrency": "",
+         "unsandboxed": True, "where": "local", "backend": "local", "options": {"original": {}}}
+
+
+class ReviewRows(unittest.TestCase):
+    def rows(self, **kw):
+        out = recipe.compile(dict(GSM8K, **kw))
+        self.assertEqual(out["errors"], [])
+        return {r[1]: r[2] for r in out["review"]}
+
+    def test_a_benchmark_setting_row_carries_no_dataset_key(self):
+        self.assertNotIn("platinum", self.rows()["Temperature"])
+
+    def test_a_setting_every_dataset_shares_names_no_dataset(self):
+        self.assertEqual(self.rows(datasets=["test", "platinum"])["Temperature"], "default (its default)")
+
+    def test_an_agent_option_reads_by_its_label_not_its_key(self):
+        self.assertNotIn("reasoning_effort", self.rows()["Options of Codex 2.2.2"])
+        self.assertEqual(self.rows()["Options of Codex 2.2.2"], "Reasoning effort medium (its default)")   # as the Agent step words it
+
+    def test_a_capability_option_reads_by_its_label_not_its_key(self):
+        out = recipe.compile(dict(GSM8K, benchmark="locomo", datasets=["locomo10"], others=["mem0"], options={}))
+        self.assertEqual(out["errors"], [])
+        options = {r[1]: r[2] for r in out["review"]}["Options"]
+        self.assertTrue(options.startswith("Reasoning effort default (its default), Infer on (its default)"), options)
+        self.assertNotIn("_", options)
 
 
 if __name__ == "__main__":

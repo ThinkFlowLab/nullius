@@ -5,6 +5,7 @@ them: its containers' flags, its processes' scopes, its concurrency, its
 driver's environment and its config."""
 from __future__ import annotations
 
+import calendar
 import json
 import os
 import shutil
@@ -17,7 +18,7 @@ import time
 import unittest
 from unittest import mock
 
-from nullius import constraints, prerequisites, settings
+from nullius import constraints, ondisk, prerequisites, settings
 from nullius.standard.backends import container
 from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe
@@ -287,6 +288,48 @@ class Probe(unittest.TestCase):
         constraints.save("h", cut, env)
         kept = constraints.load(env)["h"]
         self.assertEqual((kept["capacity"], kept["enforced"], kept["refused"]), (good["capacity"], good["enforced"], good["refused"]))
+
+    def test_a_test_is_kept_in_utc_with_its_zone_in_a_file_with_a_version(self):
+        home = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, home, True)
+        env = {"NULLIUS_HOME": home}
+        with mock.patch.dict(os.environ, {"TZ": "Europe/Paris"}):
+            time.tzset(); self.addCleanup(time.tzset)
+            before = int(time.time())
+            constraints.save("bench", {"capacity": {"cpus": 2}}, env)
+            at = constraints.load(env)["bench"]["at"]
+            self.assertTrue(at.endswith("Z"), at)
+            self.assertLessEqual(abs(calendar.timegm(time.strptime(at, "%Y-%m-%dT%H:%M:%SZ")) - before), 2)
+            shown = constraints.tested_at(at)                                   # Settings: local time, as before
+            self.assertEqual(shown, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(calendar.timegm(time.strptime(at, "%Y-%m-%dT%H:%M:%SZ")))))
+            self.assertNotEqual(shown, at[:-1].replace("T", " "))                # Paris is not UTC
+        with open(constraints.store_path(env), encoding="utf-8") as f:
+            doc = json.load(f)
+        self.assertEqual((doc["version"], list(doc["machines"])), (constraints.VERSION, ["bench"]))
+
+    def test_a_file_of_before_is_still_read_and_its_time_shown_as_it_was(self):
+        home = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, home, True)
+        env = {"NULLIUS_HOME": home}
+        os.makedirs(os.path.dirname(constraints.store_path(env)), exist_ok=True)
+        with open(constraints.store_path(env), "w", encoding="utf-8") as f:
+            json.dump({"bench": {"capacity": {"cpus": 4}, "at": "2026-11-23T18:57:09"}}, f)
+        self.assertEqual(constraints.load(env), {"bench": {"capacity": {"cpus": 4}, "at": "2026-11-23T18:57:09"}})
+        self.assertEqual(constraints.tested_at("2026-11-23T18:57:09"), "2026-11-23 18:57:09")
+        self.assertEqual((constraints.tested_at(None), constraints.tested_at("garbledZ")), ("", "garbledZ"))
+        constraints.save("lab", {"capacity": {"cpus": 1}}, env)                    # written again: versioned, the old machine kept
+        with open(constraints.store_path(env), encoding="utf-8") as f:
+            doc = json.load(f)
+        self.assertEqual((doc["version"], doc["machines"]["bench"]["at"]), (constraints.VERSION, "2026-11-23T18:57:09"))
+
+    def test_save_and_move_wait_for_the_file_lock(self):
+        home = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, home, True)
+        env = {"NULLIUS_HOME": home}
+        constraints.save("a", {"capacity": {"cpus": 1}}, env)
+        for change in (lambda: constraints.save("b", {"capacity": {"cpus": 2}}, env), lambda: constraints.move("a", "c", env=env)):
+            with ondisk.locked(constraints.store_path(env) + ".lock"):     # another process holding it
+                t = threading.Thread(target=change); t.start(); t.join(0.3)
+                self.assertTrue(t.is_alive())
+            t.join(5); self.assertFalse(t.is_alive())
+        self.assertEqual(sorted(constraints.load(env)), ["b", "c"])
 
     def test_kept_per_machine(self):
         home = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, home, True)

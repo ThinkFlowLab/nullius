@@ -603,7 +603,9 @@ class RunTest(unittest.TestCase):
         self.assertEqual(phases, ["env_setup", "agent_setup", "agent_run", "verify"])
         self.assertEqual(sorted(told), ["agent_run", "agent_setup", "env_setup", "verify"])
         for phase, key in (("env_setup", "environment_setup"), ("agent_setup", "agent_setup"), ("agent_run", "agent_execution"), ("verify", "verifier")):
-            self.assertAlmostEqual(told[phase], w[key][1] - w[key][0], places=3, msg=phase)
+            # the feed says a phase's seconds to the millisecond: the same rounding of the same two stamps, never a float within 0.5 ms
+            said = datetime.fromisoformat(res[key]["finished_at"]) - datetime.fromisoformat(res[key]["started_at"])
+            self.assertEqual(told[phase], round(said.total_seconds(), 3), msg=phase)
 
     def test_a_forced_agent_limit_is_the_runs_never_the_setups(self):
         """``--timeout agent`` bounds the agent's work from its open session, where its clock starts:

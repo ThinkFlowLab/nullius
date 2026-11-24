@@ -1479,8 +1479,8 @@ class Execution:
             return False
         prices_on_target = ""
         if self.plan.runner == STANDARD and self.on_host:
-            # the price list is this machine's user's, so the run takes it along (nullius.prices) - an empty one
-            # too: a host's own list, if it has one, never prices a run started here
+            # the price list and the user's own rows are this machine's user's, so the run takes both along, in the one
+            # file of before (nullius.prices) - empty too: a host's own list, if it has one, never prices a run started here
             prices_on_target = run_dir + "/prices.json"
             rc, out = self._sh(f"cat > {self._q(prices_on_target)}", 60, stdin=json.dumps(price_list.load()) + "\n")
             if rc != 0:

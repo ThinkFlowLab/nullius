@@ -11,9 +11,8 @@ Where model calls go, and with which key.
 | Custom | A name, a base URL, an optional key | Ollama, vLLM, LM Studio, a gateway or a hosted service | Any; the endpoints you list come first |
 
 The first four are presets: their name, base, key setting and listed
-endpoints are fixed. You can add endpoints for other protocols. An added
-endpoint is a path, or a full URL on the preset's own host, because the preset's
-key goes there.
+endpoints are fixed. To configure other endpoints, add a Custom provider.
+Existing preset overrides are ignored; move them to a Custom provider.
 
 ## Protocols
 
@@ -83,14 +82,16 @@ A rename does not break a recipe.
 
 ### Endpoints
 
-**Endpoints**, on a card, has one row per protocol. An empty row uses the base
+**Endpoints** lists only supported, read-only endpoints for presets. Custom
+providers have an editable row for every protocol. An empty row uses the base
 and the protocol's default path. A row holds a path,
 appended to the base with one slash (`/v2/chat` on `https://gw.example/v1` is
 `https://gw.example/v1/v2/chat`), or a full URL, which passes the checks a base
 gets. A path has no `..` segment. A row you fill also says that the provider
 serves that protocol: pickers list such providers first, and a judge uses a
 protocol that the provider lists before one that it does not. A base on a
-preset's host suggests that preset's endpoints.
+preset's host suggests that preset's endpoints. Run relays forward the agent's
+paths below the base URL; endpoint rows configure provider tests and judges.
 
 If one provider serves both decision formats, set at least one of them: both
 default to `/decisions`.
@@ -104,7 +105,7 @@ a setting of its own.
 | --- | --- |
 | `MODEL_<ID>` | A custom provider: `name`, `base`, `endpoints` |
 | `MODEL_<ID>_API_KEY` | Its key (secret) |
-| `OPENROUTER`, `OPENAI`, `ANTHROPIC`, `TYPESAFE` | Endpoints you add to a preset |
+| `OPENROUTER`, `OPENAI`, `ANTHROPIC`, `TYPESAFE` | Unsupported overrides; use Custom instead |
 | `<PRESET>_API_KEY` | The preset's key (secret) |
 | `MODEL_API_URL`, `MODEL_API_KEY` | The custom provider named OpenAI-compatible; recipes with no endpoint id use it |
 
@@ -115,15 +116,14 @@ a setting of its own.
 }
 ```
 
-A provider is three layers merged field by field, the later one winning: the
-preset in code, then `settings.json`, then the environment. An environment
+A custom provider merges `settings.json` and the environment field by field,
+the environment winning. An environment
 value is a partial object: it changes only the fields it names. `endpoints`
 merges by protocol, and `null` removes a field. An older setting does not
 replace a field that `null` removes.
 
 ```sh
-export MODEL_GW='{"base": "https://gw-eu.example/v1"}'
-export OPENROUTER='{"endpoints": {"messages": "/messages"}}'
+export MODEL_GW='{"base": "https://gw-eu.example/v1", "endpoints": {"messages": "/messages"}}'
 ```
 
 | Rule | |

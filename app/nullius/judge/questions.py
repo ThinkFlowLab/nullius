@@ -171,6 +171,35 @@ register("trial", {
     },
 })
 
+# --- the trial page: the same two questions a person answers on the User judge tab -----
+# A failed trial's cause in the tab's four labels, and whether its task is fair. Both models answer them beside the
+# person, for comparison only: the Filtered score reads the person's flags alone (`runs.failure_analysis`).
+register("trial", {
+    "failure_label": {
+        "label": 'Why it failed', "blurb": "The cause, in the User judge's four labels or other",
+        "type": "choice", "state": "failure", "when": "unresolved",
+        "instructions": "Why did this trial not resolve? Here `agent` means the program around the model, not the model's own steps. Pick the one layer the transcript, the recorded error and the verifier output blame most; pick `other` when they do not show which.",
+        "criteria": {
+            "agent": "The program around the model failed it: a step, turn or time limit it set was hit, a tool it provides returned an error or wrong data, or it lost or cut text the model needed",
+            "model": "The model's own mistake: a rule, document or tool result in view was not applied, a reasoning slip, a wrong or invented fact, a wrong or missing action",
+            "environment": "Something outside the agent broke the trial: the simulated user, an external service, the infrastructure, a model rate limit or an API error",
+            "evaluator": "The grading is at fault: the verifier or the expected outcome is wrong, or it rejects a defensible answer",
+            "other": "A cause outside this list, or the text shown does not say which layer is at fault",
+        },
+    },
+    "task_flag": {
+        "label": 'Task flag', "blurb": "Whether the task itself is sound, in the User judge's flags",
+        "type": "choice", "state": "failure", "when": "unresolved",
+        "instructions": "Is this task itself sound, judged from the instruction and the verifier output shown, not from the agent's work? Pick `cannot_tell` unless the text shown supports another option.",
+        "criteria": {
+            "flawed": "The verifier output shows an expected outcome that is wrong, or that the instruction gives no way to reach",
+            "ambiguous": "The instruction allows more than one defensible reading, and the verifier output accepts only one",
+            "fair": "The instruction has one defensible reading and the verifier output shows nothing wrong with the expected outcome",
+            "cannot_tell": "The text shown is not enough to judge the task: the expected outcome or the rules are not in view",
+        },
+    },
+})
+
 # --- the compare page: a matched pair -------------------------------------------------
 # Each side is scored on its own, over its own `trial` state, against one
 # rubric; the pick is made in code (`compare.comparison.better_of`), never by

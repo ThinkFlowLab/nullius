@@ -107,7 +107,10 @@
       return false;
     });
   }
-  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList, prereqHead, fieldErrors}; return; }
+  // Where the step bar's underline goes: under the active step `on`, raised from the bar's bottom edge (-1px, the last
+  // step's row) to on's own row when the steps wrap.
+  const underlineAt = (on, last) => ({left: on.offsetLeft, bottom: last.getBoundingClientRect().bottom - on.getBoundingClientRect().bottom - 1, width: on.offsetWidth});
+  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList, prereqHead, fieldErrors, underlineAt}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
@@ -983,7 +986,7 @@
   }
   // The underline under the active step is one element that slides to it. It follows the nav's own width, not
   // the window's: the Getting started panel narrows the page without a resize event.
-  const moveUnderline=()=>{const nav=$('.nb-steps'),on=nav.querySelector('.nb-step[aria-pressed=true]'),bar=nav.querySelector('.nb-stepbar');if(!on||!bar)return;bar.style.left=on.offsetLeft+'px';bar.style.width=on.offsetWidth+'px';};
+  const moveUnderline=()=>{const nav=$('.nb-steps'),on=nav.querySelector('.nb-step[aria-pressed=true]'),bar=nav.querySelector('.nb-stepbar');if(!on||!bar)return;const u=underlineAt(on,[...nav.querySelectorAll('.nb-step')].pop());bar.style.left=u.left+'px';bar.style.bottom=u.bottom+'px';bar.style.width=u.width+'px';};
   new ResizeObserver(moveUnderline).observe($('.nb-steps'));
   function stepName(t,i){const rec=r(),b=C.isStandard(rec)&&C.standardBench(rec);
     return i===S.agent&&b?(b.family==='agent'?'Agent':(b.kind||'capability').replace(/^./,c=>c.toUpperCase())):t;}
@@ -1229,7 +1232,7 @@
     else if(d.harborChoice!==undefined){const rec=r(),v=el.value;if(v==='path')rec.harborDev='';else if(v==='dev')rec.harborDev=rec.harborDev||'~/harbor-dev/.venv/bin/harbor';renderForm();refreshPlan();if(v==='dev')root.querySelector('[data-field="harborDev"]')?.select();}
     else if(el.id==='nb-import-file'){
       const file=el.files[0];if(!file)return;
-      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());savedId='';step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Review the recipe before copying commands.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
+      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());savedId='';step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Check it, then Run.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
     }
   });
   { const dl=document.getElementById('nb-models'); if(dl){const seen=new Set(); for(const o of [...dl.options]){const v=C.bareModel(o.value); if(!v||seen.has(v)){o.remove();continue;} seen.add(v); o.value=v;}} }

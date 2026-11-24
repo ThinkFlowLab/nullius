@@ -6,6 +6,7 @@ import json
 import os
 import re
 import tempfile
+from itertools import combinations
 from dataclasses import replace
 from flask import (
     abort,
@@ -21,7 +22,7 @@ from markupsafe import Markup, escape
 from nullius import execution
 from nullius import importers as harnesses
 from nullius.redact import redact
-from nullius.runs import attempts, classify, feasibility, launches, live, parse
+from nullius.runs import attempts, classify, failure_analysis, feasibility, launches, live, parse
 from nullius import workspace
 from nullius.standard.contract import definitions as standard_definitions
 
@@ -577,11 +578,54 @@ def job(job_id):
         abort(404)
     from . import judge
     board = _live_board_state(j)
+    analysis, versions = _analysis_of(j)
     return render_template("runs/job.html", job=j, live_board=board, view=_view_of(board, j, ex),
                            execution=ex, csrf=shared._csrf_token(),
                            judgement=judge.job_summary(j) if j.trials else None,
                            control=feasibility.summary_of(j), ended=shared.ended_for(job_id), own=own, deletable=_deletable(job_id, ex),
-                           trial_rows=attempts.grouped(j), pass_k=attempts.for_job(j))
+                           trial_rows=attempts.grouped(j), pass_k=attempts.for_job(j),
+                           filtered=_filtered_of(j, analysis, versions), marks=_marks_of(analysis, versions))
+
+
+def _analysis_of(j):
+    """The job's failure analysis and the current version of each flagged task; (None, {}) when its file cannot
+    be read."""
+    try:
+        analysis = failure_analysis.load(j.dir)
+    except failure_analysis.FailureAnalysisError:
+        return None, {}
+    return analysis, failure_analysis.task_versions(j, analysis.flags)    # read for flagged tasks only
+
+
+def _marks_of(analysis, versions):
+    """What the trial table marks: each flagged task (its kind, category, whether it is pending, or names another
+    version of the task) and each labelled trial."""
+    if analysis is None:
+        return {"flags": {}, "labels": {}}
+    flags = {}
+    for task, f in analysis.flags.items():
+        other = f.task_version is not None and versions.get(task) != f.task_version
+        flags[task] = {"kind": f.kind, "category": f.category, "pending": f.status != "accepted", "other": other,
+                       "counts": f.status == "accepted" and not other}
+    return {"flags": flags, "labels": analysis.labels}
+
+
+def _filtered_of(j, analysis, versions):
+    """The Filtered score block: None when the job has no accepted flag, or its file cannot be read. Every
+    combination of the switches is computed here, so the page switches between them without a reload."""
+    if analysis is None:
+        return None
+    on = [k for k in failure_analysis.KINDS if request.args.get(k) == "1"]
+    f = failure_analysis.filtered(j, analysis, on, versions)
+    if not any(f.flagged.values()) and not f.other_version:
+        return None
+    offered = [k for k in failure_analysis.KINDS if f.flagged[k]]
+    if any(k not in offered for k in on):                 # a switch the page does not offer is off
+        on = [k for k in on if k in offered]
+        f = failure_analysis.filtered(j, analysis, on, versions)
+    views = [failure_analysis.filtered(j, analysis, combo, versions)
+             for n in range(1, len(offered) + 1) for combo in combinations(offered, n)]
+    return {"view": f, "views": views}
 
 
 def _runs_of(g, owner=None) -> list:

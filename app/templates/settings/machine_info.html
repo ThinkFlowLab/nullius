@@ -18,5 +18,5 @@
   <div class="st-row"><span class="st-row-label">Local processes</span><span class="st-row-value">{% if not cap or m.scope is none %}{{ never }}{% elif m.scope.why %}{{ m.scope.why[:1] | upper }}{{ m.scope.why[1:] }}{% else %}{{ held(m.scope.enforced, m.scope.refused) }}{% endif %}</span></div>
   {#- a container run's drivers take a scope where one holds, and run unlimited where none does -#}
   {{ line('Drivers', never if not cap or m.scope is none else 'Limited' if m.scope_ok else 'Not limited') }}
-  {{ line('Tested', f.at | replace('T', ' ') if f.at else 'Never') }}
+  {{ line('Tested', m.tested or 'Never') }}
 </div>

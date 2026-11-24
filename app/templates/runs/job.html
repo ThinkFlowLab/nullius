@@ -187,12 +187,27 @@
     {% else %}
     <div class="hero none" id="adjusted-rate" data-tip="No trial in this run carries a verdict — nothing was scored">—</div>
     {% endif %}
+    {% if filtered %}{% set fv = filtered.view %}
+    <form method="get" class="filtered" id="filtered-score" aria-label="Exclude flagged tasks">
+      {% if fv.flagged.flawed or fv.flagged.ambiguous %}<span class="filter-heading">Exclude:</span>{% endif %}
+      {% for key, value in request.args.items() if key not in ('flawed', 'ambiguous') %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+      {% for k in ('flawed', 'ambiguous') %}{% if fv.flagged[k] %}
+      <label class="filter-choice"><input type="checkbox" aria-label="Exclude {{ fv.flagged[k] }} {{ k }} task{{ '' if fv.flagged[k] == 1 else 's' }}" id="filter-{{ k }}" name="{{ k }}" value="1" data-kind="{{ k }}"{{ ' checked' if k in fv.kinds }}> {{ k|capitalize }}</label>
+      {% endif %}{% endfor %}
+      {% if fv.other_version %}<span class="small faint" id="filter-other-version" data-tip="Flags set on another version of their task; they do not count">{{ fv.other_version }} on another version</span>{% endif %}
+      <span class="sr" id="filtered-live" aria-live="polite"></span>
+      {#- every combination of the switches, the one in the URL shown: runs/board.js switches between them in place #}
+      {% for v in filtered.views %}
+      <p class="filtered-rate"{% if v.kinds == fv.kinds %} id="filtered-rate"{% else %} hidden{% endif %} data-kinds="{{ v.kinds|join(',') }}" data-tip="The adjusted rate without the tasks left out">Filtered score <b>{{ v.filtered_score|pct }}</b> <span class="faint">{{ v.solved }}/{{ v.ran }}</span></p>
+      {% endfor %}
+      {% if fv.flagged.flawed or fv.flagged.ambiguous %}<noscript><button type="submit" class="btn sm">Apply</button></noscript>{% endif %}
+    </form>
+    {% endif %}
     <div class="hk" aria-label="Health">
-      {% if job.has_verdict and job.raw_solve_rate == job.adjusted_solve_rate %}<p id="raw-rate" data-tip="No outcome in this run is infra, so the raw rate is also {{ job.raw_solve_rate|pct }}">raw = adjusted</p>{% endif %}
       <dl>
         {% if not job.has_verdict or job.raw_solve_rate != job.adjusted_solve_rate %}<dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="Harbor's mean: resolved over every trial, infra included">{{ job.raw_solve_rate|pct }}</dd>{% endif %}
-        <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors, setup failures and spending caps">{{ job.n_infra }}</dd>
-        <dt>broke tests</dt><dd{% if job.n_regressions %} class="bad"{% endif %} data-tip="Trials whose patch broke tests that passed before it">{{ job.n_regressions }}</dd>
+        {% if job.n_infra %}<dt>infra</dt><dd class="warn" data-tip="Trials that never got a fair attempt — rate limits, API errors, setup failures and spending caps">{{ job.n_infra }}</dd>{% endif %}
+        {% if job.n_regressions %}<dt>broke tests</dt><dd class="bad" data-tip="Trials whose patch broke tests that passed before it">{{ job.n_regressions }}</dd>{% endif %}
       </dl>
       {% if pass_k %}
       {%- set ks = range(1, pass_k.attempts + 1)|select('le', 3)|list + ([pass_k.attempts] if pass_k.attempts > 3 else []) %}
@@ -343,19 +358,20 @@
     <button class="fclear plain" id="clear-filters" type="button" hidden>Show all {{ job.trials|length }}</button>
   </div>
   <p class="sr" id="trials-live" aria-live="polite"></p>
+  {% set show_fa = marks.flags or marks.labels %}
   {% set show_cause = show_judge %}
   {% set show_flags = show_judge and judgement.judged %}
   {% set n_judge = (1 if show_cause else 0) + (1 if show_flags else 0) + (1 if show_ins else 0) %}
   <div class="tscroll" role="region" aria-label="Trials in this run" tabindex="0">
-  <table class="tt">
+  <table class="tt"{% if filtered %} data-leave-out="{{ filtered.view.kinds|join(' ') }}"{% endif %}>
     <colgroup>
-      <col><col class="w-out">{% if job.retries %}<col class="w-rt">{% endif %}{% if show_cause %}<col class="w-cause">{% endif %}{% if show_flags %}<col class="w-flags">{% endif %}{% if show_ins %}<col class="w-ins">{% endif %}
+      <col><col class="w-out">{% if show_fa %}<col class="w-fa">{% endif %}{% if job.retries %}<col class="w-rt">{% endif %}{% if show_cause %}<col class="w-cause">{% endif %}{% if show_flags %}<col class="w-flags">{% endif %}{% if show_ins %}<col class="w-ins">{% endif %}
       {% if vocab.gained %}<col class="w-chk">{% endif %}{% if vocab.held %}<col class="w-chk">{% endif %}
       <col class="w-tok"><col class="w-tm"><col class="w-env"><col class="w-ag"><col class="w-ver"><col class="w-go">
     </colgroup>
     <thead>
       <tr class="grp">
-        <th colspan="{{ 3 if job.retries else 2 }}"></th>
+        <th colspan="{{ (3 if job.retries else 2) + (1 if show_fa else 0) }}"></th>
         {% if n_judge %}<th colspan="{{ n_judge }}"><span class="gl"><span data-tip="A judge model's reading, experimental as on the board: the recorded outcomes stand.">Judge</span>{% if tq %}<span class="gx" id="task-quality" data-tip="Task instructions the judge has scored, once per dataset and task">instructions scored <b>{{ tq.judged }}/{{ tq.tasks }}</b></span>{% endif %}</span></th>{% endif %}
         {% if vocab.gained or vocab.held %}<th colspan="{{ (1 if vocab.gained else 0) + (1 if vocab.held else 0) }}"><span class="gl">Tests</span></th>{% endif %}
         <th></th>
@@ -365,6 +381,7 @@
       <tr class="cols">
         <th scope="col">Task</th>
         <th scope="col">Outcome</th>
+        {% if show_fa %}<th scope="col"><span data-tip="Your own reading: the task's flag (flawed or ambiguous) on its first row, each attempt's failure label on its own row">User judge</span></th>{% endif %}
         {% if job.retries %}<th scope="col" class="num">Retries</th>{% endif %}
         {% if show_cause %}<th scope="col"><span data-tip="The judge's failure cause, drawn as on the board: straight when the recorded outcome allows it, jogged when it does not, ending in the judge's hollow ring. A resolved trial is not asked.">Cause<span class="nfh">{% if show_flags %} · flags{% endif %}</span></span></th>{% endif %}
         {% if show_flags %}<th scope="col" class="c-flags"><span data-tip="One slot per flag, numbered in the vocabulary's order: {% for f in judgement.flag_ids %}{{ loop.index }} {{ f }}{{ ' · ' if not loop.last }}{% endfor %}. Filled: raised on this trial.">Flags</span></th>{% endif %}
@@ -379,6 +396,8 @@
         <th scope="col"><span class="sr">Open</span></th>
       </tr>
     </thead>
+{% macro task_flag(t) %}{%- set f = marks.flags.get(t.task_base) %}{% if f %}<span class="tflag tf-{{ f.kind }}{{ ' tf-pending' if f.pending }}{{ ' tf-other' if f.other }}" data-tip="Task flagged {{ f.kind }}: {{ f.category }}{% if f.other %} · on another version of the task, so it does not count{% elif f.pending %} · pending until a person accepts it, so it does not count yet{% endif %}">{{ f.kind }}{% if f.other %} · other version{% elif f.pending %} · pending{% endif %}</span>{% endif %}{% endmacro %}
+{% macro trial_label(t) %}{%- set l = marks.labels.get(t.trial_name) %}{% if l %}<span class="tlabel" data-tip="Why it failed, set by {{ l.by }}{% if l.note %}: {{ l.note }}{% endif %}">{{ l.label }}</span>{% endif %}{% endmacro %}
 {% macro instruction(t) %}{%- set q = task_quality_of(job, t) %}{% if q %}<span class="ins task-quality" data-task-quality="{{ q.level }}" data-tip="Instruction quality {{ '%.1f'|format(q.score) }} of {{ q.top }}: {{ q.label }}{% if q.confidence is not none %} · confidence {{ '%.0f'|format(q.confidence * 100) }}%{% endif %} · {{ q.model }} · experimental, about the task text, not this trial">{{ '%.1f'|format(q.score) }}<small>/{{ q.top }}</small></span>{% else %}<span class="faint">—</span>{% endif %}{% endmacro %}
     <tbody class="rows" id="trial-rows">
       {% for t, group in trial_rows %}
@@ -386,10 +405,11 @@
       {%- if k == 1 %}
       {%- set gid = 'g-' ~ t.trial_name %}
       {%- set means = group.means(job.kind) %}
-      <tr class="task-group" data-group="{{ gid }}" data-tokens="{{ means.tokens.mean if means.tokens else 0 }}" data-total="{{ means.dur_total.mean if means.dur_total else 0 }}" data-i="{{ loop.index0 }}">
+      <tr class="task-group" data-group="{{ gid }}"{% if marks.flags.get(t.task_base, {}).counts %} data-task-flag="{{ marks.flags[t.task_base].kind }}"{% endif %} data-tokens="{{ means.tokens.mean if means.tokens else 0 }}" data-total="{{ means.dur_total.mean if means.dur_total else 0 }}" data-i="{{ loop.index0 }}">
         <td><button class="group-toggle disclosure-chevron" type="button" aria-expanded="false" aria-label="{{ task_labels[t.trial_name] }}, {{ group.n }} attempts"><span class="task">{{ task_labels[t.trial_name] }}</span></button></td>
         <td><span class="group-pass"><span>{{ attempt_count(group, false) }}</span>
           <span class="sqs" aria-hidden="true">{% for a in group.trials %}<i class="sw oc-{{ a.outcome }}" title="Attempt {{ loop.index }}: {{ a.outcome_label }}"></i>{% endfor %}</span></span></td>
+        {% if show_fa %}<td class="fa">{{ task_flag(t) }}</td>{% endif %}
         {% if job.retries %}<td></td>{% endif %}
         {% if show_cause %}<td></td>{% endif %}
         {% if show_flags %}<td></td>{% endif %}
@@ -410,7 +430,7 @@
       {%- set used = (t.n_input_tokens or 0) + (t.n_output_tokens or 0) %}
       {%- set url = url_for('trial', job_id=job.job_id, trial_name=t.trial_name) %}
       <tr data-outcome="{{ t.outcome }}" data-cause="{{ (jr.cause or '') if jr else '' }}" data-status="{{ status or '' }}" data-flags="{{ jr.flags|join(' ') if jr else '' }}"
-          data-trial="{{ t.trial_name }}" data-tokens="{{ used }}" data-total="{{ t.dur_total or 0 }}" data-i="{{ loop.index0 }}"
+          data-trial="{{ t.trial_name }}"{% if marks.flags.get(t.task_base, {}).counts %} data-task-flag="{{ marks.flags[t.task_base].kind }}"{% endif %} data-tokens="{{ used }}" data-total="{{ t.dur_total or 0 }}" data-i="{{ loop.index0 }}"
           {%- if group %} class="in-group" data-group="g-{{ group.trials[0].trial_name }}" hidden{% endif %}>
         {%- if group %}
         <td><a class="task attempt-link" href="{{ url }}" title="{{ t.task_name }}" aria-label="{{ task_labels[t.trial_name] }}, attempt {{ k }}">attempt {{ k }}</a></td>
@@ -423,6 +443,7 @@
           {%- if t.exception_type %}
           {%- if t.exception_message %}<details class="exd"><summary><span class="tw"></span>{{ t.exception_type }}</summary><code>{{ t.exception_message }}</code></details>
           {%- else %}<span class="exn">{{ t.exception_type }}</span>{% endif %}{% endif %}</td>
+        {% if show_fa %}<td class="fa">{% if not group %}{{ task_flag(t) }}{% endif %}{{ trial_label(t) }}</td>{% endif %}
         {% if job.retries %}<td class="num run-retries">{% if t.n_retries %}{{ t.n_retries }}<span class="faint">/{{ job.retries }}</span>{% else %}<span class="faint">0/{{ job.retries }}</span>{% endif %}</td>{% endif %}
         {% if show_cause %}<td>
           {%- if t.outcome == 'resolved' %}<span class="rc" data-tip="A resolved trial is never asked a failure cause"><span class="na">not asked</span></span>

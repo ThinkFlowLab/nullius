@@ -20,24 +20,20 @@ KEYS = {"OPENROUTER_API_KEY": "sk-or-fixture-0001", "OPENAI_API_KEY": "sk-oa-fix
 
 
 class Records(unittest.TestCase):
-    def test_a_preset_is_its_fixed_fields_and_the_user_adds_only_other_protocols(self):
-        env = {"OPENROUTER": json.dumps({"endpoints": {"messages": "/messages"}})}
-        rec = providers.record("openrouter", env)
-        self.assertEqual((rec["name"], rec["base"], rec["key"]), ("OpenRouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"))
-        self.assertEqual(providers.url(rec, "messages"), "https://openrouter.ai/api/v1/messages")
-        self.assertEqual(providers.url(rec, "decisions"), "https://openrouter.ai/api/alpha/decisions")     # outside its base: a full URL
-        for fixed in ({"base": "https://proxy/v1"}, {"name": "X"}, {"key": "OTHER_API_KEY"}, {"endpoints": {"chat": "/x"}}):
-            self.assertIn("fixed", providers.record_problem("OPENROUTER", json.dumps(fixed)), fixed)
-            self.assertEqual(providers.record("openrouter", {"OPENROUTER": json.dumps(fixed)})["base"], "https://openrouter.ai/api/v1")
-
-    def test_a_preset_adds_a_full_url_only_on_its_own_host(self):
-        for name, proto, bad in (("TYPESAFE", "decisions", "https://evil.example/d"), ("OPENROUTER", "messages", "https://evil.example/m"),
-                                 ("OPENAI", "messages", "https://api.openai.com.evil.example/m")):
-            why = providers.record_problem(name, json.dumps({"endpoints": {proto: bad}}))
-            self.assertIn("the preset's key is sent there", why or "", name)
-            self.assertNotIn("evil", providers.url(providers.record(name.lower(), {name: json.dumps({"endpoints": {proto: bad}})}), proto))
-        self.assertIsNone(providers.record_problem("OPENROUTER", json.dumps({"endpoints": {"messages": "https://openrouter.ai/api/v1/messages"}})))
-        self.assertIsNone(providers.record_problem("TYPESAFE", json.dumps({"endpoints": {"decisions": "/decisions"}})))
+    def test_presets_ignore_and_reject_overrides_for_every_protocol(self):
+        for provider, preset in providers.PRESETS.items():
+            for proto in providers.PROTOCOLS:
+                for entry in ("/other", "https://other.example/path", None):
+                    with self.subTest(provider=provider, protocol=proto, entry=entry):
+                        value = json.dumps({"endpoints": {proto: entry}})
+                        self.assertIn("custom provider", providers.record_problem(provider.upper(), value))
+                        rec = providers.record(provider, {provider.upper(): value})
+                        self.assertEqual(rec["endpoints"], preset["endpoints"])
+                        self.assertEqual(providers.serves(rec, proto), proto in preset["endpoints"])
+        for fixed in ({"base": "https://proxy/v1"}, {"name": "X"}, {"key": "OTHER_API_KEY"}):
+            self.assertIn("fixed", providers.record_problem("OPENROUTER", json.dumps(fixed)))
+            self.assertEqual(providers.record("openrouter", {"OPENROUTER": json.dumps(fixed)})["base"],
+                             providers.PRESETS["openrouter"]["base"])
 
     def test_a_custom_record_merges_per_protocol_and_null_removes(self):
         file = {"name": "Gateway", "base": "https://gw.example/v1", "endpoints": {"chat": "/chat/completions", "decisions": "/alpha/decisions"}}
@@ -158,6 +154,20 @@ class Layers(unittest.TestCase):
         for kept in (settings.LOADED_KEYS, settings.ENV_PART, settings._FROM):
             saved = kept.copy()
             self.addCleanup(lambda k=kept, s=saved: (k.clear(), k.update(s)))
+
+    def test_saved_preset_overrides_are_reported_and_do_not_change_protocols(self):
+        for provider, preset in providers.PRESETS.items():
+            name = provider.upper()
+            with self.subTest(provider=provider), patch.dict(os.environ):
+                os.environ.pop(name, None)
+                value = json.dumps({"endpoints": {p: "/override" for p in providers.PROTOCOLS}})
+                Path(self.file).write_text(json.dumps({name: value}))
+                settings.load(self.file)
+                self.assertEqual(providers.record(provider)["endpoints"], preset["endpoints"])
+                state = settings.state(settings.BY_NAME[name], settings.in_file(self.file))
+                self.assertIn("custom provider", state["problem"])
+                with self.assertRaises(ValueError):
+                    settings.save(self.file, name, value)
 
     def test_the_environment_sets_only_its_fields(self):
         Path(self.file).write_text(json.dumps({"MODEL_GW": json.dumps({"name": "Gateway", "base": "https://gw.example/v1",

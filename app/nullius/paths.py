@@ -51,6 +51,12 @@ def prices_file(env=None) -> str:
     return env.get("NULLIUS_PRICES") or os.path.join(config_dir(env), "prices.json")
 
 
+def own_prices_file(env=None) -> str:
+    """The user's own price rows, beside the list: ``prices-own.json`` for ``prices.json``."""
+    root, ext = os.path.splitext(prices_file(env))
+    return f"{root}-own{ext}"
+
+
 def catalogue_dir(env=None) -> str:
     env = os.environ if env is None else env
     return env.get("NULLIUS_CATALOGUE") or os.path.join(data_dir(env), "catalogue")
@@ -79,7 +85,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Show Nullius's persistent user directories (no secret values).")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    values = {"settings": settings_file(), "secrets": secrets_dir(), "prices": prices_file(), "catalogue": catalogue_dir(),
+    values = {"settings": settings_file(), "secrets": secrets_dir(), "prices": prices_file(), "own prices": own_prices_file(), "catalogue": catalogue_dir(),
               "workspaces": workspaces_dir(), "runs": runs_dir(), "recipes": recipes_dir(), "cache": cache_dir()}
     if args.json:
         print(json.dumps(values, indent=2))

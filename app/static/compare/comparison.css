@@ -150,3 +150,10 @@
 .fig-head .tools-menu a::before { content: ""; flex: 0 0 1em; text-align: center; color: var(--accent); }   /* every item keeps the check's slot, so the names align */
 .fig-head .tools-menu a[aria-current="true"]::before { content: "✓"; }   /* the card's style or metric */
 .fig-note { margin: 0; font-size: .84rem; color: var(--text-dim); }
+/* the flag filters: one list of flagged tasks set aside in every column */
+.compare-flags{display:flex;flex-wrap:wrap;gap:.65rem;align-items:center;margin:.6rem 0}
+.compare-flags .filter-heading{color:var(--text-faint);font-size:.8rem}
+.compare-flags .filter-choice{display:flex;align-items:center;gap:.5rem;font-size:.8rem;cursor:pointer}
+.compare-flags input[type=checkbox]{margin:0;flex:none;accent-color:var(--accent)}
+.compare-flags #compare-set-aside{font-size:1rem;color:var(--text)}
+.compare-flags .warn{color:var(--warn,var(--text-dim))}

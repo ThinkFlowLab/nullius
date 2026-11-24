@@ -117,8 +117,8 @@ class SettingsPage(unittest.TestCase):
         settings.load(self.env_file)
         html = self.page()
         for v in settings.VARIABLES:
-            added = v.kind == "provider" and next(p for p in providers.PROTOCOLS if p not in providers.PRESETS[v.name.lower()]["endpoints"])
-            self.assertIn(f'id="{v.name}.endpoints.{added}"' if added else f'id="{v.name}"', html)    # a preset's record: a row it may add
+            if v.kind != "provider":
+                self.assertIn(f'id="{v.name}"', html)
         self.assertIn('title="Held by the process', html)                                            # the token, from the process
         self.assertEqual(html.count('<span class="st-shown">********</span>'), 3)                   # the token and the OpenRouter and OpenAI keys: eight stars each,
         self.assertNotIn("characters", html)                                                         # never their length
@@ -157,7 +157,10 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('<p class="st-note" data-judge-via>via Anthropic Messages</p>', llm)
         self.assertIn('id="LLM_JUDGE_PROTOCOL" data-source="unset" data-secret="no" hidden>', llm)
         self.assertNotIn("messages<", llm); self.assertNotIn(">chat<", llm)                                   # names, never keys
-        self.post({"ANTHROPIC": '{"endpoints": {"chat": "/chat/completions"}}', "LLM_JUDGE_PROTOCOL": "messages"})
+        self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
+        self.post({"MODEL_BOTH.base": "https://gw.example/v1", "MODEL_BOTH.endpoints.chat": "/chat/completions",
+                   "MODEL_BOTH.endpoints.messages": "/messages"})
+        self.post({"LLM_JUDGE_PROVIDER": "custom:BOTH", "LLM_JUDGE_PROTOCOL": "messages"})
         llm = (html := self.page())[html.index('id="LLM_JUDGE_PROVIDER"'):html.index('id="LLM_JUDGE_MODEL"')]
         self.assertIn('data-judge-via hidden>via Anthropic Messages</p>', llm)
         self.assertIn('id="LLM_JUDGE_PROTOCOL" data-source="file" data-secret="no">', llm)
@@ -369,7 +372,7 @@ class SettingsPage(unittest.TestCase):
 
     def test_a_record_s_environment_fields_are_read_only_and_its_endpoints_are_saved(self):
         """A partial record in the environment locks only its own fields; the
-        Endpoints rows save into the file's record, a preset only adds
+        Endpoints rows save into the custom provider's record; presets reject
         protocols, and no key ever reaches the page."""
         self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
         saved = settings.ENV_PART.copy(); self.addCleanup(lambda: (settings.ENV_PART.clear(), settings.ENV_PART.update(saved)))
@@ -383,23 +386,26 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('placeholder="https://gw-eu.example/v1/chat/completions"', html)                  # the default, as a placeholder
         self.assertIn('title="chat">OpenAI Chat Completions</label>', html)                              # the format by name, its key as a tooltip
         self.assertNotIn('name="value:OPENROUTER.endpoints.chat"', html)                                # a preset's own endpoint is fixed
-        self.assertIn('name="value:OPENROUTER.endpoints.messages"', html)
+        for preset in providers.PRESETS:
+            self.assertNotIn(f'name="value:{preset.upper()}.endpoints.', html)
+        for protocol in providers.PROTOCOLS:
+            self.assertIn(f'name="value:MODEL_GW.endpoints.{protocol}"', html)
         self.assertNotIn("sk-gw-0123456789", html); self.assertNotIn("sk-or-0123456789", html)
         r = self.client.post("/settings/save", data={"csrf": self.token(), "value:MODEL_GW.name": "Gateway",
-                                                     "value:MODEL_GW.endpoints.decisions": "https://gw-eu.example/alpha/decisions",
-                                                     "value:OPENROUTER.endpoints.messages": "/messages"},
+                                                     "value:MODEL_GW.endpoints.decisions": "https://gw-eu.example/alpha/decisions"},
                              headers={"Origin": "http://localhost", "Accept": "application/json"})
         self.addCleanup(r.close)
         self.assertEqual(r.status_code, 200, r.get_json())
         filed = settings.in_file(self.env_file)
         self.assertEqual(json.loads(filed["MODEL_GW"]), {"name": "Gateway", "endpoints": {"decisions": "https://gw-eu.example/alpha/decisions"}})
-        self.assertEqual(json.loads(filed["OPENROUTER"]), {"endpoints": {"messages": "/messages"}})
+        self.assertNotIn("OPENROUTER", filed)
         rec = providers.record("custom:GW")
         self.assertEqual((rec["name"], rec["base"]), ("Gateway", "https://gw-eu.example/v1"))             # the environment's base still wins
-        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:OPENROUTER.endpoints.messages": ""},
+        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:OPENROUTER.endpoints.messages": "/messages"},
                              headers={"Origin": "http://localhost", "Accept": "application/json"})
         self.addCleanup(r.close)
-        self.assertNotIn("OPENROUTER", settings.in_file(self.env_file))                                  # emptied: the record goes
+        self.assertEqual(r.status_code, 400)
+        self.assertNotIn("OPENROUTER", settings.in_file(self.env_file))
         r = self.client.post("/settings/save", data={"csrf": self.token(), "value:OPENROUTER.endpoints.chat": "/x"},
                              headers={"Origin": "http://localhost", "Accept": "application/json"})
         self.addCleanup(r.close)
@@ -764,6 +770,8 @@ class SettingsPage(unittest.TestCase):
         for said in ("Reached Not tested", "Host name Not tested", "Programs Not tested", "Engine Not tested", "Capacity Not tested",
                      "Containers Not tested", "Local processes Not tested", "Drivers Not tested", "Tested Never"):
             self.assertIn(said, never)
+        self.assertRegex(info(rows["bench"]), r"Tested \d{4}-\d\d-\d\d \d\d:\d\d:\d\d ")   # kept in UTC, shown in local time with no zone
+        self.assertEqual(info(rows["bench"]).split("Tested ")[1].split(" ")[:2], constraints.tested_at(constraints.load()["bench"]["at"]).split(" "))
         for said in ("In 42 ms", "ecs-1", "uv, docker", "missing Harbor", "Podman 5.8.9, rootless", "16 CPUs, 31789 MB", "GPU 0: RTX, 4096 MB",
                      'title="Asked CPUs 0: the engine did not apply it (cpuset is not available)">CPUs Nullius may use',
                      'title="Asked CPUs 0: systemd did not apply it (cat: cpuset.cpus.effective: No such file or directory); '
@@ -912,8 +920,14 @@ class SettingsPage(unittest.TestCase):
         with patch.object(hosts, "KEY_DIR", str(self.tmp / "keys")):
             r = self.client.post("/settings/hosts/key", data={"user": "ubuntu", "host": "10.0.0.4", "port": "2222", "key": (BytesIO(b"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n"), "id_bench")}, headers=headers); self.addCleanup(r.close)
         self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
-        key = str(self.tmp / "keys" / "ubuntu@10.0.0.4")
+        key = str(self.tmp / "keys" / "ubuntu@10.0.0.4_2222")
         self.assertEqual(r.json["entry"], f"ubuntu@10.0.0.4:2222:{key}"); self.assertEqual(oct(os.stat(key).st_mode & 0o777), "0o600")
+        # a second port of the same address keeps a key of its own
+        dummy = b"-----" + b"BEGIN OPENSSH PRIVATE" + b" KEY-----\nsecond\n"
+        with patch.object(hosts, "KEY_DIR", str(self.tmp / "keys")):
+            r = self.client.post("/settings/hosts/key", data={"user": "ubuntu", "host": "10.0.0.4", "port": "2223", "key": (BytesIO(dummy), "id_other")}, headers=headers); self.addCleanup(r.close)
+        self.assertEqual(r.json["entry"], f"ubuntu@10.0.0.4:2223:{self.tmp / 'keys' / 'ubuntu@10.0.0.4_2223'}")
+        self.assertTrue(Path(key).read_bytes().endswith(b"-----\n")); self.assertNotIn(b"second", Path(key).read_bytes())
         bad = self.client.post("/settings/hosts/key", data={"user": "ubuntu", "host": "10.0.0.4", "key": (BytesIO(b"ssh-ed25519 AAAA"), "id.pub")}, headers=headers); self.addCleanup(bad.close)
         self.assertEqual(bad.status_code, 400); self.assertIn("not a private key", bad.json["error"])
         # a password goes to ssh once, through the enrolment, and is not in the answer, the file or the entry
@@ -1105,7 +1119,8 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('name="cache_write_1h"', section)
         self.assertNotIn('name="value:', section)                                       # outside Save: nothing of it lands in the file
         state = json.loads(html_text.unescape(re.search(r"data-state='([^']*)'", section).group(1)))
-        self.assertEqual(state, {"n": 0, "from": "", "on": "", "own": {}})               # nothing ships with Nullius
+        self.assertEqual(state, {"n": 0, "from": "", "on": "", "own": {}, "problems": []})   # nothing ships with Nullius
+        self.assertIn("data-own-problems", section)
         headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
         listing = json.dumps({"model-a": {"input_cost_per_token": 2.5e-06, "output_cost_per_token": 1e-05}}).encode()
         with patch.object(prices, "_fetch", lambda source: listing):
@@ -1128,6 +1143,11 @@ class SettingsPage(unittest.TestCase):
         r = self.client.post("/settings/prices/remove", data={"model": "model-a"}, headers=headers); self.addCleanup(r.close)
         self.assertEqual(r.json["own"], {})
         self.assertEqual(self.client.post("/settings/prices/remove", data={"model": "model-a"}, headers=headers).status_code, 404)
+        with open(prices.own_path(), "w") as f:                                      # a row written by hand that cannot price: said
+            json.dump({"own": {"typo": {"input": 1}}}, f)
+        page = self.page()
+        state = json.loads(html_text.unescape(re.search(r"data-state='([^']*)'", page[page.index('id="prices"'):]).group(1)))
+        self.assertEqual((state["own"], state["problems"]), ({}, ["typo prices nothing: set its input and output prices again"]))
         # the same guards as Save: token, origin, loopback
         for route in ("update", "set", "remove"):
             for kw in ({"headers": {"Origin": "http://localhost"}}, {"headers": headers, "environ_base": {"REMOTE_ADDR": "10.0.0.7"}}):

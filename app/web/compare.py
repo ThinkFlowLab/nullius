@@ -5,9 +5,9 @@ import re
 from dataclasses import replace
 from functools import partial
 from itertools import zip_longest
-from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import abort, flash, g, has_request_context, jsonify, redirect, render_template, request, url_for
 from nullius.traces import behavior, charts, trace, trajectory
-from nullius.runs import classify
+from nullius.runs import classify, failure_analysis
 from nullius.runs import verifier
 from nullius import charts as figures
 from nullius import workspace
@@ -473,7 +473,7 @@ def compare():
         order_grouped=grouped, order_alternating=alternating,
         n_agents=len(by_agent), keep=keep,
         judgement=tasks_view == "tasks" and _judgement(view), csrf=shared._csrf_token(),
-        cards=cards, add_chart=at(charts + [("bars", (headline,))]),
+        cards=cards, add_chart=at(charts + [("bars", (headline,))]), flag_filter=g.flag_filter,
     )
 
 
@@ -604,7 +604,8 @@ def _columns_requested():
             labels[name] = ws.label if ws else "Active source"
         selected = comparison.resolve([ref.value for ref in refs if ref.job_id],
                                       {name: [job for _, job, _, _ in rs] for name, rs in runs.items()}, labels)
-        view = comparison.build(selected, request.args.get("cohort", "whole"))
+        g.flag_filter = _flag_filter(selected)
+        view = comparison.build(selected, request.args.get("cohort", "whole"), g.flag_filter["set_aside"])
     except ValueError as exc:
         abort(400, description=str(exc))
     place = {s.ref: k for k, s in enumerate(view.selected)}
@@ -694,3 +695,56 @@ def compare_task(task):
         comparison=view, picks=picks, cohort=view.cohort, view=_view(), chosen=chosen_query,
         chart_filter=cfilt, no_filter=trace.Filter(),
     )
+
+
+# The pages that read a comparison: their links keep the page's flag filters, as they keep the cohort.
+COMPARISON_ENDPOINTS = {"compare", "compare_task", "compare_detail_row", "judge_compare_route", "compare_picker"}
+
+
+@app.url_defaults
+def _keep_flag_filters(endpoint, values):
+    # only from a comparison page to a link that names its runs: the sidebar's bare Compare starts afresh
+    if (has_request_context() and request.endpoint in COMPARISON_ENDPOINTS and endpoint in COMPARISON_ENDPOINTS
+            and "pick" in values):
+        for kind in failure_analysis.KINDS:
+            if kind not in values and request.args.get(kind) == "1":
+                values[kind] = "1"
+
+
+def _flag_filter(selected) -> dict:
+    """The flag filters of a comparison: one list of tasks set aside in every column, the union of the runs'
+    accepted flags of the kinds switched on, keyed as the comparison keys a task (`comparison.task_key`). A flag
+    counts only on the task version it names, and a task is set aside only when every column holding it ran the
+    same version; otherwise it stays, and is named in `differ` with the tasks the runs flag differently.
+    `flagged` counts each kind over all runs, for the switches; `unreadable` names runs whose file is broken."""
+    from nullius.compare import comparison
+    on = [k for k in failure_analysis.KINDS if request.args.get(k) == "1"]
+    runs, unreadable = [], []                 # per run: {task key: version}, {task key: kind}
+    for selection in selected:
+        job = selection.job
+        try:
+            analysis = failure_analysis.load(job.dir)
+        except failure_analysis.FailureAnalysisError:
+            analysis = failure_analysis.Analysis()
+            unreadable.append(job.job_id)
+        versions = failure_analysis.task_versions(job, analysis.flags) if analysis.flags else {}
+        tasks = {t.task_base for t in job.trials}
+        kinds = {comparison.task_key(selection, task): kind for kind in failure_analysis.KINDS
+                 for task in analysis.set_aside([kind], versions) & tasks}
+        runs.append((selection, tasks, kinds))
+    flagged_keys = set().union(*(kinds for _, _, kinds in runs))
+    # the versions every column holding a flagged task ran, read once per run for those tasks
+    ran = {}
+    for selection, tasks, _ in runs:
+        names = {key[1] for key in flagged_keys if key[1] in tasks and comparison.task_key(selection, key[1]) == key}
+        for task, version in failure_analysis.task_versions(selection.job, names).items():
+            ran.setdefault(comparison.task_key(selection, task), set()).add(version)
+    holders = {key: [r for r in runs if key[1] in r[1] and comparison.task_key(r[0], key[1]) == key]
+               for key in flagged_keys}
+    differ = sorted(key[1] for key in flagged_keys
+                    if len(ran.get(key, set())) > 1 or len({kinds.get(key) for _, _, kinds in holders[key]}) > 1)
+    set_aside = frozenset(key for key in flagged_keys if len(ran.get(key, set())) <= 1
+                          and any(kinds.get(key) in on for _, _, kinds in holders[key]))
+    return {"on": on, "flagged": {k: sum(1 for key in flagged_keys if any(kinds.get(key) == k for _, _, kinds in runs))
+                                  for k in failure_analysis.KINDS},
+            "set_aside": set_aside, "differ": differ, "unreadable": unreadable}
