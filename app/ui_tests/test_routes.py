@@ -168,6 +168,26 @@ class Routes(unittest.TestCase):
                 self.assertIn('aria-label="Pages"', html)
                 self.assertNotIn("So who's actually best?", html)
 
+    def test_an_error_renders_in_the_layout_without_its_details(self):
+        for path in ("/no-such-page", "/job/no-such-job", "/job/active-run?workspace=gone"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.addCleanup(response.close)
+                self.assertEqual(response.status_code, 404)
+                html = response.get_data(as_text=True)
+                self.assertIn("<h1>Not found</h1>", html)
+                self.assertIn('aria-label="Pages"', html)
+                self.assertIn('href="/runs"', html)
+        with patch.dict(web.app.config, PROPAGATE_EXCEPTIONS=False), \
+             patch.object(web.shared, "_jobs_for_request", side_effect=RuntimeError("secret detail")):
+            response = self.client.get("/job/active-run")
+            self.addCleanup(response.close)
+            self.assertEqual(response.status_code, 500)
+            html = response.get_data(as_text=True)
+            self.assertIn("<h1>Server error</h1>", html)
+            self.assertIn('aria-label="Pages"', html)
+            self.assertNotIn("secret detail", html)
+
     def test_command_builder_serves_catalogue_and_adapter_metadata(self):
         html = self.get_ok("/new-run").get_data(as_text=True)
         self.assertIn('id="nullius-builder"', html)
