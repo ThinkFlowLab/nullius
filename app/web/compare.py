@@ -745,11 +745,6 @@ def _flag_filter(selected) -> dict:
                     if len(ran.get(key, set())) > 1 or len({kinds.get(key) for _, _, kinds in holders[key]}) > 1)
     set_aside = frozenset(key for key in flagged_keys if len(ran.get(key, set())) <= 1
                           and any(kinds.get(key) in on for _, _, kinds in holders[key]))
-    args = request.args.to_dict(flat=False)
-    links = {}
-    for kind in failure_analysis.KINDS:
-        rest = {a: v for a, v in args.items() if a not in (kind, "endpoint")}
-        links[kind] = url_for("compare", **rest, **{kind: None if kind in on else "1"})
     return {"on": on, "flagged": {k: sum(1 for key in flagged_keys if any(kinds.get(key) == k for _, _, kinds in runs))
                                   for k in failure_analysis.KINDS},
-            "set_aside": set_aside, "differ": differ, "links": links, "unreadable": unreadable}
+            "set_aside": set_aside, "differ": differ, "unreadable": unreadable}

@@ -294,20 +294,22 @@ OWN_KEY: Optional[str] = None
 _KEY_HEADER = re.compile(rb"^-----BEGIN (?:OPENSSH |RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY-----")
 
 
-def _key_name(user: str, host: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._@-]+", "_", f"{user}@{host}")
+def _key_name(user: str, host: str, port: Optional[int] = None) -> str:
+    """<user@host>, then _<port> when the entry has one: no address holds a ``_``,
+    so two ports of one address, or an address and a port, never share a file."""
+    return re.sub(r"[^A-Za-z0-9._@-]+", "_", f"{user}@{host}") + (f"_{port}" if port else "")
 
 
-def save_key(user: str, host: str, data: bytes, key_dir: Optional[str] = None) -> str:
+def save_key(user: str, host: str, data: bytes, key_dir: Optional[str] = None, port: Optional[int] = None) -> str:
     """A private key handed to the page, written where ssh can read it and
-    nobody else: <config>/ssh/<user@host>, mode 0600. The path it is at."""
+    nobody else: <config>/ssh/<user@host>[_<port>], mode 0600. The path it is at."""
     if not _KEY_HEADER.match(data.lstrip()) or len(data) > 20000:
         raise ValueError("not a private key file (expected -----BEGIN … PRIVATE KEY-----)")
     if b"ENCRYPTED" in data[:200]:
         raise ValueError("the key has a passphrase; ssh could not use it without a prompt")
     key_dir = key_dir or KEY_DIR or os.path.join(paths.config_dir(), "ssh")
     os.makedirs(key_dir, mode=0o700, exist_ok=True)
-    path = os.path.join(key_dir, _key_name(user, host))
+    path = os.path.join(key_dir, _key_name(user, host, port))
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "wb") as fh:
         fh.write(data if data.endswith(b"\n") else data + b"\n")
@@ -317,7 +319,8 @@ def save_key(user: str, host: str, data: bytes, key_dir: Optional[str] = None) -
 def forget_keys(old: str, new: str, key_dir: Optional[str] = None) -> List[tuple]:
     """Delete each key file that ``save_key`` wrote for an entry of the host
     list ``old`` when no entry of the list ``new`` names it. Only the file
-    <config>/ssh/<user@host> of that entry goes: Nullius's own key and a key
+    <config>/ssh/<user@host>[_<port>] of that entry goes, or <user@host>, the name
+    an entry with a port was given before: Nullius's own key and a key
     the user named by path stay. The files not deleted, each as (path, reason)."""
     key_dir = os.path.realpath(key_dir or KEY_DIR or os.path.join(paths.config_dir(), "ssh"))
     try:
@@ -328,7 +331,7 @@ def forget_keys(old: str, new: str, key_dir: Optional[str] = None) -> List[tuple
     failed = []
     for h in before:
         path = h.key and os.path.realpath(os.path.expanduser(h.key))
-        if not path or path in kept or path != os.path.join(key_dir, _key_name(h.user, h.host)):
+        if not path or path in kept or path not in {os.path.join(key_dir, _key_name(h.user, h.host, p)) for p in (h.port, None)}:
             continue
         try:
             os.unlink(path)

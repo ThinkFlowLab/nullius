@@ -41,6 +41,11 @@
       return row;
     }));
     $('[data-own-none]').hidden = own.length > 0;
+    // a row of the user's that cannot price is kept in their file and said, never dropped
+    $('[data-own-problems]').replaceChildren(...(state.problems || []).map(line => {
+      const p = document.createElement('p'); p.className = 'st-note st-warn'; p.textContent = line;
+      return p;
+    }));
   };
 
   const update = $('[data-prices-update]');

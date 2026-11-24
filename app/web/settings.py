@@ -119,7 +119,7 @@ def _machine(entry: str, label: str, host=None, found=None) -> dict:
     label_of = lambda k: constraints.BY_KEY[k].label if k in constraints.BY_KEY else k
     sd = (found or {}).get("systemd")
     return {"entry": entry, "label": label, "host": host, "found": found or {}, "engine_less": constraints.engine_less(found),
-            "scope_ok": constraints.scope_ok(found),
+            "scope_ok": constraints.scope_ok(found), "tested": constraints.tested_at((found or {}).get("at")),
             # a scope's: what it held, or why there is none
             "scope": sd and {"why": sd.get("why", ""), "enforced": [label_of(k) for k in sd.get("enforced") or []],
                              "refused": [(label_of(k), constraints.explain(k, constraints.samples(cap.get("local") or cap).get(k, ""), why, scope=True)
@@ -211,7 +211,7 @@ def settings_host_key():
         user, host, port = _host_form()
         if upload is None or not upload.filename:
             raise ValueError("no key file")
-        path = hosts.save_key(user, host, upload.read(20001))
+        path = hosts.save_key(user, host, upload.read(20001), port=port)
     except ValueError as e:
         return jsonify(ok=False, error=str(e)), 400
     except OSError as e:

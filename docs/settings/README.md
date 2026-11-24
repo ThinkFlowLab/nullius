@@ -51,7 +51,7 @@ and job roots also have command-line options. The app does not load `app/.env`.
 | `RUNS_DIR`, `HARBOR_PINS` | `runs/` in the user data directory; `harbor-pins/` beside the runs |
 | `STANDARD_DIR`, `STANDARD_DATA_DIR`, `SECRETS_DIR` | `standard/` in the data directory; `datasets/` inside it; `secrets/` in the configuration directory |
 | `NULLIUS_CATALOGUE` | `catalogue/` in the user data directory; whole-entry overrides of the bundled catalogue |
-| `NULLIUS_PRICES` | `prices.json` in the configuration directory; the [model price list](model-prices.md) |
+| `NULLIUS_PRICES` | `prices.json` in the configuration directory; the [model price list](model-prices.md), your own prices beside it |
 | `DEBUG` | Development debugger and reloader; off by default, enabled by `1` |
 
 ## Save
@@ -76,7 +76,7 @@ credential values. Linux defaults:
 | Saved settings | `~/.config/nullius/settings.json` |
 | Benchmark credentials | `~/.config/nullius/secrets/<benchmark>/` |
 | Hugging Face token | `~/.config/nullius/secrets/data-provider-huggingface/` |
-| Model prices | `~/.config/nullius/prices.json` |
+| Model prices | `~/.config/nullius/prices.json`; your own, `prices-own.json` beside it |
 | User catalogue | `~/.local/share/nullius/catalogue/` |
 | Workspaces | `~/.local/share/nullius/workspaces/` |
 | Runs started from Review | `~/.local/share/nullius/runs/` |

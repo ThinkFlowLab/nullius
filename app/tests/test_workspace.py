@@ -527,6 +527,42 @@ class Cache(unittest.TestCase):
         workspace.clear_cache(self.ws)
         self.assertEqual(workspace.job_index(self.ws), {})
 
+    def test_a_job_gone_from_disk_leaves_the_index_its_cache_and_the_counts(self):
+        other = tempfile.mkdtemp(); gone = _job_dir(other, "job-b")
+        self.ws.roots.append(other); workspace.save(self.ws)
+        workspace.load_jobs(self.ws, self.ws.roots)
+        cache = workspace._cache_file(self.ws, gone)
+        self.assertTrue(os.path.exists(cache))
+        workspace.store_counts(self.ws, "k", {"runs": 2, "checks": 0})
+        shutil.rmtree(gone)
+        workspace.load_jobs(self.ws, [self.root])                    # other roots: a folder gone is dropped too
+        self.assertEqual(list(workspace.job_index(self.ws)), [self.job_dir])
+        self.assertFalse(os.path.exists(cache))
+        self.assertIsNone(workspace.stored_counts(self.ws, "k"))
+        self.assertTrue(os.path.exists(workspace._cache_file(self.ws, self.job_dir)))
+
+    def test_a_job_no_longer_found_under_its_root_leaves_the_index(self):
+        workspace.load_jobs(self.ws, self.ws.roots)
+        os.remove(os.path.join(self.job_dir, "result.json")); os.remove(os.path.join(self.job_dir, "config.json"))
+        shutil.rmtree(os.path.join(self.job_dir, "tau3-bench__t0__abc")); shutil.rmtree(os.path.join(self.job_dir, "tau3-bench__t1__abc"))
+        self.assertEqual(workspace.load_jobs(self.ws, self.ws.roots), [])
+        self.assertEqual(workspace.job_index(self.ws), {})
+        self.assertEqual(self.ws.n_cached, 0)
+
+    def test_the_same_folder_by_another_path_keeps_its_cache(self):
+        link = os.path.join(tempfile.mkdtemp(), "root"); os.symlink(self.root, link)
+        workspace.load_jobs(self.ws, [link])
+        workspace.load_jobs(self.ws, [self.root, link])              # found once: the link's entry goes, the cache stays
+        self.assertEqual(list(workspace.job_index(self.ws)), [self.job_dir])
+        self.assertTrue(os.path.exists(workspace._cache_file(self.ws, self.job_dir)))
+
+    def test_forget_drops_a_root_gone_from_disk(self):
+        workspace.load_jobs(self.ws, self.ws.roots)
+        shutil.rmtree(self.root)
+        workspace.forget(self.ws, [self.root], [])                   # find_job_dirs of a gone root is empty
+        self.assertEqual(workspace.job_index(self.ws), {})
+        self.assertEqual(self.ws.n_cached, 0)
+
     def test_corrupt_cache_falls_back_to_parse(self):
         workspace.load_job(self.ws, self.job_dir)
         path = next(os.path.join(self.ws.jobs_dir, n) for n in os.listdir(self.ws.jobs_dir)
