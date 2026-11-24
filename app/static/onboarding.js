@@ -152,6 +152,11 @@
     if (e.target.closest('#onb-open')) { S.open = !S.open; save(); return renderPanel(); }
     if (pointed && pointed.contains(e.target)) unpoint();
   });
+  // Escape on the checklist or its toggle closes it, and the focus goes back to the toggle
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !S.open || !(railItem?.contains(document.activeElement) || panel?.contains(document.activeElement))) return;
+    S.open = false; save(); unpoint(); renderPanel(); railItem?.focus();
+  });
 
   // ---- on load: the checklist read, this page's visit kept, then whatever was under way carried on
   nulliusFetch(STATE_URL, {headers: {Accept: 'application/json'}}).then(r => r.ok ? r.json() : {sections: []}).catch(() => ({sections: []})).then(j => {

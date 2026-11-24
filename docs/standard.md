@@ -383,7 +383,7 @@ The [builder](builder.md) runs the standard; what it adds:
 | Surface | What it does |
 | --- | --- |
 | The builder | Each dataset with each choice is a `cli run --from-run` and a job (`<name>-<dataset>-<agent>`); each machine a shard and a job (`<name>-shard-<I>of<N>`) |
-| A run on a host | Runs the running backend and effective catalogue: source edits, user entries and catalogue-local dataset files are included, configuration and credential stores excluded; needs `python3`, `git` and, for the container backend, Docker or Podman; `uv` is installed when missing. On the local backend a host without `npm` is refused. The job is mirrored back every 10 s |
+| A run on a host | Runs the running backend and effective catalogue: source edits, user entries and catalogue-local dataset files are included, configuration and credential stores excluded; needs `python3`, `git` and, for the container backend, Docker or Podman; `uv` is installed when missing. On the local backend a host without `npm` is refused. The job is mirrored back with a 1 s pause between looks |
 | Agents and Capabilities tabs | Each definition's ports proven and the benchmarks it runs; *Prove its ports* runs `cli conform --from-run` here, with local processes or a container, and updates its proofs |
 | A benchmark's page | Its proofs per dataset; *Run control checks* runs `cli prove --from-run` here, handed no key unless the benchmark is judged. A failed check is kept under `proven.<dataset>.failed` until it passes |
 
@@ -431,7 +431,7 @@ local proof records; saved runs and credentials remain.
 | `turn` | The transcript so far; `simulator: {model, base_url, key}` when there is one; `judge` for an upstream that grades as the conversation ends; `attempt` with `limits.attempts` | The next message, `{done: true}`, or `restart` |
 | `produce` | A capability benchmark's recall, `base_url` and `key` | The reading, through the relay |
 | `answer` | `unit, dir, setup, model, base_url, key` | `{answer}`: the upstream's own answerer, for a [setup](#setups-as-published-your-model-your-agent-or-capability) |
-| `score` | `unit, dir, transcript, answer`, `setup`, `verified` for an own image, `judge: {model, base_url, key}` when judged | `{reward, detail}`, and `passed` when the benchmark passes or fails; `parts: {n, by, parts}` when the reward is a mean over several parts (a conversation's questions), so the job's mean weighs it by `n` and breaks it down by `by`; `stopped`, the reason of a stop asked while the unit ran, kept as `verifier_result.stopped` |
+| `score` | `unit, dir, transcript, answer`, `setup`, `verified` for an own image, `judge: {model, base_url, key}` when judged | `{reward, detail}`, and `passed` when the benchmark passes or fails; `parts: {n, by, parts}` when the reward is a mean over several parts (a conversation's questions); the job's mean weighs it by `n` and breaks it down by `by`; `stopped`, the reason of a stop asked while the unit ran, kept as `verifier_result.stopped`; `detail` holds benchmark-specific evidence, redacted for display |
 | `oracle` | `{unit, dir}` | `{answer}`, the reference; a workspace benchmark also writes it into `dir` |
 | `end` | `{unit, dir}`, with `driver.unit_end`, once a unit an agent ran has ended, also after a stop, when its `setup` was sent and the driver still runs with no request left unanswered | `{}` |
 | `task_given` | `{unit, dir}`, with `driver.task_given`, just before an agent is sent its task: its first prompt, or its command | `{}` once the benchmark's side has taken it; a failure ends the unit before the task is sent |
@@ -494,6 +494,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `limit` | `true`: a bound of the upstream's own (steps, errors) |
 | `step` | `where`: where the work runs, such as the VMs' provider, asked on Where, one value as fixed; `dataset`: what its datasets need, asked on Dataset for the datasets it applies to |
 | `by` | Its default under each value of another option, e.g. each OSWorld agent's own steps |
+| `yours` | With `by`: default value for an external agent or capability |
 | `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`); `["agent"]`: an agent's run alone, never a capability's or a control's |
 
 - **Temperature** in GSM8K and HumanEval's Original setups: a non-negative decimal, or `default` for the provider's own (`--bench-option temperature=0.5`).

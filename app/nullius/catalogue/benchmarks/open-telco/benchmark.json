@@ -202,5 +202,19 @@
   ],
   "task_count": 20588,
   "citation": "@misc{maatouk2023teleqna,\n  title={TeleQnA: A Benchmark Dataset to Assess Large Language Models Telecommunications Knowledge},\n  author={Maatouk, Ali and Ayed, Fadhel and Piovesan, Nicola and De Domenico, Antonio and Debbah, Merouane and Luo, Zhi-Quan},\n  year={2023}, eprint={2310.15051}, archivePrefix={arXiv}\n}\n\n@misc{ezzakri2025teletables,\n  title={TeleTables: A Benchmark for Large Language Models in Telecom Table Interpretation},\n  author={Ezzakri, Anas and Piovesan, Nicola and Sana, Mohamed and De Domenico, Antonio and Ayed, Fadhel and Zhang, Haozhe},\n  year={2025}, eprint={2601.04202}, archivePrefix={arXiv}\n}\n\n@misc{colle2025telemath,\n  title={TeleMath: A Benchmark for Large Language Models in Telecom Mathematical Problem Solving},\n  author={Colle, Vincenzo and Sana, Mohamed and Piovesan, Nicola and De Domenico, Antonio and Ayed, Fadhel and Debbah, Merouane},\n  year={2025}, eprint={2506.10674}, archivePrefix={arXiv}\n}\n\n@misc{sana2025telelogs,\n  title={Reasoning Language Models for Root Cause Analysis in 5G Wireless Networks},\n  author={Sana, Mohamed and Piovesan, Nicola and De Domenico, Antonio and Kang, Yibin and Zhang, Haozhe and Debbah, Merouane and Ayed, Fadhel},\n  year={2025}, eprint={2507.21974}, archivePrefix={arXiv}\n}\n\n@misc{zou2024telecomgpt,\n  title={TelecomGPT: A Framework to Build Telecom-Specific Large Language Models},\n  author={Zou, Hang and Zhao, Qiyang and Tian, Yu and Bariah, Lina and Bader, Faouzi and Lestable, Thierry and Debbah, Merouane},\n  year={2024}, eprint={2407.09424}, archivePrefix={arXiv}\n}\n\n@misc{gajjar2024oranbench,\n  title={ORAN-Bench-13K: An Open Source Benchmark for Assessing LLMs in Open Radio Access Networks},\n  author={Gajjar, Pranshav and Shah, Vijay K.},\n  year={2024}, eprint={2407.06245}, archivePrefix={arXiv}\n}\n\n@misc{gajjar2025oransight2,\n  title={ORANSight-2.0: Foundational LLMs for O-RAN},\n  author={Gajjar, Pranshav and Shah, Vijay K.},\n  year={2025}, eprint={2503.05200}, archivePrefix={arXiv}\n}\n\n@misc{ferrag2026sixgbench,\n  title={6G-Bench: An Open Benchmark for Semantic Communication and Network-Level Reasoning with Foundation Models in AI-Native 6G Networks},\n  author={Ferrag, Mohamed Amine and Lakas, Abderrahmane and Debbah, Merouane},\n  year={2026}, eprint={2602.08675}, archivePrefix={arXiv}\n}",
-  "citation_source": "https://huggingface.co/datasets/GSMA/ot-full"
+  "citation_source": "https://huggingface.co/datasets/GSMA/ot-full",
+  "evidence": [
+    {
+      "label": "Extracted answer",
+      "path": "extracted"
+    },
+    {
+      "label": "Expected answer",
+      "path": "target"
+    },
+    {
+      "label": "Reply",
+      "path": "answer"
+    }
+  ]
 }
