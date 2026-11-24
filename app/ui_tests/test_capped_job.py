@@ -91,7 +91,7 @@ class CappedJobPage(unittest.TestCase):
         # the unit it cut off is a trial with its own outcome, outside the rate
         self.assertRegex(html, r'class="[^"]*oc-spending_cap[^"]*"[^>]*data-o="spending_cap"')
         self.assertIn(classify.LABELS[classify.SPENDING_CAP] + '<span class="infra">infra</span>', html)
-        self.assertIn("6 of 10 planned", self.text(html, r'<div class="run-meta".*?</div>'))
+        self.assertIn("6 of 10 planned", self.text(html, r'<div class="run-meta[^\"]*".*?</header>'))
 
     def test_a_run_within_its_cap_says_the_cap_and_no_more_and_one_without_says_nothing(self):
         html = self.page("within")

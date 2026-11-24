@@ -61,6 +61,37 @@ class TrialHead(unittest.TestCase):
         self.assertIn("my-agent", overview)
         self.assertIn("openai/x", overview)
 
+    def test_usage_summary_covers_calls_totals_and_missing_records(self):
+        from types import SimpleNamespace
+        from nullius.traces.trajectory import CacheAccounting
+
+        trial = SimpleNamespace(n_input_tokens=100, n_cache_tokens=20, n_output_tokens=30)
+        def trajectory(series, cache=None, final=None, error=""):
+            series = [dict(step_id=i, sent=100, cached=20, new=80, **p) for i, p in enumerate(series)]
+            return SimpleNamespace(token_series=series, cache=cache, final_metrics=final or {},
+                                   total_reasoning_tokens=None, error=error)
+        cases = [
+            ("one call", trajectory([dict(completion=30)], CacheAccounting("openai", 20, 80, 100, 20)), 100, 20, 30),
+            ("multiple calls", trajectory([dict(completion=30), dict(completion=40)], CacheAccounting("anthropic", 120, 180, 200, 120)), 300, 120, 70),
+            ("final metrics", trajectory([], CacheAccounting("openai", 40, 160, 200, 40), {"total_completion_tokens": 50}), 200, 40, 50),
+            ("trial totals", None, 100, 20, 30),
+            ("unreadable trajectory", trajectory([], error="bad JSON"), 100, 20, 30),
+        ]
+        with web.app.test_request_context():
+            panel = web.app.jinja_env.get_template("traces/_usage.html").module.usage_panel
+            for name, traj, sent, cached, output in cases:
+                with self.subTest(name=name):
+                    html = panel(trial, traj)
+                    self.assertIn(f'aria-label="Input {sent} tokens, {cached} from cache; output {output} tokens"', html)
+                    self.assertNotIn("asks its model once", html)
+                    self.assertEqual("Prompt growth" in html, bool(traj and len(traj.token_series) > 1))
+            empty = SimpleNamespace(n_input_tokens=0, n_cache_tokens=0, n_output_tokens=0)
+            html = panel(empty, None)
+            self.assertIn("Token usage not recorded", html)
+            self.assertNotIn('id="usage-mix"', html)
+            empty.n_output_tokens = 12
+            self.assertIn('id="usage-mix"', panel(empty, None))
+
     def test_a_value_the_trial_has_not_has_no_cell_and_no_dash(self):
         """No verifier record: no Reward. No trajectory: no Steps. No agent
         window: no Agent time. With nothing to say, the strip is not drawn."""

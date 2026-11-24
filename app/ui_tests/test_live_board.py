@@ -312,8 +312,8 @@ class LiveBoard(unittest.TestCase):
             self.assertIn("What the phases leave of the trial", html); self.assertNotIn("Harbor", html.split("<main", 1)[1])   # a reader's run, in its own words
             self.assertNotIn("How it worked", html); self.assertNotIn(">Tool calls</h3>", html)                    # edits and tests are an agent's, not one call's
             self.assertNotIn('id="runner-verdict"', html)                                                   # no record of the judge's call is kept: no card
-            self.assertIn('id="usage-mix"', html); self.assertIn("served from cache <b>60</b>", html)  # the one call drawn: from cache, new, written
-            self.assertIn("asks its model once for each of its questions, so the bar is that one call", html)   # the definition's word for an item
+            self.assertIn('id="usage-mix"', html); self.assertIn("cache <b>60</b>", html)  # the one call drawn: from cache, new, written
+            self.assertNotIn("asks its model once", html)  # recorded usage does not establish how many calls ran
             job = self.client.get("/job/lme-arm"); self.addCleanup(job.close)
             page = job.get_data(as_text=True)
             self.assertIn("Trajectory judge", page); self.assertIn("The outcomes are LongMemEval's own judge: official gpt-4o · evaluate_qa.py.", page)

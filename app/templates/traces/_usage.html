@@ -1,0 +1,65 @@
+{# One summary shape for every task. Trajectory accounting preserves cache conventions;
+   recorded trial totals remain available when no per-call trajectory was saved. #}
+{% macro usage_panel(trial, trajectory) %}
+{% set traj = trajectory if trajectory and not trajectory.error else none %}
+{% set series = traj.token_series if traj else [] %}
+{% set cache = traj.cache if traj else none %}
+{% set sent = cache.total if cache else trial.n_input_tokens or 0 %}
+{% set cached = cache.reads if cache else [trial.n_cache_tokens or 0, sent]|min %}
+{% set fresh = cache.new if cache else [sent - cached, 0]|max %}
+{% set output = (series|sum(attribute='completion')) if series else ((traj.final_metrics.get('total_completion_tokens') if traj else none) or trial.n_output_tokens or 0) %}
+{% set reasoning = traj.total_reasoning_tokens if traj else none %}
+<div class="panel" id="task-usage">
+  <h3 style="margin-top:0">Model usage</h3>
+  <h4 class="usage-section-title">Tokens</h4>
+  {% if sent or output or series or reasoning is not none %}
+  {% if sent or output %}<div class="mix-bar" id="usage-mix" role="img" aria-label="Input {{ sent }} tokens, {{ cached }} from cache; output {{ output }} tokens">
+    {% if fresh %}<span class="mix-new" style="flex:{{ fresh }}" title="input (not cached): {{ fresh|tokens('control') }}"></span>{% endif %}
+    {% if cached %}<span class="mix-cached" style="flex:{{ cached }}" title="cache: {{ cached|tokens('control') }}"></span>{% endif %}
+    {% if output %}<span class="mix-out" style="flex:{{ output }}" title="output: {{ output|tokens('control') }}"></span>{% endif %}
+  </div>{% endif %}
+  <div class="legend">
+    {% if sent or output or series %}
+    <span class="chip sp-fresh-chip" title="Input tokens not served from cache">input <b>{{ fresh|tokens('control') }}</b></span>
+    <span class="chip sp-cached-chip">cache <b>{{ cached|tokens('control') }}</b></span>
+    <span class="chip mix-out-chip">output <b>{{ output|tokens('control') }}</b></span>
+    {% if sent %}<span class="usage-stat" title="Cache ÷ total input tokens">cache hit <b>{{ (cached / sent)|hitrate }}</b></span>{% endif %}
+    {% endif %}
+    {% if reasoning is not none %}<span class="chip">reasoning <b>{{ reasoning|tokens('control') }}</b></span>{% endif %}
+  </div>
+  {% else %}<p class="muted small">Token usage not recorded.</p>{% endif %}
+    {% if series|length > 1 %}
+    <h4 class="usage-section-title usage-growth-title">Prompt growth</h4>
+    {% set max_sent = traj.token_series|map(attribute='sent')|max %}
+    <div class="spark">
+      {% for p in traj.token_series %}
+        {% set h = (56 * p.sent / max_sent)|round(1) if max_sent else 0 %}
+        {% set ch = (56 * p.cached / max_sent)|round(1) if max_sent else 0 %}
+        <span class="spark-col"
+              title="step {{ p.step_id }} · input {{ p.sent|tokens('control') }} ({{ p.cached|tokens('control') }} cached, {{ p.new|tokens('control') }} new) · output {{ p.completion|tokens('control') }}">
+          <span class="sp-fresh" style="height:{{ [h - ch, 1]|max }}px"></span>
+          {% if ch >= 1 %}<span class="sp-cached" style="height:{{ ch }}px"></span>{% endif %}
+        </span>
+      {% endfor %}
+    </div>
+    <div class="legend" style="margin:.6rem 0 0">
+      <span class="chip sp-fresh-chip" title="Input tokens not served from cache">input</span>
+      <span class="chip sp-cached-chip">cache</span>
+      {% if traj.cache and traj.cache.hit is not none %}
+        <span class="usage-stat" title="Reads ÷ every input token, both usage conventions on the same ruler: {{ traj.cache.reads|tokens('control') }} read from cache, {{ traj.cache.new|tokens('control') }} new (cache writes + fresh)">
+          cache hit <b>{{ traj.cache.hit|hitrate }}</b></span>
+        {% if traj.cache.reported_diverges %}
+          <span class="usage-stat" title="{% if traj.cache.convention == 'anthropic' %}The file's own cached ÷ prompt: this agent reports Anthropic-style usage, whose prompt_tokens excludes cache writes, so the ratio is ~100% by construction{% else %}The file's own cached ÷ prompt: its final_metrics disagree with the per-call series{% endif %}">
+            reported {{ traj.cache.reported_hit|hitrate }}</span>
+        {% endif %}
+      {% endif %}
+      {% if traj.total_reasoning_tokens is not none %}
+        <span class="chip" title="Summed from per-step metrics, or the trajectory's final metrics">reasoning <b>{{ traj.total_reasoning_tokens|tokens('control') }}</b></span>
+      {% endif %}
+    </div>
+    <p class="muted small">One column per LLM step, height ∝ input tokens; the gray band is what came from cache.
+      {%- if traj.cache and traj.cache.convention == 'anthropic' %} Anthropic-style usage: cache writes are added back onto the step that paid for them.{%- endif %}</p>
+    {% endif %}
+
+</div>
+{% endmacro %}
