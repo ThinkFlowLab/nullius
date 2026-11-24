@@ -140,6 +140,9 @@ and migration, and `docs/settings/README.md` for paths and precedence.
   the owner's rules for every page and the scope of UI checks).
 - Prefer small, targeted diffs. Do not refactor unrelated areas
   opportunistically.
+- Add a test only for a distinct regression no existing test catches, and docs
+  only when what they say became wrong or a reader needs it to choose or act.
+  Neither is owed by a change: none is a valid answer.
 
 ## Core Architecture
 
@@ -241,8 +244,7 @@ The questions, asked k=3 times with medians: each acceptance criterion of the
 linked issue (the `## Acceptance` checkbox list, one row per box; a body
 without one is judged whole), whether the issue and the PR describe the same
 change, whether the description matches the diff, whether the diff stays in
-scope, whether tests or the `## Verified` section cover it, whether the docs
-follow, whether `## Risk` names what could break; `## Before and after` is
+scope, whether `## Risk` names what could break; `## Before and after` is
 counted by the script when the diff touches what is visible. Issue rows show `–` when the PR links no issue. Everything the
 judge reads has been through `redact` first: key-shaped strings and email
 addresses never leave the runner. `/judge` from an owner, member or collaborator asks again, a draft included. Experimental:

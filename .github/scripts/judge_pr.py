@@ -17,9 +17,8 @@ The comment opens with two ratings, then a table of questions:
   description and diff: the acceptance criteria of the linked issue, one row
   per box of its `## Acceptance` list (a body without one is judged whole);
   whether the issue and the pull request describe the same change; whether
-  the description matches the diff; whether the diff stays in scope; whether
-  tests cover the change or the description says how it was verified; whether
-  the docs follow; whether the risk is named. A pull request that links no
+  the description matches the diff; whether the diff stays in scope;
+  whether the risk is named. A pull request that links no
   issue reads `–` on the first two. The row "before and after shown" is the
   script's: when the diff touches what is visible, it counts the images under
   the description's `## Before and after` heading.
@@ -117,21 +116,6 @@ QUESTIONS = {
                      "partly": "A few hunks serve something else (a tidy-up, a rename elsewhere), small beside the change",
                      "no": "A substantial part of the diff is a different change"},
     },
-    "tests": {
-        "type": "choice",
-        "instructions": "Is the changed behaviour covered: tests added or changed in the diff for it, or the description's Verified section saying what was run and checked?",
-        "criteria": {"yes": "The diff has tests for the behaviour it changes, or the description states how it was verified",
-                     "partly": "Some of the change is covered or verified, some is not",
-                     "no": "No test touches the change and the description says nothing about verification, or says it was not verified"},
-    },
-    "docs": {
-        "type": "choice",
-        "instructions": "When the change alters a page, a command, a setting, a rule or a file layout, do the documentation and the repository's own guides (README, AGENTS.md, docs/) follow in the same diff?",
-        "criteria": {"yes": "What changed for a reader or an operator is reflected in the documentation in this diff",
-                     "partly": "Some of it is reflected, some surfaces still describe the old behaviour",
-                     "no": "Something a reader or an operator sees changed and no documentation follows",
-                     "none_needed": "Nothing a reader or an operator sees changed"},
-    },
     "risk_named": {
         "type": "choice",
         "instructions": "Does the description name what could break if this change is wrong and how it would be undone (a revert, a rebuild, a migration): deleted tests, changed defaults, data on disk, keys?",
@@ -149,7 +133,7 @@ QUESTIONS = {
                      "severe": "Data, keys or history can be lost or wrong: a write into a source tree, keys or secrets, deleted tests, a changed on-disk format, a workflow with write permissions"},
     },
 }
-PR_QUESTIONS = ("issue_same", "description_matches", "scope", "tests", "docs", "risk_named", "merge_risk")
+PR_QUESTIONS = ("issue_same", "description_matches", "scope", "risk_named", "merge_risk")
 
 
 class JudgeError(Exception):
@@ -585,7 +569,7 @@ def short(text: str, n: int = 90) -> str:
 
 
 VERDICT = {"met": "✅ met", "partial": "⚠️ partial", "not_met": "❌ unmet", "no_evidence": "❌ no evidence",
-           "yes": "✅ yes", "partly": "⚠️ partly", "no": "❌ no", "none_needed": "–",
+           "yes": "✅ yes", "partly": "⚠️ partly", "no": "❌ no",
            "undecided": "❔ undecided", "unanswered": "not asked", "na": "–"}
 RISK_MARK = {"minor": "🟢", "medium": "🟡", "significant": "🟠", "major": "🔴", "severe": "⛔", "undecided": "❔", "not asked": "⚪"}
 PRIORITY_MARK = {"low": "🟢", "medium": "🟡", "high": "🟠", "extreme": "🔴"}
@@ -594,8 +578,6 @@ ROWS = [  # (question id or script row, the text of the row)
     ("issue_same", "Issue and pull request describe the same change"),
     ("description_matches", "Description matches the diff, no more, no less"),
     ("scope", "Diff stays in scope"),
-    ("tests", "Tests cover the change, or Verified says how"),
-    ("docs", "Docs follow the change"),
     ("risk_named", "Risk named in the description"),
     ("before_after", "Before and after shown"),
 ]
