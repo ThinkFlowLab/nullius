@@ -164,7 +164,7 @@ class CommonAndPerAgent(CompilerCase):
         self.assertEqual(out['e'], [])
         for text in out['runs'].values():
             self.assertIn('--max-retries 0', text)
-        self.assertEqual([m for _, m in self.runs("r.retries=-1")['e']], ['Retries per attempt must be a whole number of at least 0, or empty.'])
+        self.assertEqual([m for _, m in self.runs("r.retries=-1")['e']], ['Retries after an error must be a whole number of at least 0, or empty.'])
 
     def test_the_common_fields_and_agent_kwargs_survive_a_saved_recipe(self):
         out = self.js('const r=C.create("harbor");r.attempts=2;r.verifierTimeoutMultiplier=1.5;r.custom=[{scope:"agent",key:"k",type:"string",value:"v",agent:"nop"}];'

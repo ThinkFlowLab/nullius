@@ -67,12 +67,8 @@ class MeetingPoints(unittest.TestCase):
             field = field.split('>', 1)[0]
             self.assertIn('value=""', field)
             self.assertIn(f'placeholder="{default}"', field)
-            # a number the run gets is named in the label; "default", each own agent's, is not
-            label = label.rsplit("<label", 1)[1]
-            if default.isdigit():
-                self.assertIn(f"(default {default})", label)
-            else:
-                self.assertNotIn("(default", label)
+            # the label is the option's name alone: the input shows the default
+            self.assertIn(">Steps per task<input", label.rsplit("<label", 1)[1])
 
     def test_kit_opts_into_cleanup_before_a_retry(self):
         kit = definitions.kit("agent.computer/v1")

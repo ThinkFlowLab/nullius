@@ -795,7 +795,7 @@
         + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1',
             hint: 'Each ' + esc(u.noun) + ' is run and scored this many times.'})
         + field('Retries after an error', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0',
-            hint: 'A try that ends in an error, such as a rate limit or a crash, is run again. A failed ' + esc(u.noun) + ' never is.'}) + '</div>'
+            hint: 'Retry errors such as rate limits or crashes, but not failed ' + esc(u.nouns) + '.'}) + '</div>'
         // a conversation's most agent turns (recipe.py: run --max-turns): only a benchmark that holds conversations has turns
         + ((b.needs || []).includes('agent.conversation/v1')
           ? field('Turns per conversation', 'turns', rec.turns ?? '', {type: 'number', min: 1, placeholder: String((b.timeouts || {}).turns || ''),
@@ -826,7 +826,7 @@
         const [k, by] = Object.entries(o.by || {})[0] || [];
         // an agent's or a capability's run alone gets the benchmark's value for it (``yours``), the benchmark's own agents theirs
         const def = yours ? (!theirs && o.yours) || o.default : (k && by[of(k)]) || o.default;
-        return `<label class="nb-field" title="${esc(o.summary)}">${esc(o.label)}${/^\d+$/.test(def) ? ` (default ${esc(def)})` : ''}<input class="nb-declared" data-bench-opt-select="${esc(n)}" type="number" min="1" step="1" value="${esc(given[n] ?? '')}" placeholder="${esc(def)}" aria-label="${esc(o.label)}" autocomplete="off"></label>`;
+        return `<label class="nb-field" title="${esc(o.summary)}">${esc(o.label)}<input class="nb-declared" data-bench-opt-select="${esc(n)}" type="number" min="1" step="1" value="${esc(given[n] ?? '')}" placeholder="${esc(def)}" aria-label="${esc(o.label)}" autocomplete="off"></label>`;
       });
     return rows.length ? `<div class="nb-sectionhead nb-sectionnext"><h2>${esc(b.label)}</h2></div>` + rows.join('') : '';
   }
@@ -951,7 +951,7 @@
       html='<div class="nb-sectionhead"><h2>Scope & execution</h2></div>';
       const allTasks=(()=>{const ds=schema.datasets.find(d=>d.benchmark===rec.benchmark);return ds&&ds.tasks?'all '+ds.tasks:'all';})();
       html+=`<div class="nb-two">${field('Number of tasks','tasks',rec.tasks,{type:'number',min:1,placeholder:allTasks,hint:'Empty: '+allTasks+'.'})}${field('Concurrent trials','concurrency',rec.concurrency,{type:'number',min:1})}</div>`;
-      html+=`<div class="nb-two">${field('Retries per attempt','retries',rec.retries,{type:'number',min:0,placeholder:'0'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
+      html+=`<div class="nb-two">${field('Retries after an error','retries',rec.retries,{type:'number',min:0,placeholder:'0'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
         +harborExecutableFields(rec);
       html+=field('Output directory','output',rec.output,{});
     }
