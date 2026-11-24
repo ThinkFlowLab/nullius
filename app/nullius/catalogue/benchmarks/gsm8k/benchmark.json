@@ -43,5 +43,19 @@
     "Answers must end with a line '#### <number>'. The number is compared as text, so 18.00 does not match 18.",
     "The test split is run. The Socratic variant has the same questions and answers, with different worked explanations.",
     "GSM8K-Platinum is the test split with its errors cleaned. A problem has the same number in both, so the two runs compare problem by problem."
+  ],
+  "evidence": [
+    {
+      "label": "Extracted answer",
+      "path": "extracted"
+    },
+    {
+      "label": "Expected answer",
+      "path": "expected"
+    },
+    {
+      "label": "Reply",
+      "path": "answer"
+    }
   ]
 }

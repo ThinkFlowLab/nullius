@@ -34,9 +34,9 @@
           <input type="text" name="path" id="path" placeholder="/path/to/jobs — or a pattern: …/jobs_*, …/**/jobs"
                  {% if mode == 'add' %}required {% endif %}autofocus autocomplete="off" spellcheck="false"
                  aria-describedby="path-error">
-          <button type="button" class="row-x" aria-label="Remove this path" hidden>×</button>
+          <button type="button" class="row-x" aria-label="Remove this path" hidden><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
           <button type="button" class="add-btn" title="Add another path"
-                  aria-label="Add another path">+</button>
+                  aria-label="Add another path"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></button>
         </div>
       </div>
       <p class="field-error" id="path-error" role="alert" hidden></p>
@@ -73,7 +73,7 @@
   const pathList = document.getElementById('path-list');
 
   pathList.addEventListener('click', e => {
-    if (e.target.matches('.add-btn')) {
+    if (e.target.closest('.add-btn')) {
       const row = pathList.firstElementChild.cloneNode(true);
       const field = row.querySelector('input');
       field.value = '';
@@ -84,7 +84,7 @@
       pathList.appendChild(row);
       field.focus();
       syncRowButtons();
-    } else if (e.target.matches('.row-x')) {
+    } else if (e.target.closest('.row-x')) {
       e.target.closest('.path-row').remove();
       syncRowButtons();
     }
@@ -125,6 +125,7 @@
     x.type = 'button';
     x.className = 'alert-x';
     x.setAttribute('aria-label', 'Dismiss');
+    x.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>';
     x.addEventListener('click', () => alert.remove());
     alert.appendChild(x);
   });
@@ -215,7 +216,7 @@
       const li = document.createElement('li');
       li.innerHTML = `<span class="staged-name mono"></span>
                       <span class="staged-count faint"></span>
-                      <button type="button" class="row-x" aria-label="Remove">×</button>`;
+                      <button type="button" class="row-x" aria-label="Remove"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>`;
       li.querySelector('.staged-name').textContent = s.name;
       li.querySelector('.staged-count').textContent =
         `${s.files.length} file${s.files.length === 1 ? '' : 's'}`;

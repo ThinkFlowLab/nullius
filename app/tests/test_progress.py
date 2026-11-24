@@ -106,6 +106,12 @@ class Fold(unittest.TestCase):
         got = progress.fold([ev("plan", stages="install,units"), ev("install", "start", agent="codex@2.2.2")])
         self.assertEqual([(s["key"], s["label"]) for s in got["stages"]], [("install:codex@2.2.2", "Install codex@2.2.2"), ("units", "Units")])
 
+    def test_an_image_digest_is_shown_short_with_the_full_label_kept(self):
+        digest = "sha256:" + "0123456789ab" + "c" * 52
+        got = progress.fold([ev("environment", "start", name="tasks@" + digest), ev("install", "start", agent="terminus-2")])
+        self.assertEqual([(s["label"], s.get("full")) for s in got["stages"]],
+                         [("Environment tasks@sha256:0123456789ab", "Environment tasks@" + digest), ("Install terminus-2", None)])
+
     def test_a_planned_stage_a_later_one_overtook_was_not_needed(self):
         got = progress.fold([ev("plan", stages="image,dataset,install"), ev("image", "cached"), ev("install", "start", agent="a")])
         self.assertEqual([s["stage"] for s in got["stages"]], ["image", "install"])
@@ -208,6 +214,23 @@ class StandardRun(unittest.TestCase):
         names = sorted(d for d in os.listdir(job) if "__u" in d)
         self.assertEqual(sorted(t["trial"] for t in snap["trials"]), names)   # the trial folders' own names
 
+    def test_preflight_checks_are_visible_while_they_block(self):
+        from nullius.standard.requirements import network_requirements
+        for stage in ("models", "requirements"):
+            with self.subTest(stage=stage):
+                r = self.go(name="check-" + stage)
+                if stage == "models":
+                    r.base = "https://provider.invalid/v1"
+                def checking(*args):
+                    self.assertEqual(progress.fold(progress.read(r.job_dir))["current"], stage)
+                    raise run.Refused("check failed")
+                target, method = (r, "known_models") if stage == "models" else (network_requirements, "check")
+                with patch.object(target, method, side_effect=checking), self.assertRaises(run.Refused):
+                    r.start()
+                folded = progress.fold(progress.read(r.job_dir))
+                self.assertEqual(folded["ended"], "refused")
+                self.assertEqual(next(s for s in folded["stages"] if s["stage"] == stage)["state"], "failed")
+
     def test_a_refused_run_says_why_in_its_job_and_writes_nothing_else(self):
         r = self.go()
         with patch.object(install, "upstream_dir", lambda b, home=None: os.path.join(self.tmp, "up")), \
@@ -217,7 +240,8 @@ class StandardRun(unittest.TestCase):
                 r.start()
         events = progress.read(r.job_dir)
         self.assertEqual([(e["stage"], e.get("state")) for e in events],
-                         [("plan", None), ("upstream", "start"), ("upstream", "failed"), ("refused", None)])
+                         [("plan", None), ("requirements", "start"), ("requirements", "done"),
+                          ("upstream", "start"), ("upstream", "failed"), ("refused", None)])
         self.assertIn("git fetch: exit 128", progress.refusal(events))
         self.assertFalse(os.path.exists(os.path.join(r.job_dir, "config.json")))   # no job: nothing a runs page would list
 

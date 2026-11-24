@@ -140,7 +140,7 @@
       input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list'); input.setAttribute('aria-expanded', 'false');
       input.setAttribute('aria-controls', 'provider-models-' + (++serial));
       const wrap = document.createElement('span'); wrap.className = 'nb-model-control'; input.before(wrap); wrap.append(input);
-      const button = document.createElement('button'); button.type = 'button'; button.className = 'nb-model-open'; button.textContent = '⌄';
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'nb-model-open'; button.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg>';
       button.setAttribute('aria-label', severalOf(input) ? 'Browse the serving providers' : 'Browse provider models');
       button.addEventListener('click', e => { e.preventDefault(); input.focus(); void open(input, true); }); wrap.append(button);
       input.addEventListener('focus', () => { if(!choosing)void open(input); });

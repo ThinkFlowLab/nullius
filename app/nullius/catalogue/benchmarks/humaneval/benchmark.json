@@ -32,5 +32,23 @@
   "citation_source": "https://github.com/openai/human-eval",
   "good_to_know": [
     "One attempt per problem gives pass@1. With n attempts per problem, the run reports pass@1 to pass@n. The paper sampled 200."
+  ],
+  "evidence": [
+    {
+      "label": "Why",
+      "path": "why"
+    },
+    {
+      "label": "Result",
+      "path": "result"
+    },
+    {
+      "label": "Not tested",
+      "path": "not_tested"
+    },
+    {
+      "label": "solution.py",
+      "path": "solution.py"
+    }
   ]
 }
