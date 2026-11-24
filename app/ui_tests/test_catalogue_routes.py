@@ -262,7 +262,7 @@ class BenchmarkPage(PageCase):
             self.assertIn("Setup: " + label, osworld2)
             self.assertIn("needs " + label, osworld2)
         self.assertNotIn("Setup: scoring_programs", osworld2)
-        self.assertIn("Setup: docker", self.page("osworld1"))
+        self.assertIn("Setup: Docker for the tasks' VMs", self.page("osworld1"))
 
 
 class DatasetsOnTheirPage(PageCase):

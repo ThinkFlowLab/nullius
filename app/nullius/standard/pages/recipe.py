@@ -105,9 +105,11 @@ def _all() -> Dict[str, List[dict]]:
 
 
 def _shown(o: dict, v: str, values: dict) -> str:
-    """An option's value as Review shows it: its name, or for ``default`` under ``by`` the value it stands for."""
+    """An option's value as Review shows it: its name, or for ``default`` under ``by`` the value it stands for (an
+    agent's or a capability's run, which takes no value of that other option, gets ``yours``)."""
     by = next(iter((o.get("by") or {}).items()), None)
-    v = by[1].get(values.get(by[0]), v) if v == "default" and by else v
+    if v == "default" and by:
+        v = by[1].get(values.get(by[0]), v) if by[0] in values else o.get("yours") or v
     return (o.get("names") or {}).get(v) or v
 
 
@@ -185,7 +187,7 @@ def _bench_page(b: dict) -> dict:
             "options": {n: {"label": o.get("label") or n.replace("_", " ").capitalize(), "summary": o["summary"], "datasets": o.get("datasets") or [],
                             "setups": o.get("setups") or ["yours"],
                             **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"], "example": o.get("example")}), "default": o.get("default"), "about": o.get("about") or {}, "names": o.get("names") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
-                            "limit": bool(o.get("limit")), "step": o.get("step") or "", "by": o.get("by") or {}}
+                            "limit": bool(o.get("limit")), "step": o.get("step") or "", "by": o.get("by") or {}, "yours": o.get("yours") or ""}
                         for n, o in (b.get("options") or {}).items()},
             "host": {n: {"label": r.get("label") or n, "summary": r["summary"], "check": r["check"], "install": hostreq.install_lines(b, [n]), "needed_by": r["needed_by"]}
                      for n, r in hostreq.all_of(b).items()},
@@ -558,7 +560,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             add("model", why)
     agents_local = [p["o"]["label"] for p in picks if side == "agent" and not p["control"] and not p.get("setup") and backend == "local"]
     if agents_local and recipe.get("unsandboxed") is not True:
-        add("where", f"{', '.join(agents_local)} would run as you, not sandboxed: tick Run it as me, or choose Docker.")
+        add("where", f"{', '.join(agents_local)} would run as you, not sandboxed: tick Run it as me"
+            + ("; a container cannot start its VMs." if definitions.boots_vms(b) else ", or choose Docker."), field="unsandboxed")
     only_controls = bool(picks) and all(p["control"] for p in picks)
     needs_model = any(not p["control"] for p in picks)
     model_choice = recipe.get("model_choice", "any")
@@ -602,7 +605,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     # each attempt run again up to N times when it ends in a failure a further try may mend (runner.retries)
     retries = 0 if recipe.get("retries") in (None, "") else _int(recipe.get("retries"), 0, MAX_RETRIES)
     if retries is None:
-        add("limits", f"Retries per attempt: a whole number from 0 to {MAX_RETRIES}.")
+        add("limits", f"Retries after an error: a whole number from 0 to {MAX_RETRIES}.")
         retries = 0
     sim_model = str(recipe.get("simulator_model") or "").strip()
     judge_model = str(recipe.get("judge_model") or "").strip()
