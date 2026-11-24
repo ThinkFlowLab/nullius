@@ -35,8 +35,8 @@ for the container backend and for Harbor recipes.
 - `app/nullius/catalogue/` holds the benchmarks, agents and capabilities, one folder
   each.
 
-[AGENTS.md](AGENTS.md) is the map of the repository and the rules every
-contributor and coding assistant follows. Read it before your first change.
+[AGENTS.md](AGENTS.md) holds the rules every contributor and coding assistant
+follows. Read it before your first change.
 
 The tests require a Flask-free backend, one provider of `nullius`, and the template fields pinned in `app/tests/field_contract.json`.
 
@@ -51,8 +51,8 @@ and Capabilities pages writes the prompt for any assistant.
 
 ## Running the tests
 
-From the repository root. The backend suite needs nothing installed; only the
-route suite needs Flask.
+From the repository root. The backend suite needs git and uv; only the route suite
+needs Flask.
 
 ```bash
 python3 app/tests/parallel.py
@@ -87,12 +87,13 @@ decision by the repository owner.
 
 - **Small and targeted.** One change per pull request; no refactoring of
   unrelated areas on the way.
+- **Open it as a draft.** Mark it ready when it is: the checks run then.
 - **Fill in the template, short.** It holds an example. The PR judge compares it
   with the diff and with the linked issue's acceptance list.
 - **Reference the issue** so it shows in the issue's Development panel.
 - **Say what you verified.** Tests run, browser checks made, widths tried.
   "Not verified" is an honest answer.
-- **No key, no address, no private link** in a body, a commit or a screenshot.
+- **No key, no email address, no private link** in a body, a commit or a screenshot.
 
 Commit messages are about the change and why it was made. No machine
 attribution: no `Co-Authored-By: Claude`, no session metadata, no generated-by

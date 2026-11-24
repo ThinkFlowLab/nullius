@@ -1,62 +1,64 @@
 # Nullius
 
-Bring any benchmark, agent or capability, run it, and open every score into the
-evidence behind it: the agent's failure or the benchmark's.
+Nullius runs AI evaluations and opens every score into its evidence, to tell an
+agent's failure from a benchmark's.
 
-- Runs through the Nullius standard (`docs/standard.md`) or Harbor, only on an
-  explicit Run. Also reads Harbor, ATIF and OpenTelemetry results.
-- `app/nullius/` is the backend: standard library only, an entry's own code aside.
-  `app/web/` is Flask, the only runtime dependency.
+- Runs through the Nullius standard (`docs/standard.md`) or Harbor, only when
+  asked. Also reads Harbor, ATIF and OpenTelemetry results.
+- `app/nullius/` is the backend: standard library only, except code that runs in
+  an upstream's own environment. `app/web/` is Flask, the web framework and the
+  only runtime dependency.
 
-The user's instructions come first, then this file, then `.claude/rules/`. This
-file holds rules for any assistant: no file lists, no history.
+The user's instructions come first, then this file, then `.claude/rules/`. Rules
+for every contributor and assistant: no file catalogue, no history.
 
 ## How we work
 
 - **Small diffs.** No refactoring on the way. A defect found in passing becomes
   an issue, not a wider change.
-- **Nearby code over assumptions.** Describe what is. Remove obsolete code and
-  historical comments unless asked to keep them.
+- **Nearby code over assumptions.** Describe what is. Remove the code and comments
+  your change makes obsolete.
 - **Facilitator, not re-implementer.** A benchmark, agent or capability runs its
   upstream's own code at a pin, in its own environment. Ask before writing more
   than glue.
-- **Reuse before adding.** In the backend, for example, `paths`, `ondisk`,
-  `redact`, `settings`, `providers`; on a page `_tables.html`, `_cards.html`,
-  `tables.js`, `model-picker.js`, `disclosures.js`, `_icons.svg`.
+- **Reuse before adding**, for example `ondisk`, `redact`, `paths`, `providers`; on
+  a page `_tables.html`, `_cards.html`, `model-picker.js`, `_icons.svg`.
 - **No machine attribution** in a commit or a pull request: no assistant
   `Co-Authored-By`, session link or generated-by line. Human co-authors stay.
   Existing commits are not rewritten for it.
-- **Nothing merges without the user's word.**
+- **Nothing merges without the owner's word.**
 
 ## Three rules, each with a test
 
-1. `app/nullius/` imports no Flask (`test_layering`). A backend test that needs
-   Flask means the layering broke.
-2. One provider of `nullius` per interpreter (`test_dependency_surface`): a local
-   package can shadow an installed one. Source commands use `uv run --no-project`.
-3. Fields the templates read are pinned, for the modules `field_contract.py` lists
-   (`test_field_contract`). A rename is a blank cell, not an import error.
+1. No file in `app/nullius/` imports Flask, so it runs without the web app: on
+   hosts, in the CLI, in tests. Code that needs it goes in `app/web/`
+   (`test_layering`).
+2. Only one `nullius` is importable: with two, one hides the other
+   (`test_dependency_surface`). Run source with `uv run --no-project`.
+3. Templates read fields by name, so a renamed one renders blank.
+   `test_field_contract` fails on it, in the modules `field_contract.py` lists.
 
-Bundled files resolve from `__file__`, personal ones through `nullius.paths`.
-No personal data in the package.
+Find bundled files from `__file__`, the user's through `nullius.paths`; none of
+theirs in the package.
 
 ## Where code lives
 
 New code goes under `app/`, never at the root. A module's docstring says what it
-is: `grep -m1 '"""' app/nullius/runs/*.py`.
+is: `grep -m1 '"""' app/nullius/*.py app/nullius/runs/*.py`.
 
 | Path | Holds |
 | --- | --- |
+| `app/nullius/` itself | What all share: settings, paths, providers, hosts, running a recipe |
 | `app/nullius/runs/`, `traces/`, `compare/` | Reading one job tree, a trial's trace, several runs |
 | `app/nullius/catalogue/` | A folder per entry under `benchmarks/`, `agents/`, `capabilities/`: its definition and its own code |
 | `app/nullius/recipes/`, `harbor/` | What the builder offers and saves; the Harbor a recipe pins |
 | `app/nullius/importers/`, `judge/` | Foreign results in; questions to a judge model |
-| `app/nullius/standard/` | The standard: `contract/`, `requirements/`, `protocols/`, `calls/`, `backends/`, `runner/`, `proofs/`, `pages/`, importing one way (`test_layering`), and the conformance `kits/` |
-| `app/web/` | One module per capability; `core` is the application, `shared` what pages share. Use another module's names as attributes (`shared.STATE`): patch one, patched for all |
-| `app/templates/`, `app/static/` | The interface, under the same capability names |
+| `app/nullius/standard/` | The standard: `contract/`, `requirements/`, `protocols/`, `calls/`, `backends/`, `runner/`, `proofs/`, `pages/`, whose imports never loop (`test_layering`), and the conformance `kits/` |
+| `app/web/` | One module per area; `core` is the application, `shared` what pages share. Write `shared.STATE`, never `from .shared import STATE`, so one patch reaches all |
+| `app/templates/`, `app/static/` | The interface, under the same names |
 | `app/tests/`, `app/ui_tests/` | Backend and route suites; fixtures are small and hand-made |
 | `app/site/`, `docs/` | The website; the documentation it publishes |
-| `.agents/skills/` | Skills; `.claude/skills` links here |
+| `.agents/skills/` | Skills, written `/name` here; `.claude/skills` is a link to it |
 
 ## Commands
 
@@ -70,16 +72,23 @@ python3 app/tests/parallel.py
 uv run --no-project --with-requirements app/requirements.txt \
   python app/tests/parallel.py app/ui_tests
 
-# the app
-uv run --no-project --with-requirements app/requirements.txt app/app.py
+# one module; a route module under uv as above, with -s app/ui_tests
+NULLIUS_HOME=$(mktemp -d) python3 -m unittest discover -s app/tests -t app -p test_live.py
+
+# the app, and the CLI
+NULLIUS_HOME=$(mktemp -d) uv run --no-project --with-requirements app/requirements.txt \
+  app/app.py --debug --port 8791
+PYTHONPATH=app NULLIUS_HOME=$(mktemp -d) python3 -m nullius --help
+
+# the documentation's links and paths
+python3 .agents/skills/docs-drift/scripts/check_docs.py
 ```
 
-- The backend suite needs git and uv on PATH. Without Node, the tests of the
-  pages' scripts skip.
-- unittest by hand: `NULLIUS_HOME` a temporary folder, personal catalogue and
-  storage variables unset.
-- A page change: its tests and focused browser checks, not the full sweep.
-- CI on non-draft pull requests: the tests, and the PR judge, which never gates.
+- Always a profile of your own (`NULLIUS_HOME`). The user's server follows their
+  runs: never start on their profile, never stop it.
+- The backend suite needs git and uv. Without Node, tests of page scripts skip.
+- A draft gets no CI: run the suites you touch. Ready, it gets the tests and the PR
+  judge, which never gates; `/judge` in a comment asks it on a draft.
 
 | Changed | Refresh |
 | --- | --- |
@@ -87,41 +96,41 @@ uv run --no-project --with-requirements app/requirements.txt app/app.py
 | A catalogue definition | `python3 app/tests/catalogue_docs.py --write` |
 | A documentation figure | `python3 app/site/diagrams.py --write` |
 | The README's animated SVGs | `python3 app/site/readme_media.py --write` |
+| What a job or trial holds, outcomes included | `SCHEMA` in `app/nullius/runs/parse.py`, plus one: opened runs are cached |
+| A setting | `app/.env.example`, from `settings.example()` |
 | What a metric means | `docs/field-guide.md`, by hand |
 
 ## Tests and docs
 
-A change owes neither.
+Add neither by default.
 
-- **A test** for a distinct regression no existing test catches: behavior, a
-  contract, a failure mode. Not wording, structure or catalogue contents. Extend
-  a nearby case first.
-- **Removing a test:** name the assertions that still protect its behavior, and
-  keep its edge cases and fixture isolation.
+- **A test** when no existing one would catch this breaking: behavior, a contract,
+  a failure mode. Not wording, structure or catalogue contents. Extend a nearby
+  case first.
+- **Removing one:** name the assertions that still protect its behavior; keep its
+  edge cases.
 - **Docs** when what they say became wrong, or a reader needs them to choose or
-  act. The code already says how it works. No prerequisite Review already checks.
+  act. The code already says how it works.
 - **In `docs/`:** keep guarantees, requirements, refusals and their fix; drop
-  mechanism, narration and history. One fact, one page. A table cell is a line.
-  No validations, captures or rendered reports.
+  mechanism, narration, history and what the builder already checks. One fact, one
+  page. A table cell is a line. No validations, captures or rendered reports.
 - Headings of `docs/standard.md` are never renamed: the import skills cite them.
 
 ## Catalogue
 
 - One entry per benchmark; what it supports is an option. A version is an
   upstream release or a requested fork, never a change of our driver.
-- Definitions hold configuration. Proof runs write evidence to `proofs.json`
-  beside them and leave them untouched. Read both through `definitions`; never
-  infer proven ports from raw JSON.
-- An agent's native capability is a callable its pinned upstream exposes, tested.
-  A component's proof does not prove an agent uses it.
+- Definitions hold configuration. Proof runs write only `proofs.json`: a bundled
+  entry's in a user copy, which then hides the bundled one. Read both through
+  `contract/definitions.py`; never infer proven ports from raw JSON.
 
 ## Issues and pull requests
 
 The `file-issue` skill files both. The templates hold the shape and an example.
 
 - Search issues and pull requests first, here and where the cause lives.
-- A pull request opens as a draft and references its issue, with `Closes` when it
-  finishes it.
+- A pull request opens as a draft, with `Closes #n` when it finishes its issue,
+  else `Refs #n`.
 - Title: `type(scope): summary`, lowercase except names, no final period. A squash
   makes it the commit on `main`, and the body its message.
   - Types: `feat` `fix` `perf` `refactor` `docs` `test` `ci` `build` `chore` `revert`
@@ -135,16 +144,14 @@ The `file-issue` skill files both. The templates hold the shape and an example.
 
 Short and plain: issues, pull requests, their comments, docs.
 
-- The point first, then why. One fact per line. Fragments are fine.
-- Cut facts, not grammar: a stranger must be able to act on it.
+- The point first. One fact per line. Fragments are fine.
+- Drop facts, not words: a stranger must be able to act on it.
 - Numbers and quotes, not adjectives. No background, file tour, hedging or
   restated diff.
 
-| No | Yes |
-| --- | --- |
-| This change introduces a comprehensive improvement to model search, which previously could fail to surface relevant results in certain cases. | `Qwen 32b` found no model. Words now match in any order. |
-
 ## Read first
+
+The row, before changing that area.
 
 | Working on | Read |
 | --- | --- |
@@ -153,16 +160,14 @@ Short and plain: issues, pull requests, their comments, docs.
 | Any page | `.claude/rules/ui.md`; `/ui-sweep` only when asked |
 | Vocabulary | `docs/concepts.md` |
 | The standard, its ports and kits | `docs/standard.md` |
-| Adding an entry | `/import-benchmark`, `/import-standard`, `/import-agent`, `/import-capability`; by hand, `docs/examples/new-benchmark/` |
+| Adding an entry | `/import-benchmark`, `/import-standard`, `/import-agent`, `/import-capability`; by hand, `add-manually.md` under `docs/benchmarks/`, `docs/agents/` or `docs/capabilities/` |
 | Removing an entry | `/remove-integration` |
-| How the catalogue loads | Docstring of `app/nullius/catalogue/catalog.py` |
 | The run builder | `docs/builder.md`; `app/nullius/recipes/launch.py`; `app/static/builder/command-builder-core.js` |
-| A pinned Harbor | Docstring of `app/nullius/harbor/source.py` |
-| Running a recipe, hosts | Docstrings of `app/nullius/execution.py` and `app/nullius/hosts.py` |
-| The live board | Docstring of `app/nullius/runs/live.py` |
+| A module | Its docstring. Whole designs: `execution.py`, `catalogue/catalog.py`, `harbor/source.py`, `runs/live.py` |
+| A command; a metric | `docs/cli/README.md`; `docs/field-guide.md` |
 | Settings and storage | `docs/settings/README.md`; `app/nullius/settings.py` |
 | Judgement; the PR judge | `docs/judgement.md`; docstring of `.github/scripts/judge_pr.py` |
 | A run that looks wrong, comparing runs | `/run-analysis` |
 | Stale docs | `/docs-drift` |
 | The website; a release | `app/site/README.md`; `app/packaging/README.md` |
-| This machine | `.claude/environment.local.md`, gitignored |
+| This machine | `.claude/environment.local.md`, if present |

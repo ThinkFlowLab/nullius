@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Under 150 words, most need 80. The point first, one fact per line, fragments are fine. Cut facts, not grammar. No key, address or private link. A security problem goes to SECURITY.md's address instead.
+        Under 150 words, not counting images, quoted output and Acceptance. The point first, one fact per line, fragments are fine. Drop facts, not words. No key, email address or private link. A security problem goes to SECURITY.md's address instead.
   - type: dropdown
     id: priority
     attributes:

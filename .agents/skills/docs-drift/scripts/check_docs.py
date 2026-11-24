@@ -132,8 +132,9 @@ def check_md_links() -> list[str]:
 
 
 def check_map() -> list[str]:
-    """AGENTS.md's "Where code lives" names every package of app/nullius, and no
-    folder there that does not exist. A module is described by its docstring."""
+    """AGENTS.md's "Where code lives" names every folder of modules directly under
+    app/nullius and its standard/, and none that does not exist. A module is
+    described by its docstring."""
     agents = REPO / "AGENTS.md"
     if not agents.exists():
         return []
@@ -141,7 +142,7 @@ def check_map() -> list[str]:
     if not part:
         return ["AGENTS.md: no \"Where code lives\""]
     root = REPO / "app/nullius"
-    folders = {p.name for top in (root, root / "standard") for p in top.iterdir() if p.is_dir() and p.name != "__pycache__"}
+    folders = {p.name for top in (root, root / "standard") for p in top.iterdir() if p.is_dir() and any(p.rglob("*.py"))}
     entries = {p.name for p in (root / "catalogue").iterdir() if p.is_dir()}
     named = set(re.findall(r"`(?:app/nullius/)?([\w-]+)/`", part.group(0)))
     return ([f"AGENTS.md: \"Where code lives\" does not name `{name}/`" for name in sorted(folders - named)]
