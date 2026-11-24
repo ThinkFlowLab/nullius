@@ -147,17 +147,17 @@ def _window(document: dict) -> tuple:
     return (min(starts) if starts else None, max(ends) if ends else None)
 
 
-def trial_name_of(document: dict) -> str:
-    """``<root span name>__<7 hex of the trace id>`` — readable, and unique
-    per trace."""
+def trial_name_of(document: dict, full: bool = False) -> str:
+    """``<root span name>__<7 hex of the trace id>``, readable; with *full*,
+    the whole trace id, for traces whose short names collide."""
     tid = str(document.get("session_id") or "")
     stem = _UNSAFE.sub("_", str(document.get("trial_name") or "")).strip("._-") or "trace"
-    return f"{stem[:80]}__{tid[:7] or 'unknown'}"
+    return f"{stem[:80]}__{(tid if full else tid[:7]) or 'unknown'}"
 
 
-def write_trial(document: dict, job_dir: str) -> dict:
+def write_trial(document: dict, job_dir: str, trial: str = "") -> dict:
     """One trace document as a trial directory. Returns a summary."""
-    trial = trial_name_of(document)
+    trial = trial or trial_name_of(document)
     trial_dir = os.path.join(job_dir, trial)
     agent_dir = os.path.join(trial_dir, "agent")
     os.makedirs(agent_dir, exist_ok=True)
@@ -190,6 +190,7 @@ def write_trial(document: dict, job_dir: str) -> dict:
             {"started_at": started, "finished_at": finished} if started and finished else None),
         "verifier": None,
         "config": {"environment": {"type": ""}},
+        "source_document": {"trace_id": document.get("session_id")},
     }
     if tokens:
         result["agent_result"] = {
@@ -206,9 +207,11 @@ def write_trial(document: dict, job_dir: str) -> dict:
 
 def _write_job(documents: list, out_root: str, job_name: str, command: str,
                root: str, skipped: list) -> str:
+    names = importers.unique_names(
+        [(trial_name_of(doc), trial_name_of(doc, full=True)) for doc in documents])
     job_dir = os.path.join(out_root, job_name)
     os.makedirs(job_dir, exist_ok=True)
-    summaries = [write_trial(doc, job_dir) for doc in documents]
+    summaries = [write_trial(doc, job_dir, name) for doc, name in zip(documents, names)]
 
     # Derived output this importer wholly owns: a trial the export no longer
     # produces is stale and would keep being counted.

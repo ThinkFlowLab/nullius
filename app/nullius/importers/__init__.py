@@ -44,6 +44,7 @@ import os
 import pkgutil
 import shutil
 import tempfile
+from collections import Counter
 from types import ModuleType
 
 from nullius.redact import redact
@@ -138,6 +139,21 @@ def write_if_changed(path: str, data: bytes) -> bool:
     with open(path, "wb") as fh:
         fh.write(data)
     return True
+
+
+def unique_names(names: list[tuple[str, str]]) -> list[str]:
+    """One trial directory per document, decided before anything is written.
+
+    Each entry is (name, longer name): the name where no other document
+    shares it, so existing trials keep theirs; the longer one where it is
+    shared. Two documents still left with one name are refused.
+    """
+    counts = Counter(name for name, _ in names)
+    out = [name if counts[name] == 1 else longer for name, longer in names]
+    shared = sorted(name for name, n in Counter(out).items() if n > 1)
+    if shared:
+        raise SystemExit(redact(f"two documents would share the trial {shared[0]!r}"))
+    return out
 
 
 def mark_changed(job_dir: str, summaries: list) -> None:

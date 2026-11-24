@@ -58,6 +58,7 @@ place, and a trial the tree no longer holds is removed.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -321,11 +322,17 @@ def convert_document(path: str, doc: dict, trial: str, job_dir: str) -> dict:
 
 def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str) -> str:
     """The read documents, as one job directory of one trial each."""
+    # Flattening can give two paths one name (a/b.json, a__b.json): those take
+    # a digest of their path, so each document keeps a trial of its own.
+    names = importers.unique_names([
+        (_trial_name(path, root), _trial_name(path, root) + "__"
+         + hashlib.sha256(_shown(path, root).encode()).hexdigest()[:8])
+        for path, _doc in docs])
     job_dir = os.path.join(out_root, job_name)
     os.makedirs(job_dir, exist_ok=True)
 
-    summaries = [convert_document(path, doc, _trial_name(path, root), job_dir)
-                 for path, doc in docs]
+    summaries = [convert_document(path, doc, name, job_dir)
+                 for (path, doc), name in zip(docs, names)]
     # Derived output this importer wholly owns: a trial the tree no longer
     # holds is stale and would keep being counted.
     produced = {s["trial_dir"] for s in summaries}

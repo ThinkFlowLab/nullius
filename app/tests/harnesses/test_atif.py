@@ -101,6 +101,20 @@ class Conversion(unittest.TestCase):
         self.assertEqual(sorted(t.trial_name for t in job.trials),
                          ["a", "runs__b", "runs__c", "trajectory"])
 
+    def test_paths_that_flatten_to_one_name_stay_two_trials(self):
+        src = tempfile.mkdtemp()
+        write_doc(src, "a/b.json", minimal(session_id="s-nested"))
+        write_doc(src, "a__b.json", minimal(session_id="s-flat"))
+        write_doc(src, "c.json", minimal())
+        job_dir, job = self.convert(src)
+        names = sorted(t.trial_name for t in job.trials)
+        self.assertEqual(len(names), 3)
+        self.assertIn("c", names)                     # an unshared name is kept as it was
+        sessions = {json.loads(Path(t.dir, "result.json").read_text())["source_document"]["session_id"]
+                    for t in job.trials}
+        self.assertEqual(sessions, {"s-nested", "s-flat", "s-1"})
+        self.assertEqual(json.loads(Path(job_dir, "result.json").read_text())["n_total_trials"], 3)
+
     def test_re_converting_updates_in_place_and_drops_a_stale_trial(self):
         src = tempfile.mkdtemp()
         write_doc(src, "a.json", minimal())

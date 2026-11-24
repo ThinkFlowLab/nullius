@@ -49,6 +49,21 @@ class Convert(unittest.TestCase):
         self.assertNotIn("hunter2", message)
         self.assertEqual(os.listdir(self.out), [])          # nothing half-written
 
+    def test_traces_whose_short_names_collide_stay_two_trials(self):
+        src = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, src, True)
+        ids = ["abcdef1" + "0" * 25, "abcdef1" + "f" * 25, "1234567" + "0" * 25]
+        spans = [{"traceId": tid, "spanId": "01", "name": "agent run",
+                  "startTimeUnixNano": "1", "endTimeUnixNano": "9"} for tid in ids]
+        with open(os.path.join(src, "export.json"), "w") as fh:
+            json.dump({"resourceSpans": [{"resource": {}, "scopeSpans": [{"spans": spans}]}]}, fh)
+        job_dir = importer.convert(src, self.out)[0]
+        trials = sorted(n for n in os.listdir(job_dir) if os.path.isdir(os.path.join(job_dir, n)))
+        self.assertEqual(trials, ["agent_run__1234567", "agent_run__" + ids[0], "agent_run__" + ids[1]])
+        recorded = {json.load(open(os.path.join(job_dir, t, "result.json")))["source_document"]["trace_id"]
+                    for t in trials}
+        self.assertEqual(recorded, set(ids))
+
     def test_a_refused_file_deeper_down_is_named_by_its_path_under_the_root_once(self):
         src = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, src, True)
