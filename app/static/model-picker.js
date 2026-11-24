@@ -1,9 +1,10 @@
 // Provider model IDs stay verbatim; browsing a catalogue never chooses a model.
 // The same picker serves a model's Served by (list="nb-served"): its rows are the providers of the model the field
 // names (data-served-model), and a field of several takes each pick, or a slug typed as is, into its list.
+// Outside the builder, data-model-picker on an input is the selector of its provider's select, in its form or judge card.
 (() => {
-  // the rows a typed query keeps: the query in the id or the name, case aside; the ones already chosen left out
-  const matching = (items, query, chosen = []) => items.filter(m => !chosen.includes(m.id) && (m.id + ' ' + m.name).toLowerCase().includes(query.toLowerCase()));
+  // the rows a typed query keeps, by the tables' search (tables.js); the ones already chosen left out
+  const matching = (items, query, chosen = []) => items.filter(m => !chosen.includes(m.id) && window.NulliusTable.matches(m.id + ' ' + m.name, query));
   // what Enter takes: the highlighted row, else, in a field of several, the text as typed (a slug the list may lack)
   const entered = (items, index, text, several) => items[index] || (several && text.trim() ? {id: text.trim(), typed: true} : null);
   // The row and its menu share one request per model for five minutes, including failures. An in-flight request
@@ -25,13 +26,22 @@
     providers.subscribe = listener => listeners.add(listener);
     return providers;
   }
-  if (typeof module === 'object' && module.exports) { module.exports = {matching, entered, servingProviders}; return; }
+  // Where a provider's select says its models are: the list on its chosen option, Decision's live one, or the
+  // provider's catalogue. local:<id>, a named endpoint in Settings, is custom:<id> there.
+  const sourceOf = option => option?.dataset.models && !('live' in option.dataset)
+    ? {models: option.dataset.models.split('|').map(id => ({id, name: id}))}
+    : {url: option && 'live' in option.dataset ? '/settings/decision/models' : '/new-run/models',
+       provider: (option?.value || '').replace(/^local(?=$|:)/, 'custom'), listed: (option?.dataset.models || '').split('|').filter(Boolean)};
+  if (typeof module === 'object' && module.exports) { module.exports = {matching, entered, servingProviders, sourceOf}; return; }
   const root = document.getElementById('nullius-builder');
-  if (!root) return;
-  const schema = JSON.parse(document.getElementById('nb-schema').textContent);
-  const providers = window.NulliusServingProviders = servingProviders(nulliusFetch, schema.csrf);
+  const csrf = root ? JSON.parse(document.getElementById('nb-schema').textContent).csrf : document.querySelector('[name=csrf]')?.value;
+  const providers = root && (window.NulliusServingProviders = servingProviders(nulliusFetch, csrf));
   const cache = new Map(); let active = null, serial = 0, choosing = false;
   const severalOf = input => input.dataset.pickerSeveral === 'true';
+  const placeOf = input => {
+    if (root) return {url: '/new-run/models', provider: root.dataset.modelProvider};
+    return sourceOf([input.closest('[data-judge-card]'), input.closest('form')].map(at => at?.querySelector(input.dataset.modelPicker)).find(Boolean)?.selectedOptions[0]);
+  };
   function close() {
     if (!active) return;
     active.input.setAttribute('aria-expanded', 'false');
@@ -58,14 +68,17 @@
   }
   function choose(model, input = active.input) {
     close(); choosing = true;
+    const card = input.closest('[data-judge-card]');
     // a field of several hands the pick to the page, which lists it, and is left empty for the next one
     if (severalOf(input)) { input.value = ''; input.dispatchEvent(new CustomEvent('nb-pick', {bubbles: true, detail: model.id})); }
     else {
       input.value = model.id;
+      if (card) input.blur();      // autosave draws a saved field again only once it is left
       input.dispatchEvent(new Event('input', {bubbles: true}));
       input.dispatchEvent(new Event('change', {bubbles: true}));
     }
-    input.focus(); choosing = false;
+    if (!card) input.focus();
+    choosing = false;
   }
   function paint() {
     if (!active) return;
@@ -75,7 +88,7 @@
     // no model yet, or the one the run sends not yet known (the server compiles it): no list is asked
     if (several && !input.dataset.servedModel) status.textContent = input.dataset.servedPending === 'true' ? 'Loading providers…' : 'Choose the model first';
     else if (!result) status.textContent = several ? 'Loading providers…' : 'Loading models…';
-    else if (result.ok && input.dataset.field === 'model' && JSON.parse(root.dataset.paperModels || 'null') !== null && !result.models.length) status.textContent = 'No paper models available from this provider.';
+    else if (result.ok && root && input.dataset.field === 'model' && JSON.parse(root.dataset.paperModels || 'null') !== null && !result.models.length) status.textContent = 'No paper models available from this provider.';
     else if (!result.ok) status.textContent = result.message || (several ? "Provider list unavailable. Enter a provider's slug by hand." : 'Model list unavailable. Enter a model ID manually.');
     else {
       const matches = matching(result.models, query, several ? (input.dataset.chosen || '').split(',').filter(Boolean) : []);
@@ -91,30 +104,34 @@
       const name = document.createElement('span'); name.textContent = model.name;
       row.append(name);
       if (model.id !== model.name) { const id = document.createElement('small'); id.textContent = model.id; row.append(id); }
-      row.addEventListener('pointerdown', e => e.preventDefault());
       row.addEventListener('click', () => choose(model)); menu.append(row);
     });
     position();
   }
-  async function models(provider) {
-    let entry = cache.get(provider);
+  async function models({models: given, url, provider, listed = []}) {
+    if (given) return {ok: true, models: given};
+    const key = url + ' ' + provider;
+    let entry = cache.get(key);
     if (!entry || Date.now() - entry.at > 300000) {
-      entry = {at: Date.now(), promise: nulliusFetch('/new-run/models', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': schema.csrf}, body: JSON.stringify({provider})})
+      entry = {at: Date.now(), promise: nulliusFetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify({provider})})
         .then(r => r.json()).then(r => ({...r, models: Array.isArray(r.models) ? r.models : []}))
         .catch(() => ({ok: false, models: [], message: 'Model list unavailable. Enter a model ID manually.'}))};
-      cache.set(provider, entry);
+      cache.set(key, entry);
     }
     const result = await entry.promise;
-    if (!result.ok) cache.delete(provider);
-    return result;
+    if (!result.ok) cache.delete(key);
+    // a live list that cannot be read leaves the one drawn with the page
+    return listed.length && !result.models.length ? {ok: true, models: listed.map(id => ({id, name: id}))} : result;
   }
   async function open(input, all = false) {
     close();
     const menu = document.createElement('div'); menu.className = 'ui-select-menu nb-model-menu'; menu.id = input.getAttribute('aria-controls');
     const several = severalOf(input);
     menu.setAttribute('popover', 'manual'); menu.setAttribute('role', 'listbox'); menu.setAttribute('aria-label', several ? 'Serving providers' : 'Provider models');
+    // a press in the menu leaves the keyboard in the field
+    for (const press of ['pointerdown', 'mousedown']) menu.addEventListener(press, e => e.preventDefault());
     document.body.append(menu);
-    const state = {input, menu, wrap: input.parentElement, several, provider: root.dataset.modelProvider, model: input.dataset.servedModel || '', query: all ? '' : input.value, result: null, items: [], index: -1};
+    const state = {input, menu, wrap: input.parentElement, several, provider: root?.dataset.modelProvider, model: input.dataset.servedModel || '', query: all ? '' : input.value, result: null, items: [], index: -1};
     active = state; input.setAttribute('aria-expanded', 'true'); paint();
     if (menu.showPopover) menu.showPopover();
     if (several) {
@@ -123,18 +140,18 @@
       if (active === state) { state.result = result; paint(); }
       return;
     }
-    const paper = input.dataset.field === 'model' ? JSON.parse(root.dataset.paperModels || 'null') : null;
-    const result = await models(state.provider);
+    const paper = root && input.dataset.field === 'model' ? JSON.parse(root.dataset.paperModels || 'null') : null;
+    const result = await models(placeOf(input));
     state.result = paper === null || !result.ok ? result : {...result, models:Object.entries(paper)
       .filter(([, served])=>result.models.some(m=>m.id === served))
       .map(([id, served])=>({id:root.dataset.standardModel === 'true' ? id : served, name:id === served ? id : id + ' · ' + served}))};
     if (active === state) paint();
   }
   function scan() {
-    if (active && (!active.input.isConnected || active.input.closest('[hidden]') || active.provider !== root.dataset.modelProvider)) close();
+    if (active && (!active.input.isConnected || active.input.closest('[hidden]') || active.provider !== root?.dataset.modelProvider)) close();
     // the model a Served by lists the providers of has moved (the server named the one the run sends): its rows follow
     else if (active && active.several && active.model !== (active.input.dataset.servedModel || '')) void open(active.input, !active.query);
-    root.querySelectorAll('input[list="nb-models"], input[list="nb-served"]').forEach(input => {
+    (root || document).querySelectorAll(root ? 'input[list="nb-models"], input[list="nb-served"]' : 'input[data-model-picker]:not([role])').forEach(input => {
       if (input.getAttribute('list') === 'nb-served') input.dataset.pickerSeveral = 'true'; else input.dataset.providerModel = 'true';
       input.removeAttribute('list'); input.autocomplete = 'off';
       input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list'); input.setAttribute('aria-expanded', 'false');
@@ -142,25 +159,31 @@
       const wrap = document.createElement('span'); wrap.className = 'nb-model-control'; input.before(wrap); wrap.append(input);
       const button = document.createElement('button'); button.type = 'button'; button.className = 'nb-model-open'; button.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg>';
       button.setAttribute('aria-label', severalOf(input) ? 'Browse the serving providers' : 'Browse provider models');
+      // the field keeps the keyboard: pressing this is not leaving it, and ArrowDown opens the list
+      for (const press of ['pointerdown', 'mousedown']) button.addEventListener(press, e => e.preventDefault());
+      button.tabIndex = -1;
       button.addEventListener('click', e => { e.preventDefault(); input.focus(); void open(input, true); }); wrap.append(button);
       input.addEventListener('focus', () => { if(!choosing)void open(input); });
       // a field of several keeps the keyboard after a pick: a click on it opens its menu again for the next one
       if (severalOf(input)) input.addEventListener('click', () => { if(active?.input !== input)void open(input); });
       input.addEventListener('input', () => { if(choosing)return; if (active?.input === input) { active.query = input.value; paint(); } else void open(input); });
       input.addEventListener('keydown', e => {
+        if (e.isComposing || e.keyCode === 229) return;      // an input method's own keys
         if (e.key === 'Escape' || e.key === 'Tab') { if(e.key === 'Escape' && active){e.preventDefault();e.stopPropagation();} close(); return; }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if(active?.input !== input)void open(input, true); else highlight(active.index + (e.key === 'ArrowDown' ? 1 : -1)); }
         if (e.key === 'Enter') {
           const pick = entered(active?.input === input ? active.items : [], active?.input === input ? active.index : -1, input.value, severalOf(input));
-          if (!pick) return;
+          // the first Enter puts an open menu away (in the builder it takes the id as typed); it never submits a half-typed search
+          if (!pick) { if (active?.input === input) { e.preventDefault(); close(); if (root) input.dispatchEvent(new Event('change', {bubbles: true})); } return; }
           e.preventDefault(); choose(pick, input);
         }
       });
     });
   }
-  new MutationObserver(scan).observe(root, {childList: true, subtree: true, attributes: true, attributeFilter: ['data-model-provider', 'data-served-model']});
+  if (root) new MutationObserver(scan).observe(root, {childList: true, subtree: true, attributes: true, attributeFilter: ['data-model-provider', 'data-served-model']});
   document.addEventListener('pointerdown', e => { if(active && !active.wrap.contains(e.target) && !active.menu.contains(e.target))close(); });
   document.addEventListener('scroll', e => { if(active && !active.menu.contains(e.target))close(); }, true);
   window.addEventListener('resize', close);
+  document.addEventListener('nullius-settings-saved', scan);      // a saved field is drawn again
   scan();
 })();
