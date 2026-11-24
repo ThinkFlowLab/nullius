@@ -6,11 +6,14 @@ import json
 import os
 import re
 import threading
+import unicodedata
 from collections import OrderedDict
+from urllib.parse import quote
 from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 from markupsafe import Markup, escape
+from werkzeug.http import quote_header_value
 from nullius.traces import behavior, calls, charts, conversation, trace, trajectory
-from nullius.runs import artifacts, attempts as task_attempts, parse
+from nullius.runs import artifacts, attempts as task_attempts, evidence, parse
 from nullius import importers as harnesses
 
 from .core import app
@@ -211,7 +214,7 @@ def trial_picture(job_id, trial_name, sha256):
 def artifact_page(job_id, trial_name, key):
     job, trial = _trial_evidence(job_id, trial_name, tries=True)
     try:
-        record = artifacts.read(trial.dir, key, request.args.get("page", 1))
+        record = artifacts.read(trial.dir, key, request.args.get("page", 1), artifacts.declared(trial.source))
     except (LookupError, OSError):
         abort(404)
     response = app.make_response(render_template("traces/artifact.html", job=job, trial=trial,
@@ -226,17 +229,22 @@ def artifact_download(job_id, trial_name, key):
     and Copy puts on the clipboard. One past the reader's limit is cut there,
     as its page says, and saved under a name that says so."""
     _, trial = _trial_evidence(job_id, trial_name, tries=True)
+    declared = artifacts.declared(trial.source)
     try:
-        text, truncated = artifacts.whole(trial.dir, key)
+        text, truncated = artifacts.whole(trial.dir, key, declared)
     except (LookupError, OSError):
         abort(404)
-    name = os.path.basename(artifacts.FILES[key][1])
+    name = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", os.path.basename(artifacts.describe(key, declared)[1]))
     if truncated:
         stem, ext = os.path.splitext(name)
         name = f"{stem}.partial{ext}"
     response = app.response_class(text, mimetype="application/json" if name.endswith(".json") else "text/plain")
     if not request.args.get("inline"):
-        response.headers["Content-Disposition"] = f'attachment; filename="{name}"'
+        fallback = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+        disposition = f'attachment; filename={quote_header_value(fallback, allow_token=False)}'
+        if not name.isascii():
+            disposition += "; filename*=UTF-8''" + quote(name, safe="")
+        response.headers["Content-Disposition"] = disposition
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"      # a run's own text, shown as text whatever it holds
     return response
@@ -316,6 +324,17 @@ def trial(job_id, trial_name):
                 bench_parts["shows"] = list(dict.fromkeys(k for x in bench_parts["parts"] if isinstance(x.get("shows"), dict) for k in x["shows"]))
         except (OSError, ValueError):
             pass
+    # What the benchmark recorded of a trial that fell short: the rows its entry names, else its whole detail,
+    # excluding execution metadata and numbers already shown above.
+    short = bool(j.runner) and t.outcome != "resolved" and not (t.score is not None and t.score >= 1)
+    named = evidence.declared(t.source)
+    head = [x for x in (t.reward, t.score) if x is not None]
+    shown = {"result": head, "score": head, "reward_info.reward": head, "steps": [traj.n_steps] if ok else []}
+    detail = parse.score_detail(t.dir, leave_out=("by", "tool_calls", "max_steps", "max_errors",
+                                               "seed", "trial", "split", "attempts", "agent", "judge", "evaluation"),
+                                shown=shown) if short and named is None else None
+    reply = next((s.message for s in reversed(traj.steps) if s.source == "agent" and s.message), "") if ok else ""
+    rows = evidence.rows(t.dir, named, reply) if short and named else []
     loc = _gold_localization(j, t, traj) if ok else None
 
     # `trace` opens a
@@ -327,7 +346,8 @@ def trial(job_id, trial_name):
     # filtered view by construction, so there is one definition of "which spans
     # are in this view" and it is still the query string.
     ch = charts.charts_for(tr.roots, cfilt) if tr and tr.visible else None
-    records = [r for r in artifacts.listing(t.dir) if r["exists"]]   # a record never written has no row
+    # a record never written has no row; the benchmark's own declared records after Nullius's
+    records = [r for r in artifacts.listing(t.dir, artifacts.declared(t.source)) if r["exists"]]
     for record in records:
         record["url"] = url_for("artifact_page", job_id=job_id, trial_name=trial_name,
                                 key=record["key"], workspace=request.args.get("workspace"))
@@ -340,7 +360,7 @@ def trial(job_id, trial_name):
         if notice:
             flash(notice, "error")
     return render_template(
-        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts,
+        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts, detail=detail, evidence=rows,
         trace=tr, charts=ch, viewing=viewing, imported_from=_imported_from(j),
         chart_filter=cfilt, default_save_name=SAVED_TRACE_DEFAULT,
         artifacts=records, pictures=pictures, attempt=attempt, attempts=task_attempts.of(j, attempt), tries=_tries(attempt),

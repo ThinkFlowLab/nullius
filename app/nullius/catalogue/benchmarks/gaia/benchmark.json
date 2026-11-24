@@ -68,5 +68,11 @@
   ],
   "citation": "@misc{mialon2023gaia,\n      title={GAIA: a benchmark for General AI Assistants},\n      author={Grégoire Mialon and Clémentine Fourrier and Craig Swift and Thomas Wolf and Yann LeCun and Thomas Scialom},\n      year={2023},\n      eprint={2311.12983},\n      archivePrefix={arXiv},\n      primaryClass={cs.CL}\n}",
   "citation_source": "https://huggingface.co/spaces/gaia-benchmark/leaderboard/blob/9f133d71362e77b3539f1514f31b9c101a545fec/content.py",
-  "task_count": 165
+  "task_count": 165,
+  "evidence": [
+    {
+      "label": "Answer",
+      "path": "model_answer"
+    }
+  ]
 }

@@ -287,9 +287,17 @@ class MachineDocker(unittest.TestCase):
                 setups = {n["name"]: n for n in out["host"]["needs"]}
                 rows = prerequisites.check_here([], setups, which=lambda p: None)
                 self.assertEqual([(x["name"], x["state"]) for x in rows], [("setup:docker", "missing")])
-                self.assertEqual(rows[0]["label"], "docker")
+                self.assertEqual(rows[0]["label"], "Docker for the tasks' VMs")
                 self.assertFalse(prerequisites.ready([{"rows": rows}]))
                 self.assertTrue(prerequisites.ready([{"rows": prerequisites.check_here([], setups, which=lambda p: "/usr/bin/" + p)}]))
+
+    def test_an_agents_run_is_asked_the_tick_alone_since_no_container_starts_the_vms(self):
+        out = recipe.compile(self.a_recipe(["codex"], model_choice="any", model="vendor/m", unsandboxed=False))
+        said = [e for e in out["errors"] if "not sandboxed" in e["message"]]
+        self.assertEqual(len(said), 1, out["errors"])
+        self.assertNotIn("choose Docker", said[0]["message"])
+        self.assertEqual(said[0].get("field"), "unsandboxed")        # said under the box that resolves it
+        self.assertEqual(recipe.compile(self.a_recipe(["codex"], model_choice="any", model="vendor/m", unsandboxed=True))["errors"], [])
 
     def test_the_null_control_is_refused_as_it_starts_on_a_machine_without_docker(self):
         b = definitions.get("benchmark", "osworld1")
@@ -323,6 +331,22 @@ class UpstreamBounds(unittest.TestCase):
         del b["options"]["max_steps"]["pattern"]
         b["options"]["max_steps"]["values"] = ["default"]
         self.assertTrue(any("max_steps.limit" in p for p in definitions.problems(b, "benchmark")))
+        # the value an agent's run gets for a default by another option: beside by, not the default, a value it takes
+        for bad in ("default", "0", "many"):
+            with self.subTest(yours=bad):
+                b = copy.deepcopy(definitions.get("benchmark", "osworld1"))
+                b["options"]["max_steps"]["yours"] = bad
+                self.assertTrue(any("max_steps.yours" in p for p in definitions.problems(b, "benchmark")))
+        b = copy.deepcopy(definitions.get("benchmark", "osworld1"))
+        del b["options"]["max_steps"]["by"]
+        self.assertTrue(any("max_steps.yours" in p for p in definitions.problems(b, "benchmark")))
+
+    def test_review_names_the_steps_an_agents_run_gets_and_each_own_agents_under_by(self):
+        o = definitions.get("benchmark", "osworld1")["options"]["max_steps"]
+        self.assertEqual(recipe._shown(o, "default", {}), "100")
+        self.assertEqual(recipe._shown(o, "default", {"agent": "prompt"}), "15")
+        self.assertEqual(recipe._shown(o, "default", {"agent": None}), "default")    # several own agents: each one's
+        self.assertEqual(recipe._shown(o, "30", {}), "30")
 
     def test_each_osworld_agents_own_steps_are_its_default_and_a_run_forces_another(self):
         b, mod = self.osworld_driver()

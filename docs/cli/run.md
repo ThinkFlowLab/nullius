@@ -38,7 +38,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--max-calls N` | The most model calls a unit's agent may make: [below](#a-cap-on-model-calls) |
 | `--constraint KEY=VALUE` | What the machine allows the run (repeatable): `cpus`, `memory_mb`, `processes`, `cpu_set`, `concurrency`, `gpu_ids` (indices, empty for none); [constraints](../settings/run-hosts.md#constraints). A recipe passes each machine's own |
 | `--served-by [MODEL=]SLUG[,SLUG...]` | On OpenRouter, the serving providers that may answer a model (repeatable): [below](#serving-providers) |
-| `--exchanges MODE`, `--exchanges-max-mb N` | What each unit's relay keeps of its agent's calls (`whole`, `text`, `off`), and its bound: [below](#the-exchange-record) |
+| `--exchanges MODE`, `--exchanges-max-mb N` | What each unit's relay keeps of its agent's calls, and its bound ([below](#the-exchange-record)) |
 | `--attempts K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--retries N` | Run a failed attempt again, up to N times: [below](#retries) |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--attempts`); by default they stay for the next run |
@@ -88,21 +88,15 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 
 ## The exchange record
 
-Each trial saves its agent's model requests and replies, including side calls. This uses disk space, not extra model tokens.
+`--exchanges whole` (default) saves each agent call in the trial's `.work/relay/exchanges/`, each part and picture once. Saving uses disk space, not extra model tokens. Prompts and pictures are stored as sent, unredacted; only the relay's key is cut out.
 
-| Choice or limit | Effect |
+| Rule | Detail |
 | --- | --- |
-| `--exchanges whole` (default) | Save text and inline pictures; repeated pictures are stored once per trial. |
-| `--exchanges text` | Save text and picture metadata, without picture bytes. |
-| `--exchanges off` | Keep only the abridged call record. |
-| `--exchanges-max-mb N` | 256 MB per unit by default; once reached, stop saving full exchanges. Calls continue. |
-| Privacy | Prompts and pictures are unredacted. Credential headers are excluded and the relay's key is removed. |
-| Coverage | Agent calls only; judges, simulated users and option embeddings keep their call records alone. |
-| Write failure | Recording failure does not change the model's reply. |
-| Retries | Each try keeps its own record. |
-| Newer format | Read a refused newer record with a newer Nullius. |
-
-Inspect saved calls or reconstruct a request with [Read jobs](read-jobs.md). Reconstruction verifies the request's hash; missing pictures or removed secrets prevent an exact match.
+| `text` | Every call without the pictures' bytes, kept by their hash, type and size. |
+| `off` | No exchange record: the call record in `agent/calls.jsonl` alone. |
+| The bound | `--exchanges-max-mb`, 256 MB a unit by default; later calls are marked `cut`. |
+| Not kept | The judge's and the simulated user's calls: their call record alone. |
+| The result | `config.json`: `standard.exchanges` and `standard.exchanges_max_mb`. |
 
 ## A spending cap
 

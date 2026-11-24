@@ -1,5 +1,6 @@
 """The first-open question, run under Node with a small stand-in DOM: Tab stays on its two buttons,
-Escape answers as No does, and the focus goes back where it was."""
+Escape answers as No does, and the focus goes back where it was. The First steps panel closes on Escape
+from its toggle or from inside it, the focus on its toggle."""
 import json
 from pathlib import Path
 import shutil
@@ -49,12 +50,48 @@ setImmediate(() => {
 '''
 
 
-def ask(answer: str) -> dict:
+PANEL = r'''
+const given = JSON.parse(require('fs').readFileSync(0, 'utf8')), store = () => { const m = new Map();
+  return {getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, v), removeItem: k => m.delete(k)}; };
+class El {
+  constructor(tag) { this.tag = tag; this.attrs = {}; this.c = []; this.classList = {toggle() {}}; }
+  setAttribute(k, v) { this.attrs[k] = v; }
+  querySelector() { return {}; }
+  contains(x) { return x === this || this.c.includes(x); }
+  append(x) { this.c.push(x); }
+  focus() { document.activeElement = this; }
+  remove() { this.removed = true; }
+}
+const toggle = new El('button'), other = new El('a'), made = [], keys = [];
+global.document = {currentScript: {dataset: {state: '/onboarding', tour: '[]'}}, body: new El('body'), activeElement: other,
+  getElementById: id => id === 'onb-open' ? toggle : null, querySelector: () => null, querySelectorAll: () => [],
+  addEventListener: (t, f) => { if (t === 'keydown') keys.push(f); }, createElement: tag => { const e = new El(tag); made.push(e); return e; }};
+Object.assign(global, {localStorage: store(), sessionStorage: store(), location: {pathname: '/', search: '', href: '/'},
+  addEventListener() {}, matchMedia: () => ({matches: false}), ResizeObserver: class { observe() {} disconnect() {} },
+  nulliusFetch: () => Promise.resolve({ok: true, json: () => ({sections: []})})});
+localStorage.setItem('nullius-onboarding', JSON.stringify({asked: true, open: true}));
+require(given.script);
+setImmediate(() => {
+  const panel = made.find(e => e.tag === 'aside'), inside = new El('button');
+  panel.append(inside);
+  document.activeElement = {toggle, inside, other}[given.focus];
+  keys.forEach(f => f({key: 'Escape'}));
+  process.stdout.write(JSON.stringify({open: JSON.parse(localStorage.getItem('nullius-onboarding')).open,
+    expanded: toggle.attrs['aria-expanded'], removed: !!panel.removed, focus: document.activeElement === toggle}));
+});
+'''
+
+
+def node(program: str, given: dict) -> dict:
     if not shutil.which("node"):
-        raise unittest.SkipTest("Node is required for the first-open question")
-    out = subprocess.run(["node", "-e", ASK], input=json.dumps({"script": str(SCRIPT), "answer": answer}),
+        raise unittest.SkipTest("Node is required for the onboarding script")
+    out = subprocess.run(["node", "-e", program], input=json.dumps({"script": str(SCRIPT), **given}),
                          capture_output=True, text=True, check=True)
     return json.loads(out.stdout)
+
+
+def ask(answer: str) -> dict:
+    return node(ASK, {"answer": answer})
 
 
 class FirstOpenQuestion(unittest.TestCase):
@@ -70,6 +107,16 @@ class FirstOpenQuestion(unittest.TestCase):
         self.assertTrue(yes["state"]["open"])                                       # Yes still starts the guide
         for out in (no, escape, yes):
             self.assertTrue(out["closed"]); self.assertTrue(out["focus"])
+
+
+class FirstStepsPanel(unittest.TestCase):
+    def test_escape_on_its_toggle_or_inside_it_closes_it_and_focuses_the_toggle(self):
+        for focus in ("toggle", "inside"):
+            with self.subTest(focus=focus):
+                self.assertEqual(node(PANEL, {"focus": focus}), {"open": False, "expanded": "false", "removed": True, "focus": True})
+
+    def test_escape_elsewhere_leaves_it_open(self):
+        self.assertEqual(node(PANEL, {"focus": "other"}), {"open": True, "expanded": "true", "removed": False, "focus": False})
 
 
 if __name__ == "__main__":
