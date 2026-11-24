@@ -104,7 +104,6 @@
       const name = document.createElement('span'); name.textContent = model.name;
       row.append(name);
       if (model.id !== model.name) { const id = document.createElement('small'); id.textContent = model.id; row.append(id); }
-      row.addEventListener('pointerdown', e => e.preventDefault());
       row.addEventListener('click', () => choose(model)); menu.append(row);
     });
     position();
@@ -129,6 +128,8 @@
     const menu = document.createElement('div'); menu.className = 'ui-select-menu nb-model-menu'; menu.id = input.getAttribute('aria-controls');
     const several = severalOf(input);
     menu.setAttribute('popover', 'manual'); menu.setAttribute('role', 'listbox'); menu.setAttribute('aria-label', several ? 'Serving providers' : 'Provider models');
+    // a press in the menu leaves the keyboard in the field
+    for (const press of ['pointerdown', 'mousedown']) menu.addEventListener(press, e => e.preventDefault());
     document.body.append(menu);
     const state = {input, menu, wrap: input.parentElement, several, provider: root?.dataset.modelProvider, model: input.dataset.servedModel || '', query: all ? '' : input.value, result: null, items: [], index: -1};
     active = state; input.setAttribute('aria-expanded', 'true'); paint();
@@ -158,13 +159,16 @@
       const wrap = document.createElement('span'); wrap.className = 'nb-model-control'; input.before(wrap); wrap.append(input);
       const button = document.createElement('button'); button.type = 'button'; button.className = 'nb-model-open'; button.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg>';
       button.setAttribute('aria-label', severalOf(input) ? 'Browse the serving providers' : 'Browse provider models');
-      button.addEventListener('pointerdown', e => e.preventDefault());      // the field keeps the keyboard: it is not left
+      // the field keeps the keyboard: pressing this is not leaving it, and ArrowDown opens the list
+      for (const press of ['pointerdown', 'mousedown']) button.addEventListener(press, e => e.preventDefault());
+      button.tabIndex = -1;
       button.addEventListener('click', e => { e.preventDefault(); input.focus(); void open(input, true); }); wrap.append(button);
       input.addEventListener('focus', () => { if(!choosing)void open(input); });
       // a field of several keeps the keyboard after a pick: a click on it opens its menu again for the next one
       if (severalOf(input)) input.addEventListener('click', () => { if(active?.input !== input)void open(input); });
       input.addEventListener('input', () => { if(choosing)return; if (active?.input === input) { active.query = input.value; paint(); } else void open(input); });
       input.addEventListener('keydown', e => {
+        if (e.isComposing || e.keyCode === 229) return;      // an input method's own keys
         if (e.key === 'Escape' || e.key === 'Tab') { if(e.key === 'Escape' && active){e.preventDefault();e.stopPropagation();} close(); return; }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if(active?.input !== input)void open(input, true); else highlight(active.index + (e.key === 'ArrowDown' ? 1 : -1)); }
         if (e.key === 'Enter') {

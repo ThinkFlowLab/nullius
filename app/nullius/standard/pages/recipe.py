@@ -426,10 +426,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     the run sends it as."""
     d = defs or _all()
     errors, notes = [], []
-    # each problem once; shown: the step already says it elsewhere, so only Review lists it; field: the input it is about
-    def add(step, message, shown=False, field=None):
+    # each problem once; shown: the step already says it elsewhere, so only Review lists it; field: the input it is about; unset: nothing is
+    # chosen yet, which the Model step does not say before its field is used
+    def add(step, message, shown=False, field=None, unset=False):
         if not any(e["step"] == STEP[step] and e["message"] == message for e in errors):
-            errors.append({"step": STEP[step], "message": message, **({"shown": True} if shown else {}), **({"field": field} if field else {})})
+            errors.append({"step": STEP[step], "message": message, **({"shown": True} if shown else {}), **({"field": field} if field else {}), **({"unset": True} if unset else {})})
     out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": "",
            "served_models": {}}
     name = str(recipe.get("name") or "")
@@ -482,7 +483,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             orig = (b.get("setups") or {}).get("original") or {}
             picked = str(recipe.get("model") or "").strip()
             if not picked:
-                add("model", "Choose a model.")
+                add("model", "Choose a model.", unset=True)
                 continue
             method = "model" if recipe.get("model_choice", "any") != "paper" and "model" in (b.get("setups") or {}) else "original"
             if method == "original":
@@ -592,7 +593,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         add("model", f"{providers.label(provider)} does not serve what {b['label']}'s judge speaks: choose another provider.")
     model = str(recipe.get("model") or "").strip()
     if not _MODEL.match(model) and (needs_model or model):
-        add("model", "Choose a model or enter its ID.")
+        add("model", "Choose a model or enter its ID.", unset=not model)
     if model_choice == "paper" and model in orig.get("models", []) and provider_ in orig.get("providers", {}):
         model = orig["providers"][provider_] + (orig.get("served_as") or {}).get(model, model)
     # each unit tried K times (the upstream's --num-trials: pass^k); the user simulator's and the judge's models

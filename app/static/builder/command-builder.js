@@ -983,14 +983,14 @@
     const rec=r(),el=document.activeElement,typing=root.contains(el)&&el.dataset.typing;
     if(step===REVIEW)modelActed=true;
     // nor the last check's while the next is on its way
-    const quiet=step===S.model&&(typing||C.isStandard(rec)&&runnerKey!==runnerOutKey||!modelActed&&!rec.model&&!rec.userModel);
-    $('#nb-localerrors').textContent=fieldErrors($('#nb-form'),quiet?[]:compiled.errors.filter(e=>e.step===step&&!e.shown),esc).map(e=>e.message).join(' ');
+    const quiet=step===S.model&&(typing||C.isStandard(rec)&&runnerKey!==runnerOutKey);
+    $('#nb-localerrors').textContent=fieldErrors($('#nb-form'),quiet?[]:compiled.errors.filter(e=>e.step===step&&!e.shown&&!(e.unset&&!modelActed)),esc).map(e=>e.message).join(' ');
   }
   // A model picked, entered, or left in its field: the recipe takes it at once. What the page shows of it waits for a
   // press to end, so a button pressed to leave the field does not move from under the pointer.
-  let pressing=false;
+  let pressing=false,afterPress=null;
   document.addEventListener('pointerdown',()=>{pressing=true;},true);
-  for(const end of ['pointerup','pointercancel'])document.addEventListener(end,()=>{pressing=false;},true);
+  for(const end of ['pointerup','pointercancel'])document.addEventListener(end,()=>{pressing=false;const show=afterPress;afterPress=null;if(show)setTimeout(show);},true);
   function commitModel(el) {
     if(document.activeElement===el&&!document.hasFocus())return;   // the window lost the focus, not the field: still being typed
     const rec=r(),key=el.dataset.field,value=el.value.trim(),changed=value!==(rec[key]||'');
@@ -999,8 +999,8 @@
       if(rec.modelFormat!=='provider-id'){for(const k of ['model','userModel','evalModel'])if(typeof rec[k]==='string')rec[k]=C.bareModel(rec[k]);rec.modelFormat='provider-id';}
       C.setModelOf(rec,key,value);saveDraft();   // the field's pin goes with its model
     }
-    const show=()=>{syncServed();if(changed)refreshPlan();else localErrors();};
-    if(pressing)for(const end of ['pointerup','pointercancel'])document.addEventListener(end,()=>setTimeout(show),{once:true});
+    const show=()=>{syncServed();refreshPlan();};      // asks nothing of a recipe already checked
+    if(pressing)afterPress=show;
     else queueMicrotask(show);
   }
   function refreshPlan() {
@@ -1200,7 +1200,7 @@
     else if(b.id==='nb-next'){if(step===REVIEW){if(!compiled.errors.length)download(JSON.stringify(r(),null,2)+'\n',r().name+'.json','application/json');return;}step=nextShown(step,1);}
     else if(b.id==='nb-back')step=nextShown(step,-1);
     else if(b.id==='nb-save'){if(schema.local)openSave();return;}
-    else if(b.id==='nb-startover'){try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});savedId='';runnerOut=null;runnerKey='';step=S.benchmark;tab='select';status('Started over from the defaults.');}
+    else if(b.id==='nb-startover'){try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});savedId='';runnerOut=null;runnerKey='';modelActed=false;step=S.benchmark;tab='select';status('Started over from the defaults.');}
     else if(b.id==='nb-save-cancel'){$('#nb-save-dialog').close();return;}
     else if(b.id==='nb-saved-toggle'){renderSaved();$('#nb-saved').showModal();loadSaved();return;}
     else if(b.id==='nb-saved-close'){$('#nb-saved').close();return;}
