@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% from '_page.html' import page_head %}
+{# A page that is not there, or a request that failed: its title and the way back, never the error's details. #}
+{% block title %}{{ title }} — Nullius{% endblock %}
+{% block body %}
+{{ page_head(title) }}
+<p><a class="btn ghost sm" href="{{ url_for('index') }}">← Runs</a></p>
+{% endblock %}
