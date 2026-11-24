@@ -120,7 +120,8 @@ A change owes neither.
 The `file-issue` skill files both. The templates hold the shape and an example.
 
 - Search issues and pull requests first, here and where the cause lives.
-- A pull request references its issue, with `Closes` when it finishes it.
+- A pull request opens as a draft and references its issue, with `Closes` when it
+  finishes it.
 - Title: `type(scope): summary`, lowercase except names, no final period. A squash
   makes it the commit on `main`, and the body its message.
   - Types: `feat` `fix` `perf` `refactor` `docs` `test` `ci` `build` `chore` `revert`

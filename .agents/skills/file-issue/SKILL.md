@@ -53,7 +53,9 @@ title's types and scopes are in AGENTS.md. A visible change has two images of on
 width under `## Before and after`; otherwise drop the section. "Not checked" is
 a valid line.
 
-    gh pr create --title "fix(web): ..." --body-file pr.md
+    gh pr create --draft --title "fix(web): ..." --body-file pr.md
+
+It stays a draft until the user says it is ready: CI runs then.
 
 Read both back. The issue must list the pull request in
 `closedByPullRequestsReferences` (GraphQL); stacked pull requests link the same

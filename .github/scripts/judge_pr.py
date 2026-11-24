@@ -67,7 +67,7 @@ from typing import Callable, Optional
 URL = "https://api.typesafe.ai/v1/systemone"
 MODEL = "jev-latest"
 PROVIDER = "typesafe.ai"
-QUESTIONS_VERSION = "judgement.questions.pr.v2"
+QUESTIONS_VERSION = "judgement.questions.pr.v3"
 PRICE_PER_MTOK = 0.042          # USD per million input tokens (docs.typesafe.ai/models)
 CHARS_PER_TOKEN = 4
 FILE_LIMIT = 12_000             # characters of one file's diff kept (--file-limit)
@@ -104,9 +104,9 @@ QUESTIONS = {
     },
     "description_matches": {
         "type": "choice",
-        "instructions": "Does the pull request description describe the change the diff makes, claiming nothing the diff does not do and leaving out nothing the diff does?",
-        "criteria": {"yes": "What the description says the change does, the diff does, and nothing material is left unsaid",
-                     "partly": "The description is right as far as it goes but leaves out a material part of the diff, or overstates a detail",
+        "instructions": "Does the pull request description name the change the diff makes and claim nothing the diff does not do? A short description is right: details are left to the diff.",
+        "criteria": {"yes": "What the description says the change does, the diff does, and each main change is named, in however few words",
+                     "partly": "The description never names one of the main changes, or overstates a detail",
                      "no": "The description claims a change the diff does not make, or describes a different change"},
     },
     "scope": {
@@ -576,7 +576,7 @@ PRIORITY_MARK = {"low": "🟢", "medium": "🟡", "high": "🟠", "extreme": "�
 ROWS = [  # (question id or script row, the text of the row)
     ("criteria", "Changes do what the issue asks"),
     ("issue_same", "Issue and pull request describe the same change"),
-    ("description_matches", "Description matches the diff, no more, no less"),
+    ("description_matches", "Description matches the diff"),
     ("scope", "Diff stays in scope"),
     ("risk_named", "Risk named in the description"),
     ("before_after", "Before and after shown"),
