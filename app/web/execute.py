@@ -6,7 +6,7 @@ import os
 import re
 import time
 from flask import abort, jsonify, request, url_for
-from nullius import execution, hosts, prerequisites, prices, providers, settings
+from nullius import execution, hosts, prerequisites, prices, providers, settings, workspace
 from nullius.harbor import source as harbor_source
 from nullius.standard.backends import boat
 from nullius.standard.pages import recipe as standard_recipe
@@ -18,7 +18,10 @@ from . import shared
 @app.route("/run", methods=["POST"])
 def run_start():
     """Start a plan. The builder posts the recipe;
-    the target is this machine or one of the Settings' hosts. Same guards
+    the target is this machine or one of the Settings' hosts. ``workspace``:
+    the workspace its jobs go into, made under that name when there is none,
+    in place of the open one (``nullius recipes launch`` sends it; the
+    builder does not). Same guards
     as every mutation: form token, same origin, and a loopback client -
     running is writing to a machine."""
     shared._require_csrf()
@@ -26,8 +29,11 @@ def run_start():
         abort(403, description="Runs are started from a browser on the application host only.")
     body = request.get_json(silent=True) or {}
     recipe = body.get("recipe") if isinstance(body.get("recipe"), dict) else {}
+    into = body.get("workspace") or ""
+    if into and (not isinstance(into, str) or workspace.slug(into) != into):
+        return jsonify(ok=False, error="A workspace's name is lowercase letters, digits and dashes."), 400
     if recipe.get("harness") == standard_recipe.HARNESS:
-        return _start_standard(recipe)
+        return _start_standard(recipe, into)
     where = str(body.get("where") or "local")
     host = None
     if where != "local":
@@ -64,7 +70,7 @@ def run_start():
                           parts=[{"id": re.sub(r"[^A-Za-z0-9_.-]", "_", str(p.get("id") or "")), "label": str(p.get("label") or ""), "script": str(p.get("script") or "")}
                                  for p in (body.get("parts") or []) if isinstance(p, dict)],
                           recipe=recipe)
-    return _start(plan)
+    return _start(plan, into)
 
 
 def credentials_for(provider, endpoint=None) -> dict:
@@ -120,10 +126,10 @@ def standard_plans(recipe: dict, out: dict, known) -> tuple:
     return plans, ""
 
 
-def _start_standard(recipe: dict):
+def _start_standard(recipe: dict, into: str = ""):
     """The standard: compiled here from its definitions; on
     this machine, a host, or split over several - one run per machine, every
-    one checked before any starts."""
+    one checked before any starts. ``into``: the workspace its jobs go into (``begin``)."""
     if len(json.dumps(recipe)) > 200_000:
         return jsonify(ok=False, error="the recipe is too large to keep with the run"), 400
     out = standard_recipe.compile(recipe, docker_unusable=docker_problem, boat_unusable=boat.unusable,
@@ -138,8 +144,8 @@ def _start_standard(recipe: dict):
     if problem:
         return jsonify(ok=False, error=problem), 400
     if len(plans) == 1:
-        return _start(plans[0])
-    started, problem, status = begin(plans)
+        return _start(plans[0], into)
+    started, problem, status = begin(plans, into)
     if problem:
         return jsonify(ok=False, error=problem), status
     return jsonify(ok=True, open=url_for("index", view="launch"), runs=[ex.summary() for ex in started],
@@ -190,9 +196,10 @@ def docker_problem():
     return prerequisites.docker_here()
 
 
-def begin(plans: list) -> tuple:
+def begin(plans: list, into: str = "") -> tuple:
     """Start ``plans``, each checked before any starts: (the runs, "", 200), or
-    ([], why not, its status) and nothing started."""
+    ([], why not, its status) and nothing started. ``into``: the workspace
+    their jobs go into, the open one when empty (``shared.adopt_runs``)."""
     for plan in plans:
         problem = plan.check()
         if problem:
@@ -204,12 +211,12 @@ def begin(plans: list) -> tuple:
     started = [execution.start(plan) for plan in plans]
     # The job lands (or is mirrored) under runs/<name>/jobs: the workspace
     # reads it from now on.
-    shared.adopt_runs(started)
+    shared.adopt_runs(started, into)
     return started, "", 200
 
 
-def _start(plan: execution.Plan):
-    started, problem, status = begin([plan])
+def _start(plan: execution.Plan, into: str = ""):
+    started, problem, status = begin([plan], into)
     if problem:
         return jsonify(ok=False, error=problem), status
     summary, jobs = started[0].summary(), plan.jobs

@@ -79,7 +79,7 @@ class RunRoutes(unittest.TestCase):
             return 0, ""
         self.stack.enter_context(patch.object(execution, "subprocess_run", run))
         self.stack.enter_context(patch.object(execution, "docker_here", lambda sh, needs="": None))           # docker answers here, as the probe says it does there
-        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: self.adopted.extend(ex.jobs for ex in runs)))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into="": self.adopted.extend(ex.jobs for ex in runs)))
         self.adopted = []
         self.client = web.app.test_client()
         r = self.client.get("/new-run"); self.addCleanup(r.close)
@@ -517,6 +517,31 @@ class ResumeIntoWorkspace(unittest.TestCase):
         self.assertNotEqual(again.name, self.ws.name)
         self.assertEqual(again.roots, [self.jobs])
         self.assertEqual(workspace.load(self.home, self.ws.name).roots, self.held + [self.jobs])   # added when it started, left as it is
+
+    def test_a_run_posted_with_a_workspace_goes_into_it_and_the_open_one_stays_open(self):
+        """``workspace``: the run's jobs go into that workspace, made under that name when there is none; the open
+        one keeps its roots and stays open; the record names it for a restart. A name that is not one starts nothing."""
+        def post(name, into):
+            r = self.client.post("/run", data=json.dumps({"name": name, "script": "", "where": "local", "workspace": into,
+                                                          "parts": [{"id": "a", "label": "a", "script": "echo a"}]}),
+                                 content_type="application/json", headers={"Origin": "http://localhost", "X-CSRF-Token": self.csrf}); self.addCleanup(r.close)
+            if r.status_code == 200:
+                execution.EXECUTIONS[r.json["id"]].thread.join(10)
+            return r
+        first, second = (str(self.tmp / "runs" / n / "jobs") for n in ("q1", "q2"))
+        self.assertEqual(post("q1", "planner").status_code, 200)
+        made = workspace.load(self.home, "planner")
+        self.assertEqual((made.label, made.roots), ("planner", [first]))
+        self.assertEqual(web.shared.STATE["workspace"].name, self.ws.name)
+        self.assertEqual(workspace.load(self.home, self.ws.name).roots, self.held + [self.jobs])
+        self.assertEqual(json.loads((self.tmp / "runs" / "q1" / "run.json").read_text())["workspace"], "planner")
+        self.assertEqual(post("q2", "planner").status_code, 200)                                  # one there already: added to
+        self.assertEqual(workspace.load(self.home, "planner").roots, [first, second])
+        before = sorted(w.name for w in workspace.list_all(self.home))
+        r = post("q3", "Not a name")
+        self.assertEqual((r.status_code, r.json), (400, {"ok": False, "error": "A workspace's name is lowercase letters, digits and dashes."}))
+        self.assertFalse((self.tmp / "runs" / "q3").exists())
+        self.assertEqual(sorted(w.name for w in workspace.list_all(self.home)), before)
 
 
 class Credentials(unittest.TestCase):

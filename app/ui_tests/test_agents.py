@@ -48,7 +48,7 @@ class Tabs(unittest.TestCase):
             self.started.append(plan)
             return SimpleNamespace(jobs=str(self.tmp / "runs" / plan.name / "jobs"), summary=lambda: {})
         self.stack.enter_context(patch.object(execution, "start", start))
-        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into="": None))
         self.client = web.app.test_client()
 
     def test_capability_source_retains_pin_and_install_details(self):
@@ -379,7 +379,7 @@ class BuilderStandard(unittest.TestCase):
             self.started.append(plan)
             return SimpleNamespace(jobs=str(self.tmp / "runs" / plan.name / "jobs"), summary=lambda: {"id": plan.name + "-1"})
         self.stack.enter_context(patch.object(execution, "start", start))
-        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into="": None))
         self.client = web.app.test_client()
         r = self.client.get("/new-run"); self.addCleanup(r.close)
         self.schema = json.loads(re.search(r'<script id="nb-schema" type="application/json">(.*?)</script>', r.get_data(as_text=True), re.S).group(1))
@@ -469,7 +469,7 @@ class StandardPieces(unittest.TestCase):
             self.started.append(plan)
             return SimpleNamespace(jobs=str(self.tmp / "runs" / plan.name / "jobs"), summary=lambda: {"id": plan.name})
         self.stack.enter_context(patch.object(execution, "start", start))
-        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into="": None))
         self.client = web.app.test_client()
 
     def get(self, url):
