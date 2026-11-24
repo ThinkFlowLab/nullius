@@ -64,6 +64,7 @@ class TrialDetail(unittest.TestCase):
         said = text_of(html)
         self.assertIn("The benchmark's detail variant the second rank 42 cached no", said)   # nothing the page says elsewhere
         self.assertNotIn("tool_calls", said); self.assertNotIn("run.py", said)
+        self.assertIn("result timed out", text_of(self.panel(self.page({"result": "timed out"}))))   # a text result stays
         self.assertIn("checks ✓ saved × closed notes · cursor: not taken", said)
         self.assertRegex(html, r'<span class="ok">✓</span> saved')
         self.assertRegex(html, r'<span class="bad">×</span> closed')

@@ -272,9 +272,9 @@ def trial(job_id, trial_name):
                 bench_parts["shows"] = list(dict.fromkeys(k for x in bench_parts["parts"] if isinstance(x.get("shows"), dict) for k in x["shows"]))
         except (OSError, ValueError):
             pass
-    # a driver's names left out: its result is the score above, tool_calls the Tool calls panel's count, and by, the
-    # code that scored the trial, is the run's, the same on each of its trials
-    detail = parse.score_detail(t.dir, leave_out=("result", "by", "tool_calls")) if j.runner else None
+    # a driver's names left out: tool_calls is the Tool calls panel's count, by, the code that scored the trial, is
+    # the same on every trial of the run, and a result that is a number is the score above (a text result stays)
+    detail = parse.score_detail(t.dir, leave_out=("by", "tool_calls"), numbers=("result",)) if j.runner else None
     loc = _gold_localization(j, t, traj) if ok else None
 
     # `trace` opens a

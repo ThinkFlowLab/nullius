@@ -17,10 +17,10 @@ class ScoreDetail(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
         os.makedirs(os.path.join(self.dir, "verifier"))
 
-    def detail(self, detail, leave_out=()):
+    def detail(self, detail, leave_out=(), numbers=()):
         with open(os.path.join(self.dir, "verifier", "score.json"), "w") as f:
             json.dump({"reward": 0.0, "detail": detail}, f)
-        return parse.score_detail(self.dir, leave_out)
+        return parse.score_detail(self.dir, leave_out, numbers)
 
     def test_plain_values_keep_their_names_and_order_and_read_as_written(self):
         got = self.detail({"zeta": "as written", "count": 3, "share": 0.45, "seen": True, "missed": False, "gone": None,
@@ -53,6 +53,12 @@ class ScoreDetail(unittest.TestCase):
         got = self.detail({"steps": 3, "steps_limit": 10, "ended": "done", "rank": 7}, ("steps", "steps_limit", "ended"))
         self.assertEqual([f["name"] for f in got["fields"]], ["rank"])
         self.assertIsNone(self.detail({"steps": 3}, ("steps",)))
+        got = self.detail({"result": 1.0, "rank": 7}, numbers=("result",))     # a number: the score, shown above
+        self.assertEqual([f["name"] for f in got["fields"]], ["rank"])
+        for said in ("failed: AssertionError", True, None):                    # anything else is the driver's word
+            with self.subTest(result=said):
+                got = self.detail({"result": said}, numbers=("result",))
+                self.assertEqual([f["name"] for f in got["fields"]], ["result"])
 
     def test_a_long_nonboolean_flag_has_a_preview_and_full_redacted_text(self):
         secret = "sk-" + "example123456789012345"
