@@ -160,6 +160,12 @@ class TheRows(CompilerCase):
                                        'stale': [[], old_first, next_model], 'final': [False, next_model],
                                        'requests': ['openai/gpt-4o-2024-08-06', next_model], 'pins': None})
 
+    def test_a_model_being_typed_has_no_row_until_it_is_set(self):
+        out = self.js(self.SETUP.replace('esc,providers,', 'esc,providers,typing:role=>typed===role,').replace('const rows=', 'let typed="";const rows=')
+                      + 'const got=[];C.addServed(r,"model","openai");for(typed of ["","model","judge",""]){rows.sync();got.push([label.hidden,seen().chips]);}'
+                      'process.stdout.write(JSON.stringify(got));')
+        self.assertEqual(out, [[hidden, ['openai']] for hidden in (False, True, False, False)])
+
     def test_a_failed_compile_keeps_the_model_the_server_named(self):
         """A compile that failed names no model: the row keeps the one the server last named for the same recipe (a pin
         added in between), waits while none is known (a failed first compile, or a compile that names none), and takes
