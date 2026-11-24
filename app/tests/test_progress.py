@@ -208,6 +208,23 @@ class StandardRun(unittest.TestCase):
         names = sorted(d for d in os.listdir(job) if "__u" in d)
         self.assertEqual(sorted(t["trial"] for t in snap["trials"]), names)   # the trial folders' own names
 
+    def test_preflight_checks_are_visible_while_they_block(self):
+        from nullius.standard.requirements import network_requirements
+        for stage in ("models", "requirements"):
+            with self.subTest(stage=stage):
+                r = self.go(name="check-" + stage)
+                if stage == "models":
+                    r.base = "https://provider.invalid/v1"
+                def checking(*args):
+                    self.assertEqual(progress.fold(progress.read(r.job_dir))["current"], stage)
+                    raise run.Refused("check failed")
+                target, method = (r, "known_models") if stage == "models" else (network_requirements, "check")
+                with patch.object(target, method, side_effect=checking), self.assertRaises(run.Refused):
+                    r.start()
+                folded = progress.fold(progress.read(r.job_dir))
+                self.assertEqual(folded["ended"], "refused")
+                self.assertEqual(next(s for s in folded["stages"] if s["stage"] == stage)["state"], "failed")
+
     def test_a_refused_run_says_why_in_its_job_and_writes_nothing_else(self):
         r = self.go()
         with patch.object(install, "upstream_dir", lambda b, home=None: os.path.join(self.tmp, "up")), \
@@ -217,7 +234,8 @@ class StandardRun(unittest.TestCase):
                 r.start()
         events = progress.read(r.job_dir)
         self.assertEqual([(e["stage"], e.get("state")) for e in events],
-                         [("plan", None), ("upstream", "start"), ("upstream", "failed"), ("refused", None)])
+                         [("plan", None), ("requirements", "start"), ("requirements", "done"),
+                          ("upstream", "start"), ("upstream", "failed"), ("refused", None)])
         self.assertIn("git fetch: exit 128", progress.refusal(events))
         self.assertFalse(os.path.exists(os.path.join(r.job_dir, "config.json")))   # no job: nothing a runs page would list
 
