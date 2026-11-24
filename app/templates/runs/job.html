@@ -21,8 +21,8 @@
     {% if job.dataset %}<div class="run-identity-card">
       {% if benchmark %}<div><span class="k">Benchmark</span><span class="v">{{ benchmark }}</span></div><span class="run-identity-sep" aria-hidden="true"></span>{% endif %}
       <div><span class="k">Dataset</span><span class="v" title="{{ job.dataset }}">{{ job.dataset|dsname }}</span></div>
+      {% if job.task_set %}<span class="run-identity-sep" aria-hidden="true"></span><div><span class="k">Task set</span><span class="v" title="The task set this run ran: {{ job.task_set.units }} {{ 'task' if job.task_set.units == 1 else 'tasks' }}">{% if set_link.link %}<a href="{{ set_link.link }}">{{ set_link.name }}</a>{% else %}{{ set_link.name }}{% endif %}</span></div>{% endif %}
     </div>{% endif %}
-    {% if job.task_set %}<span class="run-set" title="The task set this run ran: {{ job.task_set.units }} {{ 'task' if job.task_set.units == 1 else 'tasks' }}">task set {% if set_link.link %}<a href="{{ set_link.link }}">{{ set_link.name }}</a>{% else %}<b>{{ set_link.name }}</b>{% endif %}</span>{% endif %}
     {% if job.agent_label or job.model_name %}
     <div class="run-identity-card">
       {% if job.agent_label %}<span class="run-identity-mark" aria-hidden="true">{{ agent_mark('agent', job.agent_name, job.agent_label) }}</span>{% endif %}

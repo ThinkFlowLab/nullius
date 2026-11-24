@@ -869,10 +869,10 @@ class TheJobPage(Case):
 
     def test_the_page_names_the_set_with_a_link_and_a_job_of_no_set_nothing_more(self):
         html = self.page("of-a-set")
-        self.assertIn("task set dev", self.meta(html))
+        self.assertIn("Dataset all Task set dev", self.meta(html))              # a cell of the dataset's card
         self.assertNotIn("revision", self.meta(html))
         self.assertIn('href="/benchmarks/fakebench/tasks/all?set=dev"', html)
-        self.assertNotIn("task set", self.meta(self.page("whole")))
+        self.assertNotIn("Task set", self.meta(self.page("whole")))
 
     def test_a_job_that_recorded_a_set_and_its_revision_before_labels_still_shows_its_set(self):
         path = self.tmp / "jobs" / "of-a-set" / "config.json"
@@ -881,27 +881,27 @@ class TheJobPage(Case):
         path.write_text(json.dumps(cfg))
         sets.rename("fakebench", "dev", "The trio")
         html = self.page("of-a-set")
-        self.assertIn("task set The trio", self.meta(html))
+        self.assertIn("Task set The trio", self.meta(html))
         self.assertIn('href="/benchmarks/fakebench/tasks/all?set=the-trio"', html)
 
     def test_a_set_not_in_the_catalogue_is_named_without_a_link(self):
         os.remove(sets.path_of("fakebench", "dev"))
         html = self.page("of-a-set")
-        self.assertIn("task set dev", self.meta(html))
+        self.assertIn("Task set dev", self.meta(html))
         self.assertNotIn("/tasks/all?set=dev", html)
 
     def test_a_renamed_set_is_named_by_its_new_name_with_its_link(self):
         sets.rename("fakebench", "dev", "trio")
         sets.create(self.fake, "dev", dataset="all", units=["good"])            # another set under the old name
         html = self.page("of-a-set")
-        self.assertIn("task set trio", self.meta(html))
+        self.assertIn("Task set trio", self.meta(html))
         self.assertIn('href="/benchmarks/fakebench/tasks/all?set=trio"', html)
         self.assertNotIn("/tasks/all?set=dev", html)
 
     def test_a_deleted_set_is_named_without_a_link(self):
         sets.delete("fakebench", "dev")
         html = self.page("of-a-set")
-        self.assertIn("task set dev", self.meta(html))
+        self.assertIn("Task set dev", self.meta(html))
         self.assertNotIn("/tasks/all?set=", html)
 
     def test_save_as_task_set_stores_the_full_unit_ids_of_the_rows_shown(self):
