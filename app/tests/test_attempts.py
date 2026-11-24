@@ -93,6 +93,12 @@ class Attempts(unittest.TestCase):
         group = attempts.of(run, run.trials[0])
         self.assertFalse(group.has_verdicts)
         self.assertEqual((group.n_scored, round(group.mean_score, 3), round(group.rate, 3)), (2, .4, .4))
+        crashed = job([at("a", "a__1", "scored", score=1.0), at("a", "a__2", "agent_error")])
+        group = attempts.of(crashed, crashed.trials[0])                                          # its score, never 0 passed of 2
+        self.assertEqual((group.has_verdicts, group.rate, group.n_scored), (False, 1.0, 1))
+        self.assertFalse(attempts.Attempts(tuple(tries("a", "agent_error", "agent_error")), scored_only=True).has_verdicts)
+        verified = attempts.Attempts((at("a", "a__1", "resolved"), at("a", "a__2", "failed_verification"), at("a", "a__3", "scored", score=.2)))
+        self.assertEqual((verified.has_verdicts, round(verified.rate, 3)), (True, .333))
         mixed = job([at("a", "a__1", "scored"), at("a", "a__2", "patch_failed_tests")])
         self.assertTrue(attempts.of(mixed, mixed.trials[0]).has_verdicts)
 

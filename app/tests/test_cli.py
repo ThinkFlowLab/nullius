@@ -168,7 +168,7 @@ class JobShow(Scratch):
         del before["identity"]
         before.update(runs_cli.job_row(job), harbor_label=job.harbor_label)
         for trial, raw in zip(job.trials, before["trials"]):
-            raw.update(outcome_label=trial.outcome_label, is_infra=trial.is_infra,
+            raw.update(outcome_label=trial.outcome_label, ended_label=trial.ended_label, is_infra=trial.is_infra,
                        is_regression=trial.is_regression, has_trace=trial.has_trace)
         before = json.loads(json.dumps(before, default=lambda value: value.isoformat()))
         apart = {"identity", "mean_score", "mean_score_planned"}                # each checked above

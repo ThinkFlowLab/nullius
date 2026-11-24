@@ -24,9 +24,10 @@ message, where a benchmark would read it as part of the answer. An adapter
 that does not know them sends text, and :func:`last_message` keeps
 what it can of the answer apart.
 
-A turn that outlives its timeout is cancelled (``session/cancel``) and, if the
-agent does not stop, its process group is killed; :class:`Timeout` is raised
-either way, and the events so far are kept on it.
+A turn that outlives its timeout, or that its caller cuts, is cancelled
+(``session/cancel``) and, if the agent does not stop, its process group is
+killed; :class:`Timeout` is raised either way, and the events so far are kept
+on it.
 """
 from __future__ import annotations
 
@@ -210,7 +211,7 @@ class Client:
         except OSError:
             return "no log"
 
-    def request(self, method: str, params: dict, timeout: float = 600):
+    def request(self, method: str, params: dict, timeout: float = 600, cut=None):
         if self.stopped is not None and self.stopped.is_set():
             raise CancelledError("the run was stopped")
         self.n += 1
@@ -221,7 +222,7 @@ class Client:
         except (BrokenPipeError, OSError):
             raise AgentFailed(f"{method}: the agent had already ended ({self.tail()})")
         try:
-            m = reply(q, timeout, self.stopped)
+            m = reply(q, timeout, self.stopped, cut)
         except queue.Empty:
             raise TimeoutError(method)
         finally:
@@ -302,12 +303,14 @@ class Client:
                 return True
         return False
 
-    def prompt(self, sid: str, text: str, timeout: float = 600) -> Turn:
+    def prompt(self, sid: str, text: str, timeout: float = 600, cut=None) -> Turn:
+        """One turn. ``cut``, an event: once it is set the turn is ended as one past its ``timeout`` is."""
         start = len(self.events)
         t0 = time.time()
         self.events.append({"t": t0, "update": {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": text}}})
         try:
-            res = self.request("session/prompt", {"sessionId": sid, "prompt": [{"type": "text", "text": text}]}, timeout=timeout)
+            res = self.request("session/prompt", {"sessionId": sid, "prompt": [{"type": "text", "text": text}]}, timeout=timeout,
+                               cut=cut)
         except TimeoutError:
             try:
                 self._send({"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": sid}})

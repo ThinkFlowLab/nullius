@@ -9,6 +9,7 @@
   the arguments JSON, and says what it answered
 - ``model``: calls the model at OPENAI_BASE_URL once and says its reply
 - ``swallow``: the same, but a refused call is no error to it: it says so and ends its turn
+- ``loop``: calls the model again and again, a refused call no error to it, and never ends the turn
 - ``die``: exits mid-turn
 - ``warn``: warns, then says ok - the warning a notice when the client takes them, else text, as an adapter does
 - anything else: says it back, upper-cased
@@ -18,6 +19,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -54,6 +56,16 @@ def turn(mid, sid, text):
     words = text.split()
     if words and words[0] == "hang":
         return
+    if words and words[0] == "loop":
+        while True:
+            req = urllib.request.Request(os.environ["OPENAI_BASE_URL"] + "/chat/completions",
+                                         data=json.dumps({"model": "fake", "messages": [{"role": "user", "content": text}]}).encode(),
+                                         headers={"Content-Type": "application/json"})
+            try:
+                urllib.request.urlopen(req).read()
+            except urllib.error.HTTPError:
+                pass
+            time.sleep(0.2)
     if words and words[0] == "die":
         os._exit(3)
     if words and words[0] == "warn":

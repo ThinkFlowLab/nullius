@@ -106,6 +106,7 @@ def job_detail(job: parse.Job) -> dict:
     data["mean_score_planned"] = job.mean_score_planned
     for trial, raw in zip(job.trials, data["trials"]):
         raw["outcome_label"] = trial.outcome_label
+        raw["ended_label"] = trial.ended_label
         raw["is_infra"] = trial.is_infra
         raw["is_regression"] = trial.is_regression
         raw["has_trace"] = trial.has_trace
@@ -120,6 +121,7 @@ def _trial_record(trial: parse.Trial) -> dict:
     derived ones the pages render, timestamps as ISO strings."""
     raw = asdict(trial)
     raw["outcome_label"] = trial.outcome_label
+    raw["ended_label"] = trial.ended_label
     raw["is_infra"] = trial.is_infra
     raw["is_regression"] = trial.is_regression
     raw["has_trace"] = trial.has_trace
@@ -195,6 +197,8 @@ def _print_trial(job: parse.Job, trial: parse.Trial) -> None:
     print(f"  evidence: trajectory {'recorded' if t.has_trajectory else 'absent'} · "
           f"trace {'recorded' if t.has_trace else 'absent'} · "
           f"reward {'recorded' if t.reward is not None else 'absent'}")
+    if t.ended_by:
+        print(f"  ended by: {t.ended_label} ({t.ended_by})")
     if t.exception_type:
         print(f"  exception: {t.exception_type}: {_first_line(t.exception_message)}")
     for name in t.p2p_failures:
@@ -325,6 +329,8 @@ def _show(args) -> int:
     width = max((len(t.trial_name) for t in job.trials), default=0)
     for t in job.trials:
         line = f"  {t.trial_name:<{width}}  {t.outcome}"
+        if t.ended_by:
+            line += f"  ended by {t.ended_by}"
         if t.exception_type:
             line += f"  {t.exception_type}"
         print(line)

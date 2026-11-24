@@ -39,7 +39,12 @@
     }
   },
   "limits": {
-    "setup_seconds": 3600
+    "setup_seconds": 3600,
+    "scored_cuts": [
+      "time",
+      "calls",
+      "end"
+    ]
   },
   "datasets": [
     {
