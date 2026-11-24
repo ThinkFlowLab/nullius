@@ -205,11 +205,29 @@ def write_trial(document: dict, job_dir: str, trial: str = "") -> dict:
             "model": model, "agent": agent.get("name") or "", "changed": changed}
 
 
+def _trace_id_in(trial_dir: str):
+    """The trace a trial folder holds: its recorded id, or its trace's own."""
+    for path, keys in ((("result.json"), ("source_document", "trace_id")),
+                       (os.path.join("agent", "trace.json"), ("session_id",))):
+        try:
+            with open(os.path.join(trial_dir, path), encoding="utf-8") as fh:
+                value = json.load(fh)
+            for key in keys:
+                value = value[key]
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if value is not None:
+            return str(value)
+    return None
+
+
 def _write_job(documents: list, out_root: str, job_name: str, command: str,
                root: str, skipped: list) -> str:
-    names = importers.unique_names(
-        [(trial_name_of(doc), trial_name_of(doc, full=True)) for doc in documents])
     job_dir = os.path.join(out_root, job_name)
+    names = importers.unique_names(
+        [(str(doc.get("session_id") or ""), trial_name_of(doc), trial_name_of(doc, full=True))
+         for doc in documents],
+        *importers.existing_trials(job_dir, _trace_id_in))
     os.makedirs(job_dir, exist_ok=True)
     summaries = [write_trial(doc, job_dir, name) for doc, name in zip(documents, names)]
 

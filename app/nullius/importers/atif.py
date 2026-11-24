@@ -320,15 +320,24 @@ def convert_document(path: str, doc: dict, trial: str, job_dir: str) -> dict:
 
 
 
+def _source_in(trial_dir: str):
+    """The source document a trial folder was made from, as recorded."""
+    try:
+        with open(os.path.join(trial_dir, "result.json"), encoding="utf-8") as fh:
+            return str(json.load(fh)["source_document"]["path"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str) -> str:
     """The read documents, as one job directory of one trial each."""
     # Flattening can give two paths one name (a/b.json, a__b.json): those take
     # a digest of their path, so each document keeps a trial of its own.
-    names = importers.unique_names([
-        (_trial_name(path, root), _trial_name(path, root) + "__"
-         + hashlib.sha256(_shown(path, root).encode()).hexdigest()[:8])
-        for path, _doc in docs])
     job_dir = os.path.join(out_root, job_name)
+    names = importers.unique_names([
+        (os.path.abspath(path), _trial_name(path, root), _trial_name(path, root) + "__"
+         + hashlib.sha256(_shown(path, root).encode()).hexdigest()[:8])
+        for path, _doc in docs], *importers.existing_trials(job_dir, _source_in))
     os.makedirs(job_dir, exist_ok=True)
 
     summaries = [convert_document(path, doc, name, job_dir)

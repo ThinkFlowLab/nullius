@@ -64,6 +64,30 @@ class Convert(unittest.TestCase):
                     for t in trials}
         self.assertEqual(recorded, set(ids))
 
+    def test_a_later_colliding_trace_never_renames_the_trial_already_there(self):
+        src = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, src, True)
+        first, later = "abcdef1" + "f" * 25, "abcdef1" + "0" * 25
+
+        def export(name, tid):
+            with open(os.path.join(src, name), "w") as fh:
+                json.dump({"resourceSpans": [{"resource": {}, "scopeSpans": [{"spans": [
+                    {"traceId": tid, "spanId": "01", "name": "agent run",
+                     "startTimeUnixNano": "1", "endTimeUnixNano": "9"}]}]}]}, fh)
+
+        def files(trial):
+            root = Path(job_dir, trial)
+            return {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+        export("one.json", first)
+        job_dir = importer.convert(src, self.out)[0]
+        before = files("agent_run__abcdef1")
+        export("two.json", later)
+        importer.convert(src, self.out)
+        trials = sorted(n for n in os.listdir(job_dir) if os.path.isdir(os.path.join(job_dir, n)))
+        self.assertEqual(trials, ["agent_run__abcdef1", "agent_run__" + later])
+        self.assertEqual(files("agent_run__abcdef1"), before)
+
     def test_a_refused_file_deeper_down_is_named_by_its_path_under_the_root_once(self):
         src = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, src, True)

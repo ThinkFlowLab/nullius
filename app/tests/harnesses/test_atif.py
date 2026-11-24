@@ -115,6 +115,34 @@ class Conversion(unittest.TestCase):
         self.assertEqual(sessions, {"s-nested", "s-flat", "s-1"})
         self.assertEqual(json.loads(Path(job_dir, "result.json").read_text())["n_total_trials"], 3)
 
+    def test_a_later_colliding_document_never_renames_the_trial_already_there(self):
+        src = tempfile.mkdtemp()
+        write_doc(src, "a__b.json", minimal(session_id="s-first"))
+        job_dir, _ = self.convert(src)
+        before = {p.relative_to(job_dir): p.read_bytes() for p in Path(job_dir, "a__b").rglob("*") if p.is_file()}
+        write_doc(src, "a/b.json", minimal(session_id="s-later"))
+        _, job = self.convert(src)
+        names = sorted(t.trial_name for t in job.trials)
+        self.assertEqual(names[0], "a__b")
+        self.assertRegex(names[1], r"^a__b__[0-9a-f]{8}$")
+        after = {p.relative_to(job_dir): p.read_bytes() for p in Path(job_dir, "a__b").rglob("*") if p.is_file()}
+        self.assertEqual(after, before)
+
+    def test_a_folder_an_older_conversion_wrote_two_documents_into_is_split(self):
+        src = tempfile.mkdtemp()
+        write_doc(src, "a__b.json", minimal(session_id="s-flat"))
+        write_doc(src, "a/b.json", minimal(session_id="s-nested"))
+        job_dir = os.path.join(self.out, "atif__old")
+        os.makedirs(os.path.join(job_dir, "a__b"))
+        Path(job_dir, "a__b", "result.json").write_text(json.dumps(
+            {"source_document": {"path": os.path.join(src, "a", "b.json")}}))
+        Path(job_dir, "result.json").write_text(json.dumps({"n_total_trials": 2}))
+        _, job = self.convert(src, job_name="atif__old")
+        names = sorted(t.trial_name for t in job.trials)
+        self.assertEqual(len(names), 2)
+        for name in names:
+            self.assertRegex(name, r"^a__b__[0-9a-f]{8}$")
+
     def test_re_converting_updates_in_place_and_drops_a_stale_trial(self):
         src = tempfile.mkdtemp()
         write_doc(src, "a.json", minimal())
