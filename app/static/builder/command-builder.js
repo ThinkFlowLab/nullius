@@ -808,11 +808,17 @@
         + (C.standardKeyless(rec) || (b.needs || []).some(n => n.startsWith('cap.')) ? '' : field('Model calls per ' + u.noun, 'max_calls', rec.max_calls ?? '', {type: 'number', min: 1, placeholder: 'none'}))
         // the whole run's, shared by its jobs (recipe.py); a run that calls no model spends nothing: no cap to offer
         + (C.standardKeyless(rec) ? '' : field('Spending cap (USD)', 'max_usd', rec.max_usd ?? '', {type: 'number', min: 0, placeholder: 'none'})
-          + field('Spending cap per ' + u.noun + ' (USD)', 'max_usd_per_unit', rec.max_usd_per_unit ?? '', {type: 'number', min: 0, placeholder: 'none'}))
+          + field('Spending cap per ' + u.noun + ' (USD)', 'max_usd_per_unit', rec.max_usd_per_unit ?? '', {type: 'number', min: 0, placeholder: 'none'})
+          + exchangesKept(rec))
         + standardTimeLimits(rec, b, u) + benchLimits(rec, b);
     }
     return '';
   }
+  // What each unit's relay keeps of its agent's calls, read on the trial's Conversation tab (recipe.py: run --exchanges):
+  // the pictures and the text, the text alone (each picture's size and kind kept), or nothing; small cards, the first the default
+  const KEEPS = [['whole', 'Pictures and text'], ['text', 'Text alone'], ['off', 'Nothing']];
+  const exchangesKept = rec => '<div class="std-exchanges-row"><span class="ui-field-copy" title="What each trial keeps of its calls to the model, shown on its Conversation tab. The pictures take most of the room.">Model calls saved</span>'
+    + `<div class="std-valgrid std-exchanges" role="radiogroup" aria-label="Model calls saved">${KEEPS.map(([v, t]) => `<button type="button" class="nb-tile std-val" data-std-exchanges="${v}" aria-pressed="${(rec.exchanges || 'whole') === v}"><strong>${t}</strong></button>`).join('')}</div></div>`;
   // The bounds the benchmark's upstream has of its own (its steps, its errors: options with ``limit``), in a section
   // of the benchmark's name after the run's scope and its time limits: those the chosen datasets and participants
   // take, each empty at its default, shown greyed - an agent's own under ``by`` (OSWorld's agents' steps).
@@ -1155,6 +1161,7 @@
     // a provider taken out of a Served by. Its row's label does not then focus the field (its menu would open); by
     // key, the keyboard goes back to that field
     if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove);syncServed();refreshPlan();if(event.detail===0)root.querySelector(`input[data-served-by="${d.servedRole}"]`)?.focus();return;}
+    if(d.stdExchanges!==undefined){const rec=r();if(d.stdExchanges==='whole')delete rec.exchanges;else rec.exchanges=d.stdExchanges;renderForm();refreshPlan();return;}
     if(d.benchOpt!==undefined){const rec=r(),o=((C.standardBench(rec)||{}).options||{})[d.benchOpt]||{};rec.bench_options={...(rec.bench_options||{})};if(d.benchVal===o.default)delete rec.bench_options[d.benchOpt];else rec.bench_options[d.benchOpt]=d.benchVal;renderForm();refreshPlan();return;}
     if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check',d.hostreqName);return;}
     if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install',d.hostreqName);return;}

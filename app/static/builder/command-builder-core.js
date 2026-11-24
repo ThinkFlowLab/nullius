@@ -234,6 +234,9 @@
     }
     if (Number.isInteger(raw.turns) && raw.turns >= 1) r.turns = raw.turns;
     if (Number.isInteger(raw.max_calls) && raw.max_calls >= 1) r.max_calls = raw.max_calls;   // the most model calls of a unit's agent
+    // what each unit's relay keeps of its agent's calls, and its bound in MB (recipe.py: run --exchanges)
+    if (['whole', 'text', 'off'].includes(raw.exchanges)) r.exchanges = raw.exchanges;
+    if (Number.isInteger(raw.exchanges_max_mb) && raw.exchanges_max_mb >= 1) r.exchanges_max_mb = raw.exchanges_max_mb;
     for (const key of ['judge_model', 'simulator_model']) if (typeof raw[key] === 'string' && raw[key].trim()) r[key] = raw[key].trim();
     // Served by: each field's serving providers, slugs in their order (the server checks them as --served-by)
     if (raw.served_by && typeof raw.served_by === 'object' && !Array.isArray(raw.served_by))
