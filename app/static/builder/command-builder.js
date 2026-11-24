@@ -978,7 +978,7 @@
   // The open step's errors. The Model step says none over a model being typed, nor before one is chosen or its field left.
   let modelActed=false;
   function localErrors() {
-    const rec=r(),el=document.activeElement,typing=root.contains(el)&&el.dataset.providerModel&&el.value!==(rec[el.dataset.field]||'');
+    const rec=r(),el=document.activeElement,typing=root.contains(el)&&el.dataset.typing;
     if(step===REVIEW)modelActed=true;
     const quiet=step===S.model&&(typing||!modelActed&&!rec.model&&!rec.userModel);
     $('#nb-localerrors').textContent=fieldErrors($('#nb-form'),quiet?[]:compiled.errors.filter(e=>e.step===step&&!e.shown),esc).map(e=>e.message).join(' ');
@@ -989,8 +989,9 @@
   document.addEventListener('pointerdown',()=>{pressing=true;},true);
   for(const end of ['pointerup','pointercancel'])document.addEventListener(end,()=>{pressing=false;},true);
   function commitModel(el) {
+    if(document.activeElement===el&&!document.hasFocus())return;   // the window lost the focus, not the field: still being typed
     const rec=r(),key=el.dataset.field,value=el.value.trim(),changed=value!==(rec[key]||'');
-    modelActed=true;
+    modelActed=true;delete el.dataset.typing;
     if(changed){
       if(rec.modelFormat!=='provider-id'){for(const k of ['model','userModel','evalModel'])if(typeof rec[k]==='string')rec[k]=C.bareModel(rec[k]);rec.modelFormat='provider-id';}
       C.setModelOf(rec,key,value);saveDraft();   // the field's pin goes with its model
@@ -1215,7 +1216,7 @@
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
     if(d.servedBy!==undefined)return;   // what is typed in a Served by filters its menu: a pick, or Enter, adds it (nb-pick)
     if(d.stdUnsandboxed!==undefined)return;   // a box's value is no tick: its change sets the recipe
-    if(d.providerModel){localErrors();return;}   // what is typed in a model field filters its list: a pick, Enter or leaving the field sets it
+    if(d.providerModel){d.typing='true';localErrors();return;}   // what is typed in a model field filters its list: a pick, Enter or leaving the field sets it
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
       const value=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;
       if(p)rec.params[p.key]=p.type==='optional-boolean'?(value==='__default__'?null:value==='true'):value;
