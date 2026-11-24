@@ -28,7 +28,7 @@
 .st-card { margin: 0; padding: 16px 20px 14px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .st-card legend { display: inline-flex; align-items: center; gap: 9px; padding: 0 6px; font-weight: 500; font-size: 15px; }
 .st-logo { width: var(--ic-lg); height: var(--ic-lg); flex: none; color: var(--text); }
-.st-icon { width: 20px; height: 20px; margin: 2px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; color: var(--text-dim); }
+.st-icon { margin: 4px; color: var(--text-dim); }   /* a 16 px icon in a logo's 24 px slot */
 .st-card-unset { border-style: dashed; background: color-mix(in srgb, var(--surface) 55%, var(--bg)); }
 /* a card's rows: a label, then what it holds - an endpoint, a key, a field */
 .st-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 16px; align-items: center; }
@@ -56,7 +56,6 @@
 .st-key-card { border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); min-width: 0; overflow: hidden; }
 .st-key-summary { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 18px 20px; }
 .st-key-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--surface-2); color: var(--text-dim); }
-.st-key-icon svg { width: 21px; height: 21px; }
 .st-key-copy { min-width: 0; }
 .st-key-copy h3, .st-key-new h3 { margin: 0; font-size: 15px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text); overflow-wrap: anywhere; }
 .st-key-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-faint); white-space: nowrap; }
@@ -162,7 +161,7 @@
   .st-constraint:has(.st-slider:not([hidden])) { margin-bottom: 0; }
   .st-constraint > .st-slider { grid-column: 1 / -1; grid-row: 1; margin-bottom: 14px; }
 }
-.st-clear { flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%; background: none; color: inherit; font: inherit; line-height: 1; cursor: pointer; opacity: .55; }
+.st-clear { flex: none; display: grid; place-items: center; padding: 0; width: 28px; height: 28px; border: 0; border-radius: 50%; background: none; color: inherit; font: inherit; line-height: 1; cursor: pointer; opacity: .55; }
 .st-clear:hover, .st-clear:focus-visible { opacity: 1; background: color-mix(in srgb, var(--bad) 20%, transparent); }
 .st-clear.off { visibility: hidden; }
 .st-slider { grid-column: 1; }
@@ -229,7 +228,6 @@
 .st-nav-label { margin: 20px 12px 6px; font-size: 12px; color: var(--text-faint); }
 .st-index a { justify-content: flex-start; gap: 10px; }
 .st-index a span { color: inherit; font-size: 15px; }
-.st-index a .ic { flex: none; width: 17px; height: 17px; }
 .st-index [hidden] { display: none; }
 .st-search-empty { padding: 8px 12px; font-size: 13px; color: var(--text-dim); }
 .st-theme-options { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -271,7 +269,6 @@
 .st-provider-add span { font-size: 18px; font-weight: 400; line-height: 1; }
 .st-provider-back { align-self: flex-start; }
 .st-provider-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-#providers [data-provider-test-all] .ic, #providers [data-provider-test] .ic { width: 15px; height: 15px; }
 .st-provider-test:empty { display: none; }
 /* a phone: the actions take their own row under the name */
 @media (max-width: 560px) { #providers .st-provider-summary { flex-wrap: wrap; justify-content: flex-end; } #providers .st-provider-summary > div { flex-basis: calc(100% - 34px); } }
@@ -318,7 +315,6 @@
 .st-sandbox-rows > .st-row + .st-row { padding-top: 14px; border-top: 1px solid var(--border-soft); }
 .settings-page .st-sandbox-rows .st-input { height: 34px; min-height: 34px; padding-block: 0; }
 .settings-page #sandbox .st-row-value.st-value, .settings-page #prices .st-row-value.st-value, .settings-page #data-providers .st-row-value.st-value { flex-direction: row; justify-content: flex-start; align-items: center; }
-#prices [data-prices-update] .ic { width: 15px; height: 15px; }
 #prices [data-prices-update].busy .ic { animation: st-prices-spin .9s linear infinite; }
 @keyframes st-prices-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #prices [data-prices-update].busy .ic { animation: none; } }

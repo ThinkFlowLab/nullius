@@ -194,6 +194,11 @@ window.NulliusTable = {
   /* A table's controls row: narrow's search and Filter, and the Sort by
      menu, which sets the sort and follows a header click. Returns
      {passes, resort}, as narrow and sortable do. */
+  /* Sort by's icon, when it has one, says the direction of the sort on, or none. */
+  sortIcon(btn, on, dir) {
+    btn?.querySelector('use')?.setAttribute('href', on ? (dir > 0 ? '#i-sort-asc' : '#i-sort-desc') : '#i-sort');
+  },
+
   toolbar(table, tools, changed) {
     const passes = this.narrow(tools, changed);
     const [sbtn, smenu] = [tools.querySelector('[data-tools-btn="sort"]'), tools.querySelector('[data-tools="sort"]')];
@@ -203,6 +208,7 @@ window.NulliusTable = {
       const {col, dir} = resort.state(), on = col === null ? '' : heads[col].dataset.col;
       smenu.querySelectorAll('[data-sort-col]').forEach(r => { r.checked = r.value === on; });
       smenu.querySelectorAll('[data-sort-dir]').forEach(r => { r.checked = Boolean(on) && r.value === (dir > 0 ? 'asc' : 'desc'); r.disabled = !on; });
+      this.sortIcon(sbtn, on, dir);
     };
     const resort = this.sortable(table, () => { sync(); changed(); });
     if (smenu) {
@@ -281,6 +287,7 @@ window.NulliusTable = {
         const c = smenu.querySelector('[data-sort-col]:checked'), on = c.value, num = c.dataset.type === 'num';
         const dir = e?.target.matches('[data-sort-dir]') ? (e.target.value === 'asc' ? 1 : -1) : (num ? -1 : 1);
         dirs.forEach(r => { r.checked = Boolean(on) && r.value === (dir > 0 ? 'asc' : 'desc'); r.disabled = !on; });
+        this.sortIcon(sbtn, on, dir);
         const key = card => { const raw = card.getAttribute('data-s-' + on) ?? ''; return num ? parseFloat(raw) || 0 : raw.toLowerCase(); };
         (on ? [...items].sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; }) : items).forEach(c => c.parentNode.appendChild(c));
       };

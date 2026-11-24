@@ -17,7 +17,7 @@
     if (key) [...tray.children].filter(t => t.dataset.noticeKey === key).forEach(t => t.remove());
     const toast = document.createElement('div'); toast.className = 'toast ' + (error ? 'bad' : 'ok'); toast.dataset.noticeKey = key;
     const text = document.createElement('span'); text.className = 'toast-text'; text.textContent = message;
-    const close = document.createElement('button'); close.type = 'button'; close.className = 'toast-close'; close.setAttribute('aria-label', 'Dismiss'); close.textContent = '×';
+    const close = document.createElement('button'); close.type = 'button'; close.className = 'toast-close'; close.setAttribute('aria-label', 'Dismiss'); close.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>';
     const bar = document.createElement('span'); bar.className = 'toast-bar'; bar.setAttribute('aria-hidden', 'true');
     const dismiss = () => { toast.remove(); if (!tray.children.length) tray.remove(); };
     close.addEventListener('click', dismiss); bar.addEventListener('animationend', dismiss);

@@ -342,18 +342,18 @@
     <div class="facet" data-k="o"><details><summary class="fsum"><span class="k">Outcome</span><span class="v">All</span><span class="car">▾</span></summary>
       <div class="fmenu">
         {% for k in ORDER %}{% if oc[k] %}<a class="fx" data-o="{{ k }}" href="?outcome={{ k }}"><i class="sw oc-{{ k }}"></i><span>{{ LABELS[k] }}</span><b>{{ oc[k] }}</b></a>{% endif %}{% endfor %}
-      </div></details><button class="x plain" type="button" hidden aria-label="Remove the outcome filter">✕</button></div>
+      </div></details><button class="x plain" type="button" hidden aria-label="Remove the outcome filter"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     {% if judgement and judgement.causes %}
     <div class="facet j" data-k="c"><details><summary class="fsum"><span class="k">Judge cause</span><span class="v">All</span><span class="car">▾</span></summary>
       <div class="fmenu" id="judge-filters">
         {% for cause, n in judgement.causes %}<a class="fx" data-c="{{ cause }}" href="?cause={{ cause }}"><span class="mono">{{ cause }}</span><b>{{ n }}</b></a>{% endfor %}
-      </div></details><button class="x plain" type="button" hidden aria-label="Remove the judge cause filter">✕</button></div>
+      </div></details><button class="x plain" type="button" hidden aria-label="Remove the judge cause filter"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     {% endif %}
     {% if judgement and judgement.flags %}
     <div class="facet j" data-k="f"><details><summary class="fsum"><span class="k">Flag</span><span class="v">All</span><span class="car">▾</span></summary>
       <div class="fmenu">
         {% for f, n in judgement.flags %}<a class="fx" data-f="{{ f }}" href="?flag={{ f }}"><span class="pip on key-n" data-n="{{ judgement.flag_ids.index(f) + 1 }}" aria-hidden="true"></span><span class="mono">{{ f }}</span><b>{{ n }}</b></a>{% endfor %}
-      </div></details><button class="x plain" type="button" hidden aria-label="Remove the flag filter">✕</button></div>
+      </div></details><button class="x plain" type="button" hidden aria-label="Remove the flag filter"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     {% endif %}
     <button class="fclear plain" id="clear-filters" type="button" hidden>Show all {{ job.trials|length }}</button>
   </div>
