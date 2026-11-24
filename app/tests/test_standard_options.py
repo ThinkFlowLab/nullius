@@ -194,10 +194,15 @@ class Builder(unittest.TestCase):
         out = recipe.compile(self.recipe(options={"effort": "high"}), self.defs())
         self.assertEqual(out["errors"], [])
         self.assertIn("--option effort=high", out["script"])
-        self.assertIn(["Options", "effort high"], [r[1:] for r in out["review"]])
+        self.assertIn(["Options", "Effort high"], [r[1:] for r in out["review"]])
         out = recipe.compile(self.recipe(), self.defs())
         self.assertNotIn("--option", out["script"])
-        self.assertIn(["Options", "effort medium (its default)"], [r[1:] for r in out["review"]])
+        self.assertIn(["Options", "Effort medium (its default)"], [r[1:] for r in out["review"]])
+
+    def test_an_option_with_a_label_is_named_by_it(self):
+        d = self.defs()
+        d["agent"] = [dict(a, options={"effort": dict(EFFORT, label="Thinking")}) for a in d["agent"]]
+        self.assertIn(["Options", "Thinking medium (its default)"], [r[1:] for r in recipe.compile(self.recipe(), d)["review"]])
 
     def test_a_value_it_does_not_allow_is_the_agent_steps_error(self):
         out = recipe.compile(self.recipe(options={"effort": "x; rm -rf"}), self.defs())
