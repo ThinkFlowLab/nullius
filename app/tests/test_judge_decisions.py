@@ -80,11 +80,11 @@ class Protocols(unittest.TestCase):
         self.assertEqual(got(dict(router, DECISION_PROTOCOL="openai-decisions")), ("systemone", "https://openrouter.ai/api/v1/systemone"))  # not served: automatic
         self.assertEqual(client.decision_judge_providers(dict(router, DECISION_PROTOCOL="decisions"))["openrouter"]["protocol"], "decisions")
         self.assertEqual(client.decision_judge_providers(router)["openrouter"]["listed"], ["systemone", "decisions"])
-        both = {"ANTHROPIC_API_KEY": "k", "ANTHROPIC": '{"endpoints": {"chat": "/chat/completions"}}', "LLM_JUDGE_PROVIDER": "anthropic", "LLM_JUDGE_MODEL": "m"}
+        both = {"MODEL_GW_API_KEY": "k", "MODEL_GW": '{"base": "https://gw.example/v1", "endpoints": {"chat": "/custom/chat", "messages": "/custom/messages"}}', "LLM_JUDGE_PROVIDER": "custom:GW", "LLM_JUDGE_MODEL": "m"}
         llm = lambda env: (client.llm_judge(env).protocol, client.llm_judge(env).url)
-        self.assertEqual(llm(both), ("chat", "https://api.anthropic.com/v1/chat/completions"))                 # unset: chat before messages
-        self.assertEqual(llm(dict(both, LLM_JUDGE_PROTOCOL="messages")), ("messages", "https://api.anthropic.com/v1/messages"))
-        self.assertEqual(client.llm_providers(both)["anthropic"]["listed"], ["chat", "messages"])
+        self.assertEqual(llm(both), ("chat", "https://gw.example/v1/custom/chat"))                 # unset: chat before messages
+        self.assertEqual(llm(dict(both, LLM_JUDGE_PROTOCOL="messages")), ("messages", "https://gw.example/v1/custom/messages"))
+        self.assertEqual(client.llm_providers(both)["custom:GW"]["listed"], ["chat", "messages"])
         self.assertEqual(llm({"OPENROUTER_API_KEY": "k", "LLM_JUDGE_MODEL": "m", "LLM_JUDGE_PROTOCOL": "messages"}),
                          ("chat", "https://openrouter.ai/api/v1/chat/completions"))                                 # not served: automatic
         for name, spoken in (("LLM_JUDGE_PROTOCOL", client.LLM_PROTOCOLS), ("DECISION_PROTOCOL", client.DECISION_PROTOCOLS)):

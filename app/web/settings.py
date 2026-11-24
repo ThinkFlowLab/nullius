@@ -419,7 +419,7 @@ def provider_cards(by: dict, env=None) -> list:
             {"protocol": p, "format": d["label"], "fixed": providers.url(rec, p) if rec["preset"] and p in providers.PRESETS[rec["id"]]["endpoints"] else "",
              "row": _record_row(setting, f"endpoints.{p}", rec["endpoints"].get(p, ""), held),
              "placeholder": settings.endpoint_url_shown(providers.join(rec["base"], d["path"])) or d["path"], "suggestion": hint.get(p, "")}
-            for p, d in providers.PROTOCOLS.items()]
+            for p, d in providers.PROTOCOLS.items() if not rec["preset"] or p in rec["endpoints"]]
         names = _provider_settings(rec["id"], settings.endpoint_ids(env))
         configured = any(by.get(n, {}).get("source", "unset") != "unset" for n in names)
         ready = providers.ready(rec, env)

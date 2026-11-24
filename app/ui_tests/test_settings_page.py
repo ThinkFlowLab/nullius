@@ -117,8 +117,8 @@ class SettingsPage(unittest.TestCase):
         settings.load(self.env_file)
         html = self.page()
         for v in settings.VARIABLES:
-            added = v.kind == "provider" and next(p for p in providers.PROTOCOLS if p not in providers.PRESETS[v.name.lower()]["endpoints"])
-            self.assertIn(f'id="{v.name}.endpoints.{added}"' if added else f'id="{v.name}"', html)    # a preset's record: a row it may add
+            if v.kind != "provider":
+                self.assertIn(f'id="{v.name}"', html)
         self.assertIn('title="Held by the process', html)                                            # the token, from the process
         self.assertEqual(html.count('<span class="st-shown">********</span>'), 3)                   # the token and the OpenRouter and OpenAI keys: eight stars each,
         self.assertNotIn("characters", html)                                                         # never their length
@@ -157,7 +157,10 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('<p class="st-note" data-judge-via>via Anthropic Messages</p>', llm)
         self.assertIn('id="LLM_JUDGE_PROTOCOL" data-source="unset" data-secret="no" hidden>', llm)
         self.assertNotIn("messages<", llm); self.assertNotIn(">chat<", llm)                                   # names, never keys
-        self.post({"ANTHROPIC": '{"endpoints": {"chat": "/chat/completions"}}', "LLM_JUDGE_PROTOCOL": "messages"})
+        self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
+        self.post({"MODEL_BOTH.base": "https://gw.example/v1", "MODEL_BOTH.endpoints.chat": "/chat/completions",
+                   "MODEL_BOTH.endpoints.messages": "/messages"})
+        self.post({"LLM_JUDGE_PROVIDER": "custom:BOTH", "LLM_JUDGE_PROTOCOL": "messages"})
         llm = (html := self.page())[html.index('id="LLM_JUDGE_PROVIDER"'):html.index('id="LLM_JUDGE_MODEL"')]
         self.assertIn('data-judge-via hidden>via Anthropic Messages</p>', llm)
         self.assertIn('id="LLM_JUDGE_PROTOCOL" data-source="file" data-secret="no">', llm)
@@ -369,7 +372,7 @@ class SettingsPage(unittest.TestCase):
 
     def test_a_record_s_environment_fields_are_read_only_and_its_endpoints_are_saved(self):
         """A partial record in the environment locks only its own fields; the
-        Endpoints rows save into the file's record, a preset only adds
+        Endpoints rows save into the custom provider's record; presets reject
         protocols, and no key ever reaches the page."""
         self.addCleanup(lambda: [os.environ.pop(n, None) for n in settings.endpoint_names()])
         saved = settings.ENV_PART.copy(); self.addCleanup(lambda: (settings.ENV_PART.clear(), settings.ENV_PART.update(saved)))
@@ -383,23 +386,26 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('placeholder="https://gw-eu.example/v1/chat/completions"', html)                  # the default, as a placeholder
         self.assertIn('title="chat">OpenAI Chat Completions</label>', html)                              # the format by name, its key as a tooltip
         self.assertNotIn('name="value:OPENROUTER.endpoints.chat"', html)                                # a preset's own endpoint is fixed
-        self.assertIn('name="value:OPENROUTER.endpoints.messages"', html)
+        for preset in providers.PRESETS:
+            self.assertNotIn(f'name="value:{preset.upper()}.endpoints.', html)
+        for protocol in providers.PROTOCOLS:
+            self.assertIn(f'name="value:MODEL_GW.endpoints.{protocol}"', html)
         self.assertNotIn("sk-gw-0123456789", html); self.assertNotIn("sk-or-0123456789", html)
         r = self.client.post("/settings/save", data={"csrf": self.token(), "value:MODEL_GW.name": "Gateway",
-                                                     "value:MODEL_GW.endpoints.decisions": "https://gw-eu.example/alpha/decisions",
-                                                     "value:OPENROUTER.endpoints.messages": "/messages"},
+                                                     "value:MODEL_GW.endpoints.decisions": "https://gw-eu.example/alpha/decisions"},
                              headers={"Origin": "http://localhost", "Accept": "application/json"})
         self.addCleanup(r.close)
         self.assertEqual(r.status_code, 200, r.get_json())
         filed = settings.in_file(self.env_file)
         self.assertEqual(json.loads(filed["MODEL_GW"]), {"name": "Gateway", "endpoints": {"decisions": "https://gw-eu.example/alpha/decisions"}})
-        self.assertEqual(json.loads(filed["OPENROUTER"]), {"endpoints": {"messages": "/messages"}})
+        self.assertNotIn("OPENROUTER", filed)
         rec = providers.record("custom:GW")
         self.assertEqual((rec["name"], rec["base"]), ("Gateway", "https://gw-eu.example/v1"))             # the environment's base still wins
-        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:OPENROUTER.endpoints.messages": ""},
+        r = self.client.post("/settings/save", data={"csrf": self.token(), "value:OPENROUTER.endpoints.messages": "/messages"},
                              headers={"Origin": "http://localhost", "Accept": "application/json"})
         self.addCleanup(r.close)
-        self.assertNotIn("OPENROUTER", settings.in_file(self.env_file))                                  # emptied: the record goes
+        self.assertEqual(r.status_code, 400)
+        self.assertNotIn("OPENROUTER", settings.in_file(self.env_file))
         r = self.client.post("/settings/save", data={"csrf": self.token(), "value:OPENROUTER.endpoints.chat": "/x"},
                              headers={"Origin": "http://localhost", "Accept": "application/json"})
         self.addCleanup(r.close)
