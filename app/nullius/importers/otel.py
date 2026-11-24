@@ -275,6 +275,8 @@ def convert(root: str, out_root: str, job_name: str = "",
     are listed in the job's ``config.json`` under ``import.skipped`` with their
     redacted reasons; when nothing reads, that list is the error.
     """
+    default = f"{NAME}__{os.path.basename(os.path.abspath(root)) or 'export'}"
+    root = os.path.realpath(root)                    # one spelling of the source, whatever the caller's cwd or links
     paths = find_exports(root)
     skipped = refused(root)
     if not paths:
@@ -287,9 +289,9 @@ def convert(root: str, out_root: str, job_name: str = "",
         raise SystemExit(str(exc)) from None
     if not documents:
         raise SystemExit(redact(f"the OTLP/JSON exports in {root} carry no spans"))
-    name, sid = importers.place(out_root, root, f"{NAME}__{os.path.basename(os.path.abspath(root)) or 'export'}",
-                                job_name, _recorded, NAME)
-    return [_write_job(documents, out_root, name, command, root, skipped, sid)]
+    with importers.locked(out_root):
+        name, sid = importers.place(out_root, root, default, job_name, _recorded, NAME)
+        return [_write_job(documents, out_root, name, command, root, skipped, sid)]
 
 
 def _recorded(cfg: dict):

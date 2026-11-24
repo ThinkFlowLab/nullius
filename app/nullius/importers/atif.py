@@ -390,12 +390,14 @@ def convert(root: str, out_root: str, job_name: str = "",
     """Convert the documents at *root* — a directory of them or one file —
     into one job. Every document is read before anything is written, so a
     refused tree leaves no half-written job behind."""
-    docs = _read_all(root)
     base = os.path.basename(os.path.normpath(root))
     if os.path.isfile(root):
         base = _trial_name(root, root)
-    job_name, sid = importers.place(out_root, root, f"{NAME}__{base}", job_name, _recorded, NAME)
-    return [_write_job(docs, root, out_root, job_name, command, sid)]
+    root = os.path.realpath(root)                    # one spelling of the source, whatever the caller's cwd or links
+    docs = _read_all(root)
+    with importers.locked(out_root):
+        job_name, sid = importers.place(out_root, root, f"{NAME}__{base}", job_name, _recorded, NAME)
+        return [_write_job(docs, root, out_root, job_name, command, sid)]
 
 
 def _recorded(cfg: dict):

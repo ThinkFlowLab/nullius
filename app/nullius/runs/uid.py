@@ -13,8 +13,9 @@ under this identity, so it follows the job and not the folder.
   reconversion and copy.
 - **derived**: none was written (Harbor, imports and standard jobs from before
   their ids). A ``uuid5`` over fixed facts read from the files: the
-  format, the folder name, what ran and when it started. No path is a fact,
-  so a copy or a move keeps it; a renamed folder is a new job.
+  format, the folder name, what ran and when it started. No path of the job is a
+  fact (an import's recorded source path is), so a copy or a move keeps it; a
+  renamed folder is a new job.
 - **pending**: nothing fixed to derive from yet: a job with no trial and no
   start (a Harbor job preparing), or a standard job from before
   ``standard.uuid`` without its ``result.json`` (still running, or killed).
@@ -30,6 +31,8 @@ from __future__ import annotations
 import json
 import os
 import uuid
+
+from nullius import importers
 
 #: fixed for good: changing one changes every derived identity
 NS_JOB = uuid.UUID("6f0f3a52-5c1e-4d39-9a2b-6a4c1f0e7d21")
@@ -58,8 +61,9 @@ def facts(job_dir: str, cfg: dict, res: dict):
     pending. The start is ``result.json``'s only, which nothing later rewrites."""
     std = cfg.get("standard") if isinstance(cfg.get("standard"), dict) else {}
     agents = [a for a in cfg.get("agents") or [] if isinstance(a, dict)]
-    if isinstance(cfg.get("harness"), str):          # an import from before nullius.source: its folder names its source
-        return {"v": 1, "format": cfg["harness"], "folder": os.path.basename(job_dir)}
+    if isinstance(cfg.get("harness"), str):          # an import from before nullius.source: its folder and recorded source
+        return {"v": 1, "format": cfg["harness"], "folder": os.path.basename(job_dir),
+                "source": str(importers.recorded(cfg) or "")}
     start = str(res["started_at"]) if res.get("started_at") else None
     if std and not res:
         return None

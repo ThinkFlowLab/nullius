@@ -33,8 +33,9 @@ path. Its first conversion gives it an id of its own (:func:`place`), derived
 from the format and that path so every workspace importing it agrees, written
 in the job's ``config.json`` as ``nullius.source`` and read back on every
 reconversion, so the folder and the identity stay its own: a second source of
-one basename gets a folder of its own. A folder converted before the id is
-kept as it is, without one.
+one basename gets a folder of its own, and a job name that names another
+source's folder is refused. A folder converted before the id is kept as it
+is, without one.
 
 **Refusing a tree** is `convert` raising ``SystemExit`` with a message
 that names the file and what is wrong with it — never a job with no trials or a traceback. The message is what a person sees, on the picker or from
@@ -47,6 +48,7 @@ discovery rather than a table here. Nothing outside a harness module mentions th
 """
 from __future__ import annotations
 
+import contextlib
 import importlib
 import json
 import os
@@ -286,17 +288,18 @@ def place(out_root: str, root: str, default: str, job_name: str = "", recorded=N
     """``(job_name, source id)``: the folder under *out_root* the tree at *root*
     is converted into, and its id, None for a folder converted before ids.
 
-    The folder that already records this source is its own. Otherwise *default*,
+    The folder that already records this source's id is its own. Otherwise *default*,
     then ``<default>-2``, ``-3``…, skipping a folder that belongs to another
-    source: one recording another path, or an older one whose
-    ``recorded(config)`` names another path. A named *job_name* is used as it is.
+    source: one recording another id, or an older one whose
+    ``recorded(config)`` names another absolute path. A named *job_name* is used
+    as it is, and refused when it belongs to another source. Call it under
+    :func:`locked`, through the write, so two conversions never pick one folder.
     """
     src, new = os.path.realpath(root), source_id(fmt, root)
     names = sorted(os.listdir(out_root)) if not job_name and os.path.isdir(out_root) else []
     for name in names:
-        sid, path = _source(_config(os.path.join(out_root, name)))
-        if sid and path == src:
-            return name, sid
+        if _source(_config(os.path.join(out_root, name)))[0] == new:
+            return name, new
     n = 1
     while True:
         name = job_name or (default if n == 1 else f"{default}-{n}")
@@ -304,14 +307,31 @@ def place(out_root: str, root: str, default: str, job_name: str = "", recorded=N
         if not os.path.isdir(job_dir):
             return name, new
         cfg = _config(job_dir)
-        sid, path = _source(cfg)
-        if job_name:                     # named: written there as asked; an older folder keeps having no id
-            return name, (sid if path == src else new) if sid else None
-        if not sid:
-            old = recorded(cfg) if recorded and cfg else None
-            if not old or os.path.realpath(old) == src or os.path.normpath(old) == os.path.normpath(root):
-                return name, None
+        if not cfg:                      # no conversion finished there
+            return name, new
+        sid = _source(cfg)[0]
+        old = recorded(cfg) if recorded and not sid else None
+        # a relative path was the cwd's of a conversion long gone: it names nothing
+        mine = sid == new if sid else not old or not os.path.isabs(old) or os.path.realpath(old) == src
+        if mine:
+            return name, sid
+        if job_name:
+            raise SystemExit(redact(f"{job_dir} holds the import of another source; choose another job name"))
         n += 1
+
+
+@contextlib.contextmanager
+def locked(out_root: str):
+    """One conversion at a time into *out_root*, from :func:`place` through the write."""
+    os.makedirs(out_root, exist_ok=True)
+    with ondisk.locked(os.path.join(out_root, ".nullius-import.lock")):
+        yield
+
+
+def recorded(cfg: dict):
+    """The source path an import from before ids recorded in its ``config.json``, or None."""
+    module = get(str(cfg.get("harness") or ""))
+    return module._recorded(cfg) if module and hasattr(module, "_recorded") else None
 
 
 def recorded_as(sid, root: str) -> dict:
