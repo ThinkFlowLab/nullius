@@ -42,7 +42,7 @@ from typing import Callable, Dict, List, Optional
 from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
 from nullius.standard.backends import boat
-from nullius.standard.calls import ledger, relay
+from nullius.standard.calls import exchanges, ledger, relay
 from nullius.standard.contract import definitions, match, ports
 from nullius.standard.proofs import prove
 from nullius.standard.requirements import hostreq
@@ -413,7 +413,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     ``timeouts``: {phase: minutes}, each phase's time limit forced on every
     job (``--timeout``), empty for the default; ``turns``: the most agent
     turns in a conversation (``--max-turns``); ``max_calls``: the most model
-    calls a unit's agent may make (``--max-calls``).
+    calls a unit's agent may make (``--max-calls``). ``exchanges`` and
+    ``exchanges_max_mb``: what each unit's relay keeps of its agent's calls
+    and its bound in MB (``--exchanges``, ``--exchanges-max-mb``), said on
+    the command only when not the default.
     ``max_usd_per_unit``: each unit's own cap (``--max-usd-per-unit``), given
     whole to every job that calls a model.
     ``unpriced``: asked, for a recipe with a cap, which of the models it
@@ -426,10 +429,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     the run sends it as."""
     d = defs or _all()
     errors, notes = [], []
-    # each problem once; shown: the step already says it elsewhere, so only Review lists it; field: the input it is about
-    def add(step, message, shown=False, field=None):
+    # each problem once; shown: the step already says it elsewhere, so only Review lists it; field: the input it is about; unset: nothing is
+    # chosen yet, which the Model step does not say before its field is used
+    def add(step, message, shown=False, field=None, unset=False):
         if not any(e["step"] == STEP[step] and e["message"] == message for e in errors):
-            errors.append({"step": STEP[step], "message": message, **({"shown": True} if shown else {}), **({"field": field} if field else {})})
+            errors.append({"step": STEP[step], "message": message, **({"shown": True} if shown else {}), **({"field": field} if field else {}), **({"unset": True} if unset else {})})
     out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": "",
            "served_models": {}}
     name = str(recipe.get("name") or "")
@@ -482,7 +486,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             orig = (b.get("setups") or {}).get("original") or {}
             picked = str(recipe.get("model") or "").strip()
             if not picked:
-                add("model", "Choose a model.")
+                add("model", "Choose a model.", unset=True)
                 continue
             method = "model" if recipe.get("model_choice", "any") != "paper" and "model" in (b.get("setups") or {}) else "original"
             if method == "original":
@@ -592,7 +596,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         add("model", f"{providers.label(provider)} does not serve what {b['label']}'s judge speaks: choose another provider.")
     model = str(recipe.get("model") or "").strip()
     if not _MODEL.match(model) and (needs_model or model):
-        add("model", "Choose a model or enter its ID.")
+        add("model", "Choose a model or enter its ID.", unset=not model)
     if model_choice == "paper" and model in orig.get("models", []) and provider_ in orig.get("providers", {}):
         model = orig["providers"][provider_] + (orig.get("served_as") or {}).get(model, model)
     # each unit tried K times (the upstream's --num-trials: pass^k); the user simulator's and the judge's models
@@ -664,6 +668,18 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     elif _int(calls, 1, 1000000) is None:
         add("limits", "Model calls per unit: a whole number of at least 1, or empty for no cap.")
         calls = None
+    keep = recipe.get("exchanges")              # what each unit's relay keeps of its agent's calls (run --exchanges)
+    if keep in ("", None):
+        keep = exchanges.DEFAULT
+    elif keep not in exchanges.MODES:
+        add("limits", "Model exchanges: whole, text or off, or empty for whole.")
+        keep = exchanges.DEFAULT
+    keep_mb = recipe.get("exchanges_max_mb")
+    if keep_mb in ("", None):
+        keep_mb = exchanges.MAX_MB
+    elif _int(keep_mb, 1) is None:
+        add("limits", f"Model exchanges per unit: a whole number of MB, at least 1, or empty for {exchanges.MAX_MB}.")
+        keep_mb = exchanges.MAX_MB
     turns = recipe.get("turns")
     if turns in ("", None) or "agent.conversation/v1" not in (b.get("needs") or []):     # only a conversation has turns
         turns = None
@@ -767,7 +783,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                 add("model", f"Served by pins {m} twice, with different providers: give its fields the same ones.")
             by_model[m] = list(slugs)
     # each field's model as the run sends it, for the builder to ask its providers under that name
-    out["served_models"] = {role: next((sent_of(p)[role] for p in sorted(picks, key=lambda q: q["control"]) if sent_of(p)[role]), None)
+    out["served_models"] = {role: next((sent_of(p)[role] for p in sorted(picks, key=lambda q: q["control"]) if _MODEL.match(sent_of(p)[role] or "")), None)
                             for role in roles}
 
     def pinned(p: dict) -> Dict[str, List[str]]:
@@ -818,6 +834,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *[w for k, v in forced.items() for w in ("--timeout", f"{k}={v:g}")],
                  *(["--max-turns", str(turns)] if turns else []),
                  *(["--max-calls", str(calls)] if calls and spends(p) and o.get("_kind") != "capability" else []),
+                 *(["--exchanges", keep] if keep != exchanges.DEFAULT else []),
+                 *(["--exchanges-max-mb", str(keep_mb)] if keep_mb != exchanges.MAX_MB else []),
                  *(["--simulator-model", sim_model] if sim_model and not p["control"] else []),
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
@@ -934,6 +952,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                      *([[STEP["limits"], "Time limits", " · ".join(f"{k} {v / 60:g} min" for k, v in forced.items())]] if forced else []),
                      *([[STEP["limits"], "Turns per conversation", str(turns)]] if turns else []),
                      *([[STEP["limits"], f"Model calls per {noun}", str(calls)]] if calls else []),
+                     *([[STEP["limits"], "Model exchanges", keep + (f" · at most {keep_mb} MB per {noun}" if keep != "off" else "")]]
+                       if (keep, keep_mb) != (exchanges.DEFAULT, exchanges.MAX_MB) else []),
                      [STEP["where"], "Where", (f"Boat sandboxes · one {boat.SIZES[boat_size]['label']} VM per {noun}" if backend == "boat"
                       else (f"{of} shards, one per machine: " if of > 1 else "")
                       + ", ".join(where_label(t) for t in targets) + f" · {backend} backend")

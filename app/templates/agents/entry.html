@@ -107,7 +107,7 @@
         <div class="std-form">
           <label>Run in<select name="backend"><option value="local">Local processes</option><option value="container">Container</option></select></label>
           <label>Provider<select name="provider">{% for p, label in providers %}<option value="{{ p }}">{{ label }}</option>{% endfor %}</select></label>
-          <label>Model<input name="model" required autocomplete="off" spellcheck="false" placeholder="gpt-5-mini"></label>
+          <label>Model<input name="model" data-model-picker="[name=provider]" required autocomplete="off" spellcheck="false" placeholder="gpt-5-mini"></label>
         </div>
         {% if kind == 'agent' %}<label class="std-consent"><input type="checkbox" name="unsandboxed" value="yes" required> Run it on this machine, as me: the local backend is not a sandbox, and its permission requests are granted.</label>{% endif %}
         <button class="btn" type="submit">Prove its ports</button>
@@ -120,6 +120,8 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}"></script>
+<script src="{{ url_for('static', filename='model-picker.js') }}"></script>
 <script src="{{ url_for('static', filename='catalogue/versions.js') }}"></script>
 {% if kind == 'agent' %}
 <script>
