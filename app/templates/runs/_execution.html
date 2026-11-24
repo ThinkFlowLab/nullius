@@ -27,16 +27,16 @@
   {% set sp = ex.stages() %}
   <div class="execution-stages" id="execution-stages"{% if not sp.stages and not sp.units %} hidden{% endif %}>
     <ol class="xs-list" id="execution-stage-list">{% for st in sp.stages %}
-      <li class="xs {{ st.state }}"{% if st.detail %} title="{{ st.detail }}"{% endif %}{% if st.state == 'running' %} aria-current="step"{% endif %}><i aria-hidden="true">{{ '' if st.state in ('done', 'cached') else '✕' if st.state == 'failed' else loop.index }}</i><span class="xs-label">{{ st.label }}</span>
+      <li class="xs {{ st.state }}"{% if st.detail %} title="{{ st.detail }}"{% endif %}{% if st.state == 'running' %} aria-current="step"{% endif %}><i aria-hidden="true">{{ '' if st.state in ('done', 'cached') else '✕' if st.state == 'failed' else loop.index }}</i><span class="xs-label"{% if st.full %} title="{{ st.full }}"{% endif %}>{{ st.label }}</span>
         {%- if st.state == 'cached' %}<span class="xs-time">cached</span>{% elif st.get('seconds') is not none and st.state in ('done', 'failed') %}<span class="xs-time">{{ st.seconds|secs }}</span>{% endif %}
         {%- if st.state in ('running', 'failed') and st.detail and st.detail != sp.detail %}<span class="xs-detail">{{ st.detail }}</span>{% endif %}</li>{% endfor %}
     </ol>
-    <div class="xs-units" id="execution-units"{% if not sp.units %} hidden{% endif %}>{% if sp.units %}{% set u = sp.units %}<progress max="{{ u.n or 1 }}" value="{{ u.done }}"></progress><span class="small"><b>{{ u.done }} / {{ u.n if u.n is not none else '?' }}</b> {{ u.noun }}{% for k in ('passed', 'failed', 'scored', 'errors') if u[k] %} · {{ u[k] }} {{ 'error' + ('' if u[k] == 1 else 's') if k == 'errors' else k }}{% endfor %}{% if u.running %} · {{ u.running }} running{% endif %}</span>{% endif %}</div>
+    <div class="xs-units" id="execution-units"{% if not sp.units %} hidden{% endif %}>{% if sp.units %}{% set u = sp.units %}<progress{% if u.n is not none %} max="{{ u.n or 1 }}" value="{{ u.done }}"{% endif %}></progress><span class="small"><b>{{ u.done }} / {{ u.n if u.n is not none else '?' }}</b> {{ u.noun }}{% for k in ('passed', 'failed', 'scored', 'errors') if u[k] %} · {{ u[k] }} {{ 'error' + ('' if u[k] == 1 else 's') if k == 'errors' else k }}{% endfor %}{% if u.running %} · {{ u.running }} running{% endif %}</span>{% endif %}</div>
     <div class="small bad" id="execution-refused"{% if sp.ended != 'refused' %} hidden{% endif %}>{% if sp.ended == 'refused' %}Refused before its first unit: {{ sp.detail }}{% endif %}</div>
   </div>
   {# a part downloading: its file, how much of it, as a bar #}
   <div class="execution-progress" id="execution-progress" hidden><progress id="execution-bar" max="1" value="0"></progress><span class="small mono" id="execution-progress-text"></span></div>
-  <details class="execution-log" {% if waiting %}open{% endif %}><summary class="small">Launch log</summary><pre id="execution-lines"></pre></details>
+  <details class="execution-log" open><summary class="small">Launch log</summary><pre id="execution-lines"></pre></details>
 </section>
 <script>
 (() => {
@@ -49,8 +49,8 @@
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const stages = sp => {
     const wrap = document.getElementById('execution-stages'), list = document.getElementById('execution-stage-list'), units = document.getElementById('execution-units');
-    if (!sp || (!sp.stages.length && !sp.units)) return;
-    wrap.hidden = false;
+    if (!sp) return;
+    wrap.hidden = !sp.stages.length && !sp.units;
     sp.stages.forEach((st, n) => {
       const li = list.children[n] || list.appendChild(el('li'));
       li.className = 'xs ' + st.state;
@@ -60,7 +60,7 @@
       if (!mark) { mark = el('i'); mark.setAttribute('aria-hidden', 'true'); li.append(mark); }
       mark.textContent = {done: '', cached: '', failed: '✕'}[st.state] ?? String(n + 1);
       while (mark.nextSibling) mark.nextSibling.remove();
-      li.append(el('span', 'xs-label', st.label));
+      const name = li.appendChild(el('span', 'xs-label', st.label)); if (st.full) name.title = st.full;
       if (st.state === 'cached') li.append(el('span', 'xs-time', 'cached'));
       else if (st.state === 'running' && st.t) li.append(el('span', 'xs-time', clock(Math.max(0, Date.now() / 1000 - st.t))));
       else if (st.seconds != null && (st.state === 'done' || st.state === 'failed')) li.append(el('span', 'xs-time', secs(st.seconds)));
@@ -73,7 +73,7 @@
     const u = sp.units;
     units.hidden = !u;
     if (u) {
-      const bar = el('progress'); bar.max = u.n || 1; bar.value = u.done;
+      const bar = el('progress'); if (u.n != null) { bar.max = u.n || 1; bar.value = u.done; }
       const txt = el('span', 'small'); txt.append(el('b', '', u.done + ' / ' + (u.n != null ? u.n : '?')), ' ' + u.noun);
       for (const k of ['passed', 'failed', 'scored', 'errors']) if (u[k]) txt.append(' · ' + u[k] + ' ' + (k === 'errors' ? (u[k] === 1 ? 'error' : 'errors') : k));
       if (u.running) txt.append(' · ' + u.running + ' running');
@@ -106,8 +106,7 @@
       if (j.state === 'stopping') document.getElementById('execution-stop')?.remove();
       const ask = document.getElementById('execution-ask'); ask.hidden = j.state !== 'paused'; document.getElementById('execution-question').textContent = j.question || '';
       if (!alive && live) { live = false; document.getElementById('execution-stop')?.remove(); if (j.error && !own) { const e = document.createElement('span'); e.className = 'small bad'; e.textContent = j.error; state.after(e); } }
-      // Check once more at completion, but do not wait forever for a job that never started.
-      if (box.dataset.waiting === 'yes') { const h = await nulliusFetch(location.pathname, {method: 'HEAD', cache: 'no-store'}); if (h.ok) location.reload(); }
+      box.dataset.live = alive ? 'yes' : 'no';
       if (alive) setTimeout(tick, 1000);
     } catch { if (retry) setTimeout(tick, 5000); }
   };

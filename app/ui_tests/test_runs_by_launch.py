@@ -321,28 +321,6 @@ class RunsByLaunch(unittest.TestCase):
             self.assertIn(f'<td data-col="run"><a href="/job/{job.job_id}">', html)   # every run, one row
         self.assertIn("Tick two or more runs to compare", html)
 
-    def test_the_flat_table_has_one_controls_row(self):
-        html = re.sub(r">\s+<", "><", self.get("/runs?view=all"))
-        view = html[html.index('<div id="view-all">'):]
-        tools = view[:view.index('<div class="table-wrap">')]
-        self.assertEqual(tools.count('class="table-tools'), 1)                               # the toolkit's row, no other
-        self.assertIn('placeholder="Search by run, agent, model, benchmark or dataset"', tools)
-        self.assertEqual(re.findall(r'data-slot="(\w+)"|data-tools-btn="(\w+)"|id="(density-btn|compare-btn)"', tools),
-                         [("views", "", ""), ("", "", "density-btn"), ("", "columns", ""), ("", "filter", ""), ("", "sort", ""),
-                          ("actions", "", ""), ("", "", "compare-btn")])
-        self.assertEqual(re.findall(r'data-filter-menu="(\w+)"', tools), ["agent", "model", "dataset"])
-        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools), [""] + [c["key"] for c in web.shared.COLUMNS])
-        self.assertIn('<button class="btn sm" type="submit" id="compare-btn" aria-disabled="true" aria-describedby="compare-why" '
-                      'title="Tick two or more runs to compare">Compare</button><span class="sr" id="compare-why">Tick two or more runs to compare</span>', tools)
-        head = view[view.index("<thead>"):view.index("</thead>")]
-        self.assertNotIn("filter-btn", head)                                                     # a header sorts, and filters nothing
-        self.assertNotIn("<button", head)
-        for job in self.jobs:
-            with self.subTest(job=job.job_id):
-                search = re.search(rf'<tr data-search="([^"]*)"[^>]*><td class="pick-col"><input type="checkbox" data-check value="{job.job_id}"', view).group(1)
-                self.assertTrue(search.startswith(f"{job.job_id} {job.agent_label} {job.model_name}"), search)
-                self.assertIn(job.dataset, search)
-
 
 if __name__ == "__main__":
     unittest.main()

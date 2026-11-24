@@ -73,36 +73,5 @@
   },
   "limits": {
     "turn_seconds": 600
-  },
-  "proven": {
-    "humaneval": {
-      "units": {
-        "units": 164,
-        "passed": "164 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 164,
-        "looked_for": 163,
-        "short": 1,
-        "passed": "164/164",
-        "note": "1 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/164",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 164
-      },
-      "oracle": {
-        "passed": "164/164",
-        "value": 1.0,
-        "expect": {
-          "at_least": 1.0
-        },
-        "units": 164
-      }
-    }
   }
 }

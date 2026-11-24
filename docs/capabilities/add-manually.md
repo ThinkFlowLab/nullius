@@ -18,9 +18,7 @@ The new folder is `capabilities/my-memory/` below that catalogue. It survives up
 ```json title="capability.json · excerpt of the scaffold"
 {
   "kind": "memory",
-  "start": {"command": ["python3", "{here}/capability.py"]},
-  "offers": [],
-  "proven": {}
+  "start": {"command": ["python3", "{here}/capability.py"]}
 }
 ```
 
@@ -93,7 +91,7 @@ Examples: `app/nullius/catalogue/capabilities/mem0/capability.py` calls an upstr
 | Rule | |
 | --- | --- |
 | The empty scaffold | Fails the recall checks |
-| Success | Passing checks write `offers` and `proven`, never by hand |
+| Success | Passing checks write [proofs.json](../standard.md#what-is-proven), never by hand |
 | Scale | Inspect the stored and recalled text before raising the limit |
 
 To contribute the entry to the bundled catalogue, copy its whole folder into

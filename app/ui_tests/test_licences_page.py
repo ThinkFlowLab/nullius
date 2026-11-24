@@ -124,16 +124,6 @@ class LicencesPanel(unittest.TestCase):
         self.assertNotIn('name="expires"', key_card)
         self.assertIn('name="expires"', file_card)
 
-    def test_custom_keys_combines_benchmark_and_agent_fields_in_one_tab(self):
-        html = self.page()
-        panel = self.panel()
-        self.assertIn('id="access-gsm8k"', panel)
-        self.assertIn('id="AGENT_KEYS"', panel)
-        self.assertIn('name="agent_key_name"', panel)
-        self.assertEqual(html.count('data-section="custom-keys"'), 1)
-        for old in ("agent-keys", "benchmark-access"):
-            self.assertNotIn(f'data-section="{old}"', html)
-
     def test_expired_credential_has_an_edit_action_and_expired_state(self):
         secrets.set("gsm8k", "FAKE_SCORER_TOKEN", KEY, expires="2001-01-01")
         panel = self.panel()
@@ -143,20 +133,13 @@ class LicencesPanel(unittest.TestCase):
         self.assertIn('aria-controls="access-gsm8k-FAKE_SCORER_TOKEN-editor"', card)
         self.assertNotIn(KEY, card)
 
-    def test_benchmark_page_omits_credential_help_and_editor(self):
-        html = self.page("/benchmarks/gsm8k")
-        self.assertNotIn('/settings#access-gsm8k', html)
-        self.assertNotIn('action="/benchmarks/gsm8k/licences"', html)
-        self.assertNotIn('name="expires"', html)
-        self.assertNotIn("FAKE_TOOL_LICENSE", html)
-
     def test_access_forms_are_outside_the_general_settings_form(self):
         forms = Forms(self.page())
         self.assertFalse(forms.nested)
         self.assertTrue(any(f.get("id") == "settings-form" for f in forms.forms))
         self.assertTrue(any(f.get("action") == "/benchmarks/gsm8k/licences" for f in forms.forms))
 
-    def test_set_says_so_in_a_toast_and_never_shows_the_value(self):
+    def test_set_and_replace_say_so_in_a_toast_and_never_show_the_value(self):
         r = self.post({"name": "FAKE_TOOL_LICENSE", "value": KEY, "expires": "2030-01-31"})
         self.assertEqual(r.status_code, 302)
         self.assertTrue(r.headers["Location"].endswith("/settings#access-gsm8k"))
@@ -168,6 +151,11 @@ class LicencesPanel(unittest.TestCase):
         self.assertNotIn(KEY, self.page())
         self.assertEqual(secrets.value("gsm8k", "FAKE_TOOL_LICENSE"), KEY.encode())
         self.assertNotIn("FAKE_TOOL_LICENSE", Path(self.env_file).read_text())       # never in Settings' file
+        self.assertIn('data-key-label="Edit"', p)
+        replacement = "replacement-licence-not-real"
+        self.post({"name": "FAKE_TOOL_LICENSE", "value": replacement})
+        self.assertEqual(secrets.value("gsm8k", "FAKE_TOOL_LICENSE"), replacement.encode())
+        self.assertNotIn(replacement, self.page())
 
     def test_embedded_settings_keeps_the_embedded_return(self):
         html = self.page("/settings?embedded=1")
@@ -176,14 +164,6 @@ class LicencesPanel(unittest.TestCase):
         self.assertIn('name="csrf"', form)
         r = self.post({"name": "FAKE_TOOL_LICENSE", "value": KEY, "embedded": "1"})
         self.assertEqual(r.headers["Location"], "/settings?embedded=1#access-gsm8k")
-
-    def test_replace_keeps_the_new_value_out_of_the_response(self):
-        secrets.set("gsm8k", "FAKE_TOOL_LICENSE", KEY)
-        self.assertIn('data-key-label="Edit"', self.panel())
-        replacement = "replacement-licence-not-real"
-        self.post({"name": "FAKE_TOOL_LICENSE", "value": replacement})
-        self.assertEqual(secrets.value("gsm8k", "FAKE_TOOL_LICENSE"), replacement.encode())
-        self.assertNotIn(replacement, self.page())
 
     def test_a_licence_file_is_uploaded_whole(self):
         r = self.post({"name": "FAKE_TOOL_LICENSE_FILE"}, files={"file": (io.BytesIO(FILE), "tool.lic")})

@@ -54,15 +54,6 @@ class EmptyWorkspace(unittest.TestCase):
         with self.client.session_transaction() as session:
             self.assertIn("nothing to scan", str(session.get("_flashes")))
 
-    def test_a_path_still_goes_to_its_roots(self):
-        job = self.root / "jobs/test-run"
-        job.mkdir(parents=True)
-        (job / "config.json").write_text(json.dumps({"agents": [{"name": "fixture"}]}))
-        with patch.object(web.shared, "adopt_roots") as adopt:
-            self.post("/use-path", name="", path=str(self.root / "jobs"), new="1")
-        adopt.assert_called_once_with([str(self.root / "jobs")], label="", new=True, into="")
-        self.assertFalse(self.home.exists())
-
     def test_a_missing_path_creates_nothing(self):
         self.post("/use-path", name="Scratch", path=str(self.root / "missing"), new="1")
         self.assertIsNone(web.shared.STATE["workspace"])

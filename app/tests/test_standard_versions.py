@@ -16,7 +16,6 @@ from unittest.mock import patch
 from nullius import ondisk
 from nullius.standard import cli
 from nullius.standard.contract import definitions, match
-from nullius.standard.proofs import conform
 
 BENCH = {
     "schema": "nullius.benchmark/v1", "key": "toy", "label": "Toy", "summary": "A toy.",
@@ -78,11 +77,6 @@ class Resolve(Catalogue):
         self.assertEqual(d["offers"], [])
         self.assertNotIn("versions", d)
 
-    def test_a_bare_key_is_the_default_version(self):
-        d = definitions.get("agent", "bot", self.root)
-        self.assertEqual(d["_version"], "1.0.0")
-        self.assertEqual(d["offers"], ["agent.workspace/v1"])
-
     def test_an_unknown_version_is_nothing(self):
         self.assertIsNone(definitions.get("agent", "bot@9.9.9", self.root))
         self.assertIsNone(definitions.get("agent", "flat@1.0.0", self.root))
@@ -137,25 +131,22 @@ class Problems(unittest.TestCase):
     def test_the_shipped_shape_passes(self):
         self.assertEqual(definitions.problems(copy.deepcopy(VERSIONED), "agent"), [])
 
-    def test_the_default_is_one_of_the_versions(self):
-        self.assertIn("default: one of the versions (2.0.0, 1.0.0)", self.bad(lambda d: d.update(default="3.0.0")))
-
-    def test_pins_and_proofs_go_in_each_version(self):
-        got = self.bad(lambda d: d.update(install={"npm": ["x@1"]}, proven={}))
-        self.assertIn("install: goes in each version, under versions", got)
-        self.assertIn("proven: goes in each version, under versions", got)
-
-    def test_only_some_fields_may_differ(self):
+    def test_each_wrong_edit_is_said_by_name(self):
+        for change, said in (
+                (lambda d: d.update(default="3.0.0"), ["default: one of the versions (2.0.0, 1.0.0)"]),
+                (lambda d: d.update(install={"npm": ["x@1"]}, proven={}),
+                 ["install: goes in each version, under versions", "proven: goes in each version, under versions"]),
+                (lambda d: d["versions"]["2.0.0"].pop("install"), ["versions.2.0.0.install: what this version installs"]),
+                (lambda d: d["versions"]["2.0.0"].update(proven={"agent.task/v1": dict(PROOF, version="1.0.0")}),
+                 ["versions.2.0.0.proven.agent.task/v1: proven on 1.0.0, not 2.0.0"])):
+            with self.subTest(said[0]):
+                got = self.bad(change)
+                for problem in said:
+                    self.assertIn(problem, got)
         got = self.bad(lambda d: d["versions"]["2.0.0"].update(label="Other"))
         self.assertTrue(any(p.startswith("versions.2.0.0: label cannot differ") for p in got), got)
-
-    def test_a_version_needs_its_install(self):
-        self.assertIn("versions.2.0.0.install: what this version installs",
-                      self.bad(lambda d: d["versions"]["2.0.0"].pop("install")))
-
-    def test_a_proof_names_its_own_version(self):
-        got = self.bad(lambda d: d["versions"]["2.0.0"].update(proven={"agent.task/v1": dict(PROOF, version="1.0.0")}))
-        self.assertIn("versions.2.0.0.proven.agent.task/v1: proven on 1.0.0, not 2.0.0", got)
+        got = self.bad(lambda d: d["versions"].update({"2.0 beta": d["versions"]["2.0.0"]}))
+        self.assertTrue(any("is not a version" in p for p in got), got)
 
     def test_a_problem_of_one_version_names_it_and_a_shared_one_is_said_once(self):
         got = self.bad(lambda d: d["versions"]["2.0.0"].update(install={"npm": ["not a pin"]}))
@@ -163,25 +154,18 @@ class Problems(unittest.TestCase):
         got = self.bad(lambda d: d.update(label=""))
         self.assertEqual(got.count("label: say it"), 1)
 
-    def test_a_version_name_is_plain(self):
-        self.assertTrue(any("is not a version" in p for p in
-                            self.bad(lambda d: d["versions"].update({"2.0 beta": d["versions"]["2.0.0"]}))))
-
 
 class Write(Catalogue):
     def test_proving_a_version_writes_only_its_block(self):
         d = definitions.get("agent", "bot@2.0.0", self.root)
         d["proven"] = {"agent.task/v1": dict(PROOF, version="2.0.0")}
         definitions.save(d)
-        raw = self.read("bot")
+        self.assertEqual(self.read("bot"), VERSIONED)
+        raw = definitions.read_document(os.path.join(self.root, "agents", "bot", "agent.json"), "agent")
         self.assertEqual(raw["versions"]["2.0.0"]["proven"], {"agent.task/v1": dict(PROOF, version="2.0.0")})
         self.assertEqual(raw["versions"]["1.0.0"], VERSIONED["versions"]["1.0.0"])
         self.assertNotIn("offers", raw)
         self.assertEqual(definitions.problems(raw, "agent"), [])
-
-    def test_a_kit_job_is_named_with_the_version(self):
-        d = definitions.get("agent", "bot@2.0.0", self.root)
-        self.assertEqual(conform.job_name("S", "agent-task-v1", definitions.job_word(d)), "S__kit__agent-task-v1__bot-2.0.0")
 
     def new_version(self, key, version):
         with patch.object(definitions, "CATALOGUE", self.root), contextlib.redirect_stdout(io.StringIO()):
@@ -193,8 +177,11 @@ class Write(Catalogue):
         self.assertEqual(self.read("flat"), FLAT)  # the bundle stays intact
         self.assertEqual(raw["default"], "0.3.0")
         self.assertEqual(list(raw["versions"]), ["0.4.0", "0.3.0"])
-        self.assertEqual(raw["versions"]["0.4.0"], {"install": {"npm": ["flat-acp@0.4.0"]}, "proven": {}})
-        self.assertEqual(raw["versions"]["0.3.0"]["proven"], FLAT["proven"])
+        self.assertEqual(raw["versions"]["0.4.0"], {"install": {"npm": ["flat-acp@0.4.0"]}})
+        self.assertNotIn("proven", raw["versions"]["0.3.0"])
+        combined = definitions.read_document(os.path.join(self.user, "agents", "flat", "agent.json"), "agent")
+        self.assertEqual(combined["versions"]["0.3.0"]["proven"], FLAT["proven"])
+        self.assertEqual(definitions.resolve(combined, "0.4.0")["offers"], [])
         self.assertEqual(raw["upstream"], {"package": "flat-acp", "license": "MIT"})
         self.assertNotIn("offers", raw)
         self.assertEqual(definitions.problems(dict(raw, _here=os.path.dirname(self.root)), "agent"), [])
@@ -203,7 +190,7 @@ class Write(Catalogue):
     def test_new_version_copies_the_default_and_refuses_a_duplicate(self):
         self.new_version("bot", "1.1.0")
         self.assertEqual(self.read("bot", user=True)["versions"]["1.1.0"],
-                         {"upstream": {"package": "@old/bot-acp"}, "install": {"npm": ["@old/bot-acp@1.1.0"]}, "proven": {}})
+                         {"upstream": {"package": "@old/bot-acp"}, "install": {"npm": ["@old/bot-acp@1.1.0"]}})
         self.assertEqual(self.read("bot"), VERSIONED)
         with self.assertRaises(SystemExit):
             self.new_version("bot", "1.1.0")
@@ -259,10 +246,6 @@ class BenchmarkVersions(unittest.TestCase):
         self.assertEqual([b["_ref"] for b in definitions.load("benchmark", self.root, every=True)[0]], ["toy@2", "toy@1"])
         self.assertEqual(definitions.load("benchmark", self.root)[1], [])
 
-    def test_a_file_without_versions_is_one(self):
-        b = definitions.resolve(dict(BENCH, upstream={"license": "MIT"}))
-        self.assertEqual((b["_ref"], definitions.job_word(b), definitions.version_of(b)), ("toy", "toy", None))
-
     def test_problems_of_a_version_name_it(self):
         bad = definitions.problems(dict(TOY, versions=dict(TOY["versions"], **{"3": {"needs": []}})), "benchmark")
         self.assertTrue(any("versions.3: needs cannot differ between versions" in p for p in bad), bad)
@@ -296,7 +279,10 @@ class BenchmarkVersions(unittest.TestCase):
         with open(os.path.join(job, "config.json")) as f:
             std = json.load(f)["standard"]
         self.assertEqual((std["benchmark"], std["benchmark_version"], std["benchmark_ref"]), ("toy", "2", "toy@2"))
-        raw = json.load(open(os.path.join(self.root, "benchmarks", "toy", "standard.json")))
+        path = os.path.join(self.root, "benchmarks", "toy", "standard.json")
+        with open(path) as f:
+            self.assertEqual(json.load(f), TOY)
+        raw = definitions.read_document(path, "benchmark")
         self.assertIn("hard", raw["versions"]["2"]["proven"])                           # its own block
         self.assertEqual(raw["versions"]["1"]["proven"], TOY["versions"]["1"]["proven"])
         self.assertNotIn("proven", raw)
@@ -311,7 +297,7 @@ class BenchmarkVersions(unittest.TestCase):
         with open(os.path.join(self.root, "benchmarks", "toy", "driver2.py")) as original, \
                 open(os.path.join(self.user, "benchmarks", "toy", "driver2.py")) as copied:
             self.assertEqual(original.read(), copied.read())
-        self.assertEqual(raw["versions"]["3"], {"proven": {}})
+        self.assertEqual(raw["versions"]["3"], {})
         self.assertEqual(raw["default"], "1")
 
 

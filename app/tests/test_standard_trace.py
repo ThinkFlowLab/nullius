@@ -75,9 +75,7 @@ class AgentTrace(unittest.TestCase):
         self.assertEqual(tool["duration_ns"], 5 * 10**9)
         self.assertEqual(tool["timing_quality"], "measured")
         self.assertEqual(tool["content"], {"arguments": {"command": "ls"}, "result": "out"})
-
-    def test_a_tool_never_seen_to_end_has_no_duration(self):
-        tool = self.turns[0]["children"][3]
+        tool = self.turns[0]["children"][3]                                    # never seen to end
         self.assertNotIn("end_ns", tool)
         self.assertEqual(tool["timing_quality"], "unknown")
 
@@ -172,6 +170,10 @@ class Written(unittest.TestCase):
         unset, same = self.trial(self.LATE, [call(5, 6)])                      # no clock given: the window is the whole of produce
         self.assertEqual(same["spans"][0]["start_ns"], int((T + 1) * 10**9))
         self.assertEqual(same["totals"]["wall_ns"], 29 * 10**9)
+        self.assertIsNone(unset["agent_setup"])
+        self.assertEqual(unset["agent_execution"]["started_at"], job.iso(T + 1))
+        self.assertEqual(job.feed_durations(unset), {"env_setup": 1.0, "agent_run": 29.0})
+        self.assertIsNone(job.feed_durations({}))
 
     def test_a_call_made_while_the_agent_set_up_widens_its_trace_and_is_never_clamped(self):
         """A model call at T+2, before the session opened at T+3: it is in the
@@ -189,13 +191,6 @@ class Written(unittest.TestCase):
         self.assertIsNone(res["agent_execution"])
         self.assertIsNone(doc)
         self.assertEqual(job.feed_durations(res), {"env_setup": 1.0, "agent_setup": 4.0})
-
-    def test_a_trial_given_no_agent_clock_has_no_setup_phase(self):
-        res, _ = self.trial(None, [])
-        self.assertIsNone(res["agent_setup"])
-        self.assertEqual(res["agent_execution"]["started_at"], job.iso(T + 1))
-        self.assertEqual(job.feed_durations(res), {"env_setup": 1.0, "agent_run": 29.0})
-        self.assertIsNone(job.feed_durations({}))
 
     def test_a_control_writes_none(self):
         self.assertFalse(os.path.exists(self.write({"key": "nop", "_kind": "control"}, None)))

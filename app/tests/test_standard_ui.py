@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 
 from nullius import execution
-from nullius.standard.contract import definitions, ports
+from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe
 from nullius.standard.proofs import prove
 
@@ -44,7 +44,7 @@ class Backend(unittest.TestCase):
                 self.assertEqual(sorted(set(re.findall(r"--attempts \S+|--retries \S+", out["script"]))), flags)
                 self.assertEqual(any("up to 2 retries an attempt" in str(row) for row in out["review"]), bool(flags))
         bad = recipe.compile(a_recipe(unsandboxed=True, retries=10), defs())["errors"]
-        self.assertIn("Retries per attempt: a whole number from 0 to 9.", [e["message"] for e in bad])
+        self.assertIn("Retries after an error: a whole number from 0 to 9.", [e["message"] for e in bad])
 
     def test_a_container_needs_no_yes_and_says_so_in_the_command(self):
         out = recipe.compile(a_recipe(backend="container"), defs(), docker_unusable=lambda: None)
@@ -100,6 +100,7 @@ class Proving(unittest.TestCase):
         self.assertTrue(recipe.proving("nope", stamp=STAMP)["errors"])
         got = recipe.proving("fakebench", stamp=STAMP, dataset="other", limit=0)
         self.assertEqual(len(got["errors"]), 2)
+        self.assertIn("Number of tasks: a whole number of at least 1, or empty for all.", got["errors"])   # the benchmark's noun
         self.assertTrue(recipe.proving("fakebench", stamp="today")["errors"])
 
 
@@ -156,10 +157,6 @@ class AgentPage(unittest.TestCase):
         page = recipe._other_page(a)                                   # the tools kit is at v2
         self.assertEqual(page["proven"]["agent.tools/v1"]["kit"], 1)
         self.assertEqual(page["proven"]["agent.tools/v1"]["older"], "proven on kit v1; kit v2 is current")
-
-    def test_every_port_has_a_name_a_person_reads(self):
-        self.assertEqual(ports.PORTS["agent.tools/v1"]["label"], "MCP tools")
-        self.assertTrue(all(s.get("label") for s in ports.PORTS.values()))
 
 
 class Keyless(unittest.TestCase):

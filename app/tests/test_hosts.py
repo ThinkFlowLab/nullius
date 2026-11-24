@@ -74,8 +74,6 @@ class SshConfig(unittest.TestCase):
         self.assertEqual(scanned[1]["user"], "me"); self.assertIsNone(scanned[1]["hostname"])   # a Match block does not leak into lab
         self.assertEqual([h["hostname"] for h in scanned[2:]], ["shared", "shared"])
         self.assertNotIn("id_bench", repr(scanned))
-
-    def test_no_config_is_no_hosts(self):
         self.assertEqual(hosts.scan_ssh_config(str(self.tmp / "absent")), [])
 
 
@@ -92,7 +90,7 @@ class ConnectionTest(unittest.TestCase):
         self.assertEqual(seen[0][-1], hosts.PROBE); self.assertIn("BatchMode=yes", seen[0])   # one command, no prompt possible
         self.assertFalse(r["docker_userns"])
 
-    def test_the_probe_says_when_the_host_s_docker_has_userns_remap(self):
+    def test_the_probe_asks_each_engine_that_is_there(self):
         tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, tmp, True)
         for tool in ("sh", "sed", "grep", "hostname"):       # the probe's tools: no docker, podman, uv or harbor of the machine's
             os.symlink(shutil.which(tool), os.path.join(tmp, tool))
@@ -106,6 +104,14 @@ class ConnectionTest(unittest.TestCase):
             with self.subTest(options=options):
                 r = hosts.test(hosts.parse("bench"), run=run)
                 self.assertEqual((r["docker_userns"], r["podman"], r["uv"], r["harbor"]), (said, False, False, False))
+        os.remove(os.path.join(tmp, "docker"))               # podman alone
+        for name in ("podman", "uv"):
+            with open(os.path.join(tmp, name), "w") as f:
+                f.write("#!/bin/sh\nexit 0\n")
+            os.chmod(os.path.join(tmp, name), 0o755)
+        out = subprocess.run(["/bin/sh", "-c", hosts.PROBE], env=env, capture_output=True, text=True).stdout
+        self.assertEqual([l for l in out.splitlines() if l.split("=")[0] in ("docker", "podman", "docker_ok", "podman_ok")],
+                         ["docker=no", "podman=yes", "podman_ok=yes"])
 
     def test_missing_tools_are_said_not_failed(self):
         r = hosts.test(hosts.parse("bench"), run=lambda a, t: (0, "ok\nuv=no\ndocker=no\npodman=no\nharbor=no\nhostname=x\n", ""))
@@ -119,16 +125,6 @@ class ConnectionTest(unittest.TestCase):
                            ("docker_ok=no\npodman_ok=no", "docker")):     # neither: docker, whose reason is said
             r = hosts.test(hosts.parse("bench"), run=lambda a, t: (0, f"ok\ndocker=yes\npodman=yes\n{said}\n", ""))
             self.assertEqual(r["engine"], want, said)
-
-    def test_the_probe_asks_each_engine_that_is_there(self):
-        with tempfile.TemporaryDirectory() as d:
-            for name, code in (("podman", 0), ("uv", 0)):
-                with open(os.path.join(d, name), "w") as f:
-                    f.write(f"#!/bin/sh\nexit {code}\n")
-                os.chmod(os.path.join(d, name), 0o755)
-            out = subprocess.run(["/bin/sh", "-c", hosts.PROBE], env={"PATH": d}, capture_output=True, text=True).stdout
-        self.assertEqual([l for l in out.splitlines() if l.split("=")[0] in ("docker", "podman", "docker_ok", "podman_ok")],
-                         ["docker=no", "podman=yes", "podman_ok=yes"])
 
     def test_a_refusal_names_its_reason(self):
         denied = hosts.test(hosts.parse("bench"), run=lambda a, t: (255, "", "ubuntu@10.0.0.4: Permission denied (publickey).\n"))
@@ -166,6 +162,25 @@ class KeysOntoHosts(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in k.iterdir()), ["id_ed25519", "id_ed25519.pub", "u@b"])   # u@b: still named
         self.assertTrue(mine.exists())                                    # the user's own file, not save_key's
         self.assertEqual(hosts.forget_keys("not a host", "", key_dir=str(k)), [])
+
+    def test_two_ports_of_one_address_keep_a_key_each(self):
+        k, head = self.tmp / "k", b"-----" + b"BEGIN OPENSSH PRIVATE" + b" KEY-----\n"
+        a, b = (hosts.save_key("ci", "10.0.0.5", head + f"dummy {p}\n".encode(), key_dir=str(k), port=p) for p in (2201, 2202))
+        self.assertEqual((os.path.basename(a), os.path.basename(b)), ("ci@10.0.0.5_2201", "ci@10.0.0.5_2202"))
+        self.assertTrue(Path(a).read_bytes().endswith(b"dummy 2201\n")); self.assertTrue(Path(b).read_bytes().endswith(b"dummy 2202\n"))
+        self.assertEqual([hosts.parse(f"ci@10.0.0.5:{p}:{path}").key for p, path in ((2201, a), (2202, b))], [a, b])
+        self.assertNotEqual(hosts._key_name("u", "h-1"), hosts._key_name("u", "h", 1))      # an address never ends in _<port>
+
+    def test_an_entry_naming_the_key_file_of_before_keeps_it_and_forget_takes_both_names(self):
+        k, head = self.tmp / "k", b"-----" + b"BEGIN OPENSSH PRIVATE" + b" KEY-----\n"
+        before = hosts.save_key("ci", "10.0.0.5", head, key_dir=str(k))     # the name a key with a port was given before
+        new = hosts.save_key("ci", "10.0.0.5", head, key_dir=str(k), port=2202)
+        old_entry, new_entry = f"ci@10.0.0.5:2201:{before}", f"ci@10.0.0.5:2202:{new}"
+        self.assertEqual(hosts.parse(old_entry).key, before)
+        self.assertEqual(hosts.forget_keys(f"{old_entry}, {new_entry}", old_entry, key_dir=str(k)), [])
+        self.assertEqual(sorted(p.name for p in k.iterdir()), ["ci@10.0.0.5"])           # still named: kept
+        self.assertEqual(hosts.forget_keys(old_entry, "", key_dir=str(k)), [])
+        self.assertEqual(list(k.iterdir()), [])
 
     def test_a_key_that_cannot_be_deleted_is_said_and_the_others_still_go(self):
         k = self.tmp / "k"

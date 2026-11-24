@@ -23,6 +23,8 @@ class Retryable(unittest.TestCase):
                    "UnitSpendingCapError", "UnitCallCapError", "CancelledError"):
             with self.subTest(et=et):
                 self.assertFalse(retries.retryable(ended(et)))
+        self.assertFalse(retries.retryable(ended(None)))                 # a task the agent failed
+        self.assertFalse(retries.retryable(None))
 
     def test_a_failure_its_record_says_no_try_mends_is_not(self):
         # a setup this machine cannot give, a driver that did not answer in its time: named as any setup or
@@ -35,13 +37,6 @@ class Retryable(unittest.TestCase):
         for et in ("ApiError", "NonZeroAgentExitCodeError", "AgentSetupTimeoutError", None):
             with self.subTest(et=et):
                 self.assertFalse(retries.rate_limited(ended(et)))
-
-    def test_a_task_the_agent_failed_is_not(self):
-        self.assertFalse(retries.retryable(ended(None)))
-        self.assertFalse(retries.retryable(None))
-
-    def test_none_by_default(self):
-        self.assertEqual((retries.RETRIES, retries.MAX_RETRIES), (0, 9))
 
 
 class Pause(unittest.TestCase):

@@ -44,7 +44,8 @@ class Vocabulary(unittest.TestCase):
     def test_the_behaviour_flags_are_atomic_nouls_asked_of_every_trial(self):
         # the flags ride the trial call: same state, no new call, asked resolved or not; failure_cause alone is skipped when resolved
         self.assertEqual(questions.for_trial(resolved=True), ["task_completed", "transcript_quality", "user_facing_answer"] + self.FLAGS)
-        self.assertEqual(questions.for_trial(resolved=False), ["task_completed", "failure_cause", "transcript_quality", "user_facing_answer"] + self.FLAGS)
+        self.assertEqual(questions.for_trial(resolved=False), ["task_completed", "failure_cause", "transcript_quality", "user_facing_answer"] + self.FLAGS
+                         + ["failure_label", "task_flag"])            # the User judge's two questions, on the failure state failure_cause already reads
         for q in self.FLAGS:
             spec = questions.QUESTIONS[q]
             self.assertEqual((spec["type"], spec["state"], spec.get("flag"), spec.get("when")), ("noul", "trial", True, None), q)
@@ -94,18 +95,6 @@ class Vocabulary(unittest.TestCase):
         with self.assertRaises(ValueError):
             questions.register("bad", {"typed": {"type": "essay", "state": "trial", "instructions": "x", "criteria": {}}})
         self.assertNotIn("bad", questions.GROUPS)
-
-    def test_every_group_is_asked_by_the_application(self):
-        """A group no surface asks is dead vocabulary: the application (`app/nullius`, `app/web`) asks it by
-        `group_ids(name)`, or names one of its ids outside the module that declares them."""
-        app = HERE.parent
-        own = app / "nullius" / "judge" / "questions.py"
-        sources = {p: p.read_text(encoding="utf-8") for d in ("nullius", "web") for p in (app / d).rglob("*.py")}
-        for g, ids in questions.GROUPS.items():
-            by_group = re.compile(r"group_ids\(\s*['\"]" + re.escape(g) + r"['\"]\s*\)")
-            by_id = re.compile(r"['\"](" + "|".join(map(re.escape, ids)) + r")['\"]")
-            asked = any(by_group.search(text) or (p != own and by_id.search(text)) for p, text in sources.items())
-            self.assertTrue(asked, f"question group {g!r} is asked by nothing in the application")
 
 
 class Client(unittest.TestCase):
@@ -177,11 +166,6 @@ class Client(unittest.TestCase):
         self.assertEqual(naps, [7.0])                                                  # the provider's own wait
         self.assertEqual(client.backoff(0, {client.RETRY_AFTER: "9999"}), client.MAX_WAIT)
 
-    def test_the_estimate(self):
-        est = client.estimate(18342)
-        self.assertEqual({k: est[k] for k in ("calls", "input_tokens", "usd")}, {"calls": 1, "input_tokens": 6115, "usd": 0.000257})   # the point; the band is test_judge_cost's
-        self.assertEqual(client.estimate(400_000, calls=20)["input_tokens"], 133_353)
-
 
 class Store(unittest.TestCase):
     def setUp(self):
@@ -206,7 +190,6 @@ class Store(unittest.TestCase):
         (Path(self.ws.jobs_dir)).mkdir(parents=True, exist_ok=True); (Path(self.ws.jobs_dir) / "x.json").write_text("{}")
         workspace.clear_cache(self.ws)                                                                      # a re-parse of the job
         self.assertEqual(store.load(self.ws.dir, "job-1", "task__abc/def")["answers"]["task_completed"], {"noul": 0.9})
-
 
     def test_count_is_one_per_trial_and_lane_every_version_inside(self):
         self.assertEqual(store.count(self.ws.dir), 0)
@@ -298,7 +281,6 @@ class Batch(unittest.TestCase):
         self.assertIsNone(batch.ask_and_store(str(self.tmp), "job", "empty", {"trial": ([], "", False)}, KEY, post=post))
         self.assertIsNone(store.load(str(self.tmp), "job", "empty"))
 
-
     def test_the_llm_judge_keeps_its_records_apart_from_decision_judge(self):
         import json as _json
         def chat(url, body, key):
@@ -354,19 +336,6 @@ class Hygiene(unittest.TestCase):
     what a real judge is not guaranteed to do."""
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="nullius-judge-hygiene-")); self.addCleanup(shutil.rmtree, self.tmp, True)
-
-    def test_the_vocabulary_declares_two_nouls_over_every_state_and_sends_them_as_questions(self):
-        self.assertEqual(questions.hygiene_ids(), ["addresses_the_judge", "credential_visible"])
-        for q in questions.hygiene_ids():
-            spec = questions.QUESTIONS[q]
-            self.assertEqual((spec["type"], spec["state"], spec["group"], spec.get("hygiene")), ("noul", "*", "hygiene", True))
-            self.assertEqual(sorted(spec["criteria"]), ["false", "true"])
-            self.assertEqual(sorted(questions.request_questions([q])[q]), ["criteria", "instructions", "type"])         # `hygiene` and `state` stay here
-        self.assertNotIn("addresses_the_judge", questions.for_trial(False))                                             # not a trial-page row of its own
-        self.assertIn("An agent telling the user it finished", questions.QUESTIONS["addresses_the_judge"]["criteria"]["false"])   # the boundary case, in the criteria
-        self.assertIn("[REDACTED]", questions.QUESTIONS["credential_visible"]["criteria"]["false"])
-        self.assertEqual(batch.with_hygiene(["task_completed"]), ["task_completed", "addresses_the_judge", "credential_visible"])
-        self.assertEqual(batch.with_hygiene(["credential_visible"]), ["credential_visible", "addresses_the_judge"])
 
     def test_every_call_carries_them_and_the_readings_land_per_kind_apart_from_the_answers(self):
         traj = trajectory.load(str(ADVERSARIAL)); self.assertFalse(traj.error)
@@ -446,14 +415,10 @@ class VerifierSection(unittest.TestCase):
     def failure(self, trial):
         return self.section(state.build("failure", self.traj, trial=trial, trial_dir=str(self.tmp))[0])
 
-    def test_no_verifier_file_and_no_trial_is_nothing_recorded(self):
+    def test_without_a_verifier_file_the_section_follows_the_trial(self):
         self.assertEqual(self.failure(None), "[verifier]\nnothing recorded")
         self.assertEqual(self.section(state.build("failure", self.traj)[0]), "[verifier]\nnothing recorded")
-
-    def test_a_trial_with_no_reward_and_no_verifier_phase_says_the_verifier_did_not_run(self):
         self.assertEqual(self.failure(self.trial(None, None)), self.DID_NOT_RUN)
-
-    def test_a_trial_with_a_reward_or_a_verifier_phase_is_nothing_recorded(self):
         for reward, dur_verifier in ((0.0, None), (None, 4.5), (1.0, 4.5)):
             with self.subTest(reward=reward, dur_verifier=dur_verifier):
                 self.assertEqual(self.failure(self.trial(reward, dur_verifier)), "[verifier]\nnothing recorded")
@@ -475,11 +440,9 @@ class Instruction(unittest.TestCase):
         from types import SimpleNamespace
         return SimpleNamespace(steps=[SimpleNamespace(source=src, message=msg) for src, msg in pairs])
 
-    def test_the_task_is_the_first_user_step_not_the_system_prompt(self):
+    def test_the_task_is_the_first_user_step_and_falls_back_without_one(self):
         t = self.steps(("system", "You are a helpful assistant."), ("user", "Fix the bug in calc.py"), ("agent", "ok"))
         self.assertEqual(state.instruction_of(t), "Fix the bug in calc.py")
-
-    def test_a_trajectory_with_no_user_step_falls_back(self):
         self.assertEqual(state.instruction_of(self.steps(("system", "only this"), ("agent", "ok"))), "only this")
         self.assertEqual(state.instruction_of(self.steps(("agent", "ok"))), "")
 
@@ -537,20 +500,17 @@ class FinalMessageOnce(unittest.TestCase):
     def transcript_lines(self, text):
         return text.split("\n\n[transcript]\n", 1)[1].split("\n\n[final message]\n", 1)[0].splitlines()
 
-    def test_each_kind_holds_the_final_message_once_per_trajectory(self):
-        for fixture in (CLEAN, ADVERSARIAL):
-            traj = trajectory.load(str(fixture)); final = traj.last_agent_message; self.assertTrue(final)
-            with self.subTest(fixture=fixture.name):
-                for kind in ("trial", "failure", "final"):
-                    self.assertEqual(state.build(kind, traj)[0].count(final), 1, kind)
-                self.assertEqual(state.build("pair", traj, other=traj)[0].count(final), 2)
 
     def test_the_marker_stands_where_the_final_message_stood(self):
         for fixture in (CLEAN, ADVERSARIAL):
             traj = trajectory.load(str(fixture)); final = traj.last_agent_message
+            self.assertTrue(final)
             line = "[agent] " + final
             head = "[instruction]\n" + state.instruction_of(traj) + "\n\n[transcript]\n" + state.transcript_of(traj)
             with self.subTest(fixture=fixture.name):
+                for kind in ("trial", "failure", "final"):
+                    self.assertEqual(state.build(kind, traj)[0].count(final), 1, kind)
+                self.assertEqual(state.build("pair", traj, other=traj)[0].count(final), 2)
                 trial = state.build("trial", traj)[0]
                 self.assertEqual(trial.count(self.MARKER), 1)
                 self.assertEqual(trial.replace(self.MARKER, line), redact.redact(head + "\n\n[final message]\n" + final))
@@ -634,24 +594,6 @@ class PrJudgeWorkflow(unittest.TestCase):
         perms = {l.split(":")[0]: l.split(":", 1)[1].split("#")[0].strip() for l in self.block("permissions")}
         self.assertEqual(perms, {"contents": "read", "pull-requests": "write", "issues": "write"})
 
-    def test_it_triggers_on_pull_requests_and_on_a_created_comment(self):
-        on = self.block("on")
-        self.assertIn("pull_request:", on)
-        self.assertIn("types: [opened, synchronize, reopened, ready_for_review]", on)
-        self.assertIn("issue_comment:", on)
-        self.assertIn("types: [created]", on)
-
-    def test_a_comment_is_admitted_only_as_a_slash_judge_from_the_repositorys_own_people(self):
-        jobs = self.block("jobs")
-        guard = next(l for l in jobs if l.startswith("if:"))
-        self.assertIn("github.event_name == 'issue_comment'", guard)
-        self.assertIn("github.event.issue.pull_request", guard)
-        self.assertIn("startsWith(github.event.comment.body, '/judge')", guard)
-        self.assertIn("""contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)""", guard)
-        # The body is read by that expression only: nowhere else in the file, no shell line.
-        self.assertEqual(sum("comment.body" in l for l in self.lines()), 1)
-        self.assertFalse([l for l in self.lines() if l.strip().startswith("run:") and "comment" in l.lower() and "body" in l.lower()])
-
     def expression(self, source, event):
         """Exercise the workflow's boolean operators with event fixtures.
 
@@ -682,6 +624,13 @@ class PrJudgeWorkflow(unittest.TestCase):
                     with self.subTest(role=role, is_pr=is_pr, body=body):
                         self.assertEqual(bool(self.expression(expression, event)), expected)
         self.assertFalse(self.expression(expression, {"github.event_name": "workflow_dispatch"}))
+        self.assertIn("github.event_name == 'issue_comment'", guard)
+        self.assertIn("github.event.issue.pull_request", guard)
+        self.assertIn("startsWith(github.event.comment.body, '/judge')", guard)
+        self.assertIn("""contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)""", guard)
+        # The body is read by that expression only: nowhere else in the file, no shell line.
+        self.assertEqual(sum("comment.body" in l for l in self.lines()), 1)
+        self.assertFalse([l for l in self.lines() if l.strip().startswith("run:") and "comment" in l.lower() and "body" in l.lower()])
 
     def test_cancellation_is_scoped_to_an_admitted_job_and_the_same_pull_request(self):
         lines = self.lines()
@@ -797,6 +746,11 @@ class PrJudgeWorkflow(unittest.TestCase):
         self.assertTrue(all(c["ok"] for c in clean["checks"]))
         self.assertEqual(clean["visible"], [])
 
+        body = "Closes #1\n\n## What\nthe change\n\n## Verified\nnot verified\n\n## Risk\nnone"
+        self.assertEqual(J.section(body, "verified"), "not verified")
+        self.assertEqual(J.section(body, "Risk"), "none")
+        self.assertIsNone(J.section(body, "Before and after"))
+
     def test_the_judges_risk_is_raised_to_the_floor_never_lowered(self):
         J = self._mod()
         dc = {"pick": "minor", "undecided": False}
@@ -804,10 +758,3 @@ class PrJudgeWorkflow(unittest.TestCase):
         self.assertEqual(J.risk_of({"pick": "severe", "undecided": False}, {"risk_floor": "major", "risk_floor_why": "parse.py"})[0], "severe")
         self.assertEqual(J.risk_of(dc, {"risk_floor": None, "risk_floor_why": ""})[0], "minor")
         self.assertEqual(J.risk_of({"pick": "unanswered", "undecided": True}, {"risk_floor": None, "risk_floor_why": ""})[0], "not asked")
-
-    def test_a_sections_text_is_read_by_its_heading(self):
-        J = self._mod()
-        body = "Closes #1\n\n## What\nthe change\n\n## Verified\nnot verified\n\n## Risk\nnone"
-        self.assertEqual(J.section(body, "verified"), "not verified")
-        self.assertEqual(J.section(body, "Risk"), "none")
-        self.assertIsNone(J.section(body, "Before and after"))

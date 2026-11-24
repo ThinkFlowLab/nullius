@@ -239,7 +239,8 @@ class Overlay(unittest.TestCase):
         loaded["proven"] = {"agent.task/v1": {"passed": "1/1", "on": "2026-10-27"}}
         definitions.save(loaded)
         path = self.user / "agents" / "bot" / "agent.json"
-        raw = json.loads(path.read_text())
+        self.assertEqual(json.loads(path.read_text()), VERSIONED)
+        raw = definitions.read_document(str(path), "agent")
         self.assertEqual(raw["versions"]["1.0.0"], VERSIONED["versions"]["1.0.0"])
         self.assertEqual(raw["versions"]["2.0.0"]["proven"], loaded["proven"])
         self.assertEqual(raw["start"], VERSIONED["start"])
@@ -259,21 +260,23 @@ class Overlay(unittest.TestCase):
         self.assertFalse((self.user / "agents" / "bot").exists())              # not a folder holding the definition alone
         self.assertEqual(definitions.get("agent", "bot")["_here"], str(folder))
 
-    def test_flat_definition_save_and_explicit_fixture_save(self):
+    def test_flat_proof_save_leaves_authored_fields_and_explicit_fixtures_unchanged(self):
         self.definition(self.bundle, "capability", CAPABILITY)
         before = self.tree(self.bundle)
         loaded = definitions.get("capability", "mem")
         loaded["summary"] = "Updated"
         definitions.save(loaded)
-        self.assertEqual(definitions.get("capability", "mem")["summary"], "Updated")
+        self.assertEqual(definitions.get("capability", "mem")["summary"], CAPABILITY["summary"])
+        self.assertTrue((self.user / "capabilities" / "mem" / "proofs.json").is_file())
         self.assertEqual(self.tree(self.bundle), before)
         fixture = self.bundle.parent / "fixture"
         folder = self.definition(fixture, "capability", CAPABILITY)
         loaded = definitions.get("capability", "mem", str(fixture))
         loaded["summary"] = "Fixture"
         definitions.save(loaded)
-        self.assertEqual(json.loads((folder / "capability.json").read_text())["summary"], "Fixture")
-        self.assertEqual(definitions.get("capability", "mem")["summary"], "Updated")
+        self.assertEqual(json.loads((folder / "capability.json").read_text()), CAPABILITY)
+        self.assertTrue((folder / "proofs.json").is_file())
+        self.assertEqual(definitions.get("capability", "mem")["summary"], CAPABILITY["summary"])
 
     def test_staged_snapshot_uses_only_its_own_catalogue(self):
         self.benchmark(self.bundle)

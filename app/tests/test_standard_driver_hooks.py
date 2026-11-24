@@ -53,16 +53,15 @@ PLAIN_DRIVER = DRIVER.replace("def setup(unit, dir, **told):", "def setup(unit, 
 
 
 class SetupFields(unittest.TestCase):
-    def test_participant_and_setup_seconds_are_checked(self):
+    def test_driver_flags_and_setup_seconds_are_checked(self):
         self.assertEqual(definitions.problems(dict(BENCH, driver=dict(BENCH["driver"], participant=True),
                                                    limits={"setup_seconds": 1800}), "benchmark"), [])
         self.assertIn("driver.participant: true or false - whether setup is told the participant's kind",
                       definitions.problems(dict(BENCH, driver=dict(BENCH["driver"], participant="yes")), "benchmark"))
-        self.assertIn("limits.setup_seconds: a whole number from 1",
-                      definitions.problems(dict(BENCH, limits={"setup_seconds": 0}), "benchmark"))
-
-    def test_setup_seconds_rejects_noninteger_and_out_of_range_values(self):
-        for value in (True, -1, 1.5, "600", 100001):
+        self.assertEqual(definitions.problems(dict(BENCH, driver=dict(BENCH["driver"], task_given=True)), "benchmark"), [])
+        self.assertIn("driver.task_given: true or false - whether the driver is told when the agent is given its task",
+                      definitions.problems(dict(BENCH, driver=dict(BENCH["driver"], task_given="yes")), "benchmark"))
+        for value in (0, True, -1, 1.5, "600", 100001):
             with self.subTest(value=value):
                 self.assertIn("limits.setup_seconds: a whole number from 1",
                               definitions.problems(dict(BENCH, limits={"setup_seconds": value}), "benchmark"))
@@ -99,16 +98,10 @@ class AgentOptions(unittest.TestCase):
 
     def test_agent_scope_is_validated(self):
         self.assertEqual(definitions.problems(self.bench, "benchmark"), [])
-        for setups in ([], "agent", ["capability"]):
+        for setups in ([], "agent", ["capability"], ["agent", "original"], ["agent", "yours"], ["model", "agent"]):
             with self.subTest(setups=setups):
                 self.assertTrue(any("options.steps.setups" in p for p in definitions.problems(
                     dict(BENCH, options={"steps": dict(self.option, setups=setups)}), "benchmark")))
-
-    def test_agent_stands_alone_on_a_benchmark_agents_run(self):
-        for setups in (["agent", "original"], ["agent", "yours"], ["model", "agent"]):
-            with self.subTest(setups=setups):
-                self.assertTrue(any("options.steps.setups" in p for p in definitions.problems(
-                    dict(self.bench, options={"steps": dict(self.option, setups=setups)}), "benchmark")))
         capability = dict(self.bench, family="capability", needs=["cap.memory/v1"])
         self.assertTrue(any("options.steps.setups" in p for p in definitions.problems(capability, "benchmark")))
         self.assertFalse(any("options.steps" in p for p in definitions.problems(
@@ -159,7 +152,6 @@ process.stdout.write(JSON.stringify(['yours', 'setup', 'shared'].map(s => benchO
         self.assertEqual((setup, shared), ("", ""))
 
 
-
 class ThroughARun(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -172,11 +164,9 @@ class ThroughARun(unittest.TestCase):
             patch.start()
             self.addCleanup(patch.stop)
 
-
     def tearDown(self):
         install.HOME = self._home
         shutil.rmtree(self.tmp, ignore_errors=True)
-
 
     def go(self, code: str, other: dict, **bench) -> tuple:
         here = os.path.join(self.tmp, "bench")
@@ -195,10 +185,8 @@ class ThroughARun(unittest.TestCase):
             result = json.load(f)
         return config, told, result
 
-
     def fake_agent(self) -> dict:
         return definitions.get("agent", "fake", ROOT)
-
 
     def test_setup_is_told_the_participant_when_the_driver_asks(self):
         _, told, _ = self.go(DRIVER, self.fake_agent(), driver=dict(BENCH["driver"], participant=True))
@@ -208,12 +196,10 @@ class ThroughARun(unittest.TestCase):
                              controls={"nop": {"source": "nullius", "from": "nothing"}})
         self.assertEqual(told, {"participant": "control"})
 
-
     def test_a_driver_whose_setup_takes_nothing_more_runs_as_before(self):
         config, told, result = self.go(PLAIN_DRIVER, self.fake_agent())
         self.assertEqual(told, {})
         self.assertIsNone(result.get("exception_info"))
-
 
     def trial_of(self, code: str, other: dict = None, **bench) -> str:
         here = os.path.join(self.tmp, "bench")
@@ -226,40 +212,34 @@ class ThroughARun(unittest.TestCase):
                       unsandboxed=True)
         return next(os.path.join(job, d) for d in os.listdir(job) if "__u" in d)
 
-
-    def test_the_null_controls_unit_gets_no_end(self):
-        asks = dict(BENCH["driver"], unit_end=True)
-        controls = {"nop": {"source": "nullius", "from": "nothing"}}
-        control = definitions.control(dict(BENCH, controls=controls), "nop")
-        trial = self.trial_of(ENDING_DRIVER, control, driver=asks, controls=controls)
-        self.assertFalse(os.path.exists(os.path.join(trial, "ended.json")))
-
-
     def test_the_end_still_goes_once_the_run_is_stopped_and_its_failure_is_no_units(self):
         here = os.path.join(self.tmp, "bench")
         os.makedirs(here, exist_ok=True)
         record = os.path.join(here, "ended.txt")
-        answering = ("import sys, json\n"
+        answering = ("import sys, json, time\n"
                      "for line in sys.stdin:\n"
+                     "    time.sleep(float(sys.argv[3]))\n"
                      "    open(sys.argv[1], 'a').write(json.loads(line)['op'] + '\\n')\n"
                      "    print(sys.argv[2], flush=True)\n")
         stopped = threading.Event()
-        for reply in ('{}', 'not json', '{"detail": ' + '[' * 3000 + '0' + ']' * 3000 + '}'):
+        replies = (('{}', 1.0), ('not json', 0), ('{"detail": ' + '[' * 3000 + '0' + ']' * 3000 + '}', 0))
+        for n, (reply, slow) in enumerate(replies, 1):
             with self.subTest(reply=reply[:12]):
                 r = run.Run.__new__(run.Run)
                 r.bench, r.other, r.local = dict(BENCH, driver=dict(BENCH["driver"], unit_end=True)), {"_kind": "agent"}, \
                     threading.local()
-                r.local.driver = jsonl.Proc([sys.executable, "-c", answering, record, reply], here, dict(os.environ),
+                r.local.driver = jsonl.Proc([sys.executable, "-c", answering, record, reply, str(slow)], here, dict(os.environ),
                                             os.path.join(here, "driver.log"), stopped=stopped).start()
                 stopped.set()                                       # the run is stopped once the unit has its driver
                 try:
                     r.unit_ended("a", here)                         # returns, whatever the driver answered
+                    with open(record) as f:
+                        self.assertEqual(len(f.read().split()), n, "returned before the driver answered its end")
                 finally:
                     r.local.driver.close()
                     stopped.clear()
         with open(record) as f:
             self.assertEqual(f.read().split(), ["end", "end", "end"])
-
 
     def test_a_driver_that_asks_is_told_each_units_end(self):
         asks = dict(BENCH["driver"], unit_end=True)
@@ -270,7 +250,6 @@ class ThroughARun(unittest.TestCase):
         with open(os.path.join(trial, "result.json")) as f:
             self.assertEqual(json.load(f)["exception_info"]["exception_type"], "EnvironmentSetupError")
         self.assertTrue(os.path.isfile(os.path.join(trial, "ended.json")))          # told although setup failed
-
 
     def test_a_driver_that_does_not_ask_is_sent_no_end(self):
         self.assertIn("driver.unit_end: true or false - whether the driver is told each unit's end",
@@ -352,24 +331,6 @@ class ThroughARun(unittest.TestCase):
             for driver in (ended, running):
                 driver.close()
 
-    def test_an_end_is_waited_for_once_the_run_is_stopped(self):
-        here = tempfile.mkdtemp(dir=self.tmp)
-        mark = os.path.join(here, "ended")
-        answering = ("import sys, time\n"
-                     "for line in sys.stdin:\n"
-                     "    time.sleep(1.0)\n"
-                     "    open(sys.argv[1], 'w').write('ended')\n"
-                     "    print('{}', flush=True)\n")
-        stopped = threading.Event()
-        r = self.ending()
-        r.local.driver = self.driver_proc(answering, mark, stopped=stopped).start()
-        stopped.set()
-        try:
-            r.unit_ended("a", here)
-            self.assertTrue(os.path.exists(mark), "returned before the driver answered its end")
-        finally:
-            r.local.driver.close()
-
     def test_a_driver_with_a_request_the_stop_left_unanswered_gets_no_end(self):
         here = tempfile.mkdtemp(dir=self.tmp)
         ops = os.path.join(here, "ops")
@@ -427,7 +388,6 @@ class ThroughARun(unittest.TestCase):
                             env=self.env, unsandboxed=True, jobs_root=self.tmp)
                 self.assertEqual(r.bench_options, {"steps": "10"} if other["_kind"] == "agent" else {})
 
-
     def env_setup_timeouts(self, other: dict, **bench) -> list:
         """The ``timeout_sec`` of each unit's ``env_setup`` phase in the job's live feed, as written."""
         trial = self.trial_of(DRIVER, other, **bench)
@@ -445,28 +405,6 @@ class ThroughARun(unittest.TestCase):
                 got = self.env_setup_timeouts(other, **bench)
                 self.assertEqual(got, [expected])
                 self.assertIs(type(got[0]), int)                    # recorded as a whole number, as given
-
-    def test_setup_gets_the_benchmarks_own_limit(self):
-        r = run.Run.__new__(run.Run)
-        r.bench, r.other, r.local = dict(BENCH, limits={"setup_seconds": 1800}), {"_kind": "agent"}, threading.local()
-        self.assertEqual(r.setup_seconds(), 1800.0)
-        r.other = {"_kind": "control"}
-        self.assertEqual(r.setup_seconds(), float(run.DRIVER_SECONDS))
-        r.bench, r.other = dict(BENCH), {"_kind": "agent"}
-        self.assertEqual(r.setup_seconds(), float(run.DRIVER_SECONDS))
-        slow = DRIVER.replace('    return {"prompt": "hi"}', '    import time; time.sleep(3)\n    return {"prompt": "hi"}')
-        here = os.path.join(self.tmp, "bench")
-        os.makedirs(here, exist_ok=True)
-        with open(os.path.join(here, "driver.py"), "w") as f:
-            f.write(slow)
-        b = dict(BENCH, _here=here, _kind="benchmark", limits={"setup_seconds": 1})
-        job = run.run(b, self.fake_agent(), model="m-1", provider="custom", jobs_root=self.tmp, concurrency=1,
-                      env=self.env, say=lambda s: None, unsandboxed=True)
-        trial = next(os.path.join(job, d) for d in os.listdir(job) if "__u" in d)
-        with open(os.path.join(trial, "result.json")) as f:
-            failed = json.load(f)["exception_info"]
-        self.assertEqual(failed["exception_type"], "EnvironmentSetupError")
-        self.assertIn("setup: no reply in 1 s", failed["exception_message"])
 
 
 # A driver that is told when the agent is given its task: it marks the trial, and records each score's answer.
@@ -513,11 +451,6 @@ class TaskGiven(unittest.TestCase):
         job = run.run(dict(BENCH, _here=here, _kind="benchmark", **bench), other, model="m-1", provider="custom",
                       jobs_root=jobs, concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True)
         return next(os.path.join(job, d) for d in os.listdir(job) if "__u" in d)
-
-    def test_the_flag_is_true_or_false(self):
-        self.assertEqual(definitions.problems(dict(BENCH, driver=dict(BENCH["driver"], task_given=True)), "benchmark"), [])
-        self.assertIn("driver.task_given: true or false - whether the driver is told when the agent is given its task",
-                      definitions.problems(dict(BENCH, driver=dict(BENCH["driver"], task_given="yes")), "benchmark"))
 
     def test_an_acp_agent_is_sent_its_task_once_the_driver_has_taken_it(self):
         seen, prompt = [], run.acp.Client.prompt

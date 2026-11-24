@@ -9,7 +9,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from unittest import mock
 
@@ -28,28 +27,19 @@ class MeetingPoints(unittest.TestCase):
     def test_one_step_option_applies_to_scripts_and_the_port(self):
         bench = definitions.get("benchmark", "osworld1")
         self.assertEqual(definitions.problems(bench, "benchmark"), [])
-        for scope, kind in (("original", "upstream"), ("model", "upstream"), ("yours", "agent")):
-            values, bad = definitions.bench_options_of(bench, "test_small", setup=scope, kind=kind)
-            self.assertEqual((values["max_steps"], bad), ("default", []))
-            for value in ("default", "1", "15", "100", "1500", "9999"):
-                values, bad = definitions.bench_options_of(bench, "test_small", {"max_steps": value}, scope, kind=kind)
-                self.assertEqual((values["max_steps"], bad), (value, []))
-            for value in ("0", "10000", "1.5"):
-                self.assertTrue(definitions.bench_options_of(bench, "test_small", {"max_steps": value}, scope, kind=kind)[1])
+        for scope, kind in (("original", "upstream"), ("model", "upstream"), ("yours", "agent"),
+                            ("yours", "control"), ("yours", "capability")):
+            with self.subTest(scope=scope, kind=kind):
+                values, bad = definitions.bench_options_of(bench, "test_small", setup=scope, kind=kind)
+                self.assertEqual((values["max_steps"], bad), ("default", []))
+                for value in ("default", "1", "15", "100", "1500", "9999"):
+                    values, bad = definitions.bench_options_of(bench, "test_small", {"max_steps": value}, scope, kind=kind)
+                    self.assertEqual((values["max_steps"], bad), (value, []))
+                for value in ("0", "10000", "1.5"):
+                    self.assertTrue(definitions.bench_options_of(bench, "test_small", {"max_steps": value}, scope, kind=kind)[1])
         option = recipe._bench_page(bench)["options"]["max_steps"]
         self.assertEqual((option["limit"], option["by"]["agent"]["m3"]), (True, "100"))
         self.assertEqual(option["setups"], ["original", "model", "yours"])
-
-    def test_step_option_also_applies_to_controls_and_capabilities_that_do_not_read_it(self):
-        """The shared yours scope includes the null control and capability runs."""
-        bench = definitions.get("benchmark", "osworld1")
-        for kind in ("control", "capability"):
-            with self.subTest(kind=kind):
-                values, bad = definitions.bench_options_of(bench, "test_small", setup="yours", kind=kind)
-                self.assertEqual((values["max_steps"], bad), ("default", []))
-                values, bad = definitions.bench_options_of(bench, "test_small", {"max_steps": "1500"},
-                                                           "yours", kind=kind)
-                self.assertEqual((values["max_steps"], bad), ("1500", []))
 
     @unittest.skipUnless(shutil.which("node"), "Node is required for builder options")
     def test_the_builder_shows_one_steps_field_for_scripts_agents_and_both(self):
@@ -71,11 +61,14 @@ class MeetingPoints(unittest.TestCase):
                    "return ['yours', 'setup', 'shared'].map(s => benchOptions(r, b, s)).join('') + benchLimits(r, b);"
                    "})));")
         result = subprocess.run(["node", "-e", program], stdin=subprocess.DEVNULL, capture_output=True, text=True, check=True)
-        for page, default in zip(json.loads(result.stdout), ("15", "default", "default")):
+        for page, default in zip(json.loads(result.stdout), ("15", "100", "default")):
             self.assertEqual(page.count('data-bench-opt-select="max_steps"'), 1)
-            field = page.split('data-bench-opt-select="max_steps"', 1)[1].split('>', 1)[0]
+            label, field = page.split('data-bench-opt-select="max_steps"', 1)
+            field = field.split('>', 1)[0]
             self.assertIn('value=""', field)
             self.assertIn(f'placeholder="{default}"', field)
+            # the label is the option's name alone: the input shows the default
+            self.assertIn(">Steps per task<input", label.rsplit("<label", 1)[1])
 
     def test_kit_opts_into_cleanup_before_a_retry(self):
         kit = definitions.kit("agent.computer/v1")
@@ -97,9 +90,6 @@ class MeetingPoints(unittest.TestCase):
                 probe.assert_not_called()
                 driver.assert_not_called()
 
-    def test_retry_closes_processes_before_archive_and_keeps_hooks_records_and_clocks_apart(self):
-        self.retry_run(inert=True)
-
     def test_retry_with_a_real_computer_server_and_acp_session(self):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
@@ -108,14 +98,14 @@ class MeetingPoints(unittest.TestCase):
                 probe.bind(os.path.join(tmp, "s"))
         except OSError as e:
             self.skipTest(f"local sockets unavailable: {e}")
-        self.retry_run(inert=False)
+        self.retry_run()
 
-    def retry_run(self, inert):
+    def retry_run(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(install, "HOME", os.path.join(tmp, "install")):
             bench = {"key": "fixture", "label": "Fixture", "_here": str(FIX), "family": "agent",
                      "needs": ["agent.computer/v1"], "datasets": [{"id": "all"}],
                      "units": {"noun": "unit", "nouns": "units"}, "score": {"kind": "pass", "says": "The fixture answered."},
-                     "driver": {"command": [sys.executable, "{here}/computer_merge_driver.py", *(["inert"] if inert else [])],
+                     "driver": {"command": [sys.executable, "{here}/computer_merge_driver.py"],
                                 "participant": True, "unit_end": True},
                      "limits": {"setup_seconds": 50, "attempts": "A seed per attempt."},
                      "mcp_servers": {"computer": {"command": [sys.executable, computer_pipe.__file__]}}}
@@ -131,20 +121,12 @@ class MeetingPoints(unittest.TestCase):
                     with self.assertRaises(ProcessLookupError):
                         os.kill(before["pid"], 0)
                 seen.append(json.loads((trial / "setup.json").read_text()))
-                if inert:
-                    kwargs["clock"]["ready"] = time.time()
-                    r.phase(trial.name, args[0], "agent_run", r.agent_limit(args[4]))
-                    self.assertEqual(r.max_calls, 1)
-                    self.assertEqual(r.driver().request("act")["steps"], 2)
-                    answer = "done", None, {}
-                else:
-                    answer = real(r, *args, **kwargs)
+                answer = real(r, *args, **kwargs)
                 if len(seen) == 1:
                     raise run._Ended("NonZeroAgentExitCodeError", "fixture failure", answer[1])
                 return answer
 
-            with mock.patch.object(run.Run, "drive_agent", drive), \
-                    mock.patch.object(run.Run, "unit_relay", return_value=None) if inert else mock.patch.dict(os.environ, {}):
+            with mock.patch.object(run.Run, "drive_agent", drive):
                 path = Path(run.run(bench, other, model="m", provider="custom", jobs_root=tmp, concurrency=1,
                                     proving=True, unsandboxed=True, retries=1, timeouts={"setup": 30, "agent": 10},
                                     max_calls=1, env={"MODEL_API_URL": "http://127.0.0.1:9/v1"}, say=lambda _: None))

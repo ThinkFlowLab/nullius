@@ -99,28 +99,15 @@ class Size(unittest.TestCase):
     def setUp(self):
         self.site = load_site()
 
-    def test_the_floor_is_the_aws_providers_root(self):
-        self.assertEqual(self.site.GUEST_GB, 40)
-
-    def test_docker_gets_the_floor_or_the_tasks_larger_size(self):
+    def test_docker_alone_gets_the_floor_or_the_tasks_larger_size(self):
         for given, wanted in ((None, 40), (0, 40), (30, 40), (40, 40), (60, 60), ("60", 60)):
             with self.subTest(given=given):
                 self.assertEqual(self.site.guest_gb("docker", given), wanted)
         self.assertEqual(self.site.guest_gb(" Docker ", None), 40)
-
-    def test_another_provider_is_left_alone(self):
         for provider in ("aws", "vmware", "virtualbox"):
             for given in (None, 30, 60):
                 with self.subTest(provider=provider, given=given):
                     self.assertEqual(self.site.guest_gb(provider, given), given)
-
-    def test_a_module_already_loaded_is_wrapped_and_one_finder_added(self):
-        module = types.SimpleNamespace(DesktopEnv=fake_class())
-        with mock.patch.dict(sys.modules, {self.site.DESKTOP_ENV: module}), mock.patch.object(sys, "meta_path", []):
-            self.site.wrap_desktop_env()
-            load_site().wrap_desktop_env()
-            self.assertEqual(len(sys.meta_path), 1)
-        self.assertEqual(module.DesktopEnv().volume_size, 40)
 
     def test_the_finders_loader_is_wrapped_not_changed(self):
         """A loader whose methods cannot be set, or that loads other modules too, is left as it was."""

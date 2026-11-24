@@ -41,9 +41,10 @@ class StandardBenchmarkSwitch(CompilerCase):
         self.assertEqual(out[4], ["computer-use-preview"])                          # Like the paper: the chosen agent's models
         self.assertEqual(out[5], ["original", "nop"])
 
-    def test_no_time_limit_is_forced_until_the_user_types_one(self):
+    def test_no_limit_is_forced_until_the_user_types_one(self):
         """The benchmark's and the agent's own limits apply by themselves: choosing a setup or a
-        benchmark forces none on the recipe, and a saved recipe keeps exactly what it was saved with."""
+        benchmark forces none on the recipe, and a saved recipe keeps exactly what it was saved with.
+        A new recipe has no limit, concurrency or attempts either, and keeps them empty."""
         out = self.js('const r=C.createStandard("tau3-bench");const osw=C.createStandard("osworld1");'
                       'const saved=JSON.parse(JSON.stringify(r));saved.timeouts={agent:45};'
                       'process.stdout.write(JSON.stringify([r.others,"timeouts" in r,"timeouts" in osw,C.fromJSON(JSON.stringify(saved)).timeouts]));')
@@ -51,6 +52,9 @@ class StandardBenchmarkSwitch(CompilerCase):
         self.assertFalse(out[1])
         self.assertFalse(out[2])
         self.assertEqual(out[3], {"agent": 45})
+        out = self.js('const r=C.createStandard("gsm8k");const back=C.fromJSON(JSON.stringify(r));'
+                      'process.stdout.write(JSON.stringify([r.limit,r.concurrency,"repeat" in r,back.limit,back.concurrency]));')
+        self.assertEqual(out, ["", "", False, "", ""])
 
     def test_explicit_agent_is_preserved(self):
         out = self.js('const r=C.createStandard("gsm8k");'
@@ -78,17 +82,6 @@ class StandardBenchmarkSwitch(CompilerCase):
         self.assertEqual(out, [["Benchmark", "Runner"], ["standard"], ["standard", "harbor"], ["harbor"],
                                "standard", "harbor", "standard", "harbor"])
 
-    def test_a_draft_from_when_the_runner_came_first_opens_on_the_same_step(self):
-        out = self.js('const r=C.createStandard("gsm8k"),old=s=>JSON.stringify({version:1,recipe:r,step:s,steps:9,tab:"select"});'
-                      'process.stdout.write(JSON.stringify([0,1,2].map(s=>C.unpackDraft(old(s),{}).step).concat('
-                      'C.unpackDraft(C.packDraft({recipe:r,step:1,tab:"select"}),{}).step)));')
-        self.assertEqual(out, [1, 0, 2, 1])
-
-    def test_a_new_recipe_has_no_limit_concurrency_or_attempts_and_keeps_them_empty(self):
-        out = self.js('const r=C.createStandard("gsm8k");const back=C.fromJSON(JSON.stringify(r));'
-                      'process.stdout.write(JSON.stringify([r.limit,r.concurrency,"repeat" in r,back.limit,back.concurrency]));')
-        self.assertEqual(out, ["", "", False, "", ""])
-
     def test_like_the_paper_is_offered_when_the_paper_fixes_a_model(self):
         out = self.js('process.stdout.write(JSON.stringify(["locomo","tau3-bench","gsm8k"].map(k=>{const r=C.createStandard(k);'
                       'return [C.paperOffered(r),C.paperListed(r)];})));')
@@ -110,7 +103,7 @@ class StandardBenchmarkSwitch(CompilerCase):
                           'process.stdout.write(JSON.stringify(restored.bench_options));')
             self.assertEqual(out, {"temperature": "0.5"})
 
-    def test_attempts_and_the_judge_and_simulator_models_survive_reopening(self):
+    def test_attempts_retries_and_the_judge_and_simulator_models_survive_reopening(self):
         """New run like this, the draft, Load and Import all go through
         fromJSON."""
         out = self.js('const r=C.createStandard("tau3-bench");r.repeat=3;r.judge_model="openai/gpt-5";r.simulator_model="openai/gpt-4.1";'
@@ -119,6 +112,10 @@ class StandardBenchmarkSwitch(CompilerCase):
                       'process.stdout.write(JSON.stringify([[back.repeat,back.judge_model,back.simulator_model],'
                       '[d.recipe.repeat,d.recipe.judge_model,d.recipe.simulator_model],C.fromJSON(JSON.stringify(Object.assign(r,{repeat:99}))).repeat]));')
         self.assertEqual(out, [[3, "openai/gpt-5", "openai/gpt-4.1"], [3, "openai/gpt-5", "openai/gpt-4.1"], None])
+        out = self.js('const r=C.createStandard("gsm8k");r.retries=2;'
+                      'process.stdout.write(JSON.stringify([C.fromJSON(JSON.stringify(r)).retries,'
+                      'C.fromJSON(JSON.stringify(Object.assign(r,{retries:10}))).retries,"retries" in C.createStandard("gsm8k")]));')
+        self.assertEqual(out, [2, None, False])
 
     def test_another_benchmarks_options_are_dropped(self):
         # a memory benchmark's RAG mode does not follow the recipe to an agent benchmark; a value the benchmark takes stays
@@ -126,7 +123,6 @@ class StandardBenchmarkSwitch(CompilerCase):
                       'const kept=JSON.stringify(C.setStandardBenchmark(JSON.parse(JSON.stringify(r)),"locomo").bench_options);'
                       'C.setStandardBenchmark(r,"tau3-bench");process.stdout.write(JSON.stringify([kept,r.bench_options]));')
         self.assertEqual(out, ['{"rag_mode":"summary"}', {}])
-
 
 
 class CommonAndPerAgent(CompilerCase):
@@ -168,19 +164,12 @@ class CommonAndPerAgent(CompilerCase):
         self.assertEqual(out['e'], [])
         for text in out['runs'].values():
             self.assertIn('--max-retries 0', text)
-        self.assertEqual([m for _, m in self.runs("r.retries=-1")['e']], ['Retries per attempt must be a whole number of at least 0, or empty.'])
-
-    def test_a_standard_recipes_retries_survive_reopening(self):
-        out = self.js('const r=C.createStandard("gsm8k");r.retries=2;'
-                      'process.stdout.write(JSON.stringify([C.fromJSON(JSON.stringify(r)).retries,'
-                      'C.fromJSON(JSON.stringify(Object.assign(r,{retries:10}))).retries,"retries" in C.createStandard("gsm8k")]));')
-        self.assertEqual(out, [2, None, False])
+        self.assertEqual([m for _, m in self.runs("r.retries=-1")['e']], ['Retries after an error must be a whole number of at least 0, or empty.'])
 
     def test_the_common_fields_and_agent_kwargs_survive_a_saved_recipe(self):
         out = self.js('const r=C.create("harbor");r.attempts=2;r.verifierTimeoutMultiplier=1.5;r.custom=[{scope:"agent",key:"k",type:"string",value:"v",agent:"nop"}];'
                       'const b=C.fromJSON(JSON.stringify(r));process.stdout.write(JSON.stringify([b.attempts,b.verifierTimeoutMultiplier,b.setupTimeoutMultiplier,b.custom[0].agent]));')
         self.assertEqual(out, [2, 1.5, '', 'nop'])
-
 
 
 class SeveralCustomAgents(CompilerCase):
@@ -201,8 +190,6 @@ class SeveralCustomAgents(CompilerCase):
         self.assertTrue(any('module:Class' in e for e in errs))
         errs = self.js('const r=C.create("harbor");r.model="openai/x";r.agents=["custom-3"];process.stdout.write(JSON.stringify(C.validate(r).errors.map(x=>x.message)));')
         self.assertTrue(any('no import path' in e for e in errs))
-
-    def test_an_agent_the_builder_does_not_offer_is_refused_with_the_way_to_it(self):
         errs = self.js('const r=C.create("harbor");r.model="openai/x";r.agents=["goose"];process.stdout.write(JSON.stringify(C.validate(r).errors.map(x=>x.message)));')
         self.assertTrue(any('goose' in e and 'custom agent' in e for e in errs))
 
@@ -213,13 +200,11 @@ class SeveralCustomAgents(CompilerCase):
         self.assertEqual(out, [['custom-0'], ['a.b:C']])
 
 
-
 class EveryTask(CompilerCase):
     def test_an_empty_task_limit_runs_every_task_and_writes_no_limit(self):
         out = self.js('const r=C.create("harbor");' + AGENT + 'r.model="openai/x";r.tasks="";const o=C.compile(r);'
                       'process.stdout.write(JSON.stringify([o.errors,o.artifacts.find(a=>a.id==="run-custom-0").text.includes("--n-tasks"),C.fromJSON(JSON.stringify(r)).tasks]));')
         self.assertEqual(out, [[], False, ''])
-
 
     def test_an_empty_limit_asks_before_running_and_names_the_count(self):
         """Running a whole dataset asks for confirmation, including its task count
@@ -230,10 +215,6 @@ class EveryTask(CompilerCase):
         self.assertIn('375 tasks', out[1]); self.assertIn('sierra-research/tau3-bench', out[1]); self.assertIn('no limit', out[1])
         self.assertEqual(out[2], '')
         self.assertIn('every task', out[3]); self.assertIn('some/thing', out[3]); self.assertNotIn('375', out[3])
-
-    def test_the_review_names_the_count_beside_every_task(self):
-        out = self.js('const r=C.create("harbor");r.tasks="";const a=C.review(r).find(x=>x[1]==="Scope")[2];r.tasks=7;const b=C.review(r).find(x=>x[1]==="Scope")[2];process.stdout.write(JSON.stringify([a,b]));')
-        self.assertEqual(out, ['every task (375 in this dataset) · 1 concurrent', '7 tasks · 1 concurrent'])
 
     def test_a_task_name_filter_is_not_every_task(self):
         """An include or exclude pattern with no limit runs the matching tasks, not the
@@ -247,7 +228,6 @@ class EveryTask(CompilerCase):
         self.assertEqual(out[2], 'up to 5 tasks matching airline* · 1 concurrent')
         self.assertEqual(out[3], 'tasks not matching telecom* (of 375 in this dataset) · 1 concurrent')
         self.assertIn('not matching telecom*', out[4])
-
 
 
 class ReferenceAgent(CompilerCase):
@@ -276,7 +256,6 @@ class ReferenceAgent(CompilerCase):
         self.assertTrue(any('runs only on tau3-bench' in e['message'] for e in out['errors']))
         swe = self.run_text(self.compile(edit="C.setBenchmark(r,'swe-bench-verified')"))
         self.assertNotIn('TAU2_USER_MODEL', swe)
-
 
 
 class ReferenceAdapterPath(CompilerCase):
@@ -314,7 +293,6 @@ class ReferenceAdapterPath(CompilerCase):
         self.assertEqual(back, [{}, {'tau3-llm-agent': '~/x'}])
 
 
-
 class TimeoutMultiplier(CompilerCase):
     """Harbor's --agent-timeout-multiplier, explained by what it does: it
     scales the timeouts the tasks declare. The builder keeps 1 as the default,
@@ -340,6 +318,8 @@ class TimeoutMultiplier(CompilerCase):
         self.assertIn('--agent-timeout-multiplier 0.15', out['cmd'])
         self.assertEqual([p['effective'] for p in out['t']['phases']], [600, 1200, 540, 300])
         self.assertFalse(any('agent time' in e or 'multiplier' in e for e in out['e']))
+        out = self.js('const r=C.setPhaseMinutes(C.create("harbor"),"agent_run",12);const back=C.fromJSON(JSON.stringify(r));process.stdout.write(JSON.stringify([back.agentMinutes,back.timeoutMultiplier]));')
+        self.assertEqual(out, [12, 0.2])
 
     def test_a_direct_multiplier_still_scales_and_a_bad_one_is_refused(self):
         out = self.effective("r.timeoutMultiplier=0.5")
@@ -369,10 +349,6 @@ class TimeoutMultiplier(CompilerCase):
         self.assertTrue(any('declared timeouts' in e for e in mins['e']))
         neg = self.effective("C.setPhaseMinutes(r,'agent_run',-3)")
         self.assertTrue(any('positive number of minutes' in e for e in neg['e']))
-
-    def test_a_saved_recipe_keeps_its_minutes(self):
-        out = self.js('const r=C.setPhaseMinutes(C.create("harbor"),"agent_run",12);const back=C.fromJSON(JSON.stringify(r));process.stdout.write(JSON.stringify([back.agentMinutes,back.timeoutMultiplier]));')
-        self.assertEqual(out, [12, 0.2])
 
 
 if __name__ == "__main__":

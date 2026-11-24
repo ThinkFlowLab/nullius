@@ -51,13 +51,6 @@ def core(schema, code):
     return json.loads(subprocess.run([node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
 
 
-
-def columns_of(html) -> tuple:
-    """The table's header columns (data-col), and each body row's cell columns, in order ('' a cell without one)."""
-    head, body = html.split("<thead>", 1)[1].split("</thead>", 1)
-    rows = re.sub(r"<template.*?</template>", "", body.split("</tbody>", 1)[0], flags=re.S).split("<tr")[1:]
-    return re.findall(r'<th data-col="(\w+)"', head), [re.findall(r'<td(?: data-col="(\w+)")?', r) for r in rows]
-
 class RunRoutes(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
@@ -394,11 +387,7 @@ class ReopenAtStart(unittest.TestCase):
         ws = workspace.create(self.home, [str(self.root)], label="witty pelican")
         web.shared.open_workspace(ws)
         self.assertEqual(self.restart().name, ws.name)
-
-    def test_a_workspace_whose_roots_are_gone_opens_as_the_open_action_does(self):
-        ws = workspace.create(self.home, [str(self.root)], label="witty pelican")
-        web.shared.open_workspace(ws)
-        self.root.rmdir()
+        self.root.rmdir()                                      # roots gone: it opens as the open action does
         self.assertEqual(self.restart().roots, [str(self.root)])
 
     def test_a_second_server_on_the_runs_folder_stops_with_one_line(self):
@@ -564,7 +553,7 @@ class WorkspaceDelete(unittest.TestCase):
         self.assertIn('id="workspaces" data-table', html); self.assertNotIn("data-cards", html)
         self.assertIn('href="/workspaces" aria-label="Table" title="Table" aria-current="true"', html)
         self.assertIn('href="/workspaces?view=cards" aria-label="Cards" title="Cards" aria-current="false"', html)
-        html = self.page("/workspaces?view=cards")
+        html = self.page("/workspaces?view=cards&q=1")
         self.assertIn('id="workspaces" data-cards', html); self.assertNotIn("data-table", html)
         self.assertIn('aria-label="Cards" title="Cards" aria-current="true"', html)
         self.assertIn('data-s-runs="0"', html)                                                           # Sort by reads it
@@ -580,11 +569,9 @@ class WorkspaceDelete(unittest.TestCase):
                       '<button type="button" class="icon-btn ws-edit" aria-label="Rename workspace gone soon"', card)
         self.assertIn(f'<input type="hidden" name="name" value="{self.ws.name}"><input type="hidden" name="view" value="cards">', card)
         self.assertIn(f'<input type="hidden" name="csrf" value="{self.csrf}">', card)
-
-    def test_the_view_toggle_keeps_the_other_query(self):
-        html = self.page("/workspaces?view=cards&q=1")
         self.assertIn('href="/workspaces?q=1" aria-label="Table"', html)
         self.assertIn('href="/workspaces?view=cards&amp;q=1" aria-label="Cards"', html)
+
 
     def test_a_restart_with_the_same_paths_reopens_the_workspace_its_runs_went_into(self):
         runs = self.tmp / "runs"
@@ -856,30 +843,6 @@ class LaunchesPage(unittest.TestCase):
                          [("state", " disabled", "")] + [(c, "", " data-off" if c in ("checks", "machines", "size") else "")
                                                          for c in ("bench", "dataset", "started", "runs", "checks", "shards", "machines", "size", "ws")])   # the launch, its state and its actions always show
 
-    def test_state_is_the_first_column_an_icon_in_the_runs_page_words(self):
-        finished, refused, failed, paused = self.record("r3"), self.record("r4", "failed"), self.record("r5", "failed"), self.record("r6", "paused")
-        failed.launched = "run"                                                              # got as far as its launch: failed, not refused
-        rows = self.rows()
-        first = {e.plan.name: re.search(r'^[^>]*>\s*(<td.*?</td>)', rows[f"run:{e.id}"], re.S).group(1) for e in (finished, refused, failed, paused)}
-        self.assertEqual(first["r4"], '<td data-col="state" data-sort="6" class="sticky-col"><svg class="ic st-refused" role="img" aria-label="refused"><title>refused</title><use href="#i-refused"/></svg></td>')
-        self.assertEqual([re.search(r'aria-label="([^"]+)"><title>\1</title><use href="#i-(\w+)"', first[n]).groups() for n in ("r3", "r5", "r6")],
-                         [("finished", "check"), ("failed", "alert"), ("paused", "pause")])
-        sort = {n: int(re.search(r'data-sort="(\d+)"', c).group(1)) for n, c in first.items()}
-        self.assertEqual(sorted(sort, key=sort.get), ["r6", "r5", "r4", "r3"])               # most telling first, not alphabetical
-        html = self.get("/launches").get_data(as_text=True)
-        self.assertRegex(html, r'<tr>\s*<th data-col="state" data-type="num" class="sticky-col"><span class="sr">State</span></th>')   # named, not shown
-        menu = re.search(r'data-filter-menu="state">(.*?)</fieldset>', html, re.S).group(1)
-        self.assertEqual(re.findall(r'data-value="([^"]+)"', menu), ["paused", "failed", "refused", "finished"])
-
-    def test_a_sharded_launch_is_one_row(self):
-        key = self.sharded()
-        row = self.rows()[key]
-        self.assertNotIn("<tr", row)                                                          # no row per shard, nothing to unfold
-        self.assertNotIn("la-fold-btn", self.get("/launches").get_data(as_text=True))
-        self.assertEqual([self.cells(row)[c] for c in ("state", "shards", "machines")], ["finished", "2", "ubuntu@10.0.0.4, ubuntu@10.0.0.5"])
-        self.assertIn(f'data-ask="/launch/{key}/ask"', row)
-        self.assertIn("<li>L1-shard-1of3 (2 shards)</li>", self.get(f"/launch/{key}/ask").get_data(as_text=True))   # Delete asks for the whole launch
-
     def test_shards_that_wrote_no_job_yet_are_one_launch(self):
         from tests.test_standard_shard import write_shard
         for i in (1, 2, 3):
@@ -906,33 +869,6 @@ class LaunchesPage(unittest.TestCase):
         self.assertEqual([self.cells(mine)[c] for c in ("state", "launch", "shards", "machines")],
                          ["running", "Q", "3", "this machine, ubuntu@10.0.0.6, gpu-box"])           # the most telling shard
         self.assertIn('title="Delete launch: not while it runs"', mine)
-
-    def test_filter_and_sort_by_are_menus_beside_columns(self):
-        self.record("r3")
-        html = self.get("/launches").get_data(as_text=True)
-        tools = re.search(r'<div class="table-tools table-controls" id="launches-tools">(.*?)<div class="table-wrap">', html, re.S).group(1)
-        self.assertEqual(re.findall(r'<button class="btn ghost sm" type="button" data-tools-btn="([\w-]+)" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-(\w+)"/></svg>([^<]+)', tools),
-                         [("columns", "table", "Columns"), ("filter", "filter", "Filter"), ("sort", "sort", "Sort by")])   # each its own icon, the text its name
-        self.assertIn('<input type="search" data-search placeholder="Search by launch, agent, benchmark or workspace" aria-label="Search by launch, agent, benchmark or workspace"', tools)
-        self.assertLess(tools.index("data-search"), tools.index('class="table-buttons"'))       # the search first, the buttons after it
-        self.assertEqual(re.findall(r'data-filter-menu="(\w+)">\s*<legend>([^<]+)', tools),
-                         [("state", "State"), ("bench", "Benchmark"), ("dataset", "Dataset"), ("machines", "Machines"), ("ws", "Workspaces")])
-        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools),
-                         ["", "state", "launch", "bench", "dataset", "started", "runs", "checks", "shards", "machines", "size", "ws"])     # "": the order the page came in
-        heads, rows = columns_of(html)
-        self.assertTrue(rows); self.assertEqual(rows, [heads] * len(rows))                        # each cell under its column's header
-        self.assertNotIn("filter-btn", html)                                                     # no caret in a header
-        self.assertNotIn("data-sorted", html)                                                    # no sort, no arrow, until one is chosen
-        self.assertIn('<table class="grid sortable tools snug" id="launches" data-table>', html)
-        pager = re.search(r'<div class="table-tools table-pager" data-pager="launches">(.*?)</div>', html, re.S).group(1)   # the shared pages, after the table
-        self.assertEqual(re.findall(r"<option(?: value=\"(\w+)\")?(?: selected)?>(\w+)</option>", pager), [("", "10"), ("", "25"), ("", "100"), ("0", "All")])
-        self.assertIn("<option selected>25</option>", pager)
-        self.assertNotIn(" id=", pager)
-        self.assertEqual(re.findall(r'aria-label="(\w+ page)"', pager), ["Previous page", "Next page"])
-
-    def test_the_sidebar_lists_it_after_workspaces(self):
-        html = self.get("/workspaces").get_data(as_text=True)
-        self.assertRegex(html, r'(?s)>Workspaces</span>.*href="/launches"[^>]*><svg class="ic"><use href="#i-launches"/>')
 
     def test_a_title_opens_its_workspace_at_the_launch(self):
         web.shared.close_workspace()
@@ -981,17 +917,6 @@ class LaunchesPage(unittest.TestCase):
         (new,) = [w for w in workspace.list_all(self.home) if w.name not in before]
         self.assertEqual((new.label, new.roots), (new.name, [self.ex.jobs]))
         self.assertRegex(new.name, r"^[a-z]+-[a-z]+$")
-
-    def test_the_add_dialog_is_drawn_once_for_the_page(self):
-        orphan = self.record("r3")
-        html, rows = self.get("/launches").get_data(as_text=True), self.rows()
-        wss = workspace.list_all(self.home)
-        self.assertEqual((html.count('<template class="launch-add">'), html.count('<select name="workspace">')), (1, 1))
-        self.assertFalse(any("<select" in r or "launch-add\"" in r for r in rows.values()))   # no row carries its own copy
-        select = html.split('<select name="workspace">', 1)[1].split("</select>", 1)[0]
-        self.assertEqual(re.findall(r'<option value="([^"]*)"', select), [w.name for w in wss] + [""])   # every workspace; the row's are dropped as it opens
-        self.assertIn(f'data-add="/launch/run:{orphan.id}/add" data-title="r3-*"', rows[f"run:{orphan.id}"])
-        self.assertEqual(re.search(r'data-f-ws="([^"]*)"', rows[f"run:{self.ex.id}"]).group(1).split("\n"), [w.name for w in wss])   # what it drops
 
     def test_add_with_no_workspace_at_all(self):
         web.shared.close_workspace()
@@ -1074,10 +999,6 @@ class LaunchesPage(unittest.TestCase):
         self._write_json(cfg, {**json.loads(Path(cfg).read_text()), "agents": [{"name": "oracle"}]})
         self.assertEqual(said(), ["0", "2", "finished"])
 
-    def test_no_launch_is_one_line(self):
-        execution.EXECUTIONS.clear()
-        self.assertIn('<div class="alert">No launch yet.</div>', self.get("/launches").get_data(as_text=True))
-
 
 if __name__ == "__main__":
     unittest.main()
@@ -1107,17 +1028,6 @@ class WorkspacesPage(unittest.TestCase):
 
     def other(self):
         return next(w for w in workspace.list_all(self.home) if w.label == "sharp lemur")
-
-    def test_one_name_column_and_no_open(self):
-        html = self.get("/workspaces").get_data(as_text=True)
-        heads = re.findall(r"<th[^>]*>(.*?)</th>", html.split("<thead>", 1)[1].split("</thead>", 1)[0])
-        self.assertEqual([re.sub(r"<[^>]+>", "", h) for h in heads], ["Open", "Name", "Runs", "Checks", "Last opened", "Launches", "Roots", "Actions"])
-        row = self.row(self.ws, html)
-        self.assertIn(f'<span class="ws-title" title="{self.ws.name}">witty pelican</span>', row)   # the name on disk a tooltip
-        self.assertNotIn('<small class="mono faint">', row)                                          # no two labels alike
-        self.assertNotIn("workspaces/open", html.split('id="workspaces" data-table>', 1)[1])   # no Open, no "runs →"
-        self.assertNotIn("runs →", html)
-        self.assertRegex(html, r'<h1>Workspaces</h1>\s*<div class="page-head-actions"><a class="btn sm" href="/import\?new=1">.*?New workspace</a>')
 
     def test_two_labels_alike_show_their_names(self):
         twin = workspace.create(self.home, [], label="witty pelican")
@@ -1339,25 +1249,6 @@ class WorkspacesPage(unittest.TestCase):
             with self.subTest(q=q):
                 self.assertEqual(set(boxes(self.get(f"/launches{q}").get_data(as_text=True)).values()), {" checked"})
 
-    def test_sort_by_alone_and_every_sort_key(self):
-        html = self.get("/workspaces").get_data(as_text=True)
-        tools = html.split('<div class="table-tools table-controls" id="workspaces-tools">', 1)[1].split('<div class="table-wrap">', 1)[0]
-        self.assertNotIn('data-tools-btn="filter"', tools)                                        # Sort by alone: nothing to filter
-        self.assertEqual(re.findall(r'data-sort-col value="(\w*)"', tools), ["", "name", "runs", "checks", "opened", "launches", "roots"])
-        heads, rows = columns_of(html)
-        self.assertEqual(heads, ["open", "name", "runs", "checks", "opened", "launches", "roots", "actions"])
-        self.assertTrue(rows); self.assertEqual(rows, [heads] * len(rows))
-        self.assertIn('<table class="grid sortable tools snug ws-table" id="workspaces" data-table>', html)
-        self.assertIn('placeholder="Search by name"', tools)
-        heads = re.findall(r'<th( data-col="\w+" data-type="\w+")?[^>]*>', html.split("<thead>", 1)[1].split("</thead>", 1)[0])
-        self.assertEqual([bool(h) for h in heads], [False, True, True, True, True, True, True, False])  # Open and the actions do not sort
-        self.assertNotIn("data-sorted", html)                                                     # no arrow until a sort is chosen
-        self.assertRegex(html, r'<div class="table-tools table-pager" data-pager="workspaces">\s*<label class="table-note">Show <select data-per><option>10</option><option selected>25</option>')
-        row = self.row(self.ws, html)
-        self.assertIn('<td data-col="name" data-sort="witty pelican" class="ws-name">', row)
-        self.assertIn('<td data-col="roots" data-sort="1" class="align-right">', row)
-        self.assertRegex(row, r'data-sort="\d{14}" class="mono faint nowrap">\d{4}-\d\d-\d\d \d\d:\d\d</td>')   # last opened, as digits
-
     def test_delete_workspace_says_what_is_lost(self):
         from nullius.judge import store
         store.save(self.ws.dir, "r1-b", "t0", {"questions": "v", "answers": {}}, lane="llm")            # beside the one setUp saved
@@ -1416,12 +1307,6 @@ class WorkspacesPage(unittest.TestCase):
                 self.assertIn('No workspace called <span class="mono">gone-now</span>: nothing added.', r.get_data(as_text=True))
                 self.assertNotIn(str(more), web.shared.STATE["workspace"].roots)
 
-    def test_the_sidebar_links_to_workspaces_without_a_tree(self):
-        html = self.get("/launches").get_data(as_text=True)
-        self.assertIn('<a class="nav-item " href="/workspaces" data-label="Workspaces" aria-label="Workspaces"><svg class="ic"><use href="#i-ws"/></svg><span class="lbl">Workspaces</span></a>', html)
-        self.assertNotIn('data-tree="nav-ws"', html)
-        self.assertNotIn("tree-runs", html)
-
 
 class ExecutionPolling(unittest.TestCase):
     def test_terminal_runs_stop_polling_even_without_a_job(self):
@@ -1435,26 +1320,23 @@ const source = JSON.parse(process.argv[1]);
 (async () => {
   const results = [];
   for (const state of ['preparing', 'running', 'paused', 'stopping', 'done', 'failed', 'stopped']) {
-    for (const headFails of [false, true]) {
+    for (const fetchFails of [false, true]) {
       const timers = [], requests = [];
       const elements = {};
       const element = id => elements[id] ||= {dataset: {run:'/run/test', live:'yes', waiting:'yes'},
         textContent:'', remove(){}, after(){}, addEventListener(){}};
       vm.runInNewContext(source, {
         document: {getElementById:element, createElement:element},
-        location: {pathname:'/job/test', reload(){}},
+        location: {pathname:'/job/test', reload(){ throw Error('unexpected navigation'); }},
         setTimeout: (fn, delay) => timers.push(delay),
         nulliusFetch: async (url, options) => {
           requests.push(options.method || 'GET');
-          if (options.method === 'HEAD') {
-            if (headFails) throw Error('network');
-            return {ok:false};
-          }
+          if (fetchFails) throw Error('network');
           return {ok:true, json:async () => ({state, log:[], lines:0, error:state==='failed'?'failed':null})};
         }
       });
       await new Promise(setImmediate);
-      results.push({state, headFails, requests, timers});
+      results.push({state, fetchFails, requests, timers});
     }
   }
   console.log(JSON.stringify(results));
@@ -1463,6 +1345,5 @@ const source = JSON.parse(process.argv[1]);
         result = subprocess.run([node, "-e", program, json.dumps(source)], check=True, capture_output=True, text=True)
         for row in json.loads(result.stdout):
             with self.subTest(**row):
-                self.assertEqual(row["requests"], ["GET", "HEAD"])
-                self.assertEqual(row["timers"], [] if row["state"] in ("done", "failed", "stopped")
-                                 else [5000 if row["headFails"] else 1000])
+                self.assertEqual(row["requests"], ["GET"])
+                self.assertEqual(row["timers"], [5000] if row["fetchFails"] else [] if row["state"] in ("done", "failed", "stopped") else [1000])

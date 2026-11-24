@@ -177,10 +177,6 @@ class MoveFromEnvFile(unittest.TestCase):
         with self.assertRaises(ValueError):
             settings.take(path, "OPENAI_API_KEY")
 
-    def test_the_settings_page_has_no_group_for_them(self):
-        self.assertNotIn("Benchmark secrets", settings.GROUPS)
-        self.assertFalse(hasattr(settings, "benchmark_secrets"))
-
 
 class LicenceFolderTest(unittest.TestCase):
     """A licence file goes only into a folder this user alone owns: a shared

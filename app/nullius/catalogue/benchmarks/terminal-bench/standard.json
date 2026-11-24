@@ -79,36 +79,5 @@
         "build": "Built now from the task's Dockerfile: its packages are whatever the mirrors serve today."
       }
     }
-  },
-  "proven": {
-    "small": {
-      "units": {
-        "units": 8,
-        "passed": "8 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 8,
-        "looked_for": 0,
-        "short": 0,
-        "passed": "8/8",
-        "note": "8 unit(s) whose oracle gave nothing to look for"
-      },
-      "nop": {
-        "passed": "0/8",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 8
-      },
-      "oracle": {
-        "passed": "8/8",
-        "value": 1.0,
-        "expect": {
-          "at_least": 1.0
-        },
-        "units": 8
-      }
-    }
   }
 }

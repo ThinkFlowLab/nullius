@@ -1,0 +1,40 @@
+{
+  "schema": "nullius.proofs/v1",
+  "kind": "benchmark",
+  "key": "agent-computer-v1",
+  "versions": {
+    "": {
+      "proven": {
+        "kit": {
+          "units": {
+            "units": 9,
+            "passed": "9 ids, the same twice, unique"
+          },
+          "leak": {
+            "units": 9,
+            "looked_for": 1,
+            "short": 8,
+            "passed": "9/9",
+            "note": "8 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
+          },
+          "nop": {
+            "passed": "0/9",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 9
+          },
+          "oracle": {
+            "passed": "9/9",
+            "value": 1.0,
+            "expect": {
+              "at_least": 1.0
+            },
+            "units": 9
+          }
+        }
+      }
+    }
+  }
+}

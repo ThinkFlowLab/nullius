@@ -31,8 +31,8 @@
       <th class="compare-col{{ ' empty' if c.i is none }}" data-column="{{ loop.index0 }}" data-run="{{ c.ref.job_id }}">
         <div class="col-tools">
           <span class="compare-baseline">{{ 'Baseline' if loop.first }}</span>
-          {% if c.left %}<a class="icon-btn" href="{{ c.left }}" aria-label="Move column {{ n }} left" title="Move left">←</a>{% endif %}
-          {% if c.right %}<a class="icon-btn" href="{{ c.right }}" aria-label="Move column {{ n }} right" title="Move right">→</a>{% endif %}
+          {% if c.left %}<a class="icon-btn" href="{{ c.left }}" aria-label="Move column {{ n }} left" title="Move left"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg></a>{% endif %}
+          {% if c.right %}<a class="icon-btn" href="{{ c.right }}" aria-label="Move column {{ n }} right" title="Move right"><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>{% endif %}
           {% if c.remove %}<a class="icon-btn" href="{{ c.remove }}" aria-label="Remove column {{ n }}" title="Remove"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></a>{% endif %}
         </div>
       </th>
@@ -71,6 +71,7 @@
           {% if j is not none %}
           <span class="faint mono col-id">{% if c.shards %}{% for s in c.shards %}{{ shard_link(s, workspace=c.ref.workspace) }}{% endfor %}{% else %}<a href="{{ url_for('job', job_id=j.job_id, workspace=c.ref.workspace) }}">{{ j.job_id }}</a>{% endif %}</span>
           {% if cohort == 'matched' %}<span class="compare-excluded">{{ comparison.excluded_trials[c.i] }} of {{ selections[c.i].job.trials|length }} trials outside this cohort</span>{% endif %}
+          {% if comparison.set_aside_trials and comparison.set_aside_trials[c.i] %}<span class="compare-excluded" id="compare-set-aside-{{ c.i }}">{{ comparison.set_aside_trials[c.i] }} trials of flagged tasks set aside</span>{% endif %}
           {% endif %}
         </div>
       </td>
@@ -110,6 +111,19 @@
 {{ controls(view or 'side', [], sort=false, views=side_views, actions=side_actions) }}
 {% if jobs %}
 {% if cohort == 'matched' and not n_shared %}<p class="alert warn">No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
+{% set ff = flag_filter %}{% if ff and ((ff.flagged.values()|sum) or ff.unreadable) %}
+<form method="get" action="{{ url_for('compare') }}" class="compare-flags" id="compare-flags" aria-label="Exclude flagged tasks">
+  {% if ff.flagged.values()|sum %}<span class="filter-heading">Exclude:</span>{% endif %}
+  {% for key, value in request.args.items(multi=True) if key not in ('flawed', 'ambiguous') %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+  {% for k in ('flawed', 'ambiguous') %}{% if ff.flagged[k] %}
+  <label class="filter-choice" title="Tasks a person flagged {{ k }} in any of these runs"><input type="checkbox" aria-label="Exclude {{ ff.flagged[k] }} {{ k }} task{{ '' if ff.flagged[k] == 1 else 's' }}" id="compare-filter-{{ k }}" name="{{ k }}" value="1"{{ ' checked' if k in ff.on }}> {{ k|capitalize }}</label>
+  {% endif %}{% endfor %}
+  {% if ff.flagged.values()|sum %}<noscript><button type="submit" class="btn sm">Apply</button></noscript>{% endif %}
+  {% if ff.on %}<span class="small" id="compare-set-aside">Filtered: {{ ff.set_aside|length }} task{{ '' if ff.set_aside|length == 1 else 's' }} set aside in every column</span>{% endif %}
+  {% if ff.unreadable %}<span class="small warn" id="compare-flags-unreadable">Flags unreadable: {{ ff.unreadable|join(', ') }}</span>{% endif %}
+  {% if ff.differ %}<span class="small warn" id="compare-flags-differ" title="{{ ff.differ|join(', ') }}">Flags differ on {{ ff.differ|length }} task{{ '' if ff.differ|length == 1 else 's' }}</span>{% endif %}
+</form>
+{% endif %}
 {% if comparison.datasets_known and not comparison.datasets_match %}<p class="compare-warn">The recorded datasets differ: pick runs of the baseline's dataset to compare the same tasks.</p>{% endif %}
 {% endif %}
 {% if view == 'chart' %}
@@ -262,10 +276,10 @@
     <tr class="compare-task-row {% if taskrow.differs %}row-differs{% endif %}">
       <td{{ classes(METRIC, true, 'mono') }}>
         <div class="compare-task-name">
-        {# One glyph, rotated by CSS on aria-expanded. #}
+        {# One icon, rotated by CSS on aria-expanded. #}
         <button type="button" class="disclose" aria-expanded="false"
                 data-task="{{ loop.index0 }}" aria-controls="compare-detail-{{ loop.index0 }}"
-                aria-label="Compare details for {{ taskrow.task }}" title="Compare details">▼</button>
+                aria-label="Compare details for {{ taskrow.task }}" title="Compare details"><svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
         <span class="compare-task-label" title="{{ taskrow.task }}">{{ taskrow.task }}</span>
         </div>
         {% if not comparison.datasets_match or not comparison.datasets_known %}<span class="compare-task-dataset">{{ 'Dataset not recorded' if taskrow.dataset.startswith('[unidentified:') else taskrow.dataset|dsname }}</span>{% endif %}
@@ -334,6 +348,12 @@
 <script>
   NulliusCompare.wire({values: {{ picks|tojson }}, lists: {{ lists|tojson }}, dataset: {{ baseline|tojson }},
                        runs: {{ url_for('compare_runs')|tojson }}});
+
+  (() => {
+    const flags = document.getElementById('compare-flags'); if (!flags) return;
+    flags.addEventListener('change', () => flags.requestSubmit());
+    addEventListener('pageshow', () => flags.reset());        // Back shows the boxes as this page was filtered
+  })();
 
   /* ---- drag a task table's column header to reorder ----
      Order is carried by qualified ?pick= params, so a drop navigates to the

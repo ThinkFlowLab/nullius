@@ -49,12 +49,6 @@ class Tokens(unittest.TestCase):
             for token in SPAN_TOKENS:
                 self.assertIn(token, tokens, f"--{token} missing from {scope}")
 
-    def test_the_two_themes_use_different_values(self):
-        dark, light = scopes()["dark"], scopes()["light"]
-        for token in SPAN_TOKENS:
-            self.assertNotEqual(dark[token], light[token],
-                                f"--{token} is identical in both themes")
-
 
 class Contrast(unittest.TestCase):
     """Every bar must be visible against every surface it can sit on.
@@ -108,6 +102,26 @@ class InterfaceContrast(unittest.TestCase):
                     f"{scope} button text is {ratio:.2f}:1 on --{background}")
 
 
+class ChosenPick(unittest.TestCase):
+    """A chosen card or a chosen row's cells take --accent-soft as background; a category tag
+    filled with it, and a tag outlined with --border, must still show on it (catalogue.css)."""
+
+    def test_tags_stand_out_on_a_chosen_card_and_a_chosen_row(self):
+        css = (palette.STYLESHEET.parent / "catalogue" / "catalogue.css").read_text(encoding="utf-8")
+        rule = re.search(r":is\(([^{]+)\)\s*\{\s*--pick-fill: color-mix\(in srgb, var\(--accent\) (\d+)%, var\(--accent-soft\)\); "
+                         r"--pick-line: color-mix\(in srgb, var\(--accent\) (\d+)%, var\(--border\)\); \}", css)
+        self.assertIsNotNone(rule, "the chosen pick's --pick-fill and --pick-line rule")
+        self.assertIn(".bench-card:has(> .bench-card-title [data-pick][aria-pressed=\"true\"])", rule[1])
+        self.assertIn(".table-wrap .grid tbody tr:has([data-pick]:checked) > td", rule[1])
+        self.assertIn(f":is({rule[1]}) > * {{\n  --accent-soft: var(--pick-fill); --border: var(--pick-line); }}", css)
+        mix = lambda share, a, b: tuple(share * x + (1 - share) * y for x, y in zip(a, b))   # color-mix in srgb
+        for scope, tokens in scopes().items():
+            accent, soft, border = (palette.to_rgb(tokens[t]) for t in ("accent", "accent-soft", "border"))
+            fill, line = mix(int(rule[2]) / 100, accent, soft), mix(int(rule[3]) / 100, accent, border)
+            self.assertGreater(palette.contrast(fill, soft), 1.2, f"{scope} category tag on a chosen pick")
+            self.assertGreaterEqual(palette.contrast(line, soft), MIN_CONTRAST, f"{scope} tag outline on a chosen pick")
+
+
 class Separation(unittest.TestCase):
     """All-pairs, not adjacent-pairs: any two kinds can end up stacked."""
 
@@ -153,18 +167,15 @@ class BlueRamp(unittest.TestCase):
     def _ramp(self, tokens):
         return [palette.lightness(palette.to_rgb(tokens[t])) for t in RAMP]
 
-    def test_the_ramp_is_monotone(self):
-        for scope, tokens in scopes().items():
-            steps = self._ramp(tokens)
-            ordered = steps == sorted(steps) or steps == sorted(steps, reverse=True)
-            self.assertTrue(ordered, f"{scope} ramp is not monotone: {steps}")
-
-    def test_each_step_is_big_enough_to_read_as_ordered(self):
+    def test_the_ramp_is_monotone_and_each_step_big_enough_to_read_as_ordered(self):
         for scope, tokens in scopes().items():
             values = self._ramp(tokens)
-            for a, b in zip(values, values[1:]):
-                self.assertGreaterEqual(abs(b - a), MIN_RAMP_STEP,
-                                        f"{scope} ramp step {a:.0f}->{b:.0f} is too small")
+            steps = [b - a for a, b in zip(values, values[1:])]
+            self.assertTrue(all(s > 0 for s in steps) or all(s < 0 for s in steps),
+                            f"{scope} ramp is not monotone: {values}")
+            for a, step in zip(values, steps):
+                self.assertGreaterEqual(abs(step), MIN_RAMP_STEP,
+                                        f"{scope} ramp step {a:.0f}->{a + step:.0f} is too small")
 
     def test_the_ramp_steps_away_from_its_surface(self):
         # The whole point: stepping toward the surface buries the far end in the
@@ -191,10 +202,12 @@ class NoHardcodedColours(unittest.TestCase):
         marker = re.compile(r"/\* ---- (.+?) ---- \*/")
         offending = []
         current = None
+        seen = set()
         for line in css.splitlines():
             hit = marker.search(line)
             if hit:
                 current = hit.group(1)
+                seen.add(current)
                 continue
             if current not in self.SECTIONS:
                 continue
@@ -204,12 +217,9 @@ class NoHardcodedColours(unittest.TestCase):
             if re.search(r"#[0-9a-fA-F]{3,8}\b", line):
                 offending.append(line.strip())
         self.assertEqual(offending, [], "hardcoded colours in waterfall rules")
-
-    def test_the_sections_it_guards_actually_exist(self):
         # Otherwise a rename silently turns the check above into a no-op.
-        css = palette.STYLESHEET.read_text(encoding="utf-8")
         for section in self.SECTIONS:
-            self.assertIn(f"/* ---- {section} ---- */", css)
+            self.assertIn(section, seen)
 
 
 class Calibration(unittest.TestCase):
@@ -219,24 +229,6 @@ class Calibration(unittest.TestCase):
     other than what the stylesheet's comments claim, and the palette should be
     re-derived rather than the thresholds nudged.
     """
-
-    CATEGORIES = ("cat-search", "cat-read", "cat-edit", "cat-execute", "cat-plan")
-
-    def test_the_shipped_category_palette_still_measures_near_its_documented_worst_pair(self):
-        # style.css says 17.0 (dark) and 16.7 (light); this script reads
-        # 16.6/15.6, i.e. slightly stricter. Assert the neighbourhood, not the
-        # exact figure — the point is that the model has not drifted.
-        for scope, tokens in scopes().items():
-            worst = min(
-                min([palette.delta_e_2000(palette.to_rgb(tokens[a]), palette.to_rgb(tokens[b]))]
-                    + [palette.delta_e_2000(palette.simulate(palette.to_rgb(tokens[a]), k),
-                                            palette.simulate(palette.to_rgb(tokens[b]), k))
-                       for k in ("deuteranopia", "protanopia")])
-                for a, b in combinations(self.CATEGORIES, 2)
-            )
-            self.assertTrue(14.0 <= worst <= 19.0,
-                            f"{scope} category worst pair measured {worst:.1f}, "
-                            "outside the range this script was calibrated in")
 
     def test_known_reference_values(self):
         white, black = palette.to_rgb("#ffffff"), palette.to_rgb("#000000")

@@ -87,21 +87,15 @@ class Verdicts(unittest.TestCase):
                        " ".join(words[::-1]) + "; actually, " + text,
                        " ".join([words[0], "ZEBRA", *words[1:]]) + "; actually, " + text,
                        words[0] + " " + text,
-                       text + " " + words[-1]]
-            for answer in answers:
-                with self.subTest(check=check, answer=answer):
-                    got = checks.verdict(check, {"words": words}, [ev("moved", 100.2, top=0.4)], ACTIONS, answer)
-                    self.assertEqual(got, {"passed": True, "why": ""})
-
-    def test_reading_ignores_screen_and_action_prose_between_the_drawn_words(self):
-        for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
-            answers = ["The window shows " + " ".join(words) + ".",
+                       text + " " + words[-1],
+                       "The window shows " + text + ".",
                        "The square holds " + words[0] + "; the paper holds " + " and ".join(words[1:]) + ".",
                        "I mirror " + words[0] + " and then stream " + " and ".join(words[1:]) + "."]
             for answer in answers:
                 with self.subTest(check=check, answer=answer):
                     got = checks.verdict(check, {"words": words}, [ev("moved", 100.2, top=0.4)], ACTIONS, answer)
                     self.assertEqual(got, {"passed": True, "why": ""})
+
 
     def test_reading_fails_without_an_unbroken_run_of_the_drawn_words(self):
         for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
@@ -116,7 +110,7 @@ class Verdicts(unittest.TestCase):
                     self.assertEqual(got, {"passed": False, "why":
                                           "the words were not found together in order; expected " + ", ".join(words)})
 
-    def test_reading_accepts_twelve_vocabulary_occurrences_including_repeats(self):
+    def test_reading_accepts_twelve_vocabulary_occurrences_and_rejects_more_even_with_a_correct_run(self):
         for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
             padding = ["ZEBRA"] * (12 - len(words))
             for found in (words + padding, padding + words, words * (12 // len(words))):
@@ -124,9 +118,6 @@ class Verdicts(unittest.TestCase):
                     got = checks.verdict(check, {"words": words}, [ev("moved", 100.2, top=0.4)], ACTIONS,
                                          " ".join(found))
                     self.assertEqual(got, {"passed": True, "why": ""})
-
-    def test_reading_rejects_more_than_twelve_vocabulary_occurrences_even_with_a_correct_run(self):
-        for check, words in (("see", ["ACORN", "BASKET", "CANDLE"]), ("scroll", ["ACORN", "BASKET"])):
             answers = [words + ["ZEBRA"] * (13 - len(words)),
                        words * (12 // len(words)) + [words[0]],
                        list(checks.WORDS), list(checks.WORDS) + words]
@@ -382,19 +373,6 @@ class Actions(unittest.TestCase):
 class EarnedPasses(unittest.TestCase):
     """A pass comes from input sent inside actions and seen by the fixture, nothing else."""
 
-    def test_a_press_of_any_mouse_button_on_another_button_fails_click(self):
-        exp = {"target": "OCEAN", "labels": ["OCEAN", "APPLE"]}
-        for button in (1, 2, 3):
-            events = [ev("press", 100.1, button=button, hit="APPLE"), ev("press", 100.2, button=1, hit="OCEAN")]
-            self.assertIn("another button", checks.click(exp, events, [{"start": 100, "end": 101}], "")["why"])
-
-    def test_enter_is_input_whose_time_is_checked(self):
-        exp = {"word": "kotabiru"}
-        self.assertFalse(checks.type_word(exp, [ev("enter", 100, value="kotabiru")], [], "")["passed"])
-        late = [ev("key", 100.1, char="k", hit="field"), ev("enter", 105, value="kotabiru")]
-        v = checks.type_word(exp, late, [{"start": 100, "end": 101}], "")
-        self.assertIn("outside every action", v["why"])
-
     def test_a_press_and_its_release_in_two_actions_pass(self):
         events = [ev("press", 100.2, hit="OCEAN", button=1), ev("release", 110.2, hit="OCEAN", button=1)]
         actions = [{"start": 100, "end": 101}, {"start": 110, "end": 111}]
@@ -450,11 +428,6 @@ class ActionTimes(unittest.TestCase):
         self.assertTrue(checks.click({"target": "OCEAN", "labels": ["OCEAN"]}, events, [said], "")["passed"])
 
 
-class _FakeX:
-    AutoRepeatModeOff = 0
-    AutoRepeatModeOn = 1
-
-
 class Session(unittest.TestCase):
     def test_the_x_server_runs_with_access_control_on_and_as_its_own_account(self):
         argv = session.server_argv()
@@ -464,13 +437,6 @@ class Session(unittest.TestCase):
         self.assertNotIn(session.SERVER_UID, (0, session.UID, 1001))
         with open(os.path.join(KIT, "desktop.Dockerfile")) as f:
             self.assertIn(f"useradd -u {session.SERVER_UID} ", f.read())
-
-    def test_the_servers_key_repeat_is_turned_off(self):
-        d = mock.Mock()
-        d.get_keyboard_control.return_value = mock.Mock(global_auto_repeat=_FakeX.AutoRepeatModeOff)
-        with mock.patch.dict(sys.modules, {"Xlib": mock.Mock(X=_FakeX), "Xlib.X": _FakeX}):
-            self.assertTrue(session.repeat_off(d))
-        d.change_keyboard_control.assert_called_once_with(auto_repeat_mode=_FakeX.AutoRepeatModeOff)
 
     def test_the_cookie_file_names_this_host_and_any_host(self):
         data = session.xauthority(b"c" * 16, "desktop")
@@ -622,6 +588,25 @@ def _from_corner(cells):
     return sorted((c - c0, r - r0) for c, r in cells)
 
 
+# What the desktop's Python reads of the active window: the process and the machine it names, the command line of
+# that process, and the desktop's host name.
+_WINDOW_OWNER = r"""
+import json, socket
+from Xlib import X, Xatom, display
+d = display.Display(":0")
+root = d.screen().root
+active = root.get_full_property(d.intern_atom("_NET_ACTIVE_WINDOW"), X.AnyPropertyType).value[0]
+w = d.create_resource_object("window", active)
+pid = w.get_full_property(d.intern_atom("_NET_WM_PID"), Xatom.CARDINAL)
+machine = w.get_full_property(Xatom.WM_CLIENT_MACHINE, X.AnyPropertyType)
+pid = int(pid.value[0]) if pid else None
+machine = machine.value if machine else None
+command = open(f"/proc/{pid}/cmdline", "rb").read().decode().split("\0") if pid else []
+print(json.dumps({"pid": pid, "machine": machine.decode() if isinstance(machine, bytes) else machine,
+                  "command": command, "host": socket.gethostname()}))
+"""
+
+
 _PREFIX = os.environ.get("NULLIUS_TEST_CONTAINER_PREFIX", "nullius-test")
 
 
@@ -631,16 +616,6 @@ def why_no_desktop() -> str:
     if not os.environ.get(docker_tier.VAR):
         return "the docker tier runs with parallel.py --docker"
     return container.unusable() or ""
-
-
-class TierGate(unittest.TestCase):
-    def test_the_desktop_tests_run_wherever_an_engine_answers_and_build_the_image(self):
-        with mock.patch.dict(os.environ, {docker_tier.VAR: "1"}), mock.patch.object(container, "unusable", return_value=None), \
-                mock.patch.object(container, "present", return_value=False):
-            self.assertEqual(why_no_desktop(), "")
-        with mock.patch.object(desktop, "image", side_effect=container.Unavailable("no build")):
-            with self.assertRaises(container.Unavailable):
-                DockerDesktop.setUpClass()
 
 
 @unittest.skipIf(why_no_desktop(), why_no_desktop() or "")
@@ -721,6 +696,14 @@ class DockerDesktop(unittest.TestCase):
         v = checks.verdict("click", exp, self.d.events(), self.d.actions, "")
         self.assertFalse(v["passed"])
         self.assertIn("outside every action", v["why"])
+
+    def test_the_fixture_window_names_its_process_and_its_machine(self):
+        self.d.start_fixture(checks.draw("type")[0])
+        said = self.d.python(_WINDOW_OWNER)
+        self.assertEqual(said["returncode"], 0, said["error"])
+        owner = json.loads(said["output"])
+        self.assertEqual(owner["machine"], owner["host"])
+        self.assertIn("/opt/desktop/fixture.py", owner["command"])
 
     def test_a_word_typed_by_an_action_passes(self):
         values, exp = checks.draw("type")

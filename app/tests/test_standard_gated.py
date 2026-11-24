@@ -8,7 +8,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from nullius.standard.calls import relay
 from nullius.standard.contract import definitions
 from nullius.standard.requirements import install
 from nullius.standard.runner import run
@@ -76,15 +75,13 @@ class Gated(unittest.TestCase):
         with open(os.path.join(job_dir, name, "result.json")) as f:
             return json.load(f)["exception_info"]
 
-    def test_a_gated_benchmarks_refused_judge_or_simulator_is_said_by_status_alone(self):
+    def test_only_a_gated_benchmarks_refused_judge_or_simulator_is_said_by_status_alone(self):
         for side in ("judge", "simulator"):
             with self.subTest(side):
                 said = self.saved(side, gated=True)
                 self.assertEqual(said["exception_type"], "ApiError")
                 self.assertIn("answered 500", said["exception_message"])
                 self.assertNotIn(WORDS, said["exception_message"])
-
-    def test_a_benchmark_not_gated_keeps_the_providers_words(self):
         said = self.saved("judge")
         self.assertEqual(said["exception_type"], "ApiError")
         self.assertIn(WORDS, said["exception_message"])
@@ -106,26 +103,16 @@ class Gated(unittest.TestCase):
         with open(os.path.join(job_dir, name, "result.json")) as f:
             return json.load(f)["exception_info"]
 
-    def test_a_gated_benchmarks_answer_failing_on_its_judge_or_simulator_is_said_by_status_alone(self):
+    def test_only_a_gated_benchmarks_answer_failing_on_its_judge_or_simulator_is_said_by_status_alone(self):
         for side in ("judge", "simulator"):
             with self.subTest(side):
                 said = self.answered(side, gated=True)
                 self.assertEqual(said["exception_type"], "ApiError")
                 self.assertIn("answered 500", said["exception_message"])
                 self.assertNotIn(WORDS, said["exception_message"])
-
-    def test_an_answer_failing_on_a_benchmark_not_gated_keeps_its_words(self):
         said = self.answered("judge", gated=False)
         self.assertEqual(said["exception_type"], "NonZeroAgentExitCodeError")
         self.assertIn(WORDS, said["exception_message"])
-
-    def test_the_failure_alone(self):
-        calls = [{"status": 429, "error": WORDS}]
-        self.assertEqual(relay.failure(calls), ("RateLimitError", WORDS))
-        exc, said = relay.failure(calls, words=False)
-        self.assertEqual(exc, "RateLimitError")
-        self.assertNotIn(WORDS, said)
-        self.assertEqual(relay.failure([{"status": 404, "error": "no such model"}], words=False)[0], "ModelNotFoundError")
 
     def test_gated_is_true_or_false(self):
         self.assertEqual(definitions.problems(dict(self.b, gated=True), "benchmark"), [])

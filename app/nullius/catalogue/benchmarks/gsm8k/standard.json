@@ -69,64 +69,6 @@
     "kind": "pass",
     "says": "the number after '####' in the agent's last message, commas removed, is the same string as the reference answer's (the upstream's extract_answer and is_correct)"
   },
-  "proven": {
-    "test": {
-      "units": {
-        "units": 1319,
-        "passed": "1319 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 1319,
-        "looked_for": 1319,
-        "short": 0,
-        "passed": "1319/1319"
-      },
-      "nop": {
-        "passed": "0/1319",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 1319
-      },
-      "oracle": {
-        "passed": "1319/1319",
-        "value": 1.0,
-        "expect": {
-          "at_least": 1.0
-        },
-        "units": 1319
-      }
-    },
-    "platinum": {
-      "units": {
-        "units": 1209,
-        "passed": "1209 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 1209,
-        "looked_for": 1209,
-        "short": 0,
-        "passed": "1209/1209"
-      },
-      "nop": {
-        "passed": "0/1209",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 1209
-      },
-      "oracle": {
-        "passed": "1209/1209",
-        "value": 1.0,
-        "expect": {
-          "at_least": 1.0
-        },
-        "units": 1209
-      }
-    }
-  },
   "setups": {
     "original": {
       "summary": "The problem asked of the model in one call, in the format the paper's solutions end with ('#### <number>'), and the reply scored by the upstream's own extract_answer and is_correct, as published. The paper's answerers were its own fine-tuned models, never released: the setup takes any model, in their place.",

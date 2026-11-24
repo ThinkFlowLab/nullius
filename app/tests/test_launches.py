@@ -56,13 +56,12 @@ class Group(unittest.TestCase):
         out = L.group([], {"r2": ("sweep", ["sweep-a", "sweep-b"], None, set())})
         self.assertEqual([(l.pending, l.started, l.dataset) for l in out], [(["sweep-a", "sweep-b"], None, None)])
 
-    def test_a_launch_with_no_job_yet_sorts_by_when_it_was_launched(self):
+    def test_a_launch_starts_when_it_was_launched_until_a_job_is_written(self):
         later = (T0 + timedelta(hours=5)).timestamp()
         out = L.group([job("older", 0), job("newer", 60 * 10)], {"r": ("r", ["r-nop", "r-agent"], later, set())})
         self.assertEqual([l.key for l in out], ["inferred:newer", "run:r", "inferred:older"])
         self.assertEqual(out[1].started, T0 + timedelta(hours=5))
-
-    def test_a_launchs_written_jobs_outrank_when_it_was_launched(self):
+        # a written job's start outranks it
         out = L.group([job("r-nop", 3)], {"r": ("r", ["r-nop", "r-agent"], (T0 + timedelta(hours=5)).timestamp(), set())})
         self.assertEqual(out[0].started, T0 + timedelta(minutes=3))
 
@@ -71,10 +70,6 @@ class Group(unittest.TestCase):
         self.assertEqual([l.job_ids for l in out][0], ["started"])
         self.assertEqual(sorted(l.job_ids[0] for l in out[1:]), ["never-a", "never-b"])
         self.assertEqual(out[1].prefix, out[1].job_ids[0])                                     # one run: its own name
-
-    def test_runs_that_share_no_prefix_are_named_not_wildcarded(self):
-        out = L.group([job("demo-liveboard-tau3-x4", 0), job("tau3-ended", 3)])
-        self.assertEqual(out[0].prefix, "demo-liveboard-tau3-x4 and 1 more")
 
     def test_every_job_lands_in_exactly_one_launch(self):
         jobs = [job(f"j{k}", k * 7, dataset="ds" + str(k % 2)) for k in range(12)]

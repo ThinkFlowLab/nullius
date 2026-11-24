@@ -383,7 +383,7 @@ The [builder](builder.md) runs the standard; what it adds:
 | --- | --- |
 | The builder | Each dataset with each choice is a `cli run --from-run` and a job (`<name>-<dataset>-<agent>`); each machine a shard and a job (`<name>-shard-<I>of<N>`) |
 | A run on a host | Runs the running backend and effective catalogue: source edits, user entries and catalogue-local dataset files are included, configuration and credential stores excluded; needs `python3`, `git` and, for the container backend, Docker or Podman; `uv` is installed when missing. On the local backend a host without `npm` is refused. The job is mirrored back every 10 s |
-| Agents and Capabilities tabs | Each definition's ports proven and the benchmarks it runs; *Prove its ports* runs `cli conform --from-run` here, with local processes or a container, and rewrites the definition |
+| Agents and Capabilities tabs | Each definition's ports proven and the benchmarks it runs; *Prove its ports* runs `cli conform --from-run` here, with local processes or a container, and updates its proofs |
 | A benchmark's page | Its proofs per dataset; *Run control checks* runs `cli prove --from-run` here, handed no key unless the benchmark is judged. A failed check is kept under `proven.<dataset>.failed` until it passes |
 
 ## Import by hand
@@ -493,6 +493,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 | `limit` | `true`: a bound of the upstream's own (steps, errors) |
 | `step` | `where`: where the work runs, such as the VMs' provider, asked on Where, one value as fixed; `dataset`: what its datasets need, asked on Dataset for the datasets it applies to |
 | `by` | Its default under each value of another option, e.g. each OSWorld agent's own steps |
+| `yours` | With `by`: default value for an external agent or capability |
 | `setups` | `["original"]`, `["original", "model"]`: a setting of the paper's pipeline. Without it the option is the port's (`["yours"]`); `["agent"]`: an agent's run alone, never a capability's or a control's |
 
 - **Temperature** in GSM8K and HumanEval's Original setups: a non-negative decimal, or `default` for the provider's own (`--bench-option temperature=0.5`).
@@ -525,7 +526,7 @@ An agent or a capability may keep several versions in its one file: an older rel
 
 | Rule | Detail |
 | --- | --- |
-| `versions` | Each version's `upstream`, `install`, and when it must, `start`, `model` or `env`, plus its `proven`; `default` names the one offered |
+| `versions` | Each version's `upstream`, `install`, and when it must, `start`, `model` or `env`; `default` names the one offered |
 | Naming | `codex@2.2.2` wherever a key is taken; a bare `codex` is its default |
 | `cli new version KEY VERSION` | Adds one from the default's block, nothing proven; a file without `versions` is turned into one first, proofs kept |
 | Proof per version | A version runs nothing until `cli conform KEY@VERSION` passes; without `versions`, a proof on another `upstream.version` does not count |
@@ -537,7 +538,7 @@ An agent or a capability may keep several versions in its one file: an older rel
 
 | Rule | Detail |
 | --- | --- |
-| What differs | `upstream`, `datasets`, `driver` (its `install` with it), `mcp_servers`, `score`, `limits`, `controls`, `environments`, and its own `proven` |
+| What differs | `upstream`, `datasets`, `driver` (its `install` with it), `mcp_servers`, `score`, `limits`, `controls`, `environments`; proofs belong to that version alone |
 | Naming | `KEY@VERSION` in `cli run`, `cli prove`, `cli fit` and the recipe's `benchmark` |
 | In jobs | `…__KEY-VERSION__…` in the name; `standard.benchmark_version` and `standard.benchmark_ref` in `config.json` |
 | A fork is a version | `versions.<name>.upstream = {repository, tag, tested}`, never a patch of ours; cloned at its commit (`upstreams/<key>/<commit>/`), its datasets checked by their own `sha256`; a private repository uses the machine's git credentials. It proves its own controls (`cli prove KEY@NAME`) |
@@ -711,9 +712,9 @@ A benchmark proves itself by its two **controls**, `nop` and `oracle`, and two c
 
 `--bench-option NAME=VALUE` sets the benchmark's own options for the units check's driver and each control's run, resolved and refused as `cli run` does them; the control job's config records the values.
 
-What passed is written into `standard.json` per dataset; a failing check is taken back, and a run on fewer units does not replace one on more.
+What passed is recorded per dataset in the version's [proofs](#what-is-proven); a failing check is taken back, and a run on fewer units does not replace one on more.
 
-```json title="standard.json · proven"
+```json title="proofs.json · versions.<version>.proven"
 "proven": {
   "test": {
     "units":  {"units": 1319, "passed": "1319 ids, the same twice, unique"},
@@ -730,6 +731,17 @@ What passed is written into `standard.json` per dataset; a failing check is take
     The same answers scored by the driver and by the upstream's own evaluation, to the same verdicts.
 
 ## What is proven
+
+Definitions describe what runs; their sibling `proofs.json` records what passed.
+Proof runs update only that file. Each file names its `kind` and `key`, uses
+schema `nullius.proofs/v1`, and holds a `versions` map: the declared version,
+or `""` when the definition has no `upstream.version`. Each version holds its
+`proven`; a single-version agent or capability also keeps its generated `offers`
+there. Multi-version agents and capabilities derive offers from each version's proofs.
+
+Existing entries with embedded proofs still load when `proofs.json` is absent.
+When present, that file is authoritative; missing evidence never falls back to
+embedded records or another version.
 
 Each `proven` record holds its model, score, kit version, skills shown and, for a repeated check, its counts; never its job or date, which only the machine that ran it could read. `cli list` shows them all.
 

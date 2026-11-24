@@ -33,7 +33,7 @@
       return C.servedRow(rec, role, shown(rec, role), out, entry && entry.result);
     };
     const chips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick"><span class="std-served-slug">${esc(slug) || '“”'}</span>`
-      + button('×', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${NAME[role]}"`, 'nb-remove') + '</span>').join('');
+      + button('<svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${NAME[role]}"`, 'nb-remove') + '</span>').join('');
     const field = (rec, role) => { if (!C.servedRoles(rec).includes(role)) return ''; const s = row(rec, role);
       return `<label class="nb-field std-served" title="Tried in this order, and no other provider. Empty: any."${s.visible ? '' : ' hidden'}>Served by<input list="nb-served" aria-label="Served by, ${NAME[role]}" data-served-by="${role}" data-served-model="${esc(s.model)}" data-served-pending="${s.pending}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
         + `<span class="nb-chips std-served-list" data-served-list="${role}" data-of="${esc(JSON.stringify(s.chosen))}">${chips(role, s.chosen)}</span></label>`; };
@@ -87,7 +87,30 @@
     return saved.length ? saved.map(s => `<div class="nb-savedrow"><span><strong>${esc(s.name)}</strong><small>${esc(s.recipe.harness)} · ${esc(new Date(s.saved).toLocaleDateString())}${state(s.recipe)}</small></span>`
       + `<div>${button('Load', `data-load="${esc(s.id)}"`)} ${button('Delete', del(s.id))}</div></div>`).join('') : '<p class="nb-note">No saved recipes.</p>';
   }
-  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList}; return; }
+  // The Prerequisites head: a status only beside a Run the machines alone hold; a held or absent Run says why itself.
+  function prereqHead(out, busy, run) {
+    if (busy) return '<span class="nb-note">checking…</span>';
+    if (!out || !run || run.hasAttribute('data-held')) return '';
+    return out.ready ? '<span class="nb-note nb-ok">Ready</span>' : '<span class="nb-note nb-error">Missing something: Run waits</span>';
+  }
+  // An error the server ties to a field (recipe.py: `field`) is said under that field of the open step, the field marked
+  // invalid and described by it; each said earlier is taken away first. Returns the step's errors no field here says.
+  function fieldErrors(form, errors, esc) {
+    form.querySelectorAll('[data-field-error]').forEach(m => m.remove());
+    form.querySelectorAll('[aria-invalid][data-field]').forEach(f => { f.removeAttribute('aria-invalid'); f.removeAttribute('aria-describedby'); });
+    return errors.filter(e => {
+      const f = e.field && form.querySelector(`[data-field="${e.field}"]`);
+      if (!f) return true;
+      f.setAttribute('aria-invalid', 'true');
+      f.setAttribute('aria-describedby', 'nb-error-' + e.field);
+      f.closest('.nb-field').insertAdjacentHTML('beforeend', `<small id="nb-error-${e.field}" class="nb-error" data-field-error>${esc(e.message)}</small>`);
+      return false;
+    });
+  }
+  // Where the step bar's underline goes: under the active step `on`, raised from the bar's bottom edge (-1px, the last
+  // step's row) to on's own row when the steps wrap.
+  const underlineAt = (on, last) => ({left: on.offsetLeft, bottom: last.getBoundingClientRect().bottom - on.getBoundingClientRect().bottom - 1, width: on.offsetWidth});
+  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList, prereqHead, fieldErrors, underlineAt}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
@@ -158,7 +181,7 @@
     const ref = vocab.filter(a => a.kind === 'reference'), ctl = vocab.filter(a => a.kind === 'control');
     if (ref.length) html += `<div class="nb-agentrow"><h4>Benchmark reference</h4><div class="nb-chips">${ref.map(a => chip(a.id, a.label, on(a.id), `title="${esc(a.summary || '')}"`)).join('')}</div></div>`;
     html += `<div class="nb-agentrow"><h4>Under evaluation</h4><div class="nb-chips">${vocab.filter(a => a.kind === 'evaluated').map(a => chip(a.id, a.label, on(a.id), `title="${esc(a.summary || '')}"`)).join('')}`
-      + rec.customAgents.map((p, i) => `<span class="nb-customagent">${chip('custom-' + i, 'custom', on('custom-' + i))}<input data-custom-agent="${i}" value="${esc(p)}" placeholder="package.module:AgentClass" spellcheck="false" aria-label="Custom agent ${i + 1} import path">${button('×', `data-remove-custom-agent="${i}"`, 'nb-remove')}</span>`).join('')
+      + rec.customAgents.map((p, i) => `<span class="nb-customagent">${chip('custom-' + i, 'custom', on('custom-' + i))}<input data-custom-agent="${i}" value="${esc(p)}" placeholder="package.module:AgentClass" spellcheck="false" aria-label="Custom agent ${i + 1} import path">${button('<svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>', `data-remove-custom-agent="${i}" aria-label="Remove custom agent ${i + 1}"`, 'nb-remove')}</span>`).join('')
       + button('+ Custom agent', 'id="nb-add-custom-agent"', 'nb-subtab') + '</div></div>';
     // Harbor's own agents: what the recipe's Harbor registers, once it has been scanned (Runner step).
     const builtin = vocab.filter(a => a.kind === 'builtin');
@@ -378,7 +401,7 @@
   // Harbor's own mark where Harbor fetches the tasks; a plain icon where no one's mark belongs. Square tiles, so
   // a mark is never read as a second radio button.
   const HARBOR_MARK = '<svg class="nb-radio-mark" aria-hidden="true"><use href="/static/brand/marks.svg#harbor"/></svg>';
-  const iconTile = name => `<span class="nb-radio-mark nb-radio-icon" aria-hidden="true"><svg><use href="#i-${name}"/></svg></span>`;
+  const iconTile = name => `<span class="nb-radio-mark nb-radio-icon" aria-hidden="true"><svg class="ic ic-lg"><use href="#i-${name}"/></svg></span>`;
   const SOURCE_MARK = { hub: HARBOR_MARK, registry: HARBOR_MARK,
     local: iconTile('folder'), generate: iconTile('wand') };
   const SOURCE_HINT = { hub: 'Harbor fetches the tasks when the run starts.', registry: 'Harbor fetches the tasks when the run starts.',
@@ -437,12 +460,19 @@
   }
   const proofSpan = p => `<span class="std-proof std-proof-${p.state}"${p.title ? ` title="${esc(p.title)}"` : ''}>${esc(p.text)}</span>`;
   // A control or a check as a plain chip: its name and its proof; where the control comes from is in its title.
-  const controlChip = (c, proof = true) => `<span class="std-ctl" title="${esc((c.key === 'nop' ? 'no answer at all' : c.key === 'oracle' ? 'the reference answers' : '') + ': must score ' + (c.must || (c.key === 'nop' ? 'nothing' : 'everything')))} - ${esc(SOURCE_SAYS[c.source] || c.source)}: ${esc(c.from)}"><b>${esc(c.key)}</b>`
+  const controlChip = (c, proof = true, of = '') => `<span class="std-ctl" title="${of ? esc(of) + ' · ' : ''}${esc((c.key === 'nop' ? 'no answer at all' : c.key === 'oracle' ? 'the reference answers' : '') + ': must score ' + (c.must || (c.key === 'nop' ? 'nothing' : 'everything')))} - ${esc(SOURCE_SAYS[c.source] || c.source)}: ${esc(c.from)}"><b>${esc(c.key)}</b>${of ? `<em>${esc(of)}</em>` : ''}`
     + (proof ? proofSpan(proofOf(c.proven, c.failed, c.expect, c.short)) : '') + '</span>';
+  // A check's chips on the Agent step: its proof on each chosen dataset (the first when none is), never a sum,
+  // since a proof is a dataset's own and datasets can share tasks (GSM8K-Platinum is GSM8K test, cleaned).
+  // Several: one row each, named by its dataset.
+  const controlChips = (o, b, ids) => { const chosen = b.datasets.filter(x => ids.includes(x.id)), ds = chosen.length ? chosen : b.datasets.slice(0, 1);
+    const chip = x => controlChip(((x || {}).controls || []).find(c => c.key === o.key) || {...o, from: o.summary}, true, ds.length > 1 ? x.label : '');
+    return ds.length > 1 ? `<span class="std-ctls">${ds.map(chip).join('')}</span>` : chip(ds[0]); };
   const checkChip = (name, proven, failed, says) => { const p = proofOf(proven, failed); if (p.state === 'ok') { p.title = [says, proven.passed, p.title].filter(Boolean).join(' · '); p.text = '✓'; }
     return `<span class="std-ctl std-checkchip"><b>${esc(name)}</b>${proofSpan(p)}</span>`; };
-  // The yes to an agent running as you: asked only for the local backend, where it is no sandbox.
-  const consentBox = rec => `<label class="nb-field nb-consent"><span><input type="checkbox" data-std-unsandboxed ${rec.unsandboxed ? 'checked' : ''}> Run it as me, not sandboxed</span></label>`;
+  // The yes to an agent running as you: asked only for the local backend, where it is no sandbox. Its field names the
+  // error asking for it, said under the box (fieldErrors).
+  const consentBox = rec => `<label class="nb-field nb-consent"><span><input type="checkbox" data-field="unsandboxed" data-std-unsandboxed ${rec.unsandboxed ? 'checked' : ''}> Run it as me, not sandboxed</span></label>`;
   // A benchmark whose units each boot a VM of their own (OSWorld's guest): a Where option has a value declaring
   // one (needs.<value>.vm); vmMemory, that VM's memory in GB under the chosen values, 0 for none.
   const bootsVms = b => Object.values((b || {}).options || {}).some(o => o.step === 'where' && Object.values(o.needs || {}).some(n => n && n.vm));
@@ -490,11 +520,12 @@
         + (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : ''))
       + '<div class="nb-sectionhead std-wherehead"><h3>Isolation</h3></div>'
       + (sandboxes || vms
-        ? `<div class="nb-fixed std-isolation"><span>${vms ? `Each ${esc(noun)} in its own VM` : `The agent alone in each ${esc(noun)}'s VM`}</span>`
-          + `<small>${vms ? (provider ? (sandboxes ? `${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, inside the ${esc(noun)}'s Boat VM` : `${esc(provider.label)}: ${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}`) : '') : 'Answers and keys stay on this machine'}</small></div>`
-        : `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
-          + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
-            : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy) + '</div>')
+        ? (vms && !sandboxes ? `<div class="nb-fixed std-isolation"><span>As you, on the machine</span><small>A container that Nullius starts cannot start the ${esc(noun)}s' VMs</small></div>` : '')
+          + `<div class="nb-fixed std-isolation"><span>${vms ? `Each ${esc(noun)} in its own VM` : `The agent alone in each ${esc(noun)}'s VM`}</span>`
+          + `<small>${vms ? (provider ? (sandboxes ? `${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, inside the ${esc(noun)}'s Boat VM` : `${esc(provider.label)}: ${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, used by ${esc(b.label)} itself`) : '') : 'Answers and keys stay on this machine'}</small></div>`
+        : `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, on the machine, not sandboxed.', '')}`
+          + how('container', 'Container', web ? 'Sandboxed: Nullius starts a container for each unit, whose only ways out are its relay and a public web proxy.'
+            : 'Sandboxed: Nullius starts a container for each unit, whose only way out is its relay.', containerWhy) + '</div>')
       + (b ? benchOptions(rec, b, 'where') : '')
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
       + (dockerOnly.length && backend !== 'container' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - ${sandboxes ? 'in a Boat VM' : 'on local processes'} their units are recorded as not run.</p>` : '')
@@ -523,12 +554,14 @@
     if ((rec.backend || 'local') === 'container' && chosen.length && chosen.every(o => o.setup)) return '';
     const reqs = need.map(n => [n, (b.host || {})[n]]).filter(([, r]) => r);
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
+    const lacks = [];                     // a chosen machine known to lack one: said once, under the requirements
     return reqs.map(([name, req]) => {
       const lines = req.install || [];
       const machines = C.whereList(rec);
       const rows = machines.map(w => {
         const st = hostState[b.key + ':' + w + ':' + name] || (w === 'local' ? {missing: local[name] ? {[name]: local[name]} : {}} : null);
         const missing = st && st.missing && st.missing[name];
+        if (missing && missing.length) lacks.push(`${w === 'local' ? 'This machine' : C.machineLabel(w)} lacks ${req.label} (${missing.join(', ')})`);
         const state = !st ? 'Not checked' : st.error ? st.error : missing && missing.length ? 'Missing' : 'Ready';
         const attrs = `data-hostreq-name="${esc(name)}"`;
         return `<div class="std-hostreq-row">${machines.length > 1 || w !== 'local' ? `<strong>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</strong>` : ''}`
@@ -540,7 +573,7 @@
       }).join('');
       return `<div class="nb-sectionhead std-wherehead"><h3>${esc(req.label)}</h3></div><div class="std-hostreq">${rows}`
         + (lines.length ? `<details><summary>Install manually</summary><div class="std-code"><div class="std-code-head"><span></span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div></details>` : '') + '</div>';
-    }).join('');
+    }).join('') + (lacks.length ? `<p class="nb-note nb-error std-hostreq-lacks" role="status">${esc(lacks.join('; '))}: ${esc(b.label)} cannot run there. Run waits until it is there.</p>` : '');
   }
   async function hostReq(entry, what, name) {
     const rec = r(), b = C.standardBench(rec), key = b.key + ':' + entry + ':' + name;
@@ -620,11 +653,11 @@
   }
   // one tile: {attr, key, on, title, mark, line, note, meta, foot, data (more attributes), tip (its title)}
   const tile = t => `<button class="nb-tile${t.disabled ? ' nb-tile-unfit' : ''}" data-${t.attr}="${esc(t.key)}" aria-pressed="${t.on}"${t.data || ''}${t.disabled ? ` disabled aria-disabled="true" title="${esc(t.why || '')}"` : t.tip ? ` title="${esc(t.tip)}"` : ''}>`
-    + `<span class="nb-tile-head">${t.mark ? `<span class="nb-mark">${t.mark}</span>` : ''}<strong>${esc(t.title)}</strong><span class="nb-tile-check" aria-hidden="true">${t.on ? '✓' : ''}</span></span>`
+    + `<span class="nb-tile-head">${t.mark ? `<span class="nb-mark">${t.mark}</span>` : ''}<strong>${esc(t.title)}</strong><span class="nb-tile-check" aria-hidden="true">${t.on ? '<svg class="ic"><use href="#i-check"/></svg>' : ''}</span></span>`
     + (t.line ? `<span class="nb-tile-line">${esc(t.line)}</span>` : '') + (t.note ? `<span class="nb-tile-note">${esc(t.note)}</span>` : '')
     + (t.meta || t.foot ? `<span class="nb-tile-foot">${t.meta ? `<span>${esc(t.meta)}</span>` : ''}${t.foot || ''}</span>` : '') + '</button>';
   // a machine to run on: this one or a host, its connection state filled in by Test connection
-  const icon = name => `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+  const icon = name => `<svg class="ic ic-lg" aria-hidden="true"><use href="#i-${name}"/></svg>`;
   const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: v === 'local' ? icon('machine') : icon('network'), title: t, tip: sub,
     foot: v !== 'local' ? `<span class="nb-state nb-hoststate" data-host-state="${esc(v)}"></span>` : ''});
   // The grids drawn by the server and run by the card toolkit (tables.js): the Benchmark step's (/new-run/benchmarks,
@@ -710,7 +743,6 @@
     if (step === S.agent) {
       const agent = b.family === 'agent', all = C.standardOthers(rec), others = all.filter(o => !o.control && (!o.setup || o.own));
       const setups = all.filter(o => o.setup && !o.own), controls = all.filter(o => o.control);
-      const ds = b.datasets.find(x => C.datasetsOf(rec).includes(x.id)) || b.datasets[0];
       // each chosen agent's options, at its vendor's default unless changed: {ref: {name: word}}
       const chosen = others.filter(o => C.chosenOf(rec).includes(o.key) && !o.why.length), mine = chosen.filter(o => !o.own);
       const optionsOf = o => { const mine = (rec.options || {})[o.key] || {}, opts = Object.entries(o.options || {});
@@ -722,10 +754,8 @@
         }).join('') + '</div>'; };
       // the chosen ones' settings, one tab each: the benchmark's own way, the benchmark's settings every agent takes, each one's own
       const yoursWord = agent ? 'agent' : (b.kind || 'capability');
-      const ds2 = ds;
-      const controlTile = o => { const c = ((ds2 || {}).controls || []).find(x => x.key === o.key) || {...o, from: o.summary};
-        return tile({attr: 'std-other', key: o.key, on: C.chosenOf(rec).includes(o.key), mark: o.key === 'nop' ? '∅' : '≡', title: o.label,
-          tip: o.summary + (b.judged ? ' The judge still runs.' : ''), foot: controlChip(c)}); };
+      const controlTile = o => tile({attr: 'std-other', key: o.key, on: C.chosenOf(rec).includes(o.key), mark: o.key === 'nop' ? '∅' : '≡', title: o.label,
+        tip: o.summary + (b.judged ? ' The judge still runs.' : ''), foot: controlChips(o, b, C.datasetsOf(rec))});
       const setupsNamed = ls => ls.filter(l => !ls.some(m => m !== l && l.startsWith(m))).join(' and ');
       const onSetups = setups.filter(o => C.chosenOf(rec).includes(o.key)).concat(chosen.some(o => o.own) ? [{label: 'Original'}] : []);
       return `<div class="nb-sectionhead"><h2>Who runs it?</h2></div>`
@@ -763,8 +793,10 @@
       return '<div class="nb-sectionhead"><h2>Scope</h2></div><div class="nb-two">'
         + field('Number of ' + u.nouns, 'limit', rec.limit, {type: 'number', min: 1, placeholder: all, hint: 'The first ones' + per + ', in its order.'})
         + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: rec.backend === 'boat' ? String((schema.standardHere || {}).boatSlots || 'Boat\'s limit') : '1'}) + '</div>'
-        + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
-        + field('Retries per attempt', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0'}) + '</div>'
+        + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1',
+            hint: 'Each ' + esc(u.noun) + ' is run and scored this many times.'})
+        + field('Retries after an error', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0',
+            hint: 'Retry errors such as rate limits or crashes, but not failed ' + esc(u.nouns) + '.'}) + '</div>'
         // a conversation's most agent turns (recipe.py: run --max-turns): only a benchmark that holds conversations has turns
         + ((b.needs || []).includes('agent.conversation/v1')
           ? field('Turns per conversation', 'turns', rec.turns ?? '', {type: 'number', min: 1, placeholder: String((b.timeouts || {}).turns || ''),
@@ -784,6 +816,7 @@
   // take, each empty at its default, shown greyed - an agent's own under ``by`` (OSWorld's agents' steps).
   function benchLimits(rec, b) {
     const chosen = C.runsOf(rec), yours = chosen.some(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k));
+    const theirs = chosen.some(k => ['original', 'model'].includes(k));
     // a default by agent: the chosen own agents' one when they share it
     const own = [...new Set(C.ownChosen(rec).map(a => a.agent))], given = rec.bench_options || {};
     const of = k => k === 'agent' && own.length ? (own.length === 1 ? own[0] : '') : given[k] ?? (b.options[k] || {}).default;
@@ -792,7 +825,8 @@
       .filter(([, o]) => (o.setups || ['yours']).some(s => s === 'yours' ? yours : chosen.includes(s)))
       .map(([n, o]) => {
         const [k, by] = Object.entries(o.by || {})[0] || [];
-        const def = (!yours && k && by[of(k)]) || o.default;
+        // an agent's or a capability's run alone gets the benchmark's value for it (``yours``), the benchmark's own agents theirs
+        const def = yours ? (!theirs && o.yours) || o.default : (k && by[of(k)]) || o.default;
         return `<label class="nb-field" title="${esc(o.summary)}">${esc(o.label)}<input class="nb-declared" data-bench-opt-select="${esc(n)}" type="number" min="1" step="1" value="${esc(given[n] ?? '')}" placeholder="${esc(def)}" aria-label="${esc(o.label)}" autocomplete="off"></label>`;
       });
     return rows.length ? `<div class="nb-sectionhead nb-sectionnext"><h2>${esc(b.label)}</h2></div>` + rows.join('') : '';
@@ -918,7 +952,7 @@
       html='<div class="nb-sectionhead"><h2>Scope & execution</h2></div>';
       const allTasks=(()=>{const ds=schema.datasets.find(d=>d.benchmark===rec.benchmark);return ds&&ds.tasks?'all '+ds.tasks:'all';})();
       html+=`<div class="nb-two">${field('Number of tasks','tasks',rec.tasks,{type:'number',min:1,placeholder:allTasks,hint:'Empty: '+allTasks+'.'})}${field('Concurrent trials','concurrency',rec.concurrency,{type:'number',min:1})}</div>`;
-      html+=`<div class="nb-two">${field('Retries per attempt','retries',rec.retries,{type:'number',min:0,placeholder:'0'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
+      html+=`<div class="nb-two">${field('Retries after an error','retries',rec.retries,{type:'number',min:0,placeholder:'0'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
         +harborExecutableFields(rec);
       html+=field('Output directory','output',rec.output,{});
     }
@@ -948,11 +982,11 @@
       const out=runnerOut||{errors:[],notes:[]};
       compiled={errors:out.errors||[],notes:out.notes||[]};
     }else{compiled=C.compile(rec);}
-    $('#nb-localerrors').textContent=compiled.errors.filter(e=>e.step===step&&!e.shown).map(e=>e.message).join(' ');
+    $('#nb-localerrors').textContent=fieldErrors($('#nb-form'),compiled.errors.filter(e=>e.step===step&&!e.shown),esc).map(e=>e.message).join(' ');
     const errors=$('#nb-errors');
     if(errors){
       errors.hidden=!compiled.errors.length;
-      errors.innerHTML=compiled.errors.map(e=>button(esc(e.message),`data-step="${e.step}" ${e.step===S.agent&&!C.isStandard(rec)?`data-config-group="${esc(e.group||'')}"`:""}`,'')).join('');
+      errors.innerHTML=compiled.errors.map(e=>button(esc(e.message),`data-step="${e.step}" ${e.field?`data-error-field="${esc(e.field)}" `:''}${e.step===S.agent&&!C.isStandard(rec)?`data-config-group="${esc(e.group||'')}"`:""}`,'')).join('');
     }
     $('#nb-next').disabled=step===REVIEW&&compiled.errors.length>0;
     if($('#nb-reviewnotes'))$('#nb-reviewnotes').innerHTML=compiled.notes.map(t=>`<p class="nb-note">${esc(t)}</p>`).join('');
@@ -960,7 +994,7 @@
   }
   // The underline under the active step is one element that slides to it. It follows the nav's own width, not
   // the window's: the Getting started panel narrows the page without a resize event.
-  const moveUnderline=()=>{const nav=$('.nb-steps'),on=nav.querySelector('.nb-step[aria-pressed=true]'),bar=nav.querySelector('.nb-stepbar');if(!on||!bar)return;bar.style.left=on.offsetLeft+'px';bar.style.width=on.offsetWidth+'px';};
+  const moveUnderline=()=>{const nav=$('.nb-steps'),on=nav.querySelector('.nb-step[aria-pressed=true]'),bar=nav.querySelector('.nb-stepbar');if(!on||!bar)return;const u=underlineAt(on,[...nav.querySelectorAll('.nb-step')].pop());bar.style.left=u.left+'px';bar.style.bottom=u.bottom+'px';bar.style.width=u.width+'px';};
   new ResizeObserver(moveUnderline).observe($('.nb-steps'));
   function stepName(t,i){const rec=r(),b=C.isStandard(rec)&&C.standardBench(rec);
     return i===S.agent&&b?(b.family==='agent'?'Agent':(b.kind||'capability').replace(/^./,c=>c.toUpperCase())):t;}
@@ -1020,10 +1054,10 @@
     if(blocked)return `<div class="nb-runbox" id="nb-runbox"><div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run" disabled data-held title="'+esc(blocked)+'"','nb-button nb-primary')}</div><p class="nb-note nb-error">${esc(blocked)} ${button('Model step','data-step="'+S.model+'"','nb-inlinebutton')} · ${button('Settings','data-href="/settings#'+C.needsOf(C.choiceOf(rec))+'"','nb-inlinebutton')}</p></div>`;
     if(C.isStandard(rec)){
       const out=runnerOut||{errors:[{message:'Compiling the recipe…'}]}, noun=C.isStandard(rec)?unitsOf(rec).noun:'item';
-      return `<div class="nb-runbox" id="nb-runbox">${(out.errors||[]).length?out.errors.map(e=>`<p class="nb-note">${esc(e.message)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"','nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(out.confirm?`<p class="nb-note nb-nolimit">No ${esc(noun)} limit: ${esc(out.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
+      return `<div class="nb-runbox" id="nb-runbox">${(out.errors||[]).length?(runnerOut?[]:out.errors).map(e=>`<p class="nb-note">${esc(e.message)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"','nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(out.confirm?`<p class="nb-note nb-nolimit">No ${esc(noun)} limit: ${esc(out.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
     }
-    const plan=C.runnable(rec);
-    return `<div class="nb-runbox" id="nb-runbox">${plan.errors.length?plan.errors.map(e=>`<p class="nb-note">${esc(e)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"'+(C.validate(rec).errors.length?' disabled data-held':''),'nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(plan.confirm?`<p class="nb-note nb-nolimit">No task limit: ${esc(plan.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
+    const plan=C.runnable(rec), listed=C.compile(rec).errors.map(e=>e.message);   // the red box's, not said twice
+    return `<div class="nb-runbox" id="nb-runbox">${plan.errors.length?plan.errors.filter(e=>!listed.includes(e)).map(e=>`<p class="nb-note">${esc(e)}</p>`).join(''):`<div class="nb-runline">${button('▶ Run on '+esc(where),'id="nb-run"'+(C.validate(rec).errors.length?' disabled data-held':''),'nb-button nb-primary')}<span id="nb-runstate" class="nb-note"></span></div>`+(plan.confirm?`<p class="nb-note nb-nolimit">No task limit: ${esc(plan.confirm.replace(/^Run /,'').replace(/\?$/,''))}. Run asks before it starts.</p>`:'')}</div>`;
   };
   // Prerequisites: what the recipe needs of each machine it runs on, asked when Review opens and on Check again
   // (/new-run/prerequisites, nullius/prerequisites.py). Run waits until every row is ready; the run asks again as it starts.
@@ -1044,7 +1078,7 @@
     const el=$('#nb-prereq'); if(!el)return;
     const out=prereq.out, mark={ok:'✓',missing:'✕',install:'↓'};
     const rows=m=>m.rows.map(x=>`<li class="nb-prereq-${x.state}"><span class="nb-prereq-mark" aria-hidden="true">${mark[x.state]}</span><span><strong>${esc(x.label)}</strong>${x.detail?` <small>${esc(x.detail)}</small>`:''}${x.state==='missing'&&x.install.length?`<code class="nb-prereq-fix">${x.install.map(esc).join('<br>')}</code>`:''}</span></li>`).join('');
-    const head=prereq.busy?'<span class="nb-note">checking…</span>':out&&out.ready?'<span class="nb-note nb-ok">Ready</span>':out?'<span class="nb-note nb-error">Missing something: Run waits</span>':'';
+    const head=prereqHead(out,prereq.busy,$('#nb-run'));
     el.innerHTML=`<div class="nb-prereq-head"><h3>Prerequisites</h3>${head}${button('Check again','id="nb-prereq-again"'+(prereq.busy?' disabled':''),'nb-inlinebutton')}</div>`
       +(out?(out.errors||[]).map(e=>`<p class="nb-note nb-error">${esc(e)}</p>`).join('')+(out.notes||[]).map(n=>`<p class="nb-notice">${esc(n)}</p>`).join('')
         +out.machines.map(m=>`<div class="nb-prereq-machine">${out.machines.length>1?`<small>${esc(m.label)}</small>`:''}<ul>${rows(m)}</ul></div>`).join(''):'');
@@ -1146,6 +1180,8 @@
     else if(b.id==='nb-refresh'){await refreshRegistry();return;}
     else return;
     render(d.step!==undefined||['nb-next','nb-back'].includes(b.id));
+    // Review's link to an error a field holds: to that field, not the step's heading
+    const f=d.errorField&&$(`#nb-form [data-field="${d.errorField}"]`);if(f){f.focus({preventScroll:true});f.scrollIntoView({block:'center'});}
   });
   // a benchmark chosen on the Benchmark step's grid, or an agent, a capability or the setup picked or let go on the
   // Agent step's; the page stays where it is and the focus on its card
@@ -1154,6 +1190,7 @@
     const el=event.target,d=el.dataset,rec=r();
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
     if(d.servedBy!==undefined)return;   // what is typed in a Served by filters its menu: a pick, or Enter, adds it (nb-pick)
+    if(d.stdUnsandboxed!==undefined)return;   // a box's value is no tick: its change sets the recipe
     if(d.providerModel && rec.modelFormat !== 'provider-id'){for(const key of ['model','userModel','evalModel'])if(typeof rec[key]==='string')rec[key]=C.bareModel(rec[key]);rec.modelFormat='provider-id';}
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
       const value=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;
@@ -1204,7 +1241,7 @@
     else if(d.harborChoice!==undefined){const rec=r(),v=el.value;if(v==='path')rec.harborDev='';else if(v==='dev')rec.harborDev=rec.harborDev||'~/harbor-dev/.venv/bin/harbor';renderForm();refreshPlan();if(v==='dev')root.querySelector('[data-field="harborDev"]')?.select();}
     else if(el.id==='nb-import-file'){
       const file=el.files[0];if(!file)return;
-      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());savedId='';step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Review the recipe before copying commands.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
+      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());savedId='';step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Check it, then Run.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
     }
   });
   { const dl=document.getElementById('nb-models'); if(dl){const seen=new Set(); for(const o of [...dl.options]){const v=C.bareModel(o.value); if(!v||seen.has(v)){o.remove();continue;} seen.add(v); o.value=v;}} }

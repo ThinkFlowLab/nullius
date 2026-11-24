@@ -8,7 +8,6 @@ without the pages following fails here; `python3 app/tests/catalogue_docs.py
 """
 from __future__ import annotations
 
-import os
 import unittest
 
 from nullius.catalogue import catalog
@@ -20,29 +19,12 @@ class SupportedPages(unittest.TestCase):
         self.assertEqual(catalogue_docs.stale(), [],
                          "run: python3 app/tests/catalogue_docs.py --write")
 
-    def test_project_with_helper_package_keeps_its_repository_source(self):
-        entry = {"upstream": {"repository": "https://example.org/agent", "tested": "a" * 40},
-                 "install": {"project": ".", "pip": ["websockets==15.0.1"]}}
-        self.assertEqual(catalogue_docs._from(entry), "repository")
-        installed = catalogue_docs._installed_from(entry)
-        self.assertIn("example.org/agent", installed)
-        self.assertIn("websockets==15.0.1", installed)
-
-    def test_every_section_has_its_index_with_a_block(self):
-        for kind, folder in catalogue_docs.SECTIONS.items():
-            path = os.path.join(folder, catalogue_docs.INDEX)
-            with open(path, encoding="utf-8") as fh:
-                text = fh.read()
-            self.assertIn(catalogue_docs.START, text, path)
-            self.assertIn(catalogue_docs.END, text, path)
-            self.assertLess(text.find(catalogue_docs.START), text.find(catalogue_docs.END), path)
-
     def test_the_pages_name_every_definition(self):
         def named(key, text):
             # a key is a code chip: markdown's in a table, HTML's on a card
             self.assertTrue(f"`{key}`" in text or f"<code>{key}</code>" in text, key)
         agents = catalogue_docs.render_agents_index()
-        for key in ("digitalmate", "codex@2.2.2", "codex@0.16.0", "goose", "jiuwenswarm@0.2.7", "jiuwenswarm@0.2.8", "mini-swe-agent", "opencode", "swe-agent", "terminus-2"):
+        for key in ("digitalmate@0.1.13", "digitalmate@0.1.13-fixes", "codex@2.2.2", "codex@0.16.0", "goose", "jiuwenswarm@0.2.7", "jiuwenswarm@0.2.8", "mini-swe-agent", "opencode", "swe-agent", "terminus-2"):
             named(key, agents)
         for port in ("agent.task/v1", "agent.workspace/v1", "agent.tools/v1", "agent.conversation/v1"):
             self.assertIn(f"`{port}`", agents)

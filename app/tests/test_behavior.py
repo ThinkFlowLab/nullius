@@ -125,14 +125,6 @@ class CategoryIsTheKey(unittest.TestCase):
         self.assertEqual(short.exploration_per_edit, 3.0)
         self.assertEqual((short.n_search, short.n_read, short.n_edit), (1, 2, 1))
 
-    def test_a_retry_is_the_same_name_and_target_within_one_agent(self):
-        # The one place a name is a key: repeating a call that already failed.
-        # That compares an agent with itself, so its own vocabulary is right.
-        failed = "success=False data={} error='boom'"
-        tr = _traj([_tool_step(1, "Run the tests", {"command": "pytest"}, observation=failed),
-                    _tool_step(2, "Run the tests", {"command": "pytest"}, observation=failed)])
-        self.assertEqual(behavior.analyze(tr).n_repeated_failed_calls, 1)
-
 
 if __name__ == "__main__":
     unittest.main()

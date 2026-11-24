@@ -248,8 +248,8 @@ def new_run_prerequisites():
     standard = recipe.get("harness") == standard_recipe.HARNESS
     if standard:
         out = standard_recipe.compile(recipe)
-        if out["errors"]:
-            return jsonify(machines=[], ready=False, errors=[e["message"] for e in out["errors"]])
+        if out["errors"]:     # the recipe's own, listed once on Review: no machine is asked
+            return jsonify(machines=[], ready=False, errors=[])
         wheres = [sh["where"] for sh in out["shards"]]
         needs = (["engine"] if out["docker"] else []) + (list(boat.PROGRAMS) if recipe.get("backend") == "boat" else [])
         h = out.get("host") or {}

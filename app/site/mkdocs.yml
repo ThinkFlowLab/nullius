@@ -92,6 +92,7 @@ nav:
           - Supported agents: agents/supported/README.md
           - Add manually: agents/add-manually.md
           - Add with an assistant: agents/add-with-assistant.md
+          - SWE-agent: agents/swe-agent.md
       - Capabilities:
           - Supported capabilities: capabilities/supported/README.md
           - Add manually: capabilities/add-manually.md
@@ -100,6 +101,7 @@ nav:
           - cli/README.md
           - Read jobs: cli/read-jobs.md
           - Import a run: cli/import.md
+          - Task flags: cli/flags.md
           - Definitions: cli/definitions.md
           - Run a benchmark: cli/run.md
           - Prove a benchmark: cli/prove.md
@@ -122,6 +124,7 @@ nav:
   - Reference:
       - Interfaces:
           - The standard: standard.md
+          - The computer port: ports/agent-computer-v1.md
       - Examples:
           - Harbor benchmark entry: examples/new-benchmark/README.md
       - Internals:
@@ -129,6 +132,7 @@ nav:
       - Metrics:
           - Metric field guide: field-guide.md
       - Release notes:
+          - v0.2.0: releases/v0.2.0.md
           - v0.1.1: releases/v0.1.1.md
           - v0.1.0: releases/v0.1.0.md
           - v0.1.0rc2: releases/v0.1.0rc2.md

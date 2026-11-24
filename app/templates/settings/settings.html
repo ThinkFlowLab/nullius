@@ -81,7 +81,7 @@
       {{ section_link('data-providers', 'Data providers', 'cloud-down', 'hugging face huggingface hf_token docker hub login registry token dataset pull limit') }}
       {{ section_link('custom-keys', 'Custom keys', 'key', access_search.words) }}
       {{ section_link('judge', 'Judges', 'scale', 'typesafe decision llm model judgement') }}
-      {{ section_link('prices', 'Model prices', 'dollar', 'cost price estimate usd tokens list update') }}
+      {{ section_link('prices', 'Model prices', 'circle-dollar', 'cost price estimate usd tokens list update') }}
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Execution</div>
@@ -221,7 +221,7 @@
     {% set srow = by.get('DECISION_PROVIDER') %}
     {% if srow and by.get('DECISION_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not decision }}" data-judge-card>
-      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-gavel"/></svg>Decision model</legend>
+      <legend><svg class="ic st-icon" aria-hidden="true"><use href="#i-gavel"/></svg>Decision model</legend>
       {{ judge_rows('DECISION', decision_providers, decision, 'Where the Decision model is asked') }}
       {{ field(by['DECISION_MODEL'], 'Model', writable, decision_providers[decision.provider].models) }}
     </fieldset>
@@ -229,7 +229,7 @@
     {% set prow = by.get('LLM_JUDGE_PROVIDER') %}
     {% if prow and by.get('LLM_JUDGE_MODEL') %}
     <fieldset class="st-card{{ ' st-card-unset' if not llm }}" data-judge-card>
-      <legend><svg class="st-logo st-icon" aria-hidden="true"><use href="#i-text"/></svg>LLM</legend>
+      <legend><svg class="ic st-icon" aria-hidden="true"><use href="#i-text"/></svg>LLM</legend>
       {{ judge_rows('LLM_JUDGE', llm_providers, llm, "The LLM judge's provider") }}
       {{ field(by['LLM_JUDGE_MODEL'], 'Model', writable, []) }}
     </fieldset>
@@ -260,7 +260,7 @@
   {% if ssh_hosts %}<div class="dialog-panel" data-panel="config">
     <label class="fl" id="host-picker-label">Host</label>
     <div class="host-picker">
-      <button type="button" class="host-picker-trigger" aria-labelledby="host-picker-label host-picked" aria-expanded="false" aria-controls="host-options"><span id="host-picked">Select a host</span><span aria-hidden="true">⌄</span></button>
+      <button type="button" class="host-picker-trigger" aria-labelledby="host-picker-label host-picked" aria-expanded="false" aria-controls="host-options"><span id="host-picked">Select a host</span><svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
       <div id="host-options" class="host-options" hidden>
         <input type="search" class="host-search" aria-label="Filter hosts by name, user or address" placeholder="Filter by name, user or address…" autocomplete="off">
         <p class="host-count" aria-live="polite"></p>
@@ -314,7 +314,7 @@
           <td class="host-acts">
             {% if writable %}<button type="button" class="host-act" data-test-machine aria-label="Test: {{ m.label }}" title="Test"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg></button>{% endif %}
             {{ act('info', 'info', m.label, 'Info', mi) }}
-            {% if m.host and writable %}{{ act('edit', 'plug', m.label, 'Connection', mi, ro) }}{% elif writable %}{{ never('plug', 'Connection: not for this machine') }}{% else %}<span class="host-act-gap"></span>{% endif %}
+            {% if m.host and writable %}{{ act('edit', 'plugs', m.label, 'Connection', mi, ro) }}{% elif writable %}{{ never('plugs', 'Connection: not for this machine') }}{% else %}<span class="host-act-gap"></span>{% endif %}
             {{ act('limits', 'sliders', m.label, 'Constraints', mi) }}
             {% if m.host and writable %}{{ act('delete', 'trash', m.label, 'Delete', mi, ro) }}{% elif writable %}{{ never('trash', 'Delete: this machine cannot be removed') }}{% else %}<span class="host-act-gap"></span>{% endif %}
           </td>
@@ -347,7 +347,7 @@
               {%- set tip = ([c.tip] if c.tip else []) + (['This machine has ' ~ m.capacity[c.key] ~ (' ' ~ c.unit if c.unit) ~ '.'] if m.capacity.get(c.key) else []) %}
               {%- if tip %} title="{{ tip | join(' ') }}" data-tip="{{ c.tip }}"{% endif %}{% if off %} disabled{% endif %}>
             {% if c.unit %}<div class="st-tabs st-unit" role="group" aria-label="Unit">{% for u in ('MB', 'GB') %}<button type="button" class="st-tab{{ ' on' if u == c.unit }}" aria-pressed="{{ 'true' if u == c.unit else 'false' }}" data-unit-choice="{{ u }}"{% if off %} disabled{% endif %}>{{ u }}</button>{% endfor %}</div>{% endif %}
-            {% if writable %}<button type="button" class="st-clear{{ ' off' if not shown }}" data-clear-constraint aria-label="Remove {{ c.label }}" title="Remove">×</button>{% endif %}
+            {% if writable %}<button type="button" class="st-clear{{ ' off' if not shown }}" data-clear-constraint aria-label="Remove {{ c.label }}" title="Remove"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>{% endif %}
             </div>
             {% if m.warnings.get(c.key) %}<p class="st-note st-warn">{{ m.warnings[c.key] }}</p>{% endif %}
           </div></div>
@@ -418,6 +418,7 @@
     <fieldset class="st-card">
       <legend>Your prices</legend>
       <div class="st-sandbox-rows" data-own-rows></div>
+      <div data-own-problems></div>
       <p class="st-about" data-own-none hidden>None yet.</p>
       {% if writable %}
       <form class="st-sandbox-rows st-prices-add" data-own-add autocomplete="off">

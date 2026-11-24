@@ -5,9 +5,9 @@ import re
 from dataclasses import replace
 from functools import partial
 from itertools import zip_longest
-from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import abort, flash, g, has_request_context, jsonify, redirect, render_template, request, url_for
 from nullius.traces import behavior, charts, trace, trajectory
-from nullius.runs import classify
+from nullius.runs import classify, failure_analysis
 from nullius.runs import verifier
 from nullius import charts as figures
 from nullius import workspace
@@ -160,6 +160,12 @@ def summary_rows(jobs, baseline=True):
             [j.mean_score for j in jobs], "higher",
             "The mean of the benchmark's own score, over every part scored when a trial is scored on its parts", unit=SCORE),
     ] if any(j.mean_score is not None for j in jobs) else []
+    if any(j.mean_score_planned is not None for j in jobs):
+        scored.append(row("mean_score_planned", "Mean over planned",
+                          ["" if j.mean_score_planned is None else f"{j.mean_score_planned:.2f}" for j in jobs],
+                          [j.mean_score_planned for j in jobs], "higher",
+                          "The mean of each trial's score over all planned trials, with an unscored trial counting 0",
+                          unit=SCORE))
     # and by the field the benchmark breaks it down by (a question's category), a row a value
     by = next((j.parts_by for j in jobs if j.parts_by), "")
     groups = {}
@@ -347,8 +353,23 @@ def compare_detail(row, jobs):
     }
 
 
-# A row's tick labels: its difference's unit, but a rate's ticks are rates and a short run's in seconds.
-AXIS = {POINTS: filters._pct, MINUTES: filters._runtime}
+def _axis(*units, fewest=False):
+    """A row's tick labels and, with ``fewest``, its unit (``Metric.size``), each unit ``(size, form, least)``: the first
+    unit whose size the axis's largest tick reaches writes every tick, at the decimals its step needs in that unit,
+    ``least`` at fewest, and the origin with none."""
+    unit = lambda top: next((u for u in units if top >= u[0]), units[-1])
+
+    def fmt(v, step, top):
+        size, form, least = unit(top)
+        return form.format(f"{v / size:.{0 if v == 0 else figures.places(step / size, least)}f}")
+    return fmt, (lambda top: unit(top)[0]) if fewest else None
+
+
+# A row's axis, by its difference's unit, as its cells read: a rate's ticks are rates, a short run's in seconds.
+AXIS = {COUNT: _axis((1, "{}", 0)), SCORE: _axis((1, "{}", 2)), POINTS: _axis((0.01, "{}%", 0), fewest=True),
+        MINUTES: _axis((1, "{}m", 0), (1 / 60, "{}s", 0)), filters._usd: _axis((1, "${}", 2)),
+        filters._tokens: _axis((1e6, "{}M", 0), (1e3, "{}k", 0), (1, "{}", 0), fewest=True)}
+BOUNDS = {POINTS: (0, 1)}
 
 
 def chart(rows, columns, jobs, style, keys):
@@ -367,10 +388,12 @@ def chart(rows, columns, jobs, style, keys):
                              text=str(row["cells"][i]), note=row["deltas"][i][0], check=check, baseline=n == 1 and i == 0,
                              tag=str(n), series=n)
 
-    return figures.STYLES[style].draw(*(
-        figures.Metric(rows[k]["label"], tuple(value(rows[k], n, c["i"]) for n, c in enumerate(columns, 1) if c["i"] is not None),
-                       AXIS.get(rows[k]["unit"], rows[k]["unit"]))
-        for k in keys))
+    def metric(row):
+        fmt, size = AXIS.get(row["unit"], (figures.number, None))
+        return figures.Metric(row["label"], tuple(value(row, n, c["i"]) for n, c in enumerate(columns, 1) if c["i"] is not None),
+                              fmt, BOUNDS.get(row["unit"], (None, None)), size)
+
+    return figures.STYLES[style].draw(*(metric(rows[k]) for k in keys))
 
 
 def _charts_requested():
@@ -417,10 +440,10 @@ def compare():
     ]
     tasks_view = _view()
     summary = summary_rows(chosen, baseline=columns[0]["i"] == 0) if tasks_view != "tasks" and (view.cohort == "whole" or view.shared_tasks) else []
-    # There is no truthful wall-clock interval for a subset of parallel trials.
+    # A matched cohort has no recorded planned trial count or wall-clock interval.
     # Whole-run intervals are ranked, labelled as such.
     if view.cohort == "matched":
-        summary = [row for row in summary if row["label"] != "Wall time"]
+        summary = [row for row in summary if row["label"] not in {"Wall time", "Mean over planned"}]
     else:
         for row in summary:
             if row["label"] == "Wall time":
@@ -473,7 +496,7 @@ def compare():
         order_grouped=grouped, order_alternating=alternating,
         n_agents=len(by_agent), keep=keep,
         judgement=tasks_view == "tasks" and _judgement(view), csrf=shared._csrf_token(),
-        cards=cards, add_chart=at(charts + [("bars", (headline,))]),
+        cards=cards, add_chart=at(charts + [("bars", (headline,))]), flag_filter=g.flag_filter,
     )
 
 
@@ -604,7 +627,8 @@ def _columns_requested():
             labels[name] = ws.label if ws else "Active source"
         selected = comparison.resolve([ref.value for ref in refs if ref.job_id],
                                       {name: [job for _, job, _, _ in rs] for name, rs in runs.items()}, labels)
-        view = comparison.build(selected, request.args.get("cohort", "whole"))
+        g.flag_filter = _flag_filter(selected)
+        view = comparison.build(selected, request.args.get("cohort", "whole"), g.flag_filter["set_aside"])
     except ValueError as exc:
         abort(400, description=str(exc))
     place = {s.ref: k for k, s in enumerate(view.selected)}
@@ -694,3 +718,56 @@ def compare_task(task):
         comparison=view, picks=picks, cohort=view.cohort, view=_view(), chosen=chosen_query,
         chart_filter=cfilt, no_filter=trace.Filter(),
     )
+
+
+# The pages that read a comparison: their links keep the page's flag filters, as they keep the cohort.
+COMPARISON_ENDPOINTS = {"compare", "compare_task", "compare_detail_row", "judge_compare_route", "compare_picker"}
+
+
+@app.url_defaults
+def _keep_flag_filters(endpoint, values):
+    # only from a comparison page to a link that names its runs: the sidebar's bare Compare starts afresh
+    if (has_request_context() and request.endpoint in COMPARISON_ENDPOINTS and endpoint in COMPARISON_ENDPOINTS
+            and "pick" in values):
+        for kind in failure_analysis.KINDS:
+            if kind not in values and request.args.get(kind) == "1":
+                values[kind] = "1"
+
+
+def _flag_filter(selected) -> dict:
+    """The flag filters of a comparison: one list of tasks set aside in every column, the union of the runs'
+    accepted flags of the kinds switched on, keyed as the comparison keys a task (`comparison.task_key`). A flag
+    counts only on the task version it names, and a task is set aside only when every column holding it ran the
+    same version; otherwise it stays, and is named in `differ` with the tasks the runs flag differently.
+    `flagged` counts each kind over all runs, for the switches; `unreadable` names runs whose file is broken."""
+    from nullius.compare import comparison
+    on = [k for k in failure_analysis.KINDS if request.args.get(k) == "1"]
+    runs, unreadable = [], []                 # per run: {task key: version}, {task key: kind}
+    for selection in selected:
+        job = selection.job
+        try:
+            analysis = failure_analysis.load(job.dir)
+        except failure_analysis.FailureAnalysisError:
+            analysis = failure_analysis.Analysis()
+            unreadable.append(job.job_id)
+        versions = failure_analysis.task_versions(job, analysis.flags) if analysis.flags else {}
+        tasks = {t.task_base for t in job.trials}
+        kinds = {comparison.task_key(selection, task): kind for kind in failure_analysis.KINDS
+                 for task in analysis.set_aside([kind], versions) & tasks}
+        runs.append((selection, tasks, kinds))
+    flagged_keys = set().union(*(kinds for _, _, kinds in runs))
+    # the versions every column holding a flagged task ran, read once per run for those tasks
+    ran = {}
+    for selection, tasks, _ in runs:
+        names = {key[1] for key in flagged_keys if key[1] in tasks and comparison.task_key(selection, key[1]) == key}
+        for task, version in failure_analysis.task_versions(selection.job, names).items():
+            ran.setdefault(comparison.task_key(selection, task), set()).add(version)
+    holders = {key: [r for r in runs if key[1] in r[1] and comparison.task_key(r[0], key[1]) == key]
+               for key in flagged_keys}
+    differ = sorted(key[1] for key in flagged_keys
+                    if len(ran.get(key, set())) > 1 or len({kinds.get(key) for _, _, kinds in holders[key]}) > 1)
+    set_aside = frozenset(key for key in flagged_keys if len(ran.get(key, set())) <= 1
+                          and any(kinds.get(key) in on for _, _, kinds in holders[key]))
+    return {"on": on, "flagged": {k: sum(1 for key in flagged_keys if any(kinds.get(key) == k for _, _, kinds in runs))
+                                  for k in failure_analysis.KINDS},
+            "set_aside": set_aside, "differ": differ, "unreadable": unreadable}

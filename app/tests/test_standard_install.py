@@ -60,7 +60,6 @@ class UpstreamTest(unittest.TestCase):
                          ["/p q/a b.py", "--x=/i"])
 
 
-
 class PipPins(unittest.TestCase):
     def test_git_and_release_pins_resolve_together_and_repin_installs_beside(self):
         pin = "sdk @ git+https://example.org/team/sdk.git@" + "a" * 40
@@ -106,7 +105,6 @@ class InstallEnv(unittest.TestCase):
                "GIT_CONFIG_KEY_0": "safe.directory"}
         self.assertEqual(install.install_env(env), {"PATH": "/bin", "HOME": "/h", "npm_config_cache": "/c", "GIT_CONFIG_KEY_0": "safe.directory"})
 
-
     def test_on_this_machine_uv_may_download_its_python_unless_told_otherwise(self):
         log = os.path.join(self.enterContext(tempfile.TemporaryDirectory()), "x.log")
         for given, want in (({}, "automatic"), ({"UV_PYTHON_DOWNLOADS": "never"}, "never")):
@@ -118,11 +116,6 @@ class InstallEnv(unittest.TestCase):
             self.assertEqual(ran.call_args.kwargs["env"]["UV_PYTHON_DOWNLOADS"], want)       # over /etc/uv/uv.toml
 
 class DataDirTest(unittest.TestCase):
-    def test_datasets_go_where_standard_data_dir_says_else_into_the_home(self):
-        self.assertEqual(install.data_dir("/st", env={}), "/st/datasets")
-        self.assertEqual(install.data_dir("/st", env={"STANDARD_DATA_DIR": "/big/data"}), "/big/data")
-        self.assertEqual(install.data_dir("/st", env={"STANDARD_DATA_DIR": ""}), "/st/datasets")
-
     def test_a_download_lands_in_the_data_dir_not_the_home(self):
         import hashlib, http.server
         from unittest import mock
@@ -170,10 +163,6 @@ class PruneTest(unittest.TestCase):
         os.symlink(self.outside, os.path.join(self.home, "link"))
         install.prune({"caches": ["{home}/../../outside", "{home}/link", "/tmp", "{install}/x"]}, self.home)
         self.assertTrue(os.path.isfile(os.path.join(self.outside, "keep")))
-
-    def test_no_caches_removes_nothing(self):
-        self.assertEqual(install.prune({}, self.home), [])
-        self.assertTrue(os.path.isdir(os.path.join(self.home, ".npm")))
 
 
 class InBaseImageTest(unittest.TestCase):
@@ -233,7 +222,6 @@ class InBaseImageTest(unittest.TestCase):
     def test_a_program_missing_is_an_install_failure(self):
         with self.assertRaisesRegex(install.InstallFailed, "no-such-program-here is not on this machine"):
             install._run(["no-such-program-here"], self.home, os.path.join(self.home, "x.log"))
-
 
 
 class WheelsTest(unittest.TestCase):

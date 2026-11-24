@@ -82,21 +82,31 @@
 
   // ---- the first-open question
   function welcome() {
-    const layer = document.createElement('div');
-    layer.className = 'onb-scrim';
-    layer.innerHTML = `<div class="onb-dialog" role="dialog" aria-modal="true" aria-labelledby="onb-w-h"><div class="onb-mark" aria-hidden="true">∅</div>
+    // a native modal: it keeps the focus, makes the page behind it inert and closes on Escape
+    const d = document.createElement('dialog');
+    d.className = 'onb-dialog';
+    d.setAttribute('aria-labelledby', 'onb-w-h');
+    d.innerHTML = `<div class="onb-mark" aria-hidden="true">∅</div>
       <h2 id="onb-w-h">Welcome to Nullius. Want a guided start?</h2>
       <p>A one-minute look at the main pages, then a checklist that takes you to a first result:</p>
       <ul><li>Set up a key and where runs happen</li><li>A free check run: oracle and nop call no model</li><li>Read the result, then compare an agent's run</li></ul>
-      <div class="onb-actions"><button class="btn ghost" type="button" data-a="no">No, I'll explore</button><button class="btn" type="button" data-a="yes">Yes, guide me</button></div></div>`;
+      <div class="onb-actions"><button class="btn ghost" type="button" data-a="no">No, I'll explore</button><button class="btn" type="button" data-a="yes">Yes, guide me</button></div>`;
     const back = document.activeElement;
-    document.body.append(layer);
-    layer.querySelector('[data-a=yes]').focus();
-    layer.addEventListener('click', e => {
-      const a = e.target.closest('[data-a]')?.dataset.a;
-      if (!a) return;
-      S.asked = true; S.open = a === 'yes'; save(); layer.remove(); back?.focus();
-      if (a === 'yes') startTour(); else renderPanel();
+    document.body.append(d);
+    d.showModal();
+    d.querySelector('[data-a=yes]').focus();
+    d.addEventListener('click', e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a) d.close(a); });
+    // Tab wraps between its two buttons instead of leaving for the browser's own controls
+    d.addEventListener('keydown', e => {
+      if (e.key !== 'Tab') return;
+      const b = [...d.querySelectorAll('button')], j = b.indexOf(document.activeElement) + (e.shiftKey ? -1 : 1);
+      e.preventDefault(); b[(j + b.length) % b.length].focus();
+    });
+    // Escape leaves returnValue empty: the same answer as No
+    d.addEventListener('close', () => {
+      const yes = d.returnValue === 'yes';
+      S.asked = true; S.open = yes; save(); d.remove(); back?.focus();
+      if (yes) startTour(); else renderPanel();
     });
   }
 
@@ -141,6 +151,11 @@
     if (act === 'tour') { S.dismissed = false; save(); return startTour(); }
     if (e.target.closest('#onb-open')) { S.open = !S.open; save(); return renderPanel(); }
     if (pointed && pointed.contains(e.target)) unpoint();
+  });
+  // Escape on the checklist or its toggle closes it, and the focus goes back to the toggle
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !S.open || !(railItem?.contains(document.activeElement) || panel?.contains(document.activeElement))) return;
+    S.open = false; save(); unpoint(); renderPanel(); railItem?.focus();
   });
 
   // ---- on load: the checklist read, this page's visit kept, then whatever was under way carried on

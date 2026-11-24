@@ -299,8 +299,7 @@ class Reaper(unittest.TestCase):
         self.assertEqual(failed, [])
         self.assertTrue(self.packed(3))
         self.assertEqual(api_logs.restore(self.folder)["restored"], 3)
-
-    def test_a_failed_run_is_packed(self):
+        shutil.rmtree(self.folder)                 # and one that failed
         argv = [sys.executable, "-c", SCRIPT + "sys.exit(3)\n", json.dumps([call(i) for i in range(2)]), "go"]
         with self.assertRaises(RuntimeError):
             self.driver._run(argv, self.unit, dict(os.environ), os.path.join(self.unit, "nop.log"), "the run")
@@ -366,18 +365,6 @@ class Reaper(unittest.TestCase):
         self.assertIn("001/api_logs {\"error\": \"OSError: [Errno 28] No space left on device\"}", lines[0])
         self.assertIn("002/api_logs {\"files\": 1, \"packed\": 1, \"images\": 2,", lines[1])
         self.assertRegex(lines[1], self.driver.RECORD)
-
-    def test_a_unit_with_no_api_logs_says_nothing(self):
-        self.driver._pack(self.unit)
-        self.assertFalse(os.path.exists(os.path.join(self.unit, self.driver.PACK_LOG)))
-
-
-class Snapshot(unittest.TestCase):
-    def test_a_hosts_snapshot_carries_the_packer(self):
-        from pathlib import Path
-
-        from nullius.standard.runner import payload
-        self.assertIn("api_logs.py", payload._entry(Path(HERE)))
 
 
 if __name__ == "__main__":

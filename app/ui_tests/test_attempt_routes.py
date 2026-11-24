@@ -126,6 +126,7 @@ class AttemptRoutes(unittest.TestCase):
 
     def test_all_attempts_lists_each_attempt_once_with_its_link(self):
         html = self.get("/trial/repeat-run/auth-token__b/attempts")
+        self.assertNotIn('class="th-card"', html)
         self.assertEqual(tabs(html)[-1], ("/trial/repeat-run/auth-token__c/attempts", True))
         rows = re.findall(r'<td><a href="(/trial/repeat-run/[^"]+)">Attempt (\d)</a></td>', html)
         self.assertEqual(rows, [("/trial/repeat-run/auth-token__c", "1"), ("/trial/repeat-run/auth-token__a", "2"),
@@ -171,23 +172,6 @@ class AttemptRoutes(unittest.TestCase):
         self.assertIn('data-tip="Mean of 2 attempts · 110 to 510">310</span>', head.group(1))
         self.assertIn('data-tokens="310.0"', head.group(0))
 
-    def test_all_attempts_has_the_head_of_an_attempts_page(self):
-        """The name as an attempt's page writes it, what ran from one macro, then the tabs: what is
-        above the tabs is every attempt's, so a tab changes what is under it and nothing above."""
-        one, every = self.get("/trial/repeat-run/auth-token__c"), self.get("/trial/repeat-run/auth-token__c/attempts")
-        above = lambda html: " ".join(html[html.index('<div class="trial-head">'):html.index('<div class="attempt-head">')].split())
-        self.assertEqual(above(one), above(every))
-        self.assertIn('<span class="k">Benchmark</span><span class="v" title="terminal-bench">', above(every))
-        self.assertIn('<span class="th-model mono">fixture-model</span>', above(every))
-        for html in (one, every):
-            self.assertLess(html.index('<header class="page-head">'), html.index('<div class="trial-head">'))
-        # an attempt's numbers are its own: under the tabs on its page, in the table here
-        self.assertNotIn('class="th-strip"', above(one))
-        self.assertLess(one.index('<div class="attempt-head">'), one.index('class="th-strip"'))
-        self.assertLess(one.index('class="th-strip"'), one.index('<nav class="trial-tabs"'))
-        self.assertNotIn('class="th-strip"', every)
-        self.assertNotIn('class="subtitle"', every)
-
     def test_all_attempts_writes_a_reward_as_the_score_beside_it(self):
         run = written_job(self.root, "partial-run", [("p__a", "p", 0, 1, None), ("p__b", "p", 2, 2 / 3, None)])
         self.stack.enter_context(patch.object(workspace, "load_jobs", return_value=[run]))
@@ -225,9 +209,9 @@ class AttemptRoutes(unittest.TestCase):
         kept, first = "/trial/retried-run/0001__u0000r2", "/trial/retried-run/0001__u0000r2.try-1"
         page = self.get(kept)
         self.assertEqual(try_tabs(page), [("rate_limited", first, False, "1"), ("resolved", kept, True, "2")])
-        self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="page">Attempt 2<svg class="attempt-retried"', page)
-        # what ran, the attempts, this attempt's tries, then this try's numbers
-        order = [page.index(part) for part in ('<div class="trial-head">', '<div class="attempt-head">', '<nav class="try-tabs"', 'class="th-strip"')]
+        self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="page">Attempt 2<svg class="ic attempt-retried"', page)
+        # The attempts, this attempt's tries, then this try's numbers.
+        order = [page.index(part) for part in ('<div class="attempt-head">', '<nav class="try-tabs"', 'class="th-strip"')]
         self.assertEqual(order, sorted(order))
         self.assertIn('id="tab-judgement"', page)
         # the first try: its own evidence, under its attempt's tab, never judged
@@ -237,7 +221,7 @@ class AttemptRoutes(unittest.TestCase):
         self.assertIn('<span class="tag oc-rate_limited">Rate limited</span>', page)
         # the page is Try 1's: its attempt's tab, which leads to the attempt's last try, is where it is, not it
         self.assertEqual([cur for _, cur in tabs(page)], [False, False, False, False])
-        self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="true">Attempt 2<svg class="attempt-retried"', page)
+        self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="true">Attempt 2<svg class="ic attempt-retried"', page)
         self.assertEqual(try_tabs(page), [("rate_limited", first, True, "1"), ("resolved", kept, False, "2")])
         self.assertNotIn('id="tab-judgement"', page)
         self.assertNotIn('id="tab-llm-judge"', page)

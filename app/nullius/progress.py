@@ -52,6 +52,8 @@ LABELS = {"connect": "Connect", "uv": "uv", "tasks": "Send the tasks", "app": "S
 
 _WORD = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)=("(?:[^"\\]|\\.)*"|\S*)')
 _BARE = re.compile(r'^[^\s"=]+$')
+# an image digest, shown short as ``docker images`` does: its first 12 hex
+_DIGEST = re.compile(r"(sha256:[0-9a-f]{12})[0-9a-f]{52}")
 
 
 def _value(v) -> str:
@@ -269,9 +271,16 @@ def fold(events: Iterable[dict]) -> dict:
             if key != st and st in stages and stages[st]["state"] == "waiting":
                 stages = {(key if k == st else k): v for k, v in stages.items()}
                 stages[key]["key"] = key
-            stages.setdefault(key, {"key": key, "stage": st, "label": label(ev), "state": "waiting"})
+            stages.setdefault(key, {"key": key, "stage": st, "state": "waiting"})
         row = stages[key]
-        row["label"] = label(ev)
+        if state == "start":
+            # A later part or retry starts this stage afresh.
+            for field in ("seconds", "bytes", "total", "detail"):
+                row.pop(field, None)
+        full = label(ev)
+        row["label"] = _DIGEST.sub(r"\1", full)
+        if row["label"] != full:
+            row["full"] = full
         if ev.get("detail") is not None:
             row["detail"] = ev["detail"]
         if state == "start":
@@ -295,7 +304,7 @@ def fold(events: Iterable[dict]) -> dict:
     last = seen[-1] if seen else -1
     rows = [r for i, r in enumerate(rows) if r["state"] != "waiting" or i > last]
     if ended:                                   # a run that ended has nothing running, nor anything still to come
-        rows = [dict(r, state="failed") if r["state"] == "running" and ended == "refused" else r
+        rows = [dict(r, state="failed" if ended == "refused" else "done") if r["state"] == "running" else r
                 for r in rows if r["state"] != "waiting"]
     current = next((r for r in rows if r["state"] == "running"), None)
     return {"stages": rows, "units": units, "current": current["key"] if current else None, "ended": ended, "detail": detail}

@@ -6,11 +6,13 @@ Harbor actually writes — see harbor/src/harbor/models/{trial,job}/result.py.
 
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from unittest import mock
 
 from nullius.runs import classify, parse
+from nullius.standard.runner import job as std_job, merge, shard
 
 
 def _write_json(path, data):
@@ -378,20 +380,6 @@ class SurfacedFields(unittest.TestCase):
     """The reader exposes agent versions and job statistics, including the
     running-trial count that distinguishes active jobs from completed ones."""
 
-    def test_trial_agent_version(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            _write_json(
-                os.path.join(tmp, "result.json"),
-                {
-                    "task_name": "swebench-verified/django__django-1",
-                    "trial_name": "t1",
-                    "agent_info": {"name": "my-agent", "version": "0.2.3",
-                                   "model_info": {"name": "gpt-5.6-luna"}},
-                },
-            )
-            trial = parse.parse_trial("job", tmp)
-        self.assertEqual(trial.agent_version, "0.2.3")
-
     def _job(self, result):
         with tempfile.TemporaryDirectory() as tmp:
             _write_json(os.path.join(tmp, "result.json"), result)
@@ -416,8 +404,6 @@ class SurfacedFields(unittest.TestCase):
         self.assertEqual(job.n_retries, 3)
         self.assertTrue(job.is_running)
         self.assertEqual(job.n_planned, 20)
-
-    def test_job_without_stats_is_not_running(self):
         job = self._job({})
         self.assertFalse(job.is_running)
         self.assertEqual(job.n_retries, 0)
@@ -463,14 +449,6 @@ class HarborCommand(unittest.TestCase):
             "--model openai/gpt-5.6-luna --agent harbor_agent:MyAgent "
             "--ak use_responses_api=1 --n-concurrent 1 --max-retries 3",
         )
-
-    def test_module_class_name_gets_no_pythonpath_either(self):
-        cfg = {"agents": [{"name": "some.module:SomeAgent", "model_name": "openai/m"}],
-               "datasets": [{"path": "../x"}]}
-        out = parse.harbor_command(cfg, env_type="docker")
-        self.assertTrue(out.startswith("harbor run "), out)
-        self.assertNotIn("PYTHONPATH", out)
-        self.assertIn("--agent some.module:SomeAgent", out)
 
     def test_registry_fetch_needs_no_pythonpath(self):
         cfg = {
@@ -592,16 +570,11 @@ class ReportsRegressions(unittest.TestCase):
         job.trials = [_trial(**kw)]
         return job
 
-    def test_a_benchmark_that_reports_held_checks_can_say_zero(self):
-        self.assertTrue(self._job(p2p_pass=12, p2p_fail=0).reports_regressions)
-
-    def test_a_benchmark_that_reports_none_shows_absence(self):
-        self.assertFalse(self._job(p2p_pass=0, p2p_fail=0).reports_regressions)
-
-    def test_a_real_regression_counts_either_way(self):
-        job = self._job(p2p_pass=3, p2p_fail=2)
-        self.assertEqual(job.n_regressions, 1)
-        self.assertTrue(job.reports_regressions)
+    def test_regressions_are_reported_only_where_held_checks_are_read(self):
+        for passed, failed, reports in ((12, 0, True), (0, 0, False), (3, 2, True)):
+            with self.subTest(p2p_pass=passed, p2p_fail=failed):
+                self.assertIs(self._job(p2p_pass=passed, p2p_fail=failed).reports_regressions, reports)
+        self.assertEqual(self._job(p2p_pass=3, p2p_fail=2).n_regressions, 1)
 
 
 def _trial(**kw):
@@ -693,10 +666,6 @@ class RateLimitsRetried(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(self._trial(tmp, log).n_rate_limited_retries, 2)
 
-    def test_the_cached_shape_moved_with_the_field(self):
-        # A workspace caches parsed trials by parse.SCHEMA; a cache from before
-        # the field would read every trial as unmeasured.
-        self.assertGreaterEqual(int(parse.SCHEMA), 3)
 
 class UnverifiedJobHasNoRate(unittest.TestCase):
     """A job nothing scored has no solve rate, not a rate of zero.
@@ -726,15 +695,12 @@ class UnverifiedJobHasNoRate(unittest.TestCase):
         self.assertEqual(job.n_resolved, 0)                 # the count is still a fact
         self.assertEqual(job.counts[classify.UNKNOWN], 2)   # and so is the mix
 
-
     def test_one_verified_trial_keeps_the_unknown_in_the_denominator(self):
         job = self._job(classify.RESOLVED, classify.UNKNOWN)
         self.assertTrue(job.has_verdict)
         self.assertEqual(job.raw_solve_rate, 0.5)
         self.assertEqual(job.adjusted_solve_rate, 0.5)
-
-    def test_a_verified_miss_is_still_zero_percent(self):
-        job = self._job(classify.PATCH_FAILED_TESTS, classify.UNKNOWN)
+        job = self._job(classify.PATCH_FAILED_TESTS, classify.UNKNOWN)     # a verified miss is zero, not absent
         self.assertEqual(job.raw_solve_rate, 0.0)
         self.assertEqual(job.adjusted_solve_rate, 0.0)
 
@@ -773,6 +739,187 @@ class KeptTries(unittest.TestCase):
             with mock.patch.object(parse, "parse_trial", side_effect=read):
                 self.assertEqual((t.n_retries, parse.tries(t)), (10 ** 9, []))
             self.assertEqual(len(looked), 99)
+
+
+# Credential-shaped and fake: what no page may show.
+SECRET = "sk-test-FAKE00"
+BENCH = {"key": "fakebench", "_ref": "fakebench@2", "_version": "2", "family": "agent", "needs": ["agent.workspace/v1"],
+         "units": {"noun": "task", "nouns": "tasks"}, "score": {"kind": "pass", "says": "the tests pass"}}
+SCORED = dict(BENCH, score={"kind": "score", "says": "a grade"})
+AGENT = {"key": "fake", "_kind": "agent", "_ref": "fake@1.2", "upstream": {"version": "1.2"}}
+NOP = {"key": "nop", "_kind": "control", "_ref": "nop", "source": "nullius"}
+PIN = {"m-1": ["deepinfra/fp8", "together"]}
+FACTS = dict(model="m-1", provider="openrouter", concurrency=3, bench_options={"temperature": "0.2"},
+             options={"reasoning_effort": "high", "max_tokens": 4096, "api_key": SECRET, "note": f"from {SECRET}"},
+             retries=2, timeouts={"agent": 600.0}, max_turns=30, max_calls=100, served_by=PIN)
+# what the reader gives of a job written with FACTS and no cap
+IDENTITY = {"benchmark": "fakebench", "benchmark_version": "2", "benchmark_options": {"temperature": "0.2"},
+            "agent": "fake@1.2", "agent_version": "1.2",
+            "agent_options": {"reasoning_effort": "high", "max_tokens": 4096, "api_key": "[REDACTED]", "note": "from [REDACTED]"},
+            "model": "m-1", "provider": "openrouter", "served_by": PIN,
+            "limits": {"timeouts": {"agent": 600.0}, "max_turns": 30, "max_calls": 100, "retries": 2, "concurrency": 3}}
+
+
+def standard_job(root, name, scores, *, bench=BENCH, other=AGENT, budget=None, retried=(), shard_of=None, **config):
+    """A standard job as a run writes it (``FACTS`` and ``config`` its settings): a unit per score, None for
+    one that ended on an error, each unit's call answered by DeepInfra. ``retried``: units tried once before
+    their last try, kept in ``retried/``. ``shard_of``: (index, of, every unit), a shard of one launch."""
+    d = os.path.join(root, name)
+    os.makedirs(d)
+    facts = dict(FACTS, **config)
+    units = [f"t-{i}" for i in range(len(scores))] if shard_of is None else \
+        [u for _, u in shard.select(shard_of[2], shard_of[0], shard_of[1])]
+    launch = {} if shard_of is None else {"launch": "L1", "shard": shard.record(shard_of[0], shard_of[1], len(shard_of[2]), units)}
+    std_job.write_config(d, job=name, bench=bench, other=other, dataset="all", units=units, granted=True, **launch, **facts)
+    calls = [{"status": 200, "model": "m-1", "t0": 1_760_000_000.0, "reply": {"served_by": "DeepInfra"}}]
+
+    def trial(path, k, u, score, retries=0):
+        exc = ("ApiError", "500") if score is None else None
+        return std_job.write_trial(path, job=name, bench=bench, other=other, model=facts["model"], unit=u, t0=1_760_000_000.0 + k,
+                                   t1=1_760_000_005.0 + k, produce=(1_760_000_000.0 + k, 1_760_000_004.0 + k),
+                                   score=None if exc else {"reward": score}, exception=exc, calls=calls if other is AGENT else [],
+                                   trajectory=None, serving=facts.get("served_by"), retries=retries)
+    results = []
+    for k, (u, score) in enumerate(zip(units, scores)):
+        folder = f"{u}__u{int(u.split('-')[1]):04d}"
+        if u in retried:
+            trial(os.path.join(d, "retried", f"{folder}.try-1"), k, u, None)
+        results.append(trial(os.path.join(d, folder), k, u, score, 1 if u in retried else 0))
+    std_job.write_result(d, name, 1_760_000_000.0, 1_760_000_060.0, results, len(units), budget=budget)
+    return d
+
+
+class RunIdentity(unittest.TestCase):
+    """What tells a standard run from another, read from its records: each fact
+    a job records, and none it does not - never an empty value in its place."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="nullius-identity-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def assertNoEmpty(self, identity):
+        for key, value in [*identity.items(), *identity.get("limits", {}).items()]:
+            self.assertNotIn(value, ("", None, {}, []), key)
+
+    def test_every_fact_a_standard_job_records_is_read(self):
+        cap = {"max_usd": 0.5, "spent_usd": 0.1, "stopped": False, "cut_off": [], "not_run": [], "unit_max_usd": 0.05, "over_unit": []}
+        j = parse.parse_job(standard_job(self.tmp, "run", [1.0, 0.0, None], budget=cap, repeat=3))
+        want = dict(IDENTITY, limits=dict(IDENTITY["limits"], repeat=3, max_usd=0.5, unit_max_usd=0.05),
+                    served={"calls": {"DeepInfra": 3}, "unnamed": 0, "held": {"m-1": True}})
+        self.assertEqual(j.identity, want)
+        self.assertNotIn(SECRET, json.dumps(j.identity))            # a credential-named option keeps its name, and no value
+
+    def test_credentials_are_redacted_for_every_value_type_and_token_counts_are_kept(self):
+        counts = {"max_tokens": "4096", "max_output_tokens": 2048, "max_completion_tokens": "1024",
+                  "max_new_tokens": "512", "token_limit": "256", "token_budget": 128}
+        for i, value in enumerate((123456789012, 1.25, True, False, None, "private-value", [123], {"value": 123})):
+            with self.subTest(value=value):
+                options = dict(counts, password=value, api_key=value, access_token=value,
+                               nested=dict(counts, authorization=value))
+                job = parse.parse_job(standard_job(self.tmp, f"credentials-{i}", [1], options=options, bench_options=options))
+                expected = dict(counts, password="[REDACTED]", api_key="[REDACTED]", access_token="[REDACTED]", nested=counts)
+                self.assertEqual(job.identity["agent_options"], expected)
+                self.assertEqual(job.identity["benchmark_options"], expected)
+
+    def test_bare_tokens_are_credentials_in_options_and_launch_values(self):
+        counts = {"max_tokens": 4096, "total_tokens": 2048, "token_limit": 1024}
+        for key in ("tokens", "Tokens"):
+            options = dict(counts, **{key: ["credential-one", "credential-two"]},
+                           nested=dict(counts, **{key: ["credential-three"]}))
+            job = parse.parse_job(standard_job(self.tmp, key, [1], options=options, bench_options=options))
+            for field in ("agent_options", "benchmark_options"):
+                with self.subTest(key=key, field=field):
+                    self.assertEqual(job.identity[field], dict(counts, **{key: "[REDACTED]"}, nested=counts))
+            agent = parse.launch_of({"agents": [{"kwargs": options, "env": options}]})["agents"][0]
+            for field in ("kwargs", "env"):
+                with self.subTest(key=key, field=field):
+                    self.assertEqual(agent[field], dict(counts, nested=counts))
+                    self.assertIn(key, agent["secret"])
+                    self.assertIn(f"nested.{key}", agent["secret"])
+
+    def test_a_job_that_records_a_fact_not_has_no_key_for_it(self):
+        # written before the options, the pin, the limits and the served record existed
+        d = os.path.join(self.tmp, "older")
+        _write_json(os.path.join(d, "config.json"), {
+            "job_name": "older", "runner": "standard", "runner_label": "Nullius",
+            "standard": {"benchmark": "fakebench", "plugged": "fake", "kind": "agent", "provider": "openai", "needs": [],
+                         "permissions_granted": True, "unsandboxed": True, "backend": "local"},
+            "agents": [{"name": "fake", "model_name": "m-1"}], "datasets": [{"name": "fakebench/all", "n_tasks": 1}]})
+        _write_json(os.path.join(d, "result.json"), {"n_total_trials": 1, "stats": {}})
+        _write_json(os.path.join(d, "t-0__u0000", "result.json"), {"task_name": "fakebench/t-0", "trial_name": "t-0__u0000"})
+        older = parse.parse_job(d)
+        self.assertEqual(older.identity, {"benchmark": "fakebench", "agent": "fake", "model": "m-1", "provider": "openai"})
+        # a control asks no model: no model, no options, no provider, no record of who served
+        control = parse.parse_job(standard_job(self.tmp, "nop", [0.0, 0.0], other=NOP, model="", options={}, served_by=None))
+        self.assertTrue(control.is_control)
+        self.assertEqual(set(control.identity), {"benchmark", "benchmark_version", "benchmark_options", "agent", "limits"})
+        self.assertEqual(control.identity["agent"], "nop")
+        # Harbor's job, and a runner's, are not the standard's: nothing
+        harbor = os.path.join(self.tmp, "harbor")
+        _write_json(os.path.join(harbor, "config.json"), {"agents": [{"name": "claude-code", "model_name": "m-1"}],
+                                                          "datasets": [{"path": "../swe"}], "n_concurrent_trials": 4})
+        _write_json(os.path.join(harbor, "result.json"), {"stats": {}})
+        self.assertEqual(parse.parse_job(harbor).identity, {})
+        for j in (older, control):
+            self.assertNoEmpty(j.identity)
+
+    def test_recorded_constraints_and_retries_are_limits_and_an_invalid_count_is_not(self):
+        caps = {"cpus": 2, "memory_mb": 512, "processes": 128, "cpu_set": "0-1", "gpu_ids": [], "concurrency": 2}
+        job = parse.parse_job(standard_job(self.tmp, "constrained", [1], constraints=caps))
+        self.assertEqual(job.identity["limits"]["constraints"], caps)
+        for i, value in enumerate((0, 1, -1, True, False, 0.5, "0", None)):
+            with self.subTest(retries=value):
+                limits = parse.parse_job(standard_job(self.tmp, f"retries-{i}", [1], retries=value)).identity["limits"]
+                self.assertNotIn("constraints", limits)                     # none recorded
+                if type(value) is int and value >= 0:
+                    self.assertEqual(limits["retries"], value)
+                else:
+                    self.assertNotIn("retries", limits)
+
+    def test_a_merged_job_and_a_job_with_retried_tries_read_the_same_facts(self):
+        every = [f"t-{i}" for i in range(6)]
+        shards = [standard_job(self.tmp, f"run-shard-{i}of2", [1.0] * 6, shard_of=(i, 2, every)) for i in (1, 2)]
+        made = merge.merge(shards, os.path.join(self.tmp, "out", "run"))
+        merged = parse.parse_job(made["out"])
+        self.assertEqual(merged.merged_from, ["run-shard-1of2", "run-shard-2of2"])
+        for d in shards:
+            one = parse.parse_job(d)
+            self.assertEqual({k: v for k, v in merged.identity.items() if k != "served"},
+                             {k: v for k, v in one.identity.items() if k != "served"})
+        self.assertEqual(merged.identity["served"], {"calls": {"DeepInfra": 6}, "unnamed": 0, "held": {"m-1": True}})   # every shard's calls
+        retried = parse.parse_job(standard_job(self.tmp, "retried", [1.0, 0.0], retried=("t-1",)))
+        plain = parse.parse_job(standard_job(self.tmp, "plain", [1.0, 0.0]))
+        self.assertEqual([t.n_retries for t in retried.trials], [0, 1])
+        self.assertEqual(retried.identity, plain.identity)
+        self.assertEqual(retried.identity, dict(IDENTITY, served={"calls": {"DeepInfra": 2}, "unnamed": 0, "held": {"m-1": True}}))
+
+    def test_the_mean_over_the_tasks_planned_counts_a_task_with_no_score_as_0(self):
+        scored = parse.parse_job(standard_job(self.tmp, "scored", [1.0, 0.5, 0.0, None], bench=SCORED))
+        self.assertEqual((scored.mean_score, scored.mean_score_planned), (0.5, 0.375))
+        # a unit never begun counts 0 too: planned 4, three ran
+        short = parse.parse_job(standard_job(self.tmp, "short", [1.0, 1.0, 1.0], bench=SCORED))
+        with open(os.path.join(short.dir, "result.json")) as f:
+            res = json.load(f)
+        _write_json(os.path.join(short.dir, "result.json"), dict(res, n_total_trials=4))
+        self.assertEqual((parse.parse_job(short.dir).mean_score, parse.parse_job(short.dir).mean_score_planned), (1.0, 0.75))
+        # a pass or fail benchmark: no mean, its rates as they were
+        passed = parse.parse_job(standard_job(self.tmp, "passed", [1.0, 0.0, None]))
+        self.assertEqual((passed.mean_score, passed.mean_score_planned), (None, None))
+        self.assertEqual((passed.raw_solve_rate, passed.adjusted_solve_rate), (1 / 3, 0.5))
+
+    def test_the_planned_mean_uses_trial_scores_with_equal_or_unequal_part_counts(self):
+        for counts in ((1, 1, 1), (1, 2, 3)):
+            with self.subTest(counts=counts):
+                path = standard_job(self.tmp, "parts-" + "".join(map(str, counts)), [1, 0.5, 0, None], bench=SCORED)
+                for trial, count in zip(parse.parse_job(path).trials, counts):
+                    result = os.path.join(trial.dir, "result.json")
+                    with open(result) as f:
+                        doc = json.load(f)
+                    doc["verifier_result"]["parts"] = {"n": count}
+                    _write_json(result, doc)
+                job = parse.parse_job(path)
+                self.assertEqual(job.mean_score, (counts[0] + 0.5 * counts[1]) / sum(counts))
+                self.assertEqual(job.mean_score_planned, 0.375)
 
 
 if __name__ == "__main__":

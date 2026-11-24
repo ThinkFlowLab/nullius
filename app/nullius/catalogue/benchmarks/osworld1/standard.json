@@ -170,6 +170,7 @@
         "yours"
       ],
       "default": "default",
+      "yours": "100",
       "pattern": "default|[1-9][0-9]{0,3}",
       "example": "50",
       "limit": true,
@@ -218,8 +219,8 @@
       }
     },
     "pause": {
-      "label": "Pause",
-      "summary": "run_single_example's sleep_after_execution for an agent: the seconds env.step waits after each action, 3.0 as in run_multienv_m3.py's default.",
+      "label": "Pause after each action (seconds)",
+      "summary": "Seconds to wait after each action before taking the next screenshot.",
       "pattern": "[0-9]{1,2}(\\.[0-9]{1,2})?",
       "example": "5.0",
       "default": "3.0",
@@ -230,7 +231,8 @@
   },
   "host": {
     "docker": {
-      "summary": "Docker on the machine the driver runs on, usable without sudo, for the upstream's docker provider; /dev/kvm makes the VMs fast, and the upstream runs them without it, slowly.",
+      "label": "Docker for the tasks' VMs",
+      "summary": "Docker on the machine, usable without sudo: OSWorld starts each task's VM in it. /dev/kvm makes the VMs fast; without it they run slowly.",
       "check": [
         "docker"
       ]
@@ -353,133 +355,11 @@
           "summary": "The same agent with any model in its own model's place: the upstream's code asks for the agent's first published model, with its prompt and action format, and the relay sends the model chosen, every side call included. Its scores compare with other runs of this setup.",
           "runs_as": "MiniMax-M3"
         }
-      },
-      "proven": {
-        "test_nogdrive": {
-          "units": {
-            "units": 360,
-            "passed": "360 ids, the same twice, unique"
-          },
-          "nop": {
-            "passed": "0/360",
-            "value": 0.0,
-            "expect": {
-              "at_most": 0.0
-            },
-            "units": 360,
-            "options": {
-              "max_steps": "default",
-              "vm_provider": "docker"
-            }
-          }
-        },
-        "test_all": {
-          "units": {
-            "units": 368,
-            "passed": "368 ids, the same twice, unique"
-          }
-        },
-        "test_small": {
-          "units": {
-            "units": 39,
-            "passed": "39 ids, the same twice, unique"
-          },
-          "failed": {
-            "nop": {
-              "passed": "0/39",
-              "value": 0.0,
-              "expect": {
-                "at_most": 0.0
-              },
-              "units": 39,
-              "problems": [
-                "5 unit(s) ended in an error before the score"
-              ]
-            }
-          }
-        },
-        "test_infeasible": {
-          "units": {
-            "units": 25,
-            "passed": "25 ids, the same twice, unique"
-          },
-          "nop": {
-            "passed": "0/25",
-            "value": 0.0,
-            "expect": {
-              "at_most": 0.0
-            },
-            "units": 25,
-            "options": {
-              "max_steps": "default",
-              "vm_provider": "docker"
-            }
-          }
-        }
       }
     },
     "044bc33": {
       "upstream": {
         "branch": "main"
-      },
-      "proven": {
-        "test_nogdrive": {
-          "units": {
-            "units": 361,
-            "passed": "361 ids, the same twice, unique"
-          },
-          "nop": {
-            "passed": "0/361",
-            "value": 0.0,
-            "expect": {
-              "at_most": 0.0
-            },
-            "units": 361,
-            "options": {
-              "max_steps": "default",
-              "vm_provider": "docker"
-            }
-          }
-        },
-        "test_all": {
-          "units": {
-            "units": 369,
-            "passed": "369 ids, the same twice, unique"
-          }
-        },
-        "test_infeasible": {
-          "units": {
-            "units": 25,
-            "passed": "25 ids, the same twice, unique"
-          },
-          "nop": {
-            "passed": "0/25",
-            "value": 0.0,
-            "expect": {
-              "at_most": 0.0
-            },
-            "units": 25,
-            "options": {
-              "max_steps": "default",
-              "vm_provider": "docker"
-            }
-          }
-        },
-        "test_small": {
-          "units": {
-            "units": 39,
-            "passed": "39 ids, the same twice, unique"
-          },
-          "nop": {
-            "passed": "0/8",
-            "value": 0.0,
-            "expect": {
-              "at_most": 0.0
-            },
-            "units": 8,
-            "limit": 8
-          }
-        }
       }
     }
   }

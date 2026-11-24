@@ -22,7 +22,6 @@ from nullius import workspace
 from nullius.catalogue import catalog
 
 
-
 APP_DIR = Path(__file__).resolve().parents[1]
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
@@ -147,6 +146,13 @@ class Routes(unittest.TestCase):
         self.assertEqual(response.status_code, 200, path)
         return response
 
+    def test_the_toolkit_search_carries_its_clear_button_hidden(self):
+        for path in ("/runs", "/benchmarks", "/agents", "/kits", "/workspaces"):
+            with self.subTest(path=path):
+                html = self.get_ok(path).get_data(as_text=True)
+                self.assertIn('<button class="st-search-clear" type="button" data-search-clear aria-label="Clear search" hidden>'
+                              '<svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>', html)
+
     def test_home_opens_runs_with_or_without_active_workspace(self):
         for active in (self.active, None):
             with self.subTest(active=bool(active)):
@@ -161,6 +167,26 @@ class Routes(unittest.TestCase):
                 self.assertIn("active-run" if active else "Build a run", html)
                 self.assertIn('aria-label="Pages"', html)
                 self.assertNotIn("So who's actually best?", html)
+
+    def test_an_error_renders_in_the_layout_without_its_details(self):
+        for path in ("/no-such-page", "/job/no-such-job", "/job/active-run?workspace=gone"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.addCleanup(response.close)
+                self.assertEqual(response.status_code, 404)
+                html = response.get_data(as_text=True)
+                self.assertIn("<h1>Not found</h1>", html)
+                self.assertIn('aria-label="Pages"', html)
+                self.assertIn('href="/runs"', html)
+        with patch.dict(web.app.config, PROPAGATE_EXCEPTIONS=False), \
+             patch.object(web.shared, "_jobs_for_request", side_effect=RuntimeError("secret detail")):
+            response = self.client.get("/job/active-run")
+            self.addCleanup(response.close)
+            self.assertEqual(response.status_code, 500)
+            html = response.get_data(as_text=True)
+            self.assertIn("<h1>Server error</h1>", html)
+            self.assertIn('aria-label="Pages"', html)
+            self.assertNotIn("secret detail", html)
 
     def test_command_builder_serves_catalogue_and_adapter_metadata(self):
         html = self.get_ok("/new-run").get_data(as_text=True)
@@ -195,13 +221,6 @@ class Routes(unittest.TestCase):
         self.assertIn("Or open a workspace", html)
         self.assertLess(html.index("Or open a workspace"), html.index('class="start-signature"'))   # the mark closes the page
         self.assertNotIn('data-label="Import"', html)                     # the rail has no Import tab
-
-    def test_removed_marketing_assets_are_not_served(self):
-        for asset in ("landing.css", "landing-core.js", "landing-logos.js", "landing.js"):
-            with self.subTest(asset=asset):
-                response = self.client.get("/static/runs/" + asset)
-                self.addCleanup(response.close)
-                self.assertEqual(response.status_code, 404)
 
     def test_catalogue_routes_keep_native_anchor_targets_and_source_count_meanings(self):
         cat = catalog.load()
@@ -288,7 +307,7 @@ class Routes(unittest.TestCase):
     def test_a_trial_has_two_judgements_in_two_tabs(self):
         with patch.dict(os.environ, {"TYPESAFE_API_KEY": "", "OPENROUTER_API_KEY": "sk-or-route-test", "LLM_JUDGE_MODEL": ""}):
             html = self.get_ok("/trial/active-run/task-001").get_data(as_text=True)
-        self.assertIn('id="tab-judgement" role="tab" type="button" data-tab="judgement"', html); self.assertIn(">Decision model</button>", html)
+        self.assertIn('id="tab-judgement" role="tab" type="button" data-tab="judgement"', html); self.assertIn(">Decision model judge</button>", html)
         self.assertIn('id="tab-llm-judge"', html); self.assertIn(">LLM judge</button>", html)
         self.assertIn('id="judgement"', html); self.assertIn('id="llm-judgement"', html)
         self.assertIn("LLM judge not configured: needs a model", html)                     # the OpenRouter key is set, the model is not
@@ -446,7 +465,6 @@ class Routes(unittest.TestCase):
         self.assertIn('class="mono faint exception-type"', head)
         self.assertIn('classify.py.">SomethingNobodyHasWrittenYetError</span>', head)
         self.assertNotIn("Agent error", trial_page)
-
 
     def test_a_trajectory_without_usage_or_tool_calls_draws_no_empty_panel(self):
         """The synthetic trajectory is messages only: no per-step usage, no

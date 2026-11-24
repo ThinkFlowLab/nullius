@@ -8,7 +8,11 @@
 An agent or a capability may hold several **versions** in its one file:
 ``versions`` maps each version to what differs in it - its ``upstream``
 (package, licence), ``install``, and optionally ``start``, ``model``, ``env``,
-``options`` (added to the shared ones), ``fidelity`` - and its own ``proven``; ``default`` names the one offered when none is named.
+``options`` (added to the shared ones), ``fidelity``; ``default`` names the
+one offered when none is named. Generated ``proven`` records and flat
+participants' ``offers`` live beside it in ``proofs.json`` (``proofs``).
+Loading combines them before validation and resolution. Embedded evidence
+in older definitions remains readable until a sibling proof file replaces it.
 What every version shares stays at the top. A version is named
 ``<key>@<version>`` (:func:`split`), and :func:`resolve` turns the file into
 one version's definition, as flat as a file without ``versions``: everything
@@ -97,7 +101,7 @@ from urllib.parse import urlsplit
 from nullius.standard.contract import ports
 from nullius import ondisk, paths
 from nullius.catalogue import storage
-from . import names
+from . import names, proofs
 
 STANDARD = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))      # the standard's folder, which holds this one
 CATALOGUE = os.path.join(os.path.dirname(STANDARD), "catalogue")
@@ -519,7 +523,8 @@ def _bench_options(d: dict) -> List[str]:
     ``embeddings`` model called through the run's relay, ``host`` requirements or ``files`` by name - and
     ``when`` it applies: another option's values (a retriever's, only with a retrieval). ``limit``:
     a bound the upstream has of its own (its steps, its errors), offered with the run's limits; ``by``:
-    its default under each value of another option (an agent's own steps), for a default of ``default``. ``names``: a name for some of its values, shown in their place. ``step``: ``where`` for a choice of where the work runs, ``dataset`` for one its datasets need, the builder step that asks it."""
+    its default under each value of another option (an agent's own steps), for a default of ``default``; ``yours``: the value
+    an agent's or a capability's run gets for it (the steps of a port's loop). ``names``: a name for some of its values, shown in their place. ``step``: ``where`` for a choice of where the work runs, ``dataset`` for one its datasets need, the builder step that asks it."""
     opts = d.get("options")
     if opts is None:
         return []
@@ -544,6 +549,8 @@ def _bench_options(d: dict) -> List[str]:
                 k != name and k in opts and isinstance(m, dict) and set(m) == set(opts[k].get("values") or [None])
                 and all(option_problem(o, v) is None for v in m.values()) for k, m in by.items())):
             bad.append(f"{w}.by: another option -> its every value -> this one's default under it")
+        if "yours" in o and (by is None or o["yours"] == o.get("default") or option_problem(o, o["yours"])):
+            bad.append(f"{w}.yours: beside by, the value an agent's or a capability's run gets for a default of default")
         # agent: an agent's run alone, on a benchmark agents run, and never beside another scope
         if on is not None and (not isinstance(on, list) or not on or any(x not in SETUPS + ("yours", "agent") for x in on)
                                or "agent" in on and (on != ["agent"] or d.get("family") != "agent")):
@@ -1707,10 +1714,16 @@ def writable_dir(kind: str, key: str, root: Optional[str] = None) -> str:
     return storage.writable_dir(KINDS[names.kind(kind)]["dir"], key, CATALOGUE, root)
 
 
+def read_document(path: str, kind: str) -> dict:
+    """An authored definition with sibling evidence, before semantic checks."""
+    with open(path) as f:
+        d = names.definition(json.load(f))
+    return proofs.attach(d, names.kind(kind), os.path.dirname(path))
+
+
 def _read(path: str, kind: str, key: str) -> Tuple[Optional[dict], List[str]]:
     try:
-        with open(path) as f:
-            d = names.definition(json.load(f))
+        d = read_document(path, kind)
         if kind == "benchmark":
             d = _with_agents(d, os.path.dirname(path))
     except (OSError, ValueError, TypeError, AttributeError) as e:
@@ -1893,15 +1906,16 @@ def _locked(path: str):
 
 
 def save(d: dict, change: Optional[Callable[[dict], None]] = None) -> None:
-    """Write a loaded definition back (the conformance run's ``offers`` and
-    ``proven``), without the fields loading added. A version of a file with
-    ``versions`` writes only its own ``proven``; the rest of the file is kept.
+    """Write only generated evidence to the entry's sibling ``proofs.json``.
 
     ``change``: what the run decided, applied to the definition as it is on
     disk now, under a lock - not to the copy loaded when a long run started,
     which would put back what another proof or the user wrote meanwhile. It
     is given the dict holding ``offers`` and ``proven`` (a version's own, for
-    a version) and changes it in place; ``d`` then holds the result too."""
+    a version) and changes it in place; ``d`` then holds the result too.
+    Without it, save the caller's evidence for its version. Authored fields
+    are never written, including legacy embedded evidence; the sibling then
+    supersedes that evidence. A deleted or replaced definition is refused."""
     # Explicit fixture roots remain local. Only a loaded bundled entry needs
     # copying; helpers and model files beside its definition must follow it.
     folder = d["_here"]
@@ -1911,28 +1925,24 @@ def save(d: dict, change: Optional[Callable[[dict], None]] = None) -> None:
     storage.ensure_writable(d["_here"], CATALOGUE)
     path = path_of(d)
     with _locked(path):
-        versioned = bool(d.get("_ref") and "@" in str(d["_ref"]))
-        if versioned or change is not None:
-            try:
-                with open(path) as f:
-                    clean = names.definition(json.load(f))
-            except (OSError, ValueError):
-                clean = None
-            if not isinstance(clean, dict):
-                clean = {k: v for k, v in d.items() if not k.startswith("_")}
-            if versioned:              # a version writes its own proven only, seen beside the offers it resolves to
-                target = clean["versions"][d["_version"]]
-                work = {"offers": d.get("offers") or [], "proven": target.get("proven") or {}}
-                if change is not None:
-                    change(work)
-                else:
-                    work["proven"] = d.get("proven") or {}
-                target["proven"] = d["proven"] = work["proven"]
-            else:
-                change(clean)
-                for k in ("offers", "proven"):
-                    if k in clean:
-                        d[k] = clean[k]
+        current = read_document(path, d["_kind"])
+        if not isinstance(current, dict) or current.get("key") != d["key"] or current.get("schema") != KINDS[d["_kind"]]["schema"]:
+            raise ValueError("the definition changed identity while its proof ran")
+        version = d.get("_version", str((d.get("upstream") or {}).get("version") or ""))
+        resolved = resolve(current, version)
+        if resolved is None:
+            raise ValueError("the definition no longer has the version this proof ran on")
+        work = {"offers": resolved.get("offers") or [], "proven": resolved.get("proven") or {}}
+        if change is not None:
+            change(work)
         else:
-            clean = {k: v for k, v in d.items() if not k.startswith("_")}
-        ondisk.write_whole(path, json.dumps(clean, indent=2) + "\n")
+            work = {"offers": d.get("offers") or [], "proven": d.get("proven") or {}}
+        evidence = proofs.document(current, d["_kind"])
+        fields = ("proven",) if d["_kind"] == "benchmark" or "versions" in current else proofs.FIELDS
+        evidence["versions"][version] = {f: work[f] for f in fields}
+        proofs.validate(evidence, current, d["_kind"])
+        proofs.write(d["_here"], evidence)
+        d["proven"] = work["proven"]
+        if d["_kind"] != "benchmark":
+            d["offers"] = ([p for p in ports.PORTS if p in d["proven"]]
+                           if "versions" in current else work["offers"])

@@ -134,13 +134,15 @@ window.NulliusTable = {
     const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
     // a modal over the page (the first-visit guide) takes the focus and the clicks without closing the menu under it
     const away = to => !menu.contains(to) && !btn.contains(to) && !to.closest?.('[aria-modal="true"]');
+    let flipped = false;
     btn.addEventListener('click', () => {
       const open = menu.hidden;
       menu.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
-      // one that opens leftwards past the page's edge (a narrow screen) opens rightwards instead
-      menu.style.left = menu.style.right = '';
-      if (open && menu.getBoundingClientRect().left < 0) Object.assign(menu.style, {left: '0', right: 'auto'});
+      // one that opens leftwards past the page's edge (a narrow screen) opens rightwards instead;
+      // only that flip is undone, so a position its caller set is kept
+      if (flipped) { menu.style.left = menu.style.right = ''; flipped = false; }
+      if (open && menu.getBoundingClientRect().left < 0) { Object.assign(menu.style, {left: '0', right: 'auto'}); flipped = true; }
       if (open) menu.querySelector('input:not(:disabled), button, a[href]')?.focus();
     });
     document.addEventListener('click', e => { if (!menu.hidden && away(e.target)) close(); });
@@ -153,17 +155,22 @@ window.NulliusTable = {
   /* A controls row's search box and filters (the controls macro), under
      `tools`; each optional. Search keeps the rows (or cards) whose
      data-search holds every word of the query, in any order and case;
-     Escape clears it. A column narrows when it does not show every value;
+     its clear button, shown while it holds text, or Escape empties it as
+     typing would and leaves the focus in it. A column narrows when it does not show every value;
      the Filter button or a dropdown holding such a column is marked
      .narrowed and counts: the Filter button the columns it narrows, a
      dropdown the values chosen (after None, 0), or the one chosen by name. Clear filters clears every
      column. `changed` runs after any of them. Returns passes(row). */
   narrow(tools, changed) {
     const [fbtn, fmenu] = [tools.querySelector('[data-tools-btn="filter"]'), tools.querySelector('[data-tools="filter"]')];
-    const q = tools.querySelector('[data-search]');
+    const q = tools.querySelector('[data-search]'), x = tools.querySelector('[data-search-clear]');
+    const shown = () => { if (x) x.hidden = !q.value; };
+    const clear = () => { q.value = ''; q.dispatchEvent(new Event('input', {bubbles: true})); q.focus(); };
     if (q) {
-      q.addEventListener('input', changed);
-      q.addEventListener('keydown', e => { if (e.key === 'Escape' && q.value) { e.preventDefault(); q.value = ''; changed(); } });
+      q.addEventListener('input', () => { shown(); changed(); });
+      q.addEventListener('keydown', e => { if (e.key === 'Escape' && q.value) { e.preventDefault(); clear(); } });
+      x?.addEventListener('click', clear);
+      shown();   // a value the browser restored
     }
     const found = row => !q || this.matches(row.dataset.search, q.value);
     const menus = [...(fmenu ? [[fbtn, fmenu, () => 1]] : []),
@@ -176,7 +183,7 @@ window.NulliusTable = {
       count.textContent = sets.length === 1 ? n(sets[0]) : sets.length ? sets.reduce((sum, set) => sum + n(set), 0) : '';
       count.hidden = !sets.length;
     });
-    const narrowed = () => { mark(); changed(); };
+    const narrowed = () => { mark(); if (q) shown(); changed(); };   // a page that empties the box itself, then filters
     const f = this.filters(tools, narrowed);
     mark();
     menus.forEach(([btn, menu]) => this.menu(btn, menu));
@@ -187,6 +194,11 @@ window.NulliusTable = {
   /* A table's controls row: narrow's search and Filter, and the Sort by
      menu, which sets the sort and follows a header click. Returns
      {passes, resort}, as narrow and sortable do. */
+  /* Sort by's icon, when it has one, says the direction of the sort on, or none. */
+  sortIcon(btn, on, dir) {
+    btn?.querySelector('use')?.setAttribute('href', on ? (dir > 0 ? '#i-sort-asc' : '#i-sort-desc') : '#i-sort');
+  },
+
   toolbar(table, tools, changed) {
     const passes = this.narrow(tools, changed);
     const [sbtn, smenu] = [tools.querySelector('[data-tools-btn="sort"]'), tools.querySelector('[data-tools="sort"]')];
@@ -196,6 +208,7 @@ window.NulliusTable = {
       const {col, dir} = resort.state(), on = col === null ? '' : heads[col].dataset.col;
       smenu.querySelectorAll('[data-sort-col]').forEach(r => { r.checked = r.value === on; });
       smenu.querySelectorAll('[data-sort-dir]').forEach(r => { r.checked = Boolean(on) && r.value === (dir > 0 ? 'asc' : 'desc'); r.disabled = !on; });
+      this.sortIcon(sbtn, on, dir);
     };
     const resort = this.sortable(table, () => { sync(); changed(); });
     if (smenu) {
@@ -274,6 +287,7 @@ window.NulliusTable = {
         const c = smenu.querySelector('[data-sort-col]:checked'), on = c.value, num = c.dataset.type === 'num';
         const dir = e?.target.matches('[data-sort-dir]') ? (e.target.value === 'asc' ? 1 : -1) : (num ? -1 : 1);
         dirs.forEach(r => { r.checked = Boolean(on) && r.value === (dir > 0 ? 'asc' : 'desc'); r.disabled = !on; });
+        this.sortIcon(sbtn, on, dir);
         const key = card => { const raw = card.getAttribute('data-s-' + on) ?? ''; return num ? parseFloat(raw) || 0 : raw.toLowerCase(); };
         (on ? [...items].sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; }) : items).forEach(c => c.parentNode.appendChild(c));
       };

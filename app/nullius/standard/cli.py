@@ -33,12 +33,12 @@ pairs fit; ``check`` checks the
 definitions (or one file); ``new`` writes a definition to fill in, or a new
 version of an agent or a capability (``new version``: the default's pins, with
 the version replaced, and nothing proven); ``fit`` says, for one benchmark, what can run it and
-why the rest cannot; ``conform`` runs the kits and writes what passed into the
-definition - the port, and each skill of its kit shown or not (``--attempts K``:
+why the rest cannot; ``conform`` runs the kits and writes what passed into
+``proofs.json`` - the port, and each skill of its kit shown or not (``--attempts K``:
 each check K times, held by a majority); ``run`` runs a benchmark into a job under ``--jobs`` (``jobs_standard/``);
 ``fidelity`` drives an agent over
 ACP and through its own command, compares the requests its model was sent, and
-writes the verdict into the definition (``standard/proofs/fidelity.py``). ``--shard I/N`` runs one
+writes the verdict into ``proofs.json`` (``standard/proofs/fidelity.py``). ``--shard I/N`` runs one
 shard of the dataset's units (``standard/runner/shard.py``: by the unit id's hash, then
 ``--limit``), the job recording its shard and its launch (``--launch``); ``--units FILE``
 runs only the units a file lists (``run.units_file``: one id a line), read on
@@ -82,7 +82,7 @@ if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
     settings.load(paths.settings_file())
 
 from nullius.standard.backends import boat
-from nullius.standard.contract import definitions, match, ports
+from nullius.standard.contract import definitions, match, ports, proofs
 from nullius.standard.proofs import conform, fidelity, pins, prove
 from nullius.standard.runner import job, merge, run, shard
 
@@ -237,7 +237,11 @@ def cmd_check(a):
         if not kind:
             print(f"schema: one of {[v['schema'] for v in definitions.KINDS.values()]}")
             return 1
-        bad = definitions.problems(dict(d, _here=os.path.dirname(os.path.abspath(a.path))), kind)
+        try:
+            d = definitions.read_document(a.path, kind)
+            bad = definitions.problems(dict(d, _here=os.path.dirname(os.path.abspath(a.path))), kind)
+        except (OSError, ValueError) as e:
+            bad = [str(e)]
     else:
         got, bad = _all()
         for k in definitions.kits():
@@ -321,13 +325,12 @@ for line in sys.stdin:
             "install": {"npm": ["PACKAGE@VERSION"]},
             "start": {"acp": ["{install}/node_modules/.bin/PROGRAM"]},
             "model": {"apis": ["chat"], "env": {"OPENAI_BASE_URL": "{base_url}", "OPENAI_API_KEY": "{key}", "MODEL": "{model}"}},
-            "offers": [], "proven": {},
         },
     },
     "capability": {
         "capability.json": {
             "schema": "nullius.capability/v1", "key": "<KEY>", "label": "<KEY>", "summary": "SAY WHAT THE CAPABILITY KEEPS AND WHAT IT GIVES BACK.",
-            "kind": "memory", "start": {"command": ["python3", "{here}/capability.py"]}, "offers": [], "proven": {},
+            "kind": "memory", "start": {"command": ["python3", "{here}/capability.py"]},
         },
         "capability.py": '''"""{key}: cap.memory/v1 in JSON lines.
 
@@ -365,7 +368,8 @@ def new_version(key: str, version: str) -> str:
     """Add ``version`` to an agent's or a capability's file: a copy of its default
     version's block with the old version replaced in its pins, nothing proven.
     A file without ``versions`` is turned into one first, its one version kept
-    as it was, proofs included. Returns the file's path."""
+    as it was. Existing evidence stays in ``proofs.json``; the new version has
+    none. Returns the definition's path."""
     if not definitions._KEY.match(key):
         sys.exit(f"no agent, capability or benchmark {key!r}")
     kind = next((k for k in ("agent", "capability", "benchmark")
@@ -375,29 +379,39 @@ def new_version(key: str, version: str) -> str:
         sys.exit(f"no agent, capability or benchmark {key!r}")
     if not definitions._VERSION.match(version):
         sys.exit("a version is letters, digits and . + _ -")
-    path = definitions.definition_path(definitions.entry_dir(kind, key), kind)
-    with open(path) as f:
-        d = definitions.names.definition(json.load(f))
-    if "versions" not in d:
-        up = dict(d.get("upstream") or {})
-        old = str(up.pop("version", "") or "")
-        if not old:
-            sys.exit(f"{path}: upstream.version is not set, so its one version has no name")
-        # a benchmark's version holds only its proofs at first: what differs in the new one is the user's to say
-        block = {"proven": d.pop("proven", {})} if kind == "benchmark" else {"install": d.pop("install", {}), "proven": d.pop("proven", {})}
-        d.pop("offers", None)
-        d["upstream"] = up
-        d["default"], d["versions"] = old, {old: block}
-    if version in d["versions"]:
-        sys.exit(f"{key} has a version {version} already")
-    old = d["default"]
-    base = d["versions"][old]
-    copy = json.loads(json.dumps({k: v for k, v in base.items() if k != "proven"}).replace(old, version))
-    d["versions"] = {version: dict(copy, proven={}), **d["versions"]}
-    path = os.path.join(definitions.writable_dir(kind, key), definitions.KINDS[kind]["file"])
-    with open(path, "w") as f:
-        json.dump(d, f, indent=2)
-        f.write("\n")
+    source = definitions.definition_path(definitions.entry_dir(kind, key), kind)
+
+    def check(d):
+        if "versions" not in d and not (d.get("upstream") or {}).get("version"):
+            sys.exit(f"{source}: upstream.version is not set, so its one version has no name")
+        if version in definitions.versions(d):
+            sys.exit(f"{key} has a version {version} already")
+
+    check(definitions.read_document(source, kind))
+    folder = definitions.writable_dir(kind, key)
+    path = definitions.definition_path(folder, kind)
+    with definitions._locked(path):
+        d = definitions.read_document(path, kind)
+        check(d)
+        evidence = proofs.document(d, kind)
+        d = proofs.strip(d)
+        if "versions" not in d:
+            up = dict(d.get("upstream") or {})
+            old = str(up.pop("version"))
+            # A benchmark shares its execution settings until an author says what differs.
+            block = {} if kind == "benchmark" else {"install": d.pop("install", {})}
+            d["upstream"] = up
+            d["default"], d["versions"] = old, {old: block}
+        old = d["default"]
+        copy = json.loads(json.dumps(d["versions"][old]).replace(old, version))
+        d["versions"] = {version: copy, **d["versions"]}
+        # Old-version evidence is valid for both manifests; publish it first so
+        # interruption cannot discard proofs while stripping their legacy fields.
+        proofs.write(folder, evidence)
+        with open(path + ".part", "w") as f:
+            json.dump(d, f, indent=2)
+            f.write("\n")
+        os.replace(path + ".part", path)
     print(f"wrote {path}: {key}@{version} beside {', '.join(v for v in d['versions'] if v != version)} (default still {old})")
     if kind == "benchmark":
         print(f"next: say what differs in it (upstream, datasets, driver, score, limits, controls, environments), then: "

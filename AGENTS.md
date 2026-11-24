@@ -39,12 +39,12 @@ and its resources.
   workspace and its jobs, path resolution, the catalogue cache, the query
   helpers, the form-token guard), `filters` (template filters, page context),
   then `runs`, `traces`, `compare`, `builder`, `catalogue`, `agents`,
-  `settings`, `workspaces`, `execute`, `judge`, `feasibility`, `reconcile`, `judge_tasks`, `onboarding` (`agents` is the Agents
+  `settings`, `workspaces`, `execute`, `judge`, `feasibility`, `reconcile`, `judge_tasks`, `onboarding`, `failure` (`agents` is the Agents
   and Capabilities tabs and conformance Kits catalogue). Cross-module names are reached as
   attributes (`shared.STATE`, `traces._trial_evidence`): patch one, patched for all.
 - `app/nullius/` — its backend, one package per purpose: `runs/` (reading one
   Harbor job tree: `parse`, `classify`, `live`, `artifacts`,
-  `feasibility`, `launches`, `verifier` - a verifier's report read by its
+  `feasibility`, `failure_analysis` - a job's failure labels and task flags, beside its result.json, written by `flags_cli` too -, `launches`, `verifier` - a verifier's report read by its
   benchmark's report block - `attempts`, a task's attempts in one job with
   their pass count and pass@k, and the `cli`), `traces/` (`trace`, the reader, with its span tree `spans`,
   `fold`, time accounting `breakdown` and layout `waterfall`; `trajectory`,
@@ -61,7 +61,7 @@ and its resources.
   `feed`: the live feed any Harbor writes, from its own trial hooks),
   `importers/` (`atif` ATIF, `otel` OpenTelemetry, and the `cli`), `judge/` (`questions`, `state`, `client`, `store`, `batch`, `reconcile`, `lanes`),
   `standard/` (the Nullius standard, `docs/standard.md`, one folder per purpose, importing one way: `test_layering.StandardFolders`;
-  `contract/`: `ports`, `names` (capability vocabulary and legacy aliases), `definitions` (with an agent's or capability's versions), `match`;
+  `contract/`: `ports`, `names` (capability vocabulary and legacy aliases), `definitions` (with an agent's or capability's versions), `proofs` (generated evidence in sibling `proofs.json`), `match`;
   `requirements/`: `install`, `hostreq` (what a benchmark's options need of the machine its driver runs on: the check and the install), `network_requirements` (an environment's declared public web access: the connectivity check before any unit);
   `protocols/`: `jsonl`, `acp`, `cancellation` (interruptible protocol waits), `computer_port` and `computer_pipe` (the computer port's MCP server, served by a desktop benchmark's runner over the benchmark's own loop, and the session's stdio pipe to it);
   `calls/`: `relay`, `ledger` (a run's spending cap);
@@ -79,7 +79,7 @@ and its resources.
   GitLab: made once on the run's machine with its token, its tasks' lock, the stack's command line), `proxy` (a
   tinyproxy of a unit's own for the tasks that ask for a proxy) and, in `startup/`,
   `sitecustomize`: its VMs' disk write limit in every process its driver starts), `catalogue/agents/<key>/`
-  (the reference `agent`; DigitalMate's `run` and `gateway` (product startup and task submission);
+  (the reference `agent`; DigitalMate's `run`, `gateway` and `acp` (product startup, task submission, and its fixed version's ACP sessions);
   JiuwenSwarm's `agent`, mini-swe-agent's `run` and SWE-agent's `run`, the wrappers that start them) and `catalogue/capabilities/<key>/` (the keyword-memory `capability`); `workspace` (and
   `workspace_cli`, its shell command),
   `cli` and `__main__` (the unified `nullius` and `python -m nullius` commands),
@@ -114,6 +114,9 @@ and its resources.
 Benchmark integrations expose one current entry with supported behavior as options.
 Internal driver changes do not create selectable versions. Reserve benchmark versions
 for explicit upstream releases or requested forks; retain only applicable proofs.
+Authored definitions contain configuration; generated evidence belongs in the entry's
+`proofs.json`. Proof runs leave definition files untouched. Read through
+`definitions` to combine the two; do not infer proven ports from raw definition JSON.
 
 ### Installation and user storage
 
@@ -272,6 +275,20 @@ reader chooses, does or concludes.
 - A table cell is a line, not a paragraph. One fact lives on one page; others link.
 - A prerequisite Review already checks is not repeated.
 - `docs/standard.md` headings are never renamed: the import skills cite them.
+
+### Test design
+
+- Test observable behavior, contracts and meaningful failure modes—not incidental
+  wording, internal structure or current catalogue contents.
+- Before adding a test, inspect nearby coverage. Extend an existing case or use
+  subtests when the fixture and behavior are shared.
+- Add a separate test when it protects a distinct regression or needs a different
+  setup. A past bug alone does not require a separate test.
+- Assert exact text only when that text is a contract.
+- Before removing a test as redundant, identify the surviving assertions that
+  protect its behavior. Shared line coverage alone is insufficient.
+- Consolidation must preserve edge cases and fixture isolation. Fewer test methods
+  is not itself the goal.
 
 ### Attribution
 

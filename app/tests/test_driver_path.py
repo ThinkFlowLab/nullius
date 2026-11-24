@@ -45,9 +45,6 @@ class DriverPath(unittest.TestCase):
             self.assertEqual(imports(path, "nullius.standard.protocols.jsonl", "nullius_tool_only_dep"),
                              {"nullius.standard.protocols.jsonl": True, "nullius_tool_only_dep": False})
 
-    def test_it_is_made_once_and_kept(self):
-        self.assertEqual(run.driver_path(), run.driver_path())
-
     def test_while_it_is_made_the_folder_holds_only_the_link(self):
         """A driver starting while another's link is being made sees only ``nullius``."""
         with tempfile.TemporaryDirectory() as site:

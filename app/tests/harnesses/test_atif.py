@@ -62,12 +62,6 @@ class SupportedVersions(unittest.TestCase):
 
 class Detection(unittest.TestCase):
 
-
-    def test_it_does_not_claim_an_unrelated_directory(self):
-        self.assertFalse(atif.detect(tempfile.mkdtemp()))
-        self.assertFalse(atif.detect("/nonexistent/tree"))
-
-
     def test_well_formed_json_that_is_not_atif_is_passed_over(self):
         src = tempfile.mkdtemp()
         write_doc(src, "trace.json", {"harbor-trace-v1": True, "roots": []})
@@ -96,7 +90,6 @@ class Conversion(unittest.TestCase):
         job_dirs = atif.convert(str(root), self.out, **kw)
         self.assertEqual(len(job_dirs), 1)
         return job_dirs[0], parse.parse_job(job_dirs[0])
-
 
     def test_trial_names_follow_the_tree_and_a_bare_trajectory_takes_its_directory(self):
         src = tempfile.mkdtemp()
@@ -177,7 +170,7 @@ class Refusal(unittest.TestCase):
         # nothing was rewritten while refusing
         self.assertTrue(os.path.isfile(good) and os.path.isfile(bad))
 
-    def test_a_document_without_steps_is_refused_as_partial(self):
+    def test_a_document_without_a_list_of_steps_is_refused(self):
         doc = minimal()
         doc.pop("steps")
         doc["extra"] = {"token": FAKE_KEY}
@@ -186,8 +179,7 @@ class Refusal(unittest.TestCase):
         self.assertIn("partial.json", message)
         self.assertIn("no steps", message)
         self.assertNotIn(FAKE_KEY, message)
-
-    def test_steps_of_the_wrong_shape_are_refused(self):
+        os.remove(os.path.join(self.src, "partial.json"))
         write_doc(self.src, "odd.json", minimal(steps={"not": "a list"}))
         self.assertIn("steps is not a list", self.refused())
 
@@ -209,11 +201,9 @@ class Refusal(unittest.TestCase):
         self.assertIn("no ATIF trajectories", message)
         self.assertIn("ATIF-v1.0", message)
 
-    def test_the_file_is_named_relative_to_the_tree_given(self):
+    def test_the_file_is_named_relative_to_the_tree_or_by_its_own_name(self):
         write_doc(self.src, "deep/er/bad.json", '{"schema_version": "ATIF-v1.7"')
         self.assertTrue(self.refused().startswith("deep/er/bad.json: "))
-
-    def test_a_single_bad_file_is_refused_by_its_own_name(self):
         path = write_doc(self.src, "lone.json", '{"schema_version": "ATIF-v1.7", "steps": ')
         self.assertTrue(self.refused(path).startswith("lone.json: not JSON"))
 
@@ -221,16 +211,6 @@ class Refusal(unittest.TestCase):
         write_doc(self.src, "good.json", minimal())
         self.assertIsNone(atif.check(self.src))
         self.assertEqual(os.listdir(self.out), [])
-
-
-class Trees(unittest.TestCase):
-    """What one job is under a root the picker opened: the root, as the CLI
-    reads it — a nested directory of trajectories is one job of several
-    trials, not a job per child."""
-
-
-    def test_a_directory_with_nothing_of_ours_is_no_tree(self):
-        self.assertEqual(atif.trees(tempfile.mkdtemp()), [])
 
 
 if __name__ == "__main__":

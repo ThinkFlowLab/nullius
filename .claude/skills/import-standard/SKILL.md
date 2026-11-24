@@ -148,7 +148,9 @@ never a second key. Preserve both routes when it already runs through Harbor.
   Propose it as a new port with a kit (`app/nullius/standard/contract/ports.py` and
   `standard/kits/<name>/`), worded for every benchmark of its kind; never
   shape it after the one at hand. Ask before adding it. This is a source contribution.
-- **An agent or a capability never writes `offers` by hand.** `cli conform` does.
+- **Never write `offers` or `proven` by hand.** `cli conform`, `cli prove` and
+  `cli fidelity` keep generated evidence in each entry's `proofs.json`, per
+  version, without rewriting its definition. Never copy another entry's proofs.
 
 ## 3. Build
 

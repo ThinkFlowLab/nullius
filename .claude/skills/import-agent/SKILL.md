@@ -166,7 +166,8 @@ contents):
 - `summary`, the agent's and each option's: one short sentence (a tooltip).
 - `fidelity.command`: its own non-interactive command, carrying `{prompt}`,
   when it has a CLI.
-- Leave `offers` and `proven` empty: `cli conform` writes them.
+- Omit `offers` and `proven`: `cli conform` writes the generated evidence in
+  `proofs.json`, beside the definition. Never copy another entry's proof file.
 
 Then `cli check` - no problems.
 

@@ -57,7 +57,7 @@ your existing `settings.json` ([location and precedence](README.md#save)).
 
 ## Request a judgement
 
-A trial's or a job's Decision model tab.
+A trial's Decision model judge tab, or a job's Decision model button.
 
 !!! warning "A judgement is a paid call"
     Configuration alone calls nothing; a batch button says how many calls it will make.

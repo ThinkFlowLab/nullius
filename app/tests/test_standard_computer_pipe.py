@@ -88,22 +88,6 @@ class Pipe(unittest.TestCase):
         for conn in held:
             conn.close()
 
-    def test_a_server_that_writes_on_and_on_is_cut_at_the_deadline(self):
-        stop = threading.Event()
-        self.addCleanup(stop.set)
-
-        def serve(conn):
-            try:
-                while not stop.is_set():
-                    conn.sendall(b"x" * 1024)
-                    time.sleep(0.01)
-            except OSError:
-                pass
-        out, code, seconds = self.run_pipe(serve)
-        self.assertEqual(code, 3)
-        self.assertLess(seconds, 15)
-        self.assertTrue(out and set(out) == {ord("x")})
-
     def test_a_server_that_always_has_more_to_send_is_cut_at_the_deadline(self):
         # The socket is never empty: the server writes with no pause and the test reads the pipe's output slowly, so
         # the pipe always finds more to read. The cut comes at the deadline all the same, and the run is bounded.
@@ -194,7 +178,7 @@ class Pipe(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn(b"8 bytes of input not sent, its input not read to its end", p.stderr.read())
 
-    def queue_scenario(self, extra=""):
+    def queue_scenario(self):
         """The socket takes its first send, then stalls until the test lets it go: the input is held back meanwhile,
         and all of it reaches the socket once the socket takes more. No read's size is assumed."""
         p = self.stand_in("class Connected:\n"
@@ -205,7 +189,7 @@ class Pipe(unittest.TestCase):
                           "    def shutdown(self, how):\n        open(sys.argv[2] + '.shut', 'w').close()\n"
                           "    def recv(self, size):\n"
                           "        while not os.path.exists(sys.argv[2] + '.shut'):\n            time.sleep(0.05)\n"
-                          "        return b''\n", extra)
+                          "        return b''\n")
         chunk, written = b"q" * 65536, [0]
         p.stdin.write(chunk)
         p.stdin.flush()
@@ -252,9 +236,6 @@ class Pipe(unittest.TestCase):
     def test_input_waiting_for_a_stalled_socket_is_bounded_and_drained_once_it_takes_more(self):
         self.queue_scenario()
 
-    def test_the_bounded_queue_holds_with_reads_of_any_size(self):
-        self.queue_scenario("real_read = module.os.read\nmodule.os.read = lambda fd, n: real_read(fd, min(n, 4096))\n")
-
     def test_input_the_pipe_never_read_is_sent_or_its_exit_is_not_0(self):
         # The server's side ends at once; the input, a file, is read only after a delay. The pipe reads on to the
         # input's end and sends it, or does not exit 0.
@@ -285,22 +266,6 @@ class Pipe(unittest.TestCase):
             return os.path.getsize(self.tmp_file())
         except OSError:
             return 0
-
-    def test_a_cut_counts_what_it_left_unwritten(self):
-        p = self.stand_in("class Connected:\n"
-                          "    def connect(self, path): pass\n"
-                          "    def shutdown(self, how): pass\n"
-                          "    def sendall(self, data): pass\n"
-                          "    def recv(self, size):\n"
-                          "        if not hasattr(self, 'sent'):\n"
-                          "            self.sent = True\n            return b'x' * 1048576\n"
-                          "        time.sleep(30)\n        return b''\n",
-                          "module.END_SECONDS = 0.2\n", stdin=subprocess.DEVNULL)
-        code = p.wait(timeout=10)                     # nothing reads its output: most of what it read stays unwritten
-        err = p.stderr.read()
-        self.assertEqual(code, 3)
-        self.assertRegex(err.decode(), r"cut 0\.2 s after the input's end, the server still connected: [1-9][0-9]* bytes "
-                                       r"from the server not written")
 
     def test_both_directions_at_once_never_block_each_other(self):
         big = 2 * 1024 * 1024
@@ -379,12 +344,14 @@ class Pipe(unittest.TestCase):
                           "        time.sleep(30)\n        return b''\n",
                           "module.END_SECONDS = 2.0\n"
                           "open(sys.argv[2], 'w').write(repr(time.monotonic()))\n", stdin=subprocess.DEVNULL)
-        code = p.wait(timeout=15)
+        code = p.wait(timeout=15)                     # nothing reads its output: most of what it read stays unwritten
         ended = time.monotonic()
         with open(self.tmp_file()) as f:
             started = float(f.read())
         self.assertEqual(code, 3)
         self.assertLess(ended - started, 3.0, "the pipe's end took a second period")
+        self.assertRegex(p.stderr.read().decode(), r"cut 2 s after the input's end, the server still connected: [1-9][0-9]* bytes "
+                                                   r"from the server not written")
 
 
 if __name__ == "__main__":

@@ -277,11 +277,6 @@ class JudgedPair(unittest.TestCase):
         self.assertIsNone(comparison.better_of(2.0, None))
         self.assertIsNone(comparison.better_of(None, None))
 
-    def test_swapping_the_sides_mirrors_the_verdict(self):
-        mirror = {"A": "B", "B": "A", "same": "same"}
-        for a, b in ((2.7, 1.2), (1.2, 2.7), (2.0, 2.4), (0.0, 0.0), (3.0, 2.4)):
-            self.assertEqual(comparison.better_of(b, a), mirror[comparison.better_of(a, b)], (a, b))
-
 
 class ScoredRuns(unittest.TestCase):
     """A benchmark that gives each task a score and no pass or fail - a

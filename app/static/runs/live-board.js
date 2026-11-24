@@ -256,7 +256,7 @@
       : t.state === 'running' ? `${PHASE_LABEL[t.phase] || t.phase}, ${clock(t.elapsed_sec)} of ${t.timeout_sec ? clock(t.timeout_sec) : 'no limit'}`
       : stateOf(s) === 'finished' ? 'Not run' : `Queued${t.position != null ? ', position ' + (t.position + 1) : ''}`;
     const href = trialHref(t, opts);
-    return `<header><h3>${esc(shortTask(t))}<small>${esc(state)}${t.agent ? ' · ' + esc(t.agent) : ''}</small></h3><button class="lb-x" type="button" data-close aria-label="Close trial detail">×</button></header>
+    return `<header><h3>${esc(shortTask(t))}<small>${esc(state)}${t.agent ? ' · ' + esc(t.agent) : ''}</small></h3><button class="lb-x" type="button" data-close aria-label="Close trial detail"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></header>
       <div class="lb-river"><div class="lb-rl"><span>${t0 == null ? 'not started' : hms(starts[keys[0]])}</span><span>${tl.ended ? 'ended ' + hms(tl.ended) : limEnd ? 'limit ' + clock(limEnd - t0) + ' in' : ''}</span></div>
         <div class="lb-track">${segs}</div><div class="lb-pl">${phases}</div></div>
       ${t.state !== 'running' && (t.activity || t.last_line) ? `<p class="lb-last"><span>Last line, redacted</span>${redacted(t.activity || t.last_line)}</p>` : ''}
@@ -307,8 +307,20 @@
     let snap = null, timer = null, misses = 0;
     // opened while the run was going: the Results rendered with the page are older than its end
     const startedLive = board.dataset.state !== 'finished';
+    let waiting = board.dataset.state === 'unknown';
     function paint() {
-      if (!snap) return;
+      if (!snap || stateOf(snap) === 'unknown') return;
+      if (waiting) {
+        waiting = false;
+        doc.getElementById('preparing')?.remove();
+        const liveTab = doc.getElementById('tab-live');
+        if (liveTab) liveTab.disabled = false;
+        const resultsTab = doc.getElementById('tab-results');
+        if (resultsTab) resultsTab.disabled = false;
+        const dot = doc.getElementById('live-dot');
+        if (dot) dot.classList.toggle('on', stateOf(snap) !== 'finished');
+        doc.dispatchEvent(new Event('live-ready'));
+      }
       const out = render(snap, opts);
       board.dataset.state = out.state;
       $('[data-lb-state]').textContent = out.stateLabel;
@@ -338,8 +350,18 @@
     async function tick() {
       try {
         const r = await nulliusFetch(endpoint, {headers: {'Accept': 'application/json'}, cache: 'no-store'});
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        misses = 0; snap = await r.json();
+        if (!r.ok) {
+          if (waiting && doc.getElementById('execution')?.dataset.live === 'no') { clearInterval(timer); timer = null; }
+          throw new Error('HTTP ' + r.status);
+        }
+        const next = await r.json();
+        if (waiting && (next.state === 'unknown' || !next.counts)) {
+          if (next.state === 'finished' || doc.getElementById('execution')?.dataset.live === 'no') {
+            clearInterval(timer); timer = null;
+          }
+          return;
+        }
+        misses = 0; snap = next;
       } catch (e) { misses += 1; }
       paint();
     }
@@ -360,7 +382,7 @@
     paint();
     if (!snap || stateOf(snap) !== 'finished') { timer = setInterval(tick, 1000); tick(); }
   }
-  // The two views of the job page: switched in place, kept in the address as ?view=.
+  // The views of the job page: switched in place, kept in the address as ?view=.
   function mountTabs(doc) {
     const tabs = Array.from(doc.querySelectorAll('[data-view-tab]'));
     if (!tabs.length) return;
@@ -376,11 +398,14 @@
       if (view === 'results' && badge && badge.dataset.stale) { location.assign(u); return; }
       history.replaceState(null, '', u);
     }
-    tabs.forEach((t, i) => {
+    doc.addEventListener('live-ready', () => {
+      if (!new URL(location.href).searchParams.has('view')) show('live');
+    });
+    tabs.forEach(t => {
       t.addEventListener('click', () => show(t.dataset.viewTab));
       t.addEventListener('keydown', e => {
         const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-        if (d) { e.preventDefault(); const n = tabs[(i + d + tabs.length) % tabs.length]; n.focus(); show(n.dataset.viewTab); }
+        if (d) { e.preventDefault(); const enabled = tabs.filter(t => !t.disabled); const i = enabled.indexOf(t); const n = enabled[(i + d + enabled.length) % enabled.length]; n.focus(); show(n.dataset.viewTab); }
       });
     });
   }

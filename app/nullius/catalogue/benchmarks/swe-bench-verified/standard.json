@@ -62,39 +62,5 @@
   },
   "limits": {
     "turn_seconds": 1800
-  },
-  "proven": {
-    "verified": {
-      "units": {
-        "units": 500,
-        "passed": "500 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 2,
-        "looked_for": 0,
-        "short": 0,
-        "passed": "2/2",
-        "note": "2 unit(s) whose oracle gave nothing to look for",
-        "limit": 2
-      },
-      "nop": {
-        "passed": "0/2",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 2,
-        "limit": 2
-      },
-      "oracle": {
-        "passed": "2/2",
-        "value": 1.0,
-        "expect": {
-          "at_least": 1.0
-        },
-        "units": 2,
-        "limit": 2
-      }
-    }
   }
 }

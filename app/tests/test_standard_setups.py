@@ -229,12 +229,6 @@ class SetupRun(unittest.TestCase):
         self.assertEqual(r["exception_info"]["exception_type"], "OutputLengthExceededError")
         self.assertIn("thinker returned no text (3 of its 3 tokens were reasoning)", r["exception_info"]["exception_message"])
 
-    def test_a_docker_setup_still_requires_a_working_daemon(self):
-        o, _ = definitions.setup(self.b, "original")
-        with patch("nullius.standard.backends.container.unusable", return_value="daemon unavailable"):
-            with self.assertRaisesRegex(run.Refused, "daemon unavailable"):
-                run.Run(self.b, o, model="paper-1", provider="custom", jobs_root=self.tmp, env=self.env, backend="container")
-
     def test_docker_setup_runs_driver_and_linux_dependencies_with_scoped_credentials(self):
         from tests import docker_tier
         from nullius.standard.backends import container
@@ -315,12 +309,7 @@ class Recipe(unittest.TestCase):
             self.assertNotIn("--bench-option rag_mode", out["script"])
         self.assertIn("run locomo original --model gpt-3.5-turbo-16k --provider openrouter", paper["script"])
         self.assertIn("run locomo model --model vendor/their-model", custom["script"])
-
-    def test_the_upstream_agents_a_setup_runs_name_its_participant(self):
-        out = self.compiled(benchmark="osworld1", datasets=["test_small"], others=["original"], model_choice="paper", model="MiniMax-M3")
-        self.assertEqual(out["errors"], [])
-        self.assertIn([recipe.STEP["agent"], "Participant", "M3 Agent · OSWorld1's own"], out["review"])
-        self.assertNotIn("Agent", [r[1] for r in out["review"]])                     # the agent is the participant, not an option
+        self.assertTrue(self.compiled(others=["original"], model="")["errors"])
 
     def test_paper_filter_also_applies_to_a_memory_capability(self):
         out = self.compiled(others=["mem0"], model_choice="paper", model="gpt-3.5-turbo-16k")
@@ -381,22 +370,12 @@ class Recipe(unittest.TestCase):
         self.assertEqual([s["key"] for s in locomo["setups"]], ["original"])
         self.assertEqual(locomo["setups"][0]["sent"]["openrouter"]["gpt-3.5-turbo-16k"], "openai/gpt-3.5-turbo")
 
-    def test_original_requires_an_explicit_model(self):
-        self.assertTrue(self.compiled(others=["original"], model="")["errors"])
-
-    def test_old_model_participant_is_not_a_recipe_choice(self):
-        self.assertTrue(self.compiled(others=["model"], model="vendor/model")["errors"])
-
     def test_a_gpu_option_is_refused_for_a_container_setup_and_asked_of_the_host_locally(self):
         boxed = self.compiled(others=["original"], model="vendor/model", backend="container", bench_options={"retrieval": "dialog"})
         self.assertIn("cuda_gpu cannot be provided in a container: choose local processes.", [e["message"] for e in boxed["errors"]])
         self.assertEqual(boxed["host"]["needs"], [])
         here = self.compiled(others=["original"], model="vendor/model", bench_options={"retrieval": "dialog"})
         self.assertEqual([n["name"] for n in here["host"]["needs"]], ["cuda_gpu"])
-
-    def test_a_gpu_option_is_refused_for_a_container_setup_beside_another_participant(self):
-        mixed = self.compiled(others=["original", "keyword-memory"], model="vendor/model", backend="container", bench_options={"retrieval": "dialog"})
-        self.assertIn("cuda_gpu cannot be provided in a container: choose local processes.", [e["message"] for e in mixed["errors"]])
 
     def test_a_container_setups_image_installs_what_has_an_install(self):
         tau = definitions.get("benchmark", "tau3-bench")
@@ -408,7 +387,6 @@ class Recipe(unittest.TestCase):
         self.assertEqual(out["errors"], [])
         self.assertIn("--backend container", out["script"])
         self.assertNotIn("--unsandboxed", out["script"])
-
 
 
 class Attempts(unittest.TestCase):

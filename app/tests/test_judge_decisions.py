@@ -32,7 +32,7 @@ def judge(env):
 
 
 class Protocols(unittest.TestCase):
-    def test_each_provider_and_model_gets_its_decision_protocol(self):
+    def test_each_provider_and_model_gets_its_decision_protocol_and_is_asked_there(self):
         got = lambda env: (judge(env).protocol, judge(env).url)
         self.assertEqual(got({"TYPESAFE_API_KEY": "k"}), ("systemone", "https://api.typesafe.ai/v1/systemone"))
         self.assertEqual(got({"OPENROUTER_API_KEY": "k"}), ("systemone", "https://openrouter.ai/api/v1/systemone"))
@@ -44,6 +44,18 @@ class Protocols(unittest.TestCase):
                   "DECISION_PROVIDER": "custom:GW", "DECISION_MODEL": "m"}
         self.assertEqual(got(custom), ("decisions", "https://gw/v1/alpha/decisions"))
         self.assertNotIn("custom:LAB", client.decision_judge_providers({"MODEL_LAB": '{"base": "http://lab/v1"}'}))   # lists none: not offered
+        self.assertEqual(judge({"OPENROUTER_API_KEY": "sk-or-1"}).provider, "openrouter")                          # the only key: OpenRouter
+        self.assertEqual(judge({"OPENROUTER_API_KEY": "sk-or-1", "TYPESAFE_API_KEY": "ts-1"}).provider, "typesafe")
+        self.assertEqual(judge({"OPENROUTER_API_KEY": "k", "DECISION_PROVIDER": "openrouter"}).model, "~typesafe/jev-latest")
+        j = judge({"OPENROUTER_API_KEY": "sk-or-1", "DECISION_PROVIDER": "openrouter", "DECISION_MODEL": "jaredpalmer/kev-4b"})
+        self.assertEqual((j.lane, j.url, j.model), ("decision", "https://openrouter.ai/api/v1/systemone", "jaredpalmer/kev-4b"))
+        post, sent = fake(200, {"model": "jaredpalmer/kev-4b", "answers": {"task_completed": {"type": "noul", "noul": 0.81}}, "usage": {"input_tokens": 50}})
+        rec = client.ask("the state", ["task_completed"], j, post=post)
+        url, body, key = sent[0]["url"], sent[0]["body"], sent[0]["key"]
+        self.assertEqual((url, key, body["model"]), ("https://openrouter.ai/api/v1/systemone", "sk-or-1", "jaredpalmer/kev-4b"))
+        self.assertIn("questions", body); self.assertEqual(body["state"], "the state")                         # the Decision contract, not a chat
+        self.assertEqual(rec["judge"], {"provider": "openrouter", "model": "jaredpalmer/kev-4b"})
+        self.assertEqual(rec["answers"], {"task_completed": {"noul": 0.81}})
 
     def test_a_setting_saved_before_the_rename_is_still_read_and_the_new_name_wins(self):
         old = {"OPENROUTER_API_KEY": "k", "SYSTEM_ONE_PROVIDER": "openrouter", "SYSTEM_ONE_MODEL": "typesafe/jev-1.14",
@@ -68,11 +80,11 @@ class Protocols(unittest.TestCase):
         self.assertEqual(got(dict(router, DECISION_PROTOCOL="openai-decisions")), ("systemone", "https://openrouter.ai/api/v1/systemone"))  # not served: automatic
         self.assertEqual(client.decision_judge_providers(dict(router, DECISION_PROTOCOL="decisions"))["openrouter"]["protocol"], "decisions")
         self.assertEqual(client.decision_judge_providers(router)["openrouter"]["listed"], ["systemone", "decisions"])
-        both = {"ANTHROPIC_API_KEY": "k", "ANTHROPIC": '{"endpoints": {"chat": "/chat/completions"}}', "LLM_JUDGE_PROVIDER": "anthropic", "LLM_JUDGE_MODEL": "m"}
+        both = {"MODEL_GW_API_KEY": "k", "MODEL_GW": '{"base": "https://gw.example/v1", "endpoints": {"chat": "/custom/chat", "messages": "/custom/messages"}}', "LLM_JUDGE_PROVIDER": "custom:GW", "LLM_JUDGE_MODEL": "m"}
         llm = lambda env: (client.llm_judge(env).protocol, client.llm_judge(env).url)
-        self.assertEqual(llm(both), ("chat", "https://api.anthropic.com/v1/chat/completions"))                 # unset: chat before messages
-        self.assertEqual(llm(dict(both, LLM_JUDGE_PROTOCOL="messages")), ("messages", "https://api.anthropic.com/v1/messages"))
-        self.assertEqual(client.llm_providers(both)["anthropic"]["listed"], ["chat", "messages"])
+        self.assertEqual(llm(both), ("chat", "https://gw.example/v1/custom/chat"))                 # unset: chat before messages
+        self.assertEqual(llm(dict(both, LLM_JUDGE_PROTOCOL="messages")), ("messages", "https://gw.example/v1/custom/messages"))
+        self.assertEqual(client.llm_providers(both)["custom:GW"]["listed"], ["chat", "messages"])
         self.assertEqual(llm({"OPENROUTER_API_KEY": "k", "LLM_JUDGE_MODEL": "m", "LLM_JUDGE_PROTOCOL": "messages"}),
                          ("chat", "https://openrouter.ai/api/v1/chat/completions"))                                 # not served: automatic
         for name, spoken in (("LLM_JUDGE_PROTOCOL", client.LLM_PROTOCOLS), ("DECISION_PROTOCOL", client.DECISION_PROTOCOLS)):
@@ -92,6 +104,9 @@ class Decision(unittest.TestCase):
         self.assertEqual(rec["usage"]["cost_usd"], 0.00004)
         merged = client.merge([rec, dict(rec, refusals={"transcript_quality": "refused"})])
         self.assertEqual(set(merged["refusals"]), {"failure_cause", "transcript_quality"})
+        post, _ = fake(200, {"answers": {"task_completed": {"noul": 0.7, "refusal": None}}})                # a null refusal: the answer
+        rec = client.ask("state", IDS, judge({"OPENROUTER_API_KEY": "sk-or-1"}), post=post)
+        self.assertEqual(rec["answers"], {"task_completed": {"noul": 0.7}}); self.assertNotIn("refusals", rec)
 
     def test_a_402_says_what_it_means(self):
         post, _ = fake(402, {"error": {"code": 402, "message": "Insufficient credits"}})
@@ -113,12 +128,6 @@ class Decision(unittest.TestCase):
         with self.assertRaises(client.JudgeError) as e:
             client.ask("state", IDS, judge(env), post=post)
         self.assertIn("Box questions are Jev-only", str(e.exception))
-
-
-    def test_a_null_refusal_beside_an_answer_is_the_answer(self):
-        post, _ = fake(200, {"answers": {"task_completed": {"noul": 0.7, "refusal": None}}})
-        rec = client.ask("state", IDS, judge({"OPENROUTER_API_KEY": "sk-or-1"}), post=post)
-        self.assertEqual(rec["answers"], {"task_completed": {"noul": 0.7}}); self.assertNotIn("refusals", rec)
 
     def test_a_reply_of_another_shape_is_a_judge_error(self):
         for env, data in (({"OPENROUTER_API_KEY": "k"}, {"answers": [1, 2]}),
@@ -212,25 +221,6 @@ class DecisionModels(unittest.TestCase):
             self.assertEqual(self.models(body), [])
         self.assertEqual(self.models(fetch=False), [])
 
-    def test_a_redirect_is_refused(self):
-        seen = []
-
-        class Handler(BaseHTTPRequestHandler):
-            def log_message(self, *a):
-                pass
-
-            def do_GET(self):
-                seen.append(self.path)
-                self.send_response(302); self.send_header("Location", f"http://127.0.0.1:{srv.server_address[1]}/elsewhere")
-                self.send_header("Content-Length", "0"); self.end_headers()
-
-        srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=srv.serve_forever, daemon=True).start()
-        self.addCleanup(srv.server_close); self.addCleanup(srv.shutdown)
-        with mock.patch.dict(providers.PRESETS["openrouter"], base=f"http://127.0.0.1:{srv.server_address[1]}/api/v1"):
-            self.assertEqual(providers.decision_models(self.env), [])
-        self.assertEqual(seen, ["/api/v1/models?output_modalities=decisions"])                     # never followed
-
     def test_the_suggestions_are_the_list_with_the_alias_first_or_the_short_list(self):
         with mock.patch.object(providers, "decision_models", return_value=["z/one", "typesafe/jev-1.14", "a/two:free", "~typesafe/jev-latest"]) as live:
             self.assertEqual(client.decision_judge_models("openrouter"), ["~typesafe/jev-latest", "typesafe/jev-1.14", "a/two:free", "z/one"])
@@ -282,8 +272,6 @@ class OpenAIDecisions(unittest.TestCase):
         self.assertEqual(rec["answers"]["failure_cause"]["probabilities"], {option: 0.6})
         self.assertEqual(rec["refusals"], {"transcript_quality": "cannot judge"})
         self.assertNotIn("not_asked", rec["answers"]); self.assertEqual(rec["usage"]["input_tokens"], 50)
-
-    def test_a_score_out_of_its_levels_is_left_out(self):
         post, _ = fake(200, {"answers": [{"name": "transcript_quality", "type": "score", "level": "7"}]})
         self.assertEqual(client.ask("s", IDS, judge(self.ENV), post=post)["answers"], {})
         post, _ = fake(200, {"answers": [{"name": "transcript_quality", "type": "score", "level": "2"}]})

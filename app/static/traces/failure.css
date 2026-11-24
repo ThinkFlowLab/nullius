@@ -1,0 +1,10 @@
+/* the User judge tab: the trial's label and its task's flag, each a short form */
+.failure-analysis{display:grid;gap:1.4rem;max-width:46rem;padding:.4rem 0}
+.failure-analysis h3{font-size:.85rem;margin:0 0 .5rem;color:var(--text-dim);font-weight:500}
+.failure-analysis p{margin:.2rem 0}
+.fa-form{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.5rem}
+.fa-form input[type=text]{flex:1 1 14rem;min-width:0}
+.fa-choices{display:flex;flex-wrap:wrap;gap:.4rem;flex-basis:100%}
+.fa-choices .chip::before{display:none}
+.fa-choices .chip input{margin:0}
+.chip-pending{font-size:.72rem;color:var(--warn,var(--text-dim));border:1px solid currentColor;border-radius:99px;padding:.05rem .45rem}

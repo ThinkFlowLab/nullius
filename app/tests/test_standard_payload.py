@@ -16,6 +16,7 @@ from unittest.mock import patch
 from nullius import execution, paths
 from nullius.standard.requirements import install
 from nullius.standard.runner import payload
+from nullius.standard.contract import definitions, proofs
 
 
 class Snapshot(unittest.TestCase):
@@ -80,14 +81,40 @@ class Snapshot(unittest.TestCase):
         self.write(entry / "data-source.json", {"revision": "next-fixture-revision"})
         self.assertNotEqual(self.build()[0], key)
 
+    def test_separate_proofs_travel_for_each_catalogue_kind_and_kits(self):
+        entries = [(self.bench(self.catalogue), "benchmark", "catalogue/benchmarks/sample")]
+        for kind, group, filename in (("agent", "agents", "agent.json"),
+                                      ("capability", "capabilities", "capability.json")):
+            entry = self.catalogue / group / "sample"
+            self.write(entry / filename, {"key": "sample"})
+            entries.append((entry, kind, f"catalogue/{group}/sample"))
+        kit = self.package / "standard/kits/sample"
+        self.write(kit / "standard.json", {"key": "sample"})
+        entries.append((kit, "benchmark", "standard/kits/sample"))
+        for entry, kind, _ in entries:
+            self.write(entry / "proofs.json", {"schema": "nullius.proofs/v1", "kind": kind, "key": "sample",
+                                                "versions": {"": {"proven": {}}}})
+        key, here = self.build()
+        for entry, _, relative in entries:
+            copied = Path(here) / "app/nullius" / relative / "proofs.json"
+            self.assertEqual(copied.read_bytes(), (entry / "proofs.json").read_bytes())
+        changed = entries[0][0] / "proofs.json"
+        evidence = json.loads(changed.read_text())
+        evidence["versions"][""]["proven"] = {"main": {"units": {"passed": "1 id"}}}
+        self.write(changed, evidence)
+        self.assertNotEqual(self.build()[0], key)
+
     def test_effective_user_entry_replaces_the_whole_bundled_folder(self):
         bundled = self.bench(self.package / "catalogue")
         self.write(bundled / "obsolete.py", "# never part of the override\n")
+        self.write(bundled / "proofs.json", {"schema": "nullius.proofs/v1", "kind": "benchmark", "key": "sample",
+                                             "versions": {"": {"proven": {"main": {"units": {"passed": "1 id"}}}}}})
         self.bench(self.catalogue, "User benchmark")
         _, here = self.build()
         entry = Path(here) / "app/nullius/catalogue/benchmarks/sample"
         self.assertEqual(json.loads((entry / "standard.json").read_text())["label"], "User benchmark")
         self.assertFalse((entry / "obsolete.py").exists())
+        self.assertFalse((entry / "proofs.json").exists(), "an override cannot borrow bundled evidence")
         self.assertEqual((entry / "driver.py").read_text(), "print('sample')\n")
 
     def test_definition_code_template_and_permissions_all_change_the_address(self):
@@ -186,9 +213,7 @@ class Snapshot(unittest.TestCase):
         definition["upstream"] = {"repository": "https://example.org/repo"}
         self.write(entry / "standard.json", definition)
         self.assertEqual(set(payload._entry(entry)), {"standard.json", "driver.py"})
-
-    def test_downloaded_and_upstream_datasets_are_not_catalogue_resources(self):
-        entry = self.bench(self.catalogue)
+        # A dataset a run downloads, or its upstream holds, is no catalogue resource.
         for dataset, upstream in [({"id": "remote", "path": "missing.jsonl"},
                                    {"repository": "https://example.org/repo"}),
                                   ({"id": "download", "url": "https://example.org/tasks.jsonl"}, {})]:
@@ -249,18 +274,22 @@ class Snapshot(unittest.TestCase):
         source = payload.PACKAGE / "catalogue/agents/reference"
         entry = self.catalogue / "agents/reference"
         shutil.copytree(source, entry)
-        definition = json.loads((entry / "agent.json").read_text())
+        definition = definitions.read_document(str(entry / "agent.json"), "agent")
         definition["label"] = "User reference"
-        self.write(entry / "agent.json", definition)
+        self.write(entry / "proofs.json", proofs.document(definition, "agent"))
+        self.write(entry / "agent.json", proofs.strip(definition))
+        expected = definitions.get("agent", "reference", root=str(self.catalogue))
         key, here = payload.build(str(self.cache))
         self.assertFalse((Path(here) / "app/.env").exists())
         other = self.tmp / "elsewhere"; other.mkdir()
-        ran = subprocess.run([sys.executable, "-c", "from nullius.standard.contract import definitions; print(definitions.get('agent', 'reference')['label'])"],
+        ran = subprocess.run([sys.executable, "-c", "import json; from nullius.standard.contract import definitions; "
+                             "d = definitions.get('agent', 'reference'); "
+                             "print(json.dumps({k: d[k] for k in ('label', 'offers', 'proven')}))"],
                              cwd=other, env=dict(os.environ, PYTHONPATH=str(Path(here) / "app"),
                                                   NULLIUS_CATALOGUE=str(Path(here) / "app/nullius/catalogue")),
                              capture_output=True, text=True)
         self.assertEqual(ran.returncode, 0, ran.stderr)
-        self.assertEqual(ran.stdout, "User reference\n")
+        self.assertEqual(json.loads(ran.stdout), {k: expected[k] for k in ("label", "offers", "proven")})
 
     def test_proof_metadata_saves_to_the_selected_catalogue_without_mutating_the_snapshot(self):
         source = payload.PACKAGE / "catalogue/agents/reference"
@@ -280,6 +309,8 @@ class Snapshot(unittest.TestCase):
         other = self.tmp / "elsewhere"; other.mkdir()
         for selected in (self.catalogue, remote):
             with self.subTest(selected=selected):
+                authored = selected / "agents/reference/agent.json"
+                before = authored.read_bytes()
                 ran = subprocess.run([sys.executable, "-c",
                     "from nullius.standard.contract import definitions; "
                     "d = definitions.get('agent', 'reference'); "
@@ -291,8 +322,10 @@ class Snapshot(unittest.TestCase):
                                        NULLIUS_CATALOGUE=str(selected)), capture_output=True, text=True)
                 self.assertEqual(ran.returncode, 0, ran.stderr)
                 self.assertEqual(ran.stdout.strip(), str(selected / "agents/reference"))
-                saved = json.loads((selected / "agents/reference/agent.json").read_text())
-                self.assertEqual(saved["proven"]["fixture-proof"], {"job": "fixture-evidence"})
+                saved = json.loads((selected / "agents/reference/proofs.json").read_text())
+                version = definitions.versions(definition)[0]
+                self.assertEqual(saved["versions"][version]["proven"]["fixture-proof"], {"job": "fixture-evidence"})
+                self.assertEqual(authored.read_bytes(), before)
         self.assertEqual((ambient / "agent.json").read_bytes(), untouched)
         self.assertEqual({p.relative_to(here): p.read_bytes() for p in Path(here).rglob("*") if p.is_file()}, snapshot_before)
 
@@ -386,10 +419,14 @@ print(json.dumps({"providers": providers, "backend": nullius.__file__,
         self.assertTrue(probe["helper_exists"])
         self.assertEqual(probe["catalogue_entry"], str(self.catalogue / "agents/reference"))
         self.assertEqual(probe["args"], ["probe", "--from-run"])
-        saved = json.loads((self.catalogue / "agents/reference/agent.json").read_text())
-        self.assertEqual(saved["proven"]["fixture-proof"], {"job": "fixture-evidence"})
+        saved = json.loads((self.catalogue / "agents/reference/proofs.json").read_text())
+        authored = self.catalogue / "agents/reference/agent.json"
+        version = definitions.versions(json.loads(authored.read_text()))[0]
+        self.assertEqual(saved["versions"][version]["proven"]["fixture-proof"], {"job": "fixture-evidence"})
+        self.assertEqual(authored.read_bytes(), (installed / "catalogue/agents/reference/agent.json").read_bytes())
         for root in (installed, snapshot / "app/nullius"):
-            self.assertNotIn("fixture-proof", json.loads((root / "catalogue/agents/reference/agent.json").read_text()).get("proven", {}))
+            untouched = definitions.read_document(str(root / "catalogue/agents/reference/agent.json"), "agent")
+            self.assertNotIn("fixture-proof", untouched.get("proven", {}))
 
 
 if __name__ == "__main__":

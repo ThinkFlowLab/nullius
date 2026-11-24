@@ -323,6 +323,7 @@
    "references",
    "repeated_trials",
    "selected",
+   "set_aside_trials",
    "shared_tasks",
    "tasks"
   ],
@@ -372,6 +373,7 @@
    "harbor_label",
    "harbor_version",
    "has_verdict",
+   "identity",
    "is_control",
    "is_preparing",
    "is_running",
@@ -380,6 +382,7 @@
    "launch",
    "launch_id",
    "mean_score",
+   "mean_score_planned",
    "merged_from",
    "model_name",
    "n_errored_trials",

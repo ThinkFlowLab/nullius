@@ -62,7 +62,9 @@ class Rows(unittest.TestCase):
                 "weak__x": record("not_a_failure", 0.3, 0.4)}                    # a disagreement under the threshold: gated
 
     def test_statuses_ranking_and_counts(self):
+        before = [(t.trial_name, t.outcome, t.reward) for t in self.job.trials]
         out = R.reconcile(self.job, self.records())
+        self.assertEqual([(t.trial_name, t.outcome, t.reward) for t in self.job.trials], before)         # the trials are read, never written
         rows = out["rows"]
         self.assertEqual([r["task"] for r in rows["disagree"]], ["limited", "failed"])                  # strongest first
         self.assertEqual([r["task"] for r in rows["agree"]], ["setup", "timed"])
@@ -78,6 +80,8 @@ class Rows(unittest.TestCase):
         self.assertEqual((row["outcome"], row["outcome_label"], row["choice"], row["confidence"], row["p"], row["compatible"]),
                          ("rate_limited", "Rate limited", "agent_error", 0.95, 0.9, ["rate_limit_or_timeout"]))
         self.assertEqual(row["version"], questions.VERSION)
+        self.assertIsNone(R.answer_of({"answers": {"failure_cause": {"noul": 0.9}}}))                     # not a Choice: no pick
+        self.assertIsNone(R.answer_of(None))
 
     def test_the_threshold_gates_by_the_choices_own_confidence_and_is_a_parameter(self):
         out = R.reconcile(self.job, self.records(), threshold=0.0)
@@ -95,16 +99,6 @@ class Rows(unittest.TestCase):
         out = R.reconcile(self.job, recs)
         self.assertEqual([r["task"] for r in out["rows"]["other"]], ["failed"]); self.assertEqual(out["rows"]["disagree"][0]["task"], "setup")
         self.assertEqual(out["rows"]["disagree"][0]["version"], "judgement.questions.v1"); self.assertEqual(out["counts"]["other"], 1)
-
-    def test_a_record_is_found_by_its_trial_name_and_nothing_is_written(self):
-        recs = {"failed__x": record("environment_error", 0.9)}
-        before = [(t.trial_name, t.outcome, t.reward) for t in self.job.trials]
-        out = R.reconcile(self.job, recs)
-        self.assertEqual(out["rows"]["disagree"][0]["task"], "failed")
-        self.assertEqual([(t.trial_name, t.outcome, t.reward) for t in self.job.trials], before)         # the trials are read, never written
-        self.assertEqual(self.by_task["odd"].outcome, "unknown")
-        self.assertIsNone(R.answer_of({"answers": {"failure_cause": {"noul": 0.9}}}))                     # not a Choice: no pick
-        self.assertIsNone(R.answer_of(None))
 
     def test_a_dedicated_likely_outcome_suggests_directly_and_gates_on_its_own_confidence(self):
         """An unknown trial asked `likely_outcome` suggests that pick itself (one label, its own confidence), not the reverse map of failure_cause."""

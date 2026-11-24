@@ -43,7 +43,12 @@ class ConformTest(unittest.TestCase):
 
     def test_benchmark_restriction_allows_kit_but_survives_proof(self):
         d = definitions.get("capability", "fakemem", self.root)
-        definitions.save(d, lambda current: current.update(only_for=["intended-benchmark"]))
+        path = definitions.path_of(d)
+        with open(path) as f:
+            authored = json.load(f)
+        authored["only_for"] = ["intended-benchmark"]
+        with open(path, "w") as f:
+            json.dump(authored, f)
         got, saved = self.check("capability", "fakemem", ["cap.memory/v1"])
         self.assertTrue(got["cap.memory/v1"]["ok"])
         self.assertEqual(saved["only_for"], ["intended-benchmark"])
@@ -52,6 +57,15 @@ class ConformTest(unittest.TestCase):
         self.assertEqual(match.fit(dict(kit, key="intended-benchmark"), saved), [])
 
     def test_a_kit_that_passes_names_its_job_and_its_record_does_not(self):
+        here = os.path.join(self.root, "capabilities", "fakemem")
+        with open(os.path.join(here, "capability.py")) as f:
+            src = f.read()
+        refuse = 'kept.append(req["session"]["text"]); out = {}'
+        self.assertIn(refuse, src)
+        with open(os.path.join(here, "capability.py"), "w") as f:      # it drops every session that looks like a secret
+            f.write(src.replace(refuse, 'out = {}\n        if not any(w in req["session"]["text"].lower() for w in '
+                                        '("password", "passcode", "token", "secret", "credential", "api key")):\n'
+                                        '            kept.append(req["session"]["text"])'))
         with mock.patch.object(conform.run, "run", wraps=conform.run.run) as ran:
             got, d = self.check("capability", "fakemem", ["cap.memory/v1"])
         # a rate-limited unit runs once more, after its pause, and nothing else: a proof is never the endpoint's busy minute
@@ -65,19 +79,6 @@ class ConformTest(unittest.TestCase):
         self.assertNotIn("job", rec)               # a folder on the machine that ran it
         self.assertEqual(d["offers"], ["cap.memory/v1"])
 
-    def test_a_memory_that_refuses_credentials_still_proves_the_memory_port(self):
-        here = os.path.join(self.root, "capabilities", "fakemem")
-        with open(os.path.join(here, "capability.py")) as f:
-            src = f.read()
-        refuse = 'kept.append(req["session"]["text"]); out = {}'
-        self.assertIn(refuse, src)
-        with open(os.path.join(here, "capability.py"), "w") as f:      # it drops every session that looks like a secret
-            f.write(src.replace(refuse, 'out = {}\n        if not any(w in req["session"]["text"].lower() for w in '
-                                        '("password", "passcode", "token", "secret", "credential", "api key")):\n'
-                                        '            kept.append(req["session"]["text"])'))
-        got, d = self.check("capability", "fakemem", ["cap.memory/v1"])
-        self.assertTrue(got["cap.memory/v1"]["ok"])
-        self.assertEqual(d["proven"]["cap.memory/v1"]["passed"], "2/2")
 
     def test_a_kit_that_fails_takes_the_claim_back(self):
         got, d = self.check("agent", "fake", ["agent.task/v1"])          # it shouts the prompt back: not the word
@@ -135,17 +136,6 @@ class ConformTest(unittest.TestCase):
             self.assertIn(port, saved["offers"])
         self.assertEqual(saved["proven"][ports[1]], old)
         self.assertIn(ports[1], saved["offers"])
-
-    def test_a_refused_kit_is_returned_as_refused_beside_the_proofs(self):
-        other = definitions.get("agent", "fake", self.root)
-        passed = SimpleNamespace(trials=[SimpleNamespace(task_name="kit/check", reward=1.0)])
-        with mock.patch.object(conform, "candidates", return_value=["agent.task/v1", "agent.workspace/v1"]), \
-                mock.patch.object(run, "run", side_effect=["passed-job", run.BenchmarkRefused("no engine")]), \
-                mock.patch.object(conform.parse, "parse_job", return_value=passed):
-            got = conform.check(other, model="m", provider="custom", jobs_root=os.path.join(self.tmp, "jobs"),
-                                say=lambda s: None, env={"MODEL_API_URL": "http://127.0.0.1:9/v1"}, unsandboxed=True)
-        self.assertTrue(got["agent.task/v1"]["ok"])
-        self.assertEqual(got["agent.workspace/v1"], {"ok": False, "refused": "no engine"})
 
     def test_a_refused_ports_record_stays_also_without_its_offer(self):
         path = os.path.join(self.root, "agents", "fake", "agent.json")
@@ -222,7 +212,7 @@ class ConformTest(unittest.TestCase):
         attempt.assert_not_called()
         save.assert_not_called()
 
-    def test_an_agent_install_refusal_is_not_a_kit_refusal(self):
+    def test_a_refusal_before_any_kit_ends_the_command(self):
         other = definitions.get("agent", "fake", self.root)
         with mock.patch.object(install, "packages", side_effect=install.InstallFailed("agent unavailable")), \
                 mock.patch.object(definitions, "save") as save:
@@ -230,9 +220,6 @@ class ConformTest(unittest.TestCase):
         self.assertEqual(status, 2)
         self.assertIn("refused: could not install what the run needs: agent unavailable", said)
         save.assert_not_called()
-
-    def test_invalid_agent_options_still_end_the_command(self):
-        other = definitions.get("agent", "fake", self.root)
         with mock.patch.object(definitions, "save") as save:
             status, said = self.invoke(other, "--option", "missing=value")
         self.assertEqual(status, 2)

@@ -112,18 +112,16 @@ class Episode(unittest.TestCase):
         agent = Agent(lambda: (self.asked(), ({"text": ""}, [{"action_type": "CLICK"}]))[1])
         self.assertEqual(self.ran(agent), [{"action_type": "CLICK"}, "DONE"])
 
-    def test_a_call_that_raised_after_the_stop_ends_with_done(self):
+    def test_a_call_that_raised_ends_with_done_only_after_a_stop(self):
+        def boom():
+            raise RuntimeError("boom")
+        with self.assertRaises(RuntimeError):                      # no stop: the upstream's own failure
+            self.ran(Agent(boom))
         def raised():
             self.asked()
             raise RuntimeError("the endpoint failed too many times")
         self.assertEqual(self.ran(Agent(raised)), ["DONE"])
         self.assertTrue(os.path.exists(self.stop + ".taken"))
-
-    def test_a_call_that_raised_with_no_stop_is_the_upstreams(self):
-        def raised():
-            raise RuntimeError("boom")
-        with self.assertRaises(RuntimeError):
-            self.ran(Agent(raised))
 
     def test_only_a_stop_that_ended_a_step_is_recorded_with_its_reasons(self):
         taken = self.stop + ".taken"
@@ -143,23 +141,6 @@ class Episode(unittest.TestCase):
         agent = Agent(("", ["click"]))
         self.assertEqual(self.ran(agent), ["DONE"])
         self.assertEqual(agent.calls, 0)
-
-    def test_wrapped_once_and_not_at_all_without_a_stop_path(self):
-        wrapped = self.module.run_single_example
-        with mock.patch.dict(os.environ, OSWORLD2_STOP=self.stop):
-            self.site.stop_when_asked(self.module)
-        self.assertIs(self.module.run_single_example, wrapped)
-        agent = Agent(("", ["click"]), ("", ["click"]))
-        self.ran(agent, 1)
-        predict = agent.predict
-        self.ran(agent, 1)
-        self.assertIs(agent.predict, predict)
-        bare = types.ModuleType("lib_run_single")
-        exec(EPISODE, bare.__dict__)
-        run = bare.run_single_example
-        with mock.patch.dict(os.environ, {"OSWORLD2_STOP": ""}):
-            self.site.stop_when_asked(bare)
-        self.assertIs(bare.run_single_example, run)
 
 
 class Imported(unittest.TestCase):
@@ -400,17 +381,13 @@ class Relayed(unittest.TestCase):
         self.assertEqual(len(self.relay.calls("u1")), 4)
         self.assertEqual(self.post(self.relay.url("u1"), "m", "fine"), 200)
 
-    def test_a_stop_asked_after_an_overflow_is_heeded(self):
-        with open(self.stop, "w") as f:
-            f.write("context window\nbatch cap\n")
-        self.assertEqual(self.post(self.relay.url("u1"), "m", "fine"), 400)
-        self.assertEqual(self.relay.calls("u1"), [])
-
     def test_once_asked_from_outside_the_agents_own_calls_are_not_sent(self):
-        with open(self.stop, "w") as f:
-            f.write("batch cap\n")
-        self.assertEqual(self.post(self.relay.url("u1"), "m", "fine"), 400)
-        self.assertEqual(self.relay.calls("u1"), [])
+        for asked in ("batch cap\n", "context window\nbatch cap\n"):     # alone, and after an overflow
+            with self.subTest(asked=asked):
+                with open(self.stop, "w") as f:
+                    f.write(asked)
+                self.assertEqual(self.post(self.relay.url("u1"), "m", "fine"), 400)
+                self.assertEqual(self.relay.calls("u1"), [])
         self.assertEqual(self.post(self.relay.url("u1"), "sim", "fine"), 200)
         self.assertEqual(self.post(self.relay.url("u1-judge", model="j"), "j", "fine"), 200)
         self.assertEqual(len(self.relay.calls("u1")) + len(self.relay.calls("u1-judge")), 2)

@@ -1,0 +1,48 @@
+{
+  "schema": "nullius.proofs/v1",
+  "kind": "benchmark",
+  "key": "locomo",
+  "versions": {
+    "": {
+      "proven": {
+        "locomo10": {
+          "units": {
+            "units": 1540,
+            "passed": "1540 ids, the same twice, unique"
+          },
+          "leak": {
+            "units": 1540,
+            "looked_for": 1144,
+            "short": 396,
+            "passed": "1540/1540",
+            "in_prompt": {
+              "units": 2,
+              "first": [
+                "conv-49:10",
+                "conv-50:39"
+              ],
+              "why": "A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+            },
+            "note": "396 reference(s) under 12 characters not looked for: too short to tell a leak from chance; 2 prompt(s) name their answer, as the benchmark says they may: A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+          },
+          "nop": {
+            "passed": "0/1540",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 1540
+          },
+          "oracle": {
+            "passed": "1540/1540",
+            "value": 1.0,
+            "expect": {
+              "at_least": 1.0
+            },
+            "units": 1540
+          }
+        }
+      }
+    }
+  }
+}

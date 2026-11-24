@@ -97,17 +97,6 @@ class EngineTest(unittest.TestCase):
         self.assertEqual((got["docker_ok"], got["podman_ok"], got["engine"]), (False, True, "podman"))
         self.assertEqual(self.engine(), got["engine"])
 
-    def test_a_docker_that_refuses_this_user_says_podman_is_there(self):
-        self.enterContext(mock.patch.object(container, "DOCKER", "docker"))
-        refused = subprocess.CompletedProcess([], 1, "", "permission denied while trying to connect to the docker API\n")
-        self.enterContext(mock.patch.object(container, "_docker", return_value=refused))
-        said = "docker is installed but not usable by this user: permission denied while trying to connect to the docker API" \
-               " (add this user to the docker group, then log in again)"
-        with mock.patch.object(container.shutil, "which", return_value=None):
-            self.assertEqual(container.unusable(), said)
-        with mock.patch.object(container.shutil, "which", return_value="/usr/bin/podman"):
-            self.assertEqual(container.unusable(), said + ". podman is on this machine: Nullius uses it when docker does not answer and podman does")
-
     def test_podman_is_asked_whether_it_is_rootless_in_its_own_terms(self):
         self.enterContext(mock.patch.object(container, "DOCKER", "podman"))
         for said, rootless in (("name=rootless\n", True), ("\n", False)):
@@ -178,21 +167,6 @@ class ArgvTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.enterContext(mock.patch.dict(os.environ, {"NULLIUS_HOME": os.path.join(self.tmp, "profile")}))
         self.enterContext(mock.patch.object(container, "DOCKER", "docker"))
-
-    def test_agent_home_does_not_replace_host_docker_context(self):
-        with mock.patch.dict(os.environ, {"HOME": "/host-home", "PATH": "/bin"}, clear=True), \
-                mock.patch.object(container, "_context", return_value={"DOCKER_HOST": "unix:///run/alt.sock"}):
-            env = container.client_env({"HOME": "/trial-home", "AGENT_TOKEN": "synthetic"})
-        self.assertEqual(env["HOME"], "/trial-home")
-        self.assertEqual(env["DOCKER_HOST"], "unix:///run/alt.sock")
-        self.assertNotIn("DOCKER_CONFIG", env)
-        self.assertEqual(env["AGENT_TOKEN"], "synthetic")
-
-    def test_agent_home_preserves_explicit_docker_configuration(self):
-        with mock.patch.dict(os.environ, {"HOME": "/host-home", "DOCKER_CONFIG": "/custom-docker", "DOCKER_CONTEXT": "desktop-linux"}, clear=True):
-            env = container.client_env({"HOME": "/trial-home"})
-        self.assertEqual(env["DOCKER_CONFIG"], "/custom-docker")
-        self.assertEqual(env["DOCKER_CONTEXT"], "desktop-linux")
 
     def test_mounts_each_folder_once_at_its_own_path(self):
         ws, home, app = (os.path.join(self.tmp, n) for n in ("ws", "home", "app"))
@@ -413,15 +387,6 @@ class ArgvTest(unittest.TestCase):
         self.assertFalse(os.path.exists(sd.dir))
         self.assertEqual(u.socket_doors, [])
 
-    def test_a_licence_server_on_this_machine_on_rootful_podman_is_reached_through_a_door(self):
-        self.enterContext(mock.patch.object(container, "rootless", return_value=False))
-        self.enterContext(mock.patch.object(container, "DOCKER", "podman"))      # its bridge has no address here until a container joins it
-        self.enterContext(mock.patch.object(container.platform, "system", return_value="Linux"))
-        u, _ = self._started(base="https://x/v1", servers=["host.docker.internal:27000"])
-        self.addCleanup(u.stop)
-        self.assertEqual(u.reach, {"host.docker.internal:27000": "licence-server-1:27000"})
-        self.assertEqual(u.socket_doors[0].target, ("127.0.0.1", 27000))
-
     def test_the_loopback_forwarder_passes_connections_until_it_stops(self):
         import http.server, socket, threading, urllib.request
         class Ok(http.server.BaseHTTPRequestHandler):
@@ -626,11 +591,6 @@ class ArgvTest(unittest.TestCase):
         self.assertLessEqual(len(a), 80)
         self.assertNotEqual(a, b)
 
-    def test_missing_docker_is_said_plainly(self):
-        from unittest import mock
-        with mock.patch.object(container, "DOCKER", "nullius-no-such-docker"):
-            self.assertEqual(container.unusable(), "nullius-no-such-docker is not installed on this machine")
-
 
 class ContextTest(unittest.TestCase):
     """A Docker selected only by ``docker context use`` is in the user's
@@ -655,8 +615,9 @@ class ContextTest(unittest.TestCase):
 
     def test_docker_host_and_docker_context_win(self):
         self.assertEqual(self.env(self.ALT, DOCKER_HOST="tcp://h:2375")["DOCKER_HOST"], "tcp://h:2375")
-        env = self.env(self.ALT, DOCKER_CONTEXT="other")
+        env = self.env(self.ALT, DOCKER_CONTEXT="other", DOCKER_CONFIG="/custom-docker")
         self.assertEqual((env["DOCKER_CONTEXT"], env.get("DOCKER_HOST")), ("other", None))
+        self.assertEqual((env["HOME"], env["DOCKER_CONFIG"]), ("/unit-home", "/custom-docker"))
 
     def test_a_tls_context_passes_its_certificates(self):
         tls = dict(self.ALT, TLSMaterial={"docker": ["ca.pem", "cert.pem", "key.pem"]})

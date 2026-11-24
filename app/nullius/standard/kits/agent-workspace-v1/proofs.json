@@ -1,0 +1,40 @@
+{
+  "schema": "nullius.proofs/v1",
+  "kind": "benchmark",
+  "key": "agent-workspace-v1",
+  "versions": {
+    "": {
+      "proven": {
+        "kit": {
+          "units": {
+            "units": 2,
+            "passed": "2 ids, the same twice, unique"
+          },
+          "leak": {
+            "units": 2,
+            "looked_for": 1,
+            "short": 1,
+            "passed": "2/2",
+            "note": "1 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
+          },
+          "nop": {
+            "passed": "0/2",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 2
+          },
+          "oracle": {
+            "passed": "2/2",
+            "value": 1.0,
+            "expect": {
+              "at_least": 1.0
+            },
+            "units": 2
+          }
+        }
+      }
+    }
+  }
+}

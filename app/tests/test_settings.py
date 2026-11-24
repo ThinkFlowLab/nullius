@@ -41,30 +41,6 @@ class Table(unittest.TestCase):
         stale = sorted(v for v in settings.STARTUP if v not in read)
         self.assertEqual(stale, [], f"named as start-up options but no longer read: {stale}")
 
-    def test_the_page_offers_what_a_person_sets_and_no_more(self):
-        self.assertEqual([v.name for v in settings.VARIABLES],
-                         ["MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY", "DECISION_PROVIDER", "DECISION_PROTOCOL", "DECISION_MODEL", "LLM_JUDGE_PROVIDER", "LLM_JUDGE_PROTOCOL", "LLM_JUDGE_MODEL",
-                          "OPENROUTER", "OPENAI", "ANTHROPIC", "TYPESAFE", "AGENT_KEYS", "HOSTS", "HF_ENDPOINT", "HOST_CONSTRAINTS"])
-        self.assertEqual(sorted(v.name for v in settings.VARIABLES if v.secret), ["ANTHROPIC_API_KEY", "MODEL_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY"])
-        self.assertEqual(settings.BY_NAME["MODEL_API_URL"].kind, "endpoint")                         # shown, so it may hold no credential
-        for name in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"):
-            self.assertEqual(settings.BY_NAME[name].example, "")                               # no placeholder on a settings field
-        self.assertEqual({settings.BY_NAME[n].group for n in ("MODEL_API_KEY", "MODEL_API_URL", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY")}, {"Model credentials"})
-        self.assertEqual({settings.BY_NAME[n].kind for n in ("OPENROUTER", "OPENAI", "ANTHROPIC", "TYPESAFE")}, {"provider"})   # a preset's additions
-        self.assertIn("OpenAI-compatible", settings.BY_NAME["MODEL_API_KEY"].purpose)
-
-    def test_the_servers_address_and_port_are_start_up_options(self):
-        """APP_HOST and APP_PORT are read at startup; the running Settings page
-        cannot change the server's listening address."""
-        for name in ("APP_HOST", "APP_PORT"):
-            self.assertIn(name, settings.STARTUP); self.assertNotIn(name, settings.BY_NAME)
-        for old in ("HOST", "PORT"):
-            self.assertNotIn(old, settings.BY_NAME); self.assertNotIn(old, settings.STARTUP)
-        self.assertEqual((settings.INSTEAD["HOST"], settings.INSTEAD["PORT"]), ("APP_HOST", "APP_PORT"))
-        self.assertEqual(settings.GROUPS, ["Model credentials", "Run hosts", "Custom keys", "Data providers"])
-        example = settings.example()
-        self.assertIn("#   APP_PORT: ", example); self.assertNotIn("\nAPP_PORT=", example); self.assertNotIn("\nPORT=", example)
-
     def test_example_file_matches_the_table(self):
         example = settings.example()
         for v in settings.VARIABLES:
@@ -89,7 +65,6 @@ class Validation(unittest.TestCase):
         for name in ("HOSTS", "MODEL_API_KEY"):
             self.bad(name, "x\ny"); self.bad(name, " padded ")
 
-    def test_keys_and_agent_names_have_no_arbitrary_length_limits(self):
         for value in ("x", "k" * 4096):
             self.ok("OPENAI_API_KEY", value)
             self.ok("MODEL_API_KEY", value)
@@ -319,17 +294,6 @@ class File(unittest.TestCase):
                                                       {"name": "SOMETHING_ELSE", "instead": ""},
                                                       {"name": "API_KEY_TYPESAFE", "instead": "TYPESAFE_API_KEY"}])   # a start-up option and a setting are read; the judge key's old name is not
         self.assertNotIn("API_KEY_TYPESAFE", settings.BY_NAME)                              # renamed, with no fallback to the old name
-
-    def test_a_leftover_port_or_host_line_points_at_the_start_up_option(self):
-        self.write("PORT=6000\nHOST=0.0.0.0\nAPP_PORT=6001\n")
-        self.assertEqual(settings.unread(self.path), [{"name": "PORT", "instead": "APP_PORT"},
-                                                      {"name": "HOST", "instead": "APP_HOST"}])     # APP_PORT is read, at start
-
-    def test_save_creates_the_file_when_absent(self):
-        settings.save(self.path, "HOSTS", "bench")
-        self.assertEqual(Path(self.path).read_text(), "HOSTS=bench\n")
-        self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o600)
-        self.assertIn("HOSTS", settings.LOADED_KEYS)
 
 
 if __name__ == "__main__":

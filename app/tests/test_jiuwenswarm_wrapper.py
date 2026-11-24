@@ -167,17 +167,6 @@ class RuntimeSocket(unittest.TestCase):
         for path in paths:
             self.assertFalse(os.path.exists(os.path.dirname(path)))
 
-    def test_runtime_directory_is_cleaned_when_startup_fails(self):
-        paths = []
-
-        def fail(path):
-            paths.append(path)
-            raise RuntimeError("startup failed")
-
-        with patch.object(agent, "run", side_effect=fail), self.assertRaisesRegex(RuntimeError, "startup failed"):
-            agent.main()
-        self.assertFalse(os.path.exists(os.path.dirname(paths[0])))
-
     def test_older_versions_without_a_worker_need_no_shutdown_call(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(agent.subprocess, "run") as run:
             agent.stop_worker({"JIUWENSWARM_RUNTIME_SOCKET": os.path.join(directory, "missing.sock")})

@@ -135,11 +135,8 @@ class Macros(unittest.TestCase):
         self.assertIn('<button type="button" class="card-link" data-pick="g" aria-pressed="false" disabled>Gamma</button></div>'
                       '<div class="bench-card-blocker" title="needs agent.tools/v1">Lacks tools</div>', html)
         self.assertNotIn('<a ', html)
-
-    def test_a_single_choice_is_marked_on_its_card(self):
-        cols = [dict(key='title', label='Name', card='title')]
         items = [{'title': 'Alpha', 'pick': {'value': 'a', 'one': True}}, {'title': 'Beta', 'pick': {'value': 'b', 'on': True, 'one': True}}]
-        self.assertIn('<button type="button" class="card-link" data-pick="b" data-pick-one aria-pressed="true">Beta</button>', self.render(cols, items))
+        self.assertIn('<button type="button" class="card-link" data-pick="b" data-pick-one aria-pressed="true">Beta</button>', self.render(cols[:1], items))
 
 
 class Script(unittest.TestCase):

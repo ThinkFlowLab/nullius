@@ -50,37 +50,6 @@
   "limits": {
     "turn_seconds": 300
   },
-  "proven": {
-    "kit": {
-      "units": {
-        "units": 5,
-        "passed": "5 ids, the same twice, unique"
-      },
-      "leak": {
-        "units": 5,
-        "looked_for": 1,
-        "short": 4,
-        "passed": "5/5",
-        "note": "4 reference(s) under 12 characters not looked for: too short to tell a leak from chance"
-      },
-      "nop": {
-        "passed": "0/5",
-        "value": 0.0,
-        "expect": {
-          "at_most": 0.0
-        },
-        "units": 5
-      },
-      "oracle": {
-        "passed": "5/5",
-        "value": 1.0,
-        "expect": {
-          "at_least": 1.0
-        },
-        "units": 5
-      }
-    }
-  },
   "check_details": {
     "one-tool": {
       "label": "Call one tool",
@@ -89,22 +58,22 @@
     },
     "arguments": {
       "label": "Pass typed arguments",
-      "task": "Find an item’s stock code in a named warehouse.",
+      "task": "Find an item\u2019s stock code in a named warehouse.",
       "passes": "The answer contains the code and the server records get_stock_code with the correct warehouse and numeric item."
     },
     "decoys": {
       "label": "Choose among decoys",
-      "task": "Find a parcel’s tracking number among twenty similar tools.",
+      "task": "Find a parcel\u2019s tracking number among twenty similar tools.",
       "passes": "The answer contains the tracking number and the server records get_tracking_number for that parcel."
     },
     "chain": {
       "label": "Chain three calls",
       "task": "Find the settlement code for the account paying for an order.",
-      "passes": "The answer contains the code; successful order → customer → account → settlement calls appear in that order."
+      "passes": "The answer contains the code; successful order \u2192 customer \u2192 account \u2192 settlement calls appear in that order."
     },
     "retry": {
       "label": "Recover from a tool error",
-      "task": "Find a site’s permit code for a given year.",
+      "task": "Find a site\u2019s permit code for a given year.",
       "passes": "The answer contains the code; a failed get_permit_code call is followed by a successful call with the correct site ID and year."
     }
   }
