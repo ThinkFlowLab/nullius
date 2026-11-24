@@ -695,6 +695,20 @@ class RetriedOnHost(unittest.TestCase):
         self.assertTrue((trial / "agent" / "trace.json").exists())
 
 
+class FollowCadence(unittest.TestCase):
+    def test_remote_updates_are_read_again_within_one_second_of_a_copy(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as root:
+            ex = execution.Execution(execution.Plan(name="follow", script="true", host=hosts.parse("bench")),
+                                     root=root, env={})
+            with patch.object(ex, "_sh", side_effect=[(0, "\n__nullius__ alive"), (0, "\n__nullius__ 0")]), \
+                    patch.object(ex, "_mirror") as mirror, patch.object(ex._stop, "wait", return_value=False) as wait:
+                self.assertEqual(ex._follow({"id": "run", "label": "run"}), 0)
+            self.assertEqual(mirror.call_count, 2)
+            self.assertEqual(wait.call_count, 1)
+            self.assertLessEqual(wait.call_args.args[0], 1.0)
+
+
 class TasksOnHost(unittest.TestCase):
     def test_two_folders_of_one_name_never_share_a_copy_and_one_folder_keeps_its_own(self):
         a, b = execution._tasks_place("/data/projA/tasks", "r1"), execution._tasks_place("/data/projB/tasks", "r2")
