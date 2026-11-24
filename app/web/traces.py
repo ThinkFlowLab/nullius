@@ -13,7 +13,7 @@ from flask import abort, flash, g, jsonify, redirect, render_template, request, 
 from markupsafe import Markup, escape
 from werkzeug.http import quote_header_value
 from nullius.traces import behavior, charts, conversation, trace, trajectory
-from nullius.runs import artifacts, attempts as task_attempts, parse
+from nullius.runs import artifacts, attempts as task_attempts, evidence, parse
 from nullius import importers as harnesses
 
 from .core import app
@@ -272,12 +272,17 @@ def trial(job_id, trial_name):
                 bench_parts["shows"] = list(dict.fromkeys(k for x in bench_parts["parts"] if isinstance(x.get("shows"), dict) for k in x["shows"]))
         except (OSError, ValueError):
             pass
-    # Keep trial evidence, excluding execution metadata and numbers already shown above.
+    # What the benchmark recorded of a trial that fell short: the rows its entry names, else its whole detail,
+    # excluding execution metadata and numbers already shown above.
+    short = bool(j.runner) and t.outcome != "resolved" and not (t.score is not None and t.score >= 1)
+    named = evidence.declared(t.source)
     head = [x for x in (t.reward, t.score) if x is not None]
     shown = {"result": head, "score": head, "reward_info.reward": head, "steps": [traj.n_steps] if ok else []}
     detail = parse.score_detail(t.dir, leave_out=("by", "tool_calls", "max_steps", "max_errors",
                                                "seed", "trial", "split", "attempts", "agent", "judge", "evaluation"),
-                                shown=shown) if j.runner else None
+                                shown=shown) if short and named is None else None
+    reply = next((s.message for s in reversed(traj.steps) if s.source == "agent" and s.message), "") if ok else ""
+    rows = evidence.rows(t.dir, named, reply) if short and named else []
     loc = _gold_localization(j, t, traj) if ok else None
 
     # `trace` opens a
@@ -297,7 +302,7 @@ def trial(job_id, trial_name):
         record["download"] = url_for("artifact_download", job_id=job_id, trial_name=trial_name,
                                      key=record["key"], workspace=request.args.get("workspace"))
     return render_template(
-        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts, detail=detail,
+        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts, detail=detail, evidence=rows,
         trace=tr, charts=ch, viewing=viewing, imported_from=_imported_from(j),
         chart_filter=cfilt, default_save_name=SAVED_TRACE_DEFAULT,
         artifacts=records, attempt=attempt, attempts=task_attempts.of(j, attempt), tries=_tries(attempt),

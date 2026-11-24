@@ -45,5 +45,44 @@
     "verify": 300
   },
   "citation": "@misc{barres2025tau2,\n      title={$\\tau^2$-Bench: Evaluating Conversational Agents in a Dual-Control Environment},\n      author={Victor Barres and Honghua Dong and Soham Ray and Xujie Si and Karthik Narasimhan},\n      year={2025},\n      eprint={2506.07982},\n      archivePrefix={arXiv},\n      primaryClass={cs.AI},\n      url={https://arxiv.org/abs/2506.07982},\n}\n\n@misc{yao2024tau,\n      title={$\\tau$-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains},\n      author={Shunyu Yao and Noah Shinn and Pedram Razavi and Karthik Narasimhan},\n      year={2024},\n      eprint={2406.12045},\n      archivePrefix={arXiv},\n      primaryClass={cs.AI},\n      url={https://arxiv.org/abs/2406.12045},\n}\n\n@article{shi2026tau,\n  title={$\\tau$-Knowledge: Evaluating Conversational Agents over Unstructured Knowledge},\n  author={Shi, Quan and Zytek, Alexandra and Razavi, Pedram and Narasimhan, Karthik and Barres, Victor},\n  journal={arXiv preprint arXiv:2603.04370},\n  year={2026}\n}",
-  "citation_source": "https://github.com/sierra-research/tau2-bench"
+  "citation_source": "https://github.com/sierra-research/tau2-bench",
+  "evidence": [
+    {
+      "label": "Checks",
+      "path": "reward_info.reward_breakdown",
+      "names": {
+        "DB": "Database",
+        "COMMUNICATE": "Communication",
+        "ACTION": "Actions",
+        "ENV_ASSERTION": "Environment",
+        "NL_ASSERTION": "Assertions"
+      },
+      "values": {
+        "1.0": "Pass",
+        "0.0": "Fail"
+      }
+    },
+    {
+      "label": "Ended by",
+      "path": "termination",
+      "values": {
+        "user_stop": "User",
+        "agent_stop": "Agent",
+        "max_steps": "Step limit",
+        "timeout": "Timeout",
+        "too_many_errors": "Too many errors",
+        "agent_error": "Agent error",
+        "user_error": "User error",
+        "context_window_exceeded": "Context window exceeded",
+        "unexpected_error": "Unexpected error"
+      }
+    },
+    {
+      "label": "Tool errors",
+      "path": "tool_errors",
+      "unless": [
+        "0"
+      ]
+    }
+  ]
 }

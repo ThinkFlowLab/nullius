@@ -106,6 +106,9 @@ class Benchmark:
     #: the trial's ``verifier/`` (a file, or a folder whose files are listed): the
     #: trial's Artifacts tab lists those that exist (``nullius.runs.artifacts``)
     records: list = field(default_factory=list)
+    #: what of its score's detail a trial that fell short shows, in order
+    #: (``nullius.runs.evidence``); None shows the whole detail
+    evidence: list | None = None
     #: how to cite it: the BibTeX its official repository gives, else its paper's
     citation: str = ""
     citation_source: str = ""
@@ -195,6 +198,16 @@ def valid_record(record) -> bool:
         return False
     parts = path.split("/")
     return len(parts) > 1 and parts[0] == "verifier" and all(p not in ("", ".", "..") for p in parts[1:])
+
+
+def valid_evidence(entry) -> bool:
+    """A declared evidence row's shape (``nullius.runs.evidence``)."""
+    words = lambda x: isinstance(x, dict) and all(isinstance(v, str) for v in x.values())
+    return (isinstance(entry, dict) and set(entry) <= {"label", "path", "values", "names", "unless", "reply"}
+            and all(isinstance(entry.get(k), str) and entry[k].strip() for k in ("label", "path"))
+            and words(entry.get("values", {})) and words(entry.get("names", {}))
+            and isinstance(entry.get("unless", []), list) and all(isinstance(x, str) for x in entry.get("unless", []))
+            and isinstance(entry.get("reply", False), bool))
 
 
 def sort_key(title: str) -> str:
@@ -426,6 +439,8 @@ def validate(cat: Catalog) -> list:
             bad.append(f"{b.key}: no category")
         if not isinstance(b.records, list) or not all(valid_record(r) for r in b.records):
             bad.append(f"{b.key}: records are each {{label, path under verifier/}}")
+        if b.evidence is not None and not (isinstance(b.evidence, list) and all(valid_evidence(e) for e in b.evidence)):
+            bad.append(f"{b.key}: evidence rows are each {{label, path}}, with values, names, unless or reply")
         for h in b.harness:
             if h not in dict(HARNESSES):
                 bad.append(f"{b.key}: harness {h!r} is not one of {[k for k, _ in HARNESSES]}")

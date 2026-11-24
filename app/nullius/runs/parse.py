@@ -120,14 +120,20 @@ def _shown(value) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+def read_detail(trial_dir: str) -> dict | None:
+    """The detail beside a score's reward, redacted, or None."""
+    said = _read_score(trial_dir)
+    detail = said.get("detail") if isinstance(said, dict) else None
+    return _options(detail) if isinstance(detail, dict) else None
+
+
 def score_detail(trial_dir: str, leave_out=(), shown=None) -> dict | None:
     """Redacted score evidence for display. Nested objects become named groups,
     structured lists become numbered groups; no object is rendered as raw JSON.
     ``leave_out`` excludes top-level metadata; ``shown`` suppresses duplicate numbers
     by their full path. Long text keeps a preview and its full value."""
-    said = _read_score(trial_dir)
-    detail = said.get("detail") if isinstance(said, dict) else None
-    if not isinstance(detail, dict):
+    detail = read_detail(trial_dir)
+    if detail is None:
         return None
     fields, groups = [], []
 
@@ -161,7 +167,7 @@ def score_detail(trial_dir: str, leave_out=(), shown=None) -> dict | None:
         if flags:
             groups.append({"name": redact(path), "flags": flags})
 
-    visit(_options(detail))
+    visit(detail)
     return {"fields": fields, "groups": groups} if fields or groups else None
 
 

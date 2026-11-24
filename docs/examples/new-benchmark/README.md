@@ -41,6 +41,7 @@ folder replaces the entire bundled entry of the same key, and survives upgrades.
 | `datasets` | `key`, `title`, `tasks`, `official` (upstream link), `source` (a phrase), `registry` (`name@version`) or `hub` (`org/name`), `verifier` |
 | `report` | Optional: how the verifier's report is read, shaped by `app/nullius/runs/verifier.py` |
 | `records` | Optional: `{label, path}` entries under `verifier/`; text files or folders (one level, up to 200 files, printable names only) |
+| `evidence` | Optional: `{label, path}` rows of the score's `detail`, shown when a trial falls short; shaped by `app/nullius/runs/evidence.py` |
 | `citation`, `citation_source` | BibTeX, and its source |
 
 Full rules: the docstring of `app/nullius/catalogue/catalog.py`.
