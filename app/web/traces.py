@@ -273,15 +273,10 @@ def trial(job_id, trial_name):
         except (OSError, ValueError):
             pass
     steps_of = None
-    if j.runner:
-        try:                                       # the benchmark's own count of the trial's steps and its limit, as its score said them
-            with open(os.path.join(t.dir, "verifier", "score.json"), encoding="utf-8") as fh:
-                detail = json.load(fh).get("detail")
-            whole = lambda v, least: isinstance(v, int) and not isinstance(v, bool) and v >= least
-            if whole(detail.get("steps"), 0) and whole(detail.get("steps_limit"), 1):
-                steps_of = {"steps": detail["steps"], "limit": detail["steps_limit"]}
-        except (OSError, ValueError, AttributeError):
-            pass
+    said = parse.read_detail(t.dir) if j.runner else None   # the benchmark's own count of the trial's steps and its limit
+    whole = lambda v, least: isinstance(v, int) and not isinstance(v, bool) and v >= least
+    if said and whole(said.get("steps"), 0) and whole(said.get("steps_limit"), 1):
+        steps_of = {"steps": said["steps"], "limit": said["steps_limit"]}
     # What the benchmark recorded of a trial that fell short: the rows its entry names, else its whole detail,
     # excluding execution metadata and numbers already shown above.
     short = bool(j.runner) and t.outcome != "resolved" and not (t.score is not None and t.score >= 1)
