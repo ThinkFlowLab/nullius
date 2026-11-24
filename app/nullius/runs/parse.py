@@ -8,9 +8,12 @@ and redact on the way in.
 from __future__ import annotations
 
 import functools
+import json
 import os
 import re
 import shlex
+import stat
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
@@ -28,7 +31,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "18"
+SCHEMA = "19"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness, so a limit the run survived leaves nothing in result.json —
@@ -70,6 +73,102 @@ def _retries_of(res: dict) -> int:
     std = res.get("standard") if isinstance(res.get("standard"), dict) else {}
     n = std.get("retries")
     return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
+
+
+SCORE_BYTES = 1024 * 1024
+
+
+def _read_score(trial_dir: str):
+    """Read at most SCORE_BYTES from a regular score file without following links inside the trial."""
+    try:
+        with ExitStack() as opened:
+            flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+            trial = os.open(trial_dir, flags)
+            opened.callback(os.close, trial)
+            folder = os.open("verifier", flags, dir_fd=trial)
+            opened.callback(os.close, folder)
+            fd = os.open("score.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=folder)
+            opened.callback(os.close, fd)
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_size > SCORE_BYTES:
+                return None
+            raw = os.read(fd, SCORE_BYTES + 1)
+        return json.loads(raw) if 0 < len(raw) <= SCORE_BYTES else None
+    except (OSError, ValueError):
+        return None
+
+
+# A value of a score's detail longer than this is cut on the trial's page, its whole text a click away
+DETAIL_CELL = 200
+
+
+def _plain(value) -> bool:
+    return value is None or isinstance(value, (str, int, float, bool))
+
+
+def _shown(value) -> str:
+    """A value of a score's detail as the page writes it: text as written, a boolean as yes or no, none for null or
+    empty text, a list of plain values joined, anything deeper as its JSON."""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if value is None or value == "":
+        return "none"
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    if isinstance(value, list) and all(_plain(x) for x in value):
+        return ", ".join(_shown(x) for x in value) if value else "none"
+    return json.dumps(value, ensure_ascii=False)
+
+
+def read_detail(trial_dir: str) -> dict | None:
+    """The detail beside a score's reward, redacted, or None."""
+    said = _read_score(trial_dir)
+    detail = said.get("detail") if isinstance(said, dict) else None
+    return _options(detail) if isinstance(detail, dict) else None
+
+
+def score_detail(trial_dir: str, leave_out=(), shown=None) -> dict | None:
+    """Redacted score evidence for display. Nested objects become named groups,
+    structured lists become numbered groups; no object is rendered as raw JSON.
+    ``leave_out`` excludes top-level metadata; ``shown`` suppresses duplicate numbers
+    by their full path. Long text keeps a preview and its full value."""
+    detail = read_detail(trial_dir)
+    if detail is None:
+        return None
+    fields, groups = [], []
+
+    def cell(name, value):
+        text = redact(_shown(value))
+        return {"name": redact(str(name)), "text": text,
+                "cut": text[:DETAIL_CELL] if len(text) > DETAIL_CELL else ""}
+
+    def visit(values, path=""):
+        flags = []
+        for name, value in values.items():
+            full = f"{path}.{name}" if path else str(name)
+            if (not path and name in leave_out) or (
+                    isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and value in (shown or {}).get(full, ())):
+                continue
+            if isinstance(value, dict):
+                visit(value, full)
+            elif isinstance(value, list) and not all(_plain(x) for x in value):
+                visit({str(i + 1): x for i, x in enumerate(value)}, full)
+            elif path:
+                item = cell(name, value)
+                if not item["cut"]:
+                    item.pop("cut")
+                item["held"] = value if isinstance(value, bool) else None
+                if isinstance(value, bool):
+                    item["text"] = ""
+                flags.append(item)
+            else:
+                fields.append(cell(name, value))
+        if flags:
+            groups.append({"name": redact(path), "flags": flags})
+
+    visit(detail)
+    return {"fields": fields, "groups": groups} if fields or groups else None
 
 
 def count_rate_limits(path: str) -> int | None:
@@ -320,6 +419,11 @@ class Job:
     # listing several): each one's {name, model, effort}, which split_agents
     # turns into one view per agent. [] for a job of one agent.
     agents: list = field(default_factory=list)
+    # What tells a Nullius standard run from another, as its records say it (identity_of): the benchmark, its
+    # version and options, the agent, its version and options, the model, the provider, the serving providers
+    # pinned and who served, the limits and the caps. A fact the job does not record is not a key. {} for
+    # every other job.
+    identity: dict = field(default_factory=dict)
 
     @property
     def agent_label(self) -> str:
@@ -428,6 +532,17 @@ class Job:
         is the number a paper that scores questions reports."""
         scored = [(t.score, t.n_parts or 1) for t in self.trials if t.score is not None]
         return sum(s * n for s, n in scored) / sum(n for _, n in scored) if scored else None
+
+    @property
+    def mean_score_planned(self):
+        """The mean score over every trial the run planned (``n_planned``), a
+        trial with no score - one that ended on an error, one never run -
+        counting 0; each trial contributes its own score regardless of part
+        counts. ``mean_score`` keeps its part weighting. None when no trial
+        was scored."""
+        if self.mean_score is None:
+            return None
+        return sum(t.score for t in self.trials if t.score is not None) / max(self.n_planned, len(self.trials))
 
     @property
     def score_by_group(self) -> list:
@@ -789,6 +904,7 @@ _PHASE_MULTIPLIERS = ("agent_timeout_multiplier", "agent_setup_timeout_multiplie
 # A launch carries only the name of a value filed under a name like these: it
 # is a credential, and the record is embedded in the builder's page.
 _SECRET_KEY = re.compile(r"(?:api[-_]?key|token|password|authorization|credential|secret)", re.I)
+_TOKEN_COUNT_KEY = re.compile(r"^(?:(?:(?:max|min|num|n|total|input|output|prompt|completion|new)[-_])+tokens|token[-_](?:count|limit|budget))$", re.I)
 # What a recipe can say; any other key a config recorded is named, not dropped.
 _LAUNCH_TOP = {"job_name", "jobs_dir", "quiet", "debug", "agents", "datasets", "tasks", "retry",
                "n_concurrent_trials", "n_attempts", "timeout_multiplier", "environment", *_PHASE_MULTIPLIERS}
@@ -803,7 +919,7 @@ def _scrub(values, at: str = "") -> tuple:
     kept, secret = {}, []
     for key, value in (values if isinstance(values, dict) else {}).items():
         name = f"{at}{key}"
-        if _SECRET_KEY.search(str(key)):
+        if _SECRET_KEY.search(str(key)) and not _TOKEN_COUNT_KEY.fullmatch(str(key)):
             secret.append(name)
         else:
             kept[str(key)], inner = _scrub_value(value, name)
@@ -886,6 +1002,76 @@ def _budget(b) -> dict:
             "unit_max_usd": num(b.get("unit_max_usd")), "over_unit": names(b.get("over_unit")),
             # a merged job: its shards, and how many stopped at their share
             "shards": num(b.get("shards")) or 0, "shards_stopped": num(b.get("shards_stopped")) or 0}
+
+
+def _options(values) -> dict:
+    """A run's options as a page may show them: strings redacted at any depth
+    (``_scrub``), and an option filed under a credential's name kept by its
+    name with its value replaced. Token counts are not credentials."""
+    out = {}
+    for key, value in (values if isinstance(values, dict) else {}).items():
+        hidden = _SECRET_KEY.search(str(key)) and not _TOKEN_COUNT_KEY.fullmatch(str(key))
+        out[str(key)] = "[REDACTED]" if hidden else _scrub_value(value, str(key))[0]
+    return out
+
+
+def _served(v) -> dict:
+    """Who served a job's calls (``result.json``'s ``served``): the calls by
+    serving provider, those that named none, and for each pinned model
+    whether the pin ``held`` (true, ``unknown``, or null with no call); {}
+    when the job records none."""
+    if not isinstance(v, dict):
+        return {}
+    count = lambda n: n if isinstance(n, int) and not isinstance(n, bool) and n >= 0 else None
+    calls = {redact(str(k)): count(n) for k, n in v["calls"].items() if count(n) is not None} if isinstance(v.get("calls"), dict) else {}
+    held = {redact(str(m)): h for m, h in v["held"].items() if h is True or h is None or h == "unknown"} if isinstance(v.get("held"), dict) else {}
+    unnamed = count(v.get("unnamed")) or 0
+    if not calls and not unnamed and not held:
+        return {}
+    return {"calls": calls, "unnamed": unnamed, **({"held": held} if held else {})}
+
+
+def identity_of(cfg: dict, res: dict, agent_version: str = "") -> dict:
+    """What tells a Nullius standard run from another, from its ``config.json``
+    (``cfg``) and its ``result.json`` (``res``): the benchmark, its version and
+    options; the agent as the run named it, the version its trials report
+    (``agent_version``) and its options, defaults included; the model; the
+    provider; the serving providers pinned by model (``served_by``) and who
+    served (``served``); and the limits in force: time limits by phase, turns,
+    model calls, attempts of each unit, retries, units at a time, and the
+    spending caps and resource constraints. A fact the job does not record is not a key, never an
+    empty value, and a control that calls no model has no provider. {} for a
+    job not of the standard. Every string is redacted."""
+    std = cfg.get("standard") if isinstance(cfg, dict) and isinstance(cfg.get("standard"), dict) else {}
+    if not std:
+        return {}
+    word = lambda v: redact(v) if isinstance(v, str) else ""
+    number = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+    agents = cfg.get("agents") if isinstance(cfg.get("agents"), list) else []
+    first = agents[0] if agents and isinstance(agents[0], dict) else {}
+    out = {"benchmark": word(std.get("benchmark")), "benchmark_version": word(std.get("benchmark_version")),
+           "benchmark_options": _options(std.get("benchmark_options")),
+           "agent": word(std.get("plugged")), "agent_version": word(agent_version),
+           "agent_options": _options(std.get("options")), "model": word(first.get("model_name"))}
+    # a control asks no model unless it has a judge or a simulated user; the provider it records is then a default
+    asks = out["model"] or std.get("judge") or std.get("simulator") or std.get("kind") != "control"
+    out["provider"] = word(std.get("provider")) if asks else ""
+    pins = std.get("served_by") if isinstance(std.get("served_by"), dict) else {}
+    out["served_by"] = {redact(str(m)): [word(s) for s in slugs if isinstance(s, str)]
+                        for m, slugs in pins.items() if isinstance(slugs, list) and slugs}
+    out["served"] = _served(res.get("served") if isinstance(res, dict) else None)
+    timeouts = std.get("timeouts") if isinstance(std.get("timeouts"), dict) else {}
+    budget = _budget(res.get("budget") if isinstance(res, dict) else None)
+    whole = lambda v: v if number(v) and isinstance(v, int) else None
+    retries = std.get("retries")
+    limits = {"timeouts": {str(k): v for k, v in timeouts.items() if number(v)},
+              "constraints": _options(std.get("constraints")),
+              "max_turns": whole(std.get("max_turns")), "max_calls": whole(std.get("max_calls")),
+              "repeat": whole(std.get("repeat")) if (whole(std.get("repeat")) or 0) > 1 else None,
+              "retries": retries if type(retries) is int and retries >= 0 else None, "concurrency": whole(cfg.get("n_concurrent_trials")),
+              "max_usd": budget.get("max_usd"), "unit_max_usd": budget.get("unit_max_usd")}
+    out["limits"] = {k: v for k, v in limits.items() if v is not None and v != {}}
+    return {k: v for k, v in out.items() if v not in ("", {})}
 
 
 def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
@@ -973,6 +1159,7 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
                      "units": len(ts["units"]) if isinstance(ts.get("units"), list) else 0}
                     if isinstance(ts.get("name"), str) and ts["name"] else {})
     job.budget = _budget(res.get("budget"))
+    job.identity = identity_of(cfg, res, job.agent_version)
     job.standard = bool(std)
     setup = std.get("setup") if isinstance(std.get("setup"), dict) else {}
     was = (std.get("benchmark_options") or {}).get("agent") if isinstance(std.get("benchmark_options"), dict) else None

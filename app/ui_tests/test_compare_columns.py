@@ -10,7 +10,7 @@ from .test_tables import APP, DOM
 SETUP = r'''
 require(process.argv[2]);
 document.createElement = tag => new El(tag);
-global.innerWidth = 1280;
+global.innerWidth = 1280; global.innerHeight = 800;
 global.addEventListener = () => {};
 global.location = {get href() { return 'http://nullius/compare?pick=a:r1&pick=b:&cohort=matched'; }, set href(url) { this.went = url; }};
 const replaced = [], fetched = [];
@@ -124,6 +124,18 @@ process.stdout.write(JSON.stringify(out));
         self.assertIsNone(got["clicked"])                                      # a click on it does nothing
         self.assertEqual(got["searched"], ["Already in column 1"])            # search still finds it
         self.assertIsNone(got["entered"])                                      # and Enter does nothing
+
+    def test_the_opened_list_keeps_its_place_by_its_button_inside_the_window(self):
+        got = node(r'''
+global.scrollY = 0;
+const [th] = page([column(0, '', 'a')], {values: ['a:'], lists: {a: {runs: RUNS, same: 0}}, dataset: '', runs: '/compare/runs'});
+const btn = th.querySelector('[data-run-btn]'), list = th.querySelector('[data-run-menu]');
+const at = y => { Object.assign(btn, {y, height: 30, width: 200}); btn.click(); const {left, top, bottom, maxHeight} = list.style; btn.click(); return {left, top, bottom, maxHeight}; };
+process.stdout.write(JSON.stringify({high: at(300), low: at(700)}));
+''')
+        # the menu toolkit leaves the place Compare gave it: under its button with room below, above it near the bottom
+        self.assertEqual(got["high"], {"left": "8px", "top": "334px", "bottom": "auto", "maxHeight": "458px"})
+        self.assertEqual(got["low"], {"left": "8px", "top": "auto", "bottom": "104px", "maxHeight": "688px"})
 
     def test_a_modal_over_the_page_leaves_the_opened_list_open(self):
         got = node(r'''

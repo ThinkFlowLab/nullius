@@ -246,7 +246,7 @@
     keepEndpoint(r, raw);
     if ((Number.isInteger(raw.limit) && raw.limit >= 1) || raw.limit === '') r.limit = raw.limit;
     if ((Number.isInteger(raw.concurrency) && raw.concurrency >= 1) || raw.concurrency === '') r.concurrency = raw.concurrency;
-    // attempts per unit, retries per attempt, and the judge's and user simulator's models: a reopened recipe runs as it was saved
+    // attempts per unit, retries after an error, and the judge's and user simulator's models: a reopened recipe runs as it was saved
     if (Number.isInteger(raw.repeat) && raw.repeat >= 1 && raw.repeat <= 32) r.repeat = raw.repeat;
     if (Number.isInteger(raw.retries) && raw.retries >= 0 && raw.retries <= 9) r.retries = raw.retries;
     // the run's spending cap in USD, shared by its jobs (recipe.py): an amount above zero, or none
@@ -575,7 +575,7 @@
       if (!Number.isInteger(Number(r[key])) || Number(r[key]) < 1) add(STEP.limits, key + ' must be an integer of at least 1, or empty for every task.');
     }
     // empty: none, as the standard's field reads it
-    if (r.retries !== '' && r.retries != null && (!Number.isInteger(Number(r.retries)) || Number(r.retries) < 0)) add(STEP.limits, 'Retries per attempt must be a whole number of at least 0, or empty.');
+    if (r.retries !== '' && r.retries != null && (!Number.isInteger(Number(r.retries)) || Number(r.retries) < 0)) add(STEP.limits, 'Retries after an error must be a whole number of at least 0, or empty.');
     if (!Number.isFinite(Number(r.timeoutMultiplier)) || !(Number(r.timeoutMultiplier) > 0)) add(STEP.agent, 'Timeout multiplier must be positive.', 'Common');
     // Common trial settings (Harbor's own per-trial flags): empty means the flag is not written.
     for (const [key, label] of COMMON) if (r[key] !== '' && (!Number.isFinite(Number(r[key])) || !(Number(r[key]) > 0))) add(STEP.agent, label + ' must be a positive number, or empty.', 'Common');

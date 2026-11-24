@@ -33,7 +33,7 @@
       return C.servedRow(rec, role, shown(rec, role), out, entry && entry.result);
     };
     const chips = (role, chosen) => chosen.map((slug, i) => `<span class="nb-agentchip std-served-pick"><span class="std-served-slug">${esc(slug) || '“”'}</span>`
-      + button('×', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${NAME[role]}"`, 'nb-remove') + '</span>').join('');
+      + button('<svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>', `data-served-remove="${i}" data-served-role="${role}" aria-label="Remove ${esc(slug)} from Served by, ${NAME[role]}"`, 'nb-remove') + '</span>').join('');
     const field = (rec, role) => { if (!C.servedRoles(rec).includes(role)) return ''; const s = row(rec, role);
       return `<label class="nb-field std-served" title="Tried in this order, and no other provider. Empty: any."${s.visible ? '' : ' hidden'}>Served by<input list="nb-served" aria-label="Served by, ${NAME[role]}" data-served-by="${role}" data-served-model="${esc(s.model)}" data-served-pending="${s.pending}" data-chosen="${esc(s.chosen.join(','))}" placeholder="${s.placeholder}" autocomplete="off" spellcheck="false">`
         + `<span class="nb-chips std-served-list" data-served-list="${role}" data-of="${esc(JSON.stringify(s.chosen))}">${chips(role, s.chosen)}</span></label>`; };
@@ -181,7 +181,7 @@
     const ref = vocab.filter(a => a.kind === 'reference'), ctl = vocab.filter(a => a.kind === 'control');
     if (ref.length) html += `<div class="nb-agentrow"><h4>Benchmark reference</h4><div class="nb-chips">${ref.map(a => chip(a.id, a.label, on(a.id), `title="${esc(a.summary || '')}"`)).join('')}</div></div>`;
     html += `<div class="nb-agentrow"><h4>Under evaluation</h4><div class="nb-chips">${vocab.filter(a => a.kind === 'evaluated').map(a => chip(a.id, a.label, on(a.id), `title="${esc(a.summary || '')}"`)).join('')}`
-      + rec.customAgents.map((p, i) => `<span class="nb-customagent">${chip('custom-' + i, 'custom', on('custom-' + i))}<input data-custom-agent="${i}" value="${esc(p)}" placeholder="package.module:AgentClass" spellcheck="false" aria-label="Custom agent ${i + 1} import path">${button('×', `data-remove-custom-agent="${i}"`, 'nb-remove')}</span>`).join('')
+      + rec.customAgents.map((p, i) => `<span class="nb-customagent">${chip('custom-' + i, 'custom', on('custom-' + i))}<input data-custom-agent="${i}" value="${esc(p)}" placeholder="package.module:AgentClass" spellcheck="false" aria-label="Custom agent ${i + 1} import path">${button('<svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>', `data-remove-custom-agent="${i}" aria-label="Remove custom agent ${i + 1}"`, 'nb-remove')}</span>`).join('')
       + button('+ Custom agent', 'id="nb-add-custom-agent"', 'nb-subtab') + '</div></div>';
     // Harbor's own agents: what the recipe's Harbor registers, once it has been scanned (Runner step).
     const builtin = vocab.filter(a => a.kind === 'builtin');
@@ -401,7 +401,7 @@
   // Harbor's own mark where Harbor fetches the tasks; a plain icon where no one's mark belongs. Square tiles, so
   // a mark is never read as a second radio button.
   const HARBOR_MARK = '<svg class="nb-radio-mark" aria-hidden="true"><use href="/static/brand/marks.svg#harbor"/></svg>';
-  const iconTile = name => `<span class="nb-radio-mark nb-radio-icon" aria-hidden="true"><svg><use href="#i-${name}"/></svg></span>`;
+  const iconTile = name => `<span class="nb-radio-mark nb-radio-icon" aria-hidden="true"><svg class="ic ic-lg"><use href="#i-${name}"/></svg></span>`;
   const SOURCE_MARK = { hub: HARBOR_MARK, registry: HARBOR_MARK,
     local: iconTile('folder'), generate: iconTile('wand') };
   const SOURCE_HINT = { hub: 'Harbor fetches the tasks when the run starts.', registry: 'Harbor fetches the tasks when the run starts.',
@@ -470,8 +470,9 @@
     return ds.length > 1 ? `<span class="std-ctls">${ds.map(chip).join('')}</span>` : chip(ds[0]); };
   const checkChip = (name, proven, failed, says) => { const p = proofOf(proven, failed); if (p.state === 'ok') { p.title = [says, proven.passed, p.title].filter(Boolean).join(' · '); p.text = '✓'; }
     return `<span class="std-ctl std-checkchip"><b>${esc(name)}</b>${proofSpan(p)}</span>`; };
-  // The yes to an agent running as you: asked only for the local backend, where it is no sandbox.
-  const consentBox = rec => `<label class="nb-field nb-consent"><span><input type="checkbox" data-std-unsandboxed ${rec.unsandboxed ? 'checked' : ''}> Run it as me, not sandboxed</span></label>`;
+  // The yes to an agent running as you: asked only for the local backend, where it is no sandbox. Its field names the
+  // error asking for it, said under the box (fieldErrors).
+  const consentBox = rec => `<label class="nb-field nb-consent"><span><input type="checkbox" data-field="unsandboxed" data-std-unsandboxed ${rec.unsandboxed ? 'checked' : ''}> Run it as me, not sandboxed</span></label>`;
   // A benchmark whose units each boot a VM of their own (OSWorld's guest): a Where option has a value declaring
   // one (needs.<value>.vm); vmMemory, that VM's memory in GB under the chosen values, 0 for none.
   const bootsVms = b => Object.values((b || {}).options || {}).some(o => o.step === 'where' && Object.values(o.needs || {}).some(n => n && n.vm));
@@ -519,11 +520,12 @@
         + (list.some(w => w !== 'local') ? button('Test connection', 'id="nb-test-host"') + ' <span id="nb-hosttest" class="nb-note"></span>' : ''))
       + '<div class="nb-sectionhead std-wherehead"><h3>Isolation</h3></div>'
       + (sandboxes || vms
-        ? `<div class="nb-fixed std-isolation"><span>${vms ? `Each ${esc(noun)} in its own VM` : `The agent alone in each ${esc(noun)}'s VM`}</span>`
-          + `<small>${vms ? (provider ? (sandboxes ? `${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, inside the ${esc(noun)}'s Boat VM` : `${esc(provider.label)}: ${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}`) : '') : 'Answers and keys stay on this machine'}</small></div>`
-        : `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, not sandboxed.', '')}`
-          + how('container', 'Container', web ? 'Sandboxed: each unit in a container whose only ways out are its relay and a public web proxy.'
-            : 'Sandboxed: each unit in a container whose only way out is its relay.', containerWhy) + '</div>')
+        ? (vms && !sandboxes ? `<div class="nb-fixed std-isolation"><span>As you, on the machine</span><small>A container that Nullius starts cannot start the ${esc(noun)}s' VMs</small></div>` : '')
+          + `<div class="nb-fixed std-isolation"><span>${vms ? `Each ${esc(noun)} in its own VM` : `The agent alone in each ${esc(noun)}'s VM`}</span>`
+          + `<small>${vms ? (provider ? (sandboxes ? `${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, inside the ${esc(noun)}'s Boat VM` : `${esc(provider.label)}: ${esc((provider.names || {})[provider.values[0]] || words(provider.values[0]))}, used by ${esc(b.label)} itself`) : '') : 'Answers and keys stay on this machine'}</small></div>`
+        : `<div class="nb-pick-grid std-backends">${how('local', 'Local processes', 'Its commands run as you, on the machine, not sandboxed.', '')}`
+          + how('container', 'Container', web ? 'Sandboxed: Nullius starts a container for each unit, whose only ways out are its relay and a public web proxy.'
+            : 'Sandboxed: Nullius starts a container for each unit, whose only way out is its relay.', containerWhy) + '</div>')
       + (b ? benchOptions(rec, b, 'where') : '')
       + (agentRun && backend === 'local' ? consentBox(rec) : '')
       + (dockerOnly.length && backend !== 'container' && agentRun ? `<p class="nb-note nb-error">${esc(dockerOnly.join(', '))}: ${dockerOnly.length > 1 ? 'these environments need' : 'this environment needs'} a container - ${sandboxes ? 'in a Boat VM' : 'on local processes'} their units are recorded as not run.</p>` : '')
@@ -552,12 +554,14 @@
     if ((rec.backend || 'local') === 'container' && chosen.length && chosen.every(o => o.setup)) return '';
     const reqs = need.map(n => [n, (b.host || {})[n]]).filter(([, r]) => r);
     const local = ((schema.standardHere || {}).host || {})[b.key] || {};
+    const lacks = [];                     // a chosen machine known to lack one: said once, under the requirements
     return reqs.map(([name, req]) => {
       const lines = req.install || [];
       const machines = C.whereList(rec);
       const rows = machines.map(w => {
         const st = hostState[b.key + ':' + w + ':' + name] || (w === 'local' ? {missing: local[name] ? {[name]: local[name]} : {}} : null);
         const missing = st && st.missing && st.missing[name];
+        if (missing && missing.length) lacks.push(`${w === 'local' ? 'This machine' : C.machineLabel(w)} lacks ${req.label} (${missing.join(', ')})`);
         const state = !st ? 'Not checked' : st.error ? st.error : missing && missing.length ? 'Missing' : 'Ready';
         const attrs = `data-hostreq-name="${esc(name)}"`;
         return `<div class="std-hostreq-row">${machines.length > 1 || w !== 'local' ? `<strong>${esc(w === 'local' ? 'This machine' : C.machineLabel(w))}</strong>` : ''}`
@@ -569,7 +573,7 @@
       }).join('');
       return `<div class="nb-sectionhead std-wherehead"><h3>${esc(req.label)}</h3></div><div class="std-hostreq">${rows}`
         + (lines.length ? `<details><summary>Install manually</summary><div class="std-code"><div class="std-code-head"><span></span><button type="button" class="std-copy" data-copy-code>Copy</button></div><pre><code>${esc(lines.join('\n'))}</code></pre></div></details>` : '') + '</div>';
-    }).join('');
+    }).join('') + (lacks.length ? `<p class="nb-note nb-error std-hostreq-lacks" role="status">${esc(lacks.join('; '))}: ${esc(b.label)} cannot run there. Run waits until it is there.</p>` : '');
   }
   async function hostReq(entry, what, name) {
     const rec = r(), b = C.standardBench(rec), key = b.key + ':' + entry + ':' + name;
@@ -649,11 +653,11 @@
   }
   // one tile: {attr, key, on, title, mark, line, note, meta, foot, data (more attributes), tip (its title)}
   const tile = t => `<button class="nb-tile${t.disabled ? ' nb-tile-unfit' : ''}" data-${t.attr}="${esc(t.key)}" aria-pressed="${t.on}"${t.data || ''}${t.disabled ? ` disabled aria-disabled="true" title="${esc(t.why || '')}"` : t.tip ? ` title="${esc(t.tip)}"` : ''}>`
-    + `<span class="nb-tile-head">${t.mark ? `<span class="nb-mark">${t.mark}</span>` : ''}<strong>${esc(t.title)}</strong><span class="nb-tile-check" aria-hidden="true">${t.on ? '✓' : ''}</span></span>`
+    + `<span class="nb-tile-head">${t.mark ? `<span class="nb-mark">${t.mark}</span>` : ''}<strong>${esc(t.title)}</strong><span class="nb-tile-check" aria-hidden="true">${t.on ? '<svg class="ic"><use href="#i-check"/></svg>' : ''}</span></span>`
     + (t.line ? `<span class="nb-tile-line">${esc(t.line)}</span>` : '') + (t.note ? `<span class="nb-tile-note">${esc(t.note)}</span>` : '')
     + (t.meta || t.foot ? `<span class="nb-tile-foot">${t.meta ? `<span>${esc(t.meta)}</span>` : ''}${t.foot || ''}</span>` : '') + '</button>';
   // a machine to run on: this one or a host, its connection state filled in by Test connection
-  const icon = name => `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+  const icon = name => `<svg class="ic ic-lg" aria-hidden="true"><use href="#i-${name}"/></svg>`;
   const machineTile = (attr, v, t, sub, on) => tile({attr, key: v, on, mark: v === 'local' ? icon('machine') : icon('network'), title: t, tip: sub,
     foot: v !== 'local' ? `<span class="nb-state nb-hoststate" data-host-state="${esc(v)}"></span>` : ''});
   // The grids drawn by the server and run by the card toolkit (tables.js): the Benchmark step's (/new-run/benchmarks,
@@ -842,8 +846,10 @@
         + field('Number of ' + u.nouns, 'limit', rec.limit, {type: 'number', min: 1, max: most, placeholder: all,
             hint: 'Empty: all' + (most ? ' ' + most : '') + per + '. Else the first ones, in order.'})
         + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: rec.backend === 'boat' ? String((schema.standardHere || {}).boatSlots || 'Boat\'s limit') : '1'}) + '</div>'
-        + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1'})
-        + field('Retries per attempt', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0'}) + '</div>'
+        + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1',
+            hint: 'Each ' + esc(u.noun) + ' is run and scored this many times.'})
+        + field('Retries after an error', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0',
+            hint: 'Retry errors such as rate limits or crashes, but not failed ' + esc(u.nouns) + '.'}) + '</div>'
         // a conversation's most agent turns (recipe.py: run --max-turns): only a benchmark that holds conversations has turns
         + ((b.needs || []).includes('agent.conversation/v1')
           ? field('Turns per conversation', 'turns', rec.turns ?? '', {type: 'number', min: 1, placeholder: String((b.timeouts || {}).turns || ''),
@@ -863,6 +869,7 @@
   // take, each empty at its default, shown greyed - an agent's own under ``by`` (OSWorld's agents' steps).
   function benchLimits(rec, b) {
     const chosen = C.runsOf(rec), yours = chosen.some(k => !['original', 'model'].includes(k) && !(b.controls || []).some(x => x.key === k));
+    const theirs = chosen.some(k => ['original', 'model'].includes(k));
     // a default by agent: the chosen own agents' one when they share it
     const own = [...new Set(C.ownChosen(rec).map(a => a.agent))], given = rec.bench_options || {};
     const of = k => k === 'agent' && own.length ? (own.length === 1 ? own[0] : '') : given[k] ?? (b.options[k] || {}).default;
@@ -871,7 +878,8 @@
       .filter(([, o]) => (o.setups || ['yours']).some(s => s === 'yours' ? yours : chosen.includes(s)))
       .map(([n, o]) => {
         const [k, by] = Object.entries(o.by || {})[0] || [];
-        const def = (!yours && k && by[of(k)]) || o.default;
+        // an agent's or a capability's run alone gets the benchmark's value for it (``yours``), the benchmark's own agents theirs
+        const def = yours ? (!theirs && o.yours) || o.default : (k && by[of(k)]) || o.default;
         return `<label class="nb-field" title="${esc(o.summary)}">${esc(o.label)}<input class="nb-declared" data-bench-opt-select="${esc(n)}" type="number" min="1" step="1" value="${esc(given[n] ?? '')}" placeholder="${esc(def)}" aria-label="${esc(o.label)}" autocomplete="off"></label>`;
       });
     return rows.length ? `<div class="nb-sectionhead nb-sectionnext"><h2>${esc(b.label)}</h2></div>` + rows.join('') : '';
@@ -999,7 +1007,7 @@
       html='<div class="nb-sectionhead"><h2>Scope & execution</h2></div>';
       const allTasks=(()=>{const ds=schema.datasets.find(d=>d.benchmark===rec.benchmark);return ds&&ds.tasks?'all '+ds.tasks:'all';})();
       html+=`<div class="nb-two">${field('Number of tasks','tasks',rec.tasks,{type:'number',min:1,placeholder:allTasks,hint:'Empty: '+allTasks+'.'})}${field('Concurrent trials','concurrency',rec.concurrency,{type:'number',min:1})}</div>`;
-      html+=`<div class="nb-two">${field('Retries per attempt','retries',rec.retries,{type:'number',min:0,placeholder:'0'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
+      html+=`<div class="nb-two">${field('Retries after an error','retries',rec.retries,{type:'number',min:0,placeholder:'0'})}${field('Include task names · optional glob','include',rec.include,{placeholder:'django*'})}</div>`
         +harborExecutableFields(rec);
       html+=field('Output directory','output',rec.output,{});
     }
@@ -1240,6 +1248,7 @@
     const el=event.target,d=el.dataset,rec=r();
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
     if(d.servedBy!==undefined)return;   // what is typed in a Served by filters its menu: a pick, or Enter, adds it (nb-pick)
+    if(d.stdUnsandboxed!==undefined)return;   // a box's value is no tick: its change sets the recipe
     if(d.providerModel && rec.modelFormat !== 'provider-id'){for(const key of ['model','userModel','evalModel'])if(typeof rec[key]==='string')rec[key]=C.bareModel(rec[key]);rec.modelFormat='provider-id';}
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
       const typed=el.type==='number'?(el.value===''?'':Number(el.value)):el.value,value=d.field==='limit'?atMost(el,typed):typed;

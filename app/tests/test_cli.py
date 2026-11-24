@@ -149,6 +149,34 @@ class ExitCodes(Scratch):
         self.assertCwdUntouched()
 
 
+class JobShow(Scratch):
+    """`runs.cli show <root> <job>`: the job from the shell."""
+
+    def test_a_standard_job_s_document_holds_what_identifies_it_and_both_means_and_the_rest_as_before(self):
+        from dataclasses import asdict
+        from tests.test_parse import IDENTITY, SCORED, SECRET as OPTION_SECRET, standard_job
+        standard_job(self.tmp, "scored", [1.0, 0.5, 0.0, None], bench=SCORED)
+        out = self.sh("runs.cli", "show", self.tmp, "scored", "--json")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertNotIn(OPTION_SECRET, out.stdout + out.stderr)              # the option filed under a credential's name
+        doc = json.loads(out.stdout)
+        self.assertEqual(doc["identity"], dict(IDENTITY, served={"calls": {"DeepInfra": 4}, "unnamed": 0, "held": {"m-1": True}}))
+        self.assertEqual((doc["mean_score"], doc["mean_score_planned"]), (0.5, 0.375))
+        # Every earlier field keeps the parsed value, including each trial's details.
+        job = parse.load_all([self.tmp])[0]
+        before = asdict(job)
+        del before["identity"]
+        before.update(runs_cli.job_row(job), harbor_label=job.harbor_label)
+        for trial, raw in zip(job.trials, before["trials"]):
+            raw.update(outcome_label=trial.outcome_label, is_infra=trial.is_infra,
+                       is_regression=trial.is_regression, has_trace=trial.has_trace)
+        before = json.loads(json.dumps(before, default=lambda value: value.isoformat()))
+        apart = {"identity", "mean_score", "mean_score_planned"}                # each checked above
+        self.assertEqual({k: v for k, v in doc.items() if k not in apart}, {k: v for k, v in before.items() if k not in apart})
+        self.assertIn("  mean score 0.50 over the trials scored · 0.38 over the 4 planned\n",
+                      self.sh("runs.cli", "show", self.tmp, "scored").stdout)
+
+
 # -------------------------------------------------------
 # The trial view, the comparison and the workspace list. Same table, same rules:
 # help with the exit codes, --json on stdout alone, 3 for what is not

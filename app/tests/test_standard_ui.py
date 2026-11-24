@@ -44,7 +44,7 @@ class Backend(unittest.TestCase):
                 self.assertEqual(sorted(set(re.findall(r"--attempts \S+|--retries \S+", out["script"]))), flags)
                 self.assertEqual(any("up to 2 retries an attempt" in str(row) for row in out["review"]), bool(flags))
         bad = recipe.compile(a_recipe(unsandboxed=True, retries=10), defs())["errors"]
-        self.assertIn("Retries per attempt: a whole number from 0 to 9.", [e["message"] for e in bad])
+        self.assertIn("Retries after an error: a whole number from 0 to 9.", [e["message"] for e in bad])
 
     def test_a_container_needs_no_yes_and_says_so_in_the_command(self):
         out = recipe.compile(a_recipe(backend="container"), defs(), docker_unusable=lambda: None)

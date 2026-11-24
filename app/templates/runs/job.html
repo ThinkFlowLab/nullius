@@ -9,35 +9,55 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='runs/board.css') }}">{% endblock %}
 {% block body %}{% set oc = job.counts %}
 
+{#- What tells this run from another, as its records say it (job.identity), as (name, value) rows of the card each
+    belongs to; a fact not recorded has no row. The caps stay under Run totals. -#}
+{%- macro fact_value(v) -%}{% if v is sameas true %}yes{% elif v is sameas false %}no{% elif v is mapping %}{{ v|tojson }}{% elif v is string or v is number %}{{ v }}{% else %}{{ v|join(', ') }}{% endif %}{%- endmacro %}
+{%- macro calls(n) %}{{ n }} call{{ '' if n == 1 else 's' }}{% endmacro %}
+{%- set facts = job.identity %}{% set lim = facts.limits or {} %}
+{%- set benchmark_rows, agent_rows, limit_rows = [], [], [] %}
+{%- for k, v in (facts.benchmark_options or {}).items() if v is not none %}{% set _ = benchmark_rows.append((names.benchmark_options[k], fact_value(v))) %}{% endfor %}
+{%- for k, v in (facts.agent_options or {}).items() if v is not none %}{% set _ = agent_rows.append((names.agent_options[k], fact_value(v))) %}{% endfor %}
+{%- if facts.provider %}{% set _ = agent_rows.append(('Provider', facts.provider|provider)) %}{% endif %}
+{%- if facts.served_by %}{% set requested %}{% for m, slugs in facts.served_by.items() %}{% if not loop.first %} · {% endif %}{% if facts.served_by|length > 1 %}{{ m }}: {% endif %}{{ slugs|join(', ') }}{% endfor %}{% endset %}{% set _ = agent_rows.append(('Requested', requested)) %}{% endif %}
+{%- if facts.served and (facts.served.calls or facts.served.unnamed) %}{% set answered %}{% for name, n in facts.served.calls.items() %}{% if not loop.first %}, {% endif %}{{ name }} · {{ calls(n) }}{% endfor %}{% if facts.served.unnamed %}{% if facts.served.calls %}, {% endif %}unnamed · {{ calls(facts.served.unnamed) }}{% endif %}{% endset %}{% set _ = agent_rows.append(('Answered by', answered)) %}{% endif %}
+{%- for key, name in [('concurrency', 'Concurrent'), ('repeat', 'Attempts'), ('retries', 'Retries'), ('max_turns', 'Turns'), ('max_calls', 'Model calls')] if key in lim %}{% set _ = limit_rows.append((name, lim[key])) %}{% endfor %}
+{%- for key, name in [('setup', 'Setup limit'), ('image', 'Image limit'), ('agent', 'Agent limit'), ('verify', 'Verifier limit'), ('score', 'Score limit')] if key in (lim.timeouts or {}) %}{% set _ = limit_rows.append((name, '%g min'|format(lim.timeouts[key] / 60))) %}{% endfor %}
+{#- A card with rows has a chevron and opens them beneath it, by click or keyboard; `name` keeps one open at a time,
+    and `pop` keeps the sliding disclosures off a panel laid over the page. A card with none is as it was. -#}
+{%- macro identity_card(rows) %}{% if rows %}<details class="pop run-identity-more" name="run-identity">
+      <summary class="run-identity-card">{{ caller() }}<svg class="ic dd-chev" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+      <dl class="run-identity-details">{% for k, v in rows %}<dt>{{ k }}</dt><dd>{{ v }}</dd>{% endfor %}</dl>
+    </details>{% else %}<div class="run-identity-card">{{ caller() }}</div>{% endif %}{% endmacro %}
+
 {% set meta %}
   <div class="run-meta run-identity" aria-label="Run details">
     {% set dataset = nav_catalog.dataset(job.dataset) if nav_catalog else none %}
     {% set sources = job.trials|map(attribute='source')|select|unique|list %}
-    {% set benchmark = dataset.benchmark if dataset else (sources[0] if sources|length == 1 else none) %}
+    {% set benchmark = names.benchmark or (dataset.benchmark if dataset else (sources[0] if sources|length == 1 else none)) %}
     <div class="run-identity-card">
       {% if not job.runner %}<svg class="run-runner-logo" aria-hidden="true"><use href="{{ url_for('static', filename='brand/marks.svg') }}#harbor"/></svg>{% endif %}
       <div><span class="k">Runner</span><span class="v mono" title="{{ job.runner_commit if job.runner else job.harbor_label }}">{% if job.runner %}{{ job.runner }}{% if job.runner_commit %} <span class="mono">{{ job.runner_commit }}</span>{% endif %}{% else %}harbor{% if job.harbor_label %} {{ job.harbor_label }}{% endif %}{% endif %}</span></div>
     </div>
-    {% if job.dataset %}<div class="run-identity-card">
+    {% if job.dataset %}{% call identity_card(benchmark_rows) %}
       {% if benchmark %}<div><span class="k">Benchmark</span><span class="v">{{ benchmark }}</span></div><span class="run-identity-sep" aria-hidden="true"></span>{% endif %}
       <div><span class="k">Dataset</span><span class="v" title="{{ job.dataset }}">{{ job.dataset|dsname }}</span></div>
       {% if job.task_set %}<span class="run-identity-sep" aria-hidden="true"></span><div><span class="k">Task set</span><span class="v" title="The task set this run ran: {{ job.task_set.units }} {{ 'task' if job.task_set.units == 1 else 'tasks' }}">{% if set_link.link %}<a href="{{ set_link.link }}">{{ set_link.name }}</a>{% else %}{{ set_link.name }}{% endif %}</span></div>{% endif %}
-    </div>{% endif %}
+    {% endcall %}{% endif %}
     {% if job.agent_label or job.model_name %}
-    <div class="run-identity-card">
+    {% call identity_card(agent_rows) %}
       {% if job.agent_label %}<span class="run-identity-mark" aria-hidden="true">{{ agent_mark('agent', job.agent_name, job.agent_label) }}</span>{% endif %}
       <div>{% if job.agent_label %}<span class="v">{{ job.agent_label }}{% if job.agent_version %} <span class="mono faint" title="Recorded agent version">v{{ job.agent_version }}</span>{% endif %}</span>{% endif %}
       {% if job.model_name %}<span class="run-identity-model mono">{{ job.model_name }}</span>{% endif %}</div>
-    </div>
+    {% endcall %}
     {% endif %}
     {% if control %}<span class="chip-control" title="Harbor control: never calls a model">control</span>
     <span class="control-verdict {{ control.state }}" id="control-verdict" data-state="{{ control.state }}"
       title="{{ control.control }} must be {{ control.expected }} on every task; this is a check on the tasks, not a score">{{ control.label }}</span>{% endif %}
-    <div class="run-identity-card">
+    {% call identity_card(limit_rows) %}
       <div><span class="k">Trials</span><span class="v">{{ job.trials|length }}{% if job.n_planned and job.n_planned != job.trials|length %} of {{ job.n_planned }} planned{% endif %}</span></div>
       {% if job.duration_min is not none %}<span class="run-identity-sep" aria-hidden="true"></span><div><span class="k">Duration</span><span class="v">{{ job.duration_min|runtime }}</span></div>{% endif %}
       {% if job.n_retries %}<span class="run-identity-sep" aria-hidden="true"></span><div><span class="k">Retried</span><span class="v warn" title="Trials Harbor restarted after an error">{{ job.n_retries }}</span></div>{% endif %}
-    </div>
+    {% endcall %}
   </div>{% endset %}
 {% set actions %}
     {% if execution and execution.plan.recipe %}<a class="btn sm ghost" href="{{ url_for('new_run', run=job.job_id) }}"
@@ -170,6 +190,7 @@
     <div class="hk" aria-label="Health">
       <dl>
         <dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="No pass or fail in this benchmark: no rate">—</dd>
+        {% if job.mean_score_planned is not none %}<dt>planned</dt><dd id="planned-mean" data-tip="The mean over all {{ [job.n_planned, job.trials|length]|max }} planned, a trial with no score counting 0">{{ '%.2f'|format(job.mean_score_planned) }}</dd>{% endif %}
         <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors, setup failures and spending caps">{{ job.n_infra }}</dd>
       </dl>
     </div>
@@ -340,6 +361,7 @@
     {% if job.budget.over_unit %}<div class="sp"><details class="pop"><summary aria-label="The units that reached it"><span class="tw"></span>{{ job.budget.over_unit|length }} reached it</summary>
       <div class="popm cap-units" role="group" aria-label="The units that reached it">{% for u in job.budget.over_unit %}<span>{{ u }}</span>{% endfor %}</div></details></div>{% endif %}{% endif %}
     {% if job.mean_score is not none %}<div class="kv" data-tip="{% if job.n_scored_parts %}The mean score over every one of the {{ job.n_scored_parts }} scored, whichever trial it is under{% else %}The mean of each item's graded score (an F1, partial credit){% endif %}{% if not job.scored_only %}; the rates count an item resolved at its benchmark's pass mark{% endif %}"><span class="k">Mean score</span><span class="v">{{ '%.2f'|format(job.mean_score) }}</span></div>{% endif %}
+    {% if job.mean_score_planned is not none %}<div class="kv" id="planned-mean-total" data-tip="The mean over all {{ [job.n_planned, job.trials|length]|max }} planned, a trial with no score counting 0"><span class="k">Mean over planned</span><span class="v">{{ '%.2f'|format(job.mean_score_planned) }}</span></div>{% endif %}
     {% for g in job.score_by_group %}<div class="kv by-group" data-tip="The mean score of the {{ g.n }} scored with {{ job.parts_by }} {{ g.group }}"><span class="k">{{ job.parts_by|capitalize }} {{ g.group }}</span><span class="v">{{ '%.2f'|format(g.mean) }} <small class="faint">{{ g.n }}</small></span></div>{% endfor %}
     {% if job.duration_min %}<div class="kv" data-tip="Start to finish, the whole run"><span class="k">Duration</span><span class="v">{{ job.duration_min|runtime }}</span></div>{% endif %}
   </div>
@@ -353,18 +375,18 @@
     <div class="facet" data-k="o"><details><summary class="fsum"><span class="k">Outcome</span><span class="v">All</span><span class="car">▾</span></summary>
       <div class="fmenu">
         {% for k in ORDER %}{% if oc[k] %}<a class="fx" data-o="{{ k }}" href="?outcome={{ k }}"><i class="sw oc-{{ k }}"></i><span>{{ LABELS[k] }}</span><b>{{ oc[k] }}</b></a>{% endif %}{% endfor %}
-      </div></details><button class="x plain" type="button" hidden aria-label="Remove the outcome filter">✕</button></div>
+      </div></details><button class="x plain" type="button" hidden aria-label="Remove the outcome filter"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     {% if judgement and judgement.causes %}
     <div class="facet j" data-k="c"><details><summary class="fsum"><span class="k">Judge cause</span><span class="v">All</span><span class="car">▾</span></summary>
       <div class="fmenu" id="judge-filters">
         {% for cause, n in judgement.causes %}<a class="fx" data-c="{{ cause }}" href="?cause={{ cause }}"><span class="mono">{{ cause }}</span><b>{{ n }}</b></a>{% endfor %}
-      </div></details><button class="x plain" type="button" hidden aria-label="Remove the judge cause filter">✕</button></div>
+      </div></details><button class="x plain" type="button" hidden aria-label="Remove the judge cause filter"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     {% endif %}
     {% if judgement and judgement.flags %}
     <div class="facet j" data-k="f"><details><summary class="fsum"><span class="k">Flag</span><span class="v">All</span><span class="car">▾</span></summary>
       <div class="fmenu">
         {% for f, n in judgement.flags %}<a class="fx" data-f="{{ f }}" href="?flag={{ f }}"><span class="pip on key-n" data-n="{{ judgement.flag_ids.index(f) + 1 }}" aria-hidden="true"></span><span class="mono">{{ f }}</span><b>{{ n }}</b></a>{% endfor %}
-      </div></details><button class="x plain" type="button" hidden aria-label="Remove the flag filter">✕</button></div>
+      </div></details><button class="x plain" type="button" hidden aria-label="Remove the flag filter"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     {% endif %}
     <button class="fclear plain" id="clear-filters" type="button" hidden>Show all {{ job.trials|length }}</button>
   </div>
