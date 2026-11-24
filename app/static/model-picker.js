@@ -158,6 +158,7 @@
       const wrap = document.createElement('span'); wrap.className = 'nb-model-control'; input.before(wrap); wrap.append(input);
       const button = document.createElement('button'); button.type = 'button'; button.className = 'nb-model-open'; button.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg>';
       button.setAttribute('aria-label', severalOf(input) ? 'Browse the serving providers' : 'Browse provider models');
+      button.addEventListener('pointerdown', e => e.preventDefault());      // the field keeps the keyboard: it is not left
       button.addEventListener('click', e => { e.preventDefault(); input.focus(); void open(input, true); }); wrap.append(button);
       input.addEventListener('focus', () => { if(!choosing)void open(input); });
       // a field of several keeps the keyboard after a pick: a click on it opens its menu again for the next one

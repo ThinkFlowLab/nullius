@@ -14,6 +14,9 @@
       const b = C.standardBench(rec) || {}, lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
       return (!paper && rec[role + '_model']) || lb && lb[role] || b[role] || '';
     };
+    // the roles whose model is being typed: their providers are asked once it is picked or the field is left
+    const typing = new Set();
+    const type = (field, on) => { const role = field.replace('_model', ''); if (typing.has(role) === on) return; typing[on ? 'add' : 'delete'](role); sync(); };
     // the server's compile, while what decides the models it names has not changed since
     const known = rec => { const c = compiled(); return c && c.out && c.key === C.servedKey(rec) ? c.out : null; };
     providers.subscribe(model => {
@@ -28,7 +31,7 @@
       served: C.servedKey(JSON.parse(key)) === C.servedKey(rec) ? C.servedCompiled(last, out, key) : last,
     });
     const row = (rec, role) => {
-      const out = known(rec), model = C.servedModelOf(role, '', out);
+      const out = typing.has(role) ? null : known(rec), model = C.servedModelOf(role, '', out);
       const entry = C.servedRoles(rec).includes(role) && model ? providers(model) : null;
       return C.servedRow(rec, role, shown(rec, role), out, entry && entry.result);
     };
@@ -49,7 +52,7 @@
         if (list && list.dataset.of !== JSON.stringify(s.chosen)) { list.dataset.of = JSON.stringify(s.chosen); list.innerHTML = chips(role, s.chosen); }
       });
     }
-    return {field, sync, acceptCompile};
+    return {field, sync, type, acceptCompile};
   }
   // Saved recipes are the server's (/new-run/recipes, nullius/recipes/store.py); a browser on its host alone writes them.
   // move() sends what this browser kept before (nullius.recipes.v1, and the older nullius.recipes.v1.<workspace> lists)
@@ -220,8 +223,9 @@
   // The standard's recipe as the server compiles it from the definitions (POST
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
   let runnerOut = null, runnerKey = '', runnerTimer, runnerServed = null;
+  const MODEL_FIELDS = ['model', 'simulator_model', 'judge_model'];
   // Served by's rows (servedRows above), given the models the server last named and what decided them (C.servedCompiled)
-  const {field: servedField, sync: syncServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders});
+  const {field: servedField, sync: syncServed, type: typeServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders});
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
@@ -1200,7 +1204,7 @@
       else if(!d.providerModel&&['model','userModel','evalModel'].includes(d.field)&&/^(openrouter|openai)\//.test(String(value))){rec.provider=C.providerOf(rec,value);rec[d.field]=C.bareModel(value);
         renderForm();refreshPlan();const f=root.querySelector(`[data-field="${d.field}"]`);if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);}return;}   // the provider the prefix named, and whether it is set
       else if(d.field==='provider'){C.setChoice(rec,value);renderForm();refreshPlan();return;}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
-      else if(['model','simulator_model','judge_model'].includes(d.field)){C.setModelOf(rec,d.field,value);syncServed();}   // the field's pin goes with its model; its Served by follows, in place
+      else if(MODEL_FIELDS.includes(d.field)){C.setModelOf(rec,d.field,value);typeServed(d.field,true);syncServed();}   // the field's pin goes with its model; its Served by follows, in place
       else rec[d.field]=value;
       if(el.list?.id==='nb-paths')completeDirectory(el.value);
     }else if(d.stdMinutes){const t=Object.assign({},rec.timeouts);if(el.value===''||!(Number(el.value)>0))delete t[d.stdMinutes];else t[d.stdMinutes]=Number(el.value);if(Object.keys(t).length)rec.timeouts=t;else delete rec.timeouts;refreshPlan();return;
@@ -1217,12 +1221,14 @@
   // no cap, unsaid. It is said, and the field emptied, so that it shows what the recipe holds
   root.addEventListener('focusout',event=>{
     const el=event.target;
+    if(MODEL_FIELDS.includes(el.dataset.field))typeServed(el.dataset.field,false);
     if(el.type==='number'&&(el.dataset.field||el.dataset.stdMinutes||el.dataset.benchOptSelect)&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
   });
   // a provider picked in a Served by, or slugs typed there and Enter: they join its list, after the ones there
   root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail);syncServed();refreshPlan();});
   root.addEventListener('change',async event=>{
     const el=event.target,d=el.dataset;
+    if(MODEL_FIELDS.includes(d.field))typeServed(d.field,false);
     if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
     else if(d.stdVersion!==undefined){   // in place: only the card's count changes on this step, so nothing else is drawn again
