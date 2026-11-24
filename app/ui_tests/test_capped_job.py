@@ -3,6 +3,7 @@ that it stopped the run, and the units it cut off or never began, read from
 the job as a standard run writes it; the builder keeps a recipe's cap."""
 from __future__ import annotations
 
+import json
 import re
 import tempfile
 import unittest
@@ -131,9 +132,10 @@ class CappedJobPage(unittest.TestCase):
 
 
 class RunFactsOnTheJobPage(unittest.TestCase):
-    """What identifies a run, as the job page shows it: one block for a standard job, read from the job as a run
-    writes it, the names its definitions give; nothing for a job that records none; and beside the mean score
-    over the trials scored, the mean over every trial planned."""
+    """What identifies a run, as the job page shows it: in the header's cards, each fact a standard job records
+    beneath the card it belongs to, read from the job as a run writes it, the names its definitions give; a card
+    with nothing more does not open; and beside the mean score over the trials scored, the mean over every trial
+    planned."""
 
     @classmethod
     def setUpClass(cls):
@@ -145,6 +147,8 @@ class RunFactsOnTheJobPage(unittest.TestCase):
         standard_job(str(jobs), "facts", [1.0, 0.0, None], budget={"max_usd": 0.5, "spent_usd": 0.1, "stopped": False, "cut_off": [], "not_run": []})
         standard_job(str(jobs), "named", [1.0], bench={k: v for k, v in VERSIONED.items() if k != "_version"} | {"key": "locomo", "_ref": "locomo"},
                      bench_options={"rag_mode": "dialog"}, options={}, served_by=None, timeouts=None, max_turns=None, max_calls=None, retries=0)
+        result = Path(standard_job(str(jobs), "unserved", [1.0], served_by=None)) / "result.json"      # a run that kept no serving record
+        result.write_text(json.dumps({k: v for k, v in json.loads(result.read_text()).items() if k != "served"}))
         standard_job(str(jobs), "scored", [1.0, 0.5, 0.0, None], bench=SCORED)
         standard_job(str(jobs), "constrained", [1], constraints={"cpus": 2, "memory_mb": 512, "processes": 128,
                                                                   "cpu_set": "0-1", "gpu_ids": [], "concurrency": 2})
@@ -170,34 +174,48 @@ class RunFactsOnTheJobPage(unittest.TestCase):
     page = CappedJobPage.page
     text = CappedJobPage.text
 
-    def rows(self, html):
-        """The block's rows, (name, value) as text."""
-        block = re.search(r'<dl class="run-facts" id="run-facts".*?</dl>', html, re.S)
-        self.assertIsNotNone(block)
-        return [(self.text(dt, r".*"), self.text(dd, r".*")) for dt, dd in re.findall(r"<dt>(.*?)</dt><dd[^>]*>(.*?)</dd>", block[0], re.S)]
+    def header(self, html):
+        return re.search(r'<div class="run-meta run-identity".*?</header>', html, re.S)[0]
 
-    def test_a_standard_job_shows_what_identifies_it_in_one_block_and_no_credential(self):
+    def cards(self, html):
+        """The header's cards that open, by the first word each card says (a fact's name, or the agent's): the
+        (name, value) rows beneath it. They are one group of disclosures, so the browser keeps one open at a time."""
+        found = re.findall(r'<details class="pop run-identity-more" name="run-identity">\s*<summary class="run-identity-card">(.*?)'
+                           r'<svg class="ic dd-chev"[^>]*>.*?</summary>\s*<dl class="run-identity-details">(.*?)</dl>', self.header(html), re.S)
+        self.assertEqual(len(found), self.header(html).count("<details"))
+        return {re.search(r'<span class="[kv]">([^<]*)', card)[1].strip():
+                [(self.text(dt, r".*"), self.text(dd, r".*")) for dt, dd in re.findall(r"<dt>(.*?)</dt><dd>(.*?)</dd>", rows, re.S)]
+                for card, rows in found}
+
+    def test_a_standard_job_shows_what_identifies_it_beneath_its_cards_and_no_credential(self):
         from tests.test_parse import SECRET
         html = self.page("facts")
-        self.assertEqual(self.rows(html), [
-            ("Benchmark", "fakebench 2 · Temperature 0.2"),
-            ("Agent options", "Reasoning effort high · Max tokens 4096 · Api key [REDACTED] · Note from [REDACTED]"),
-            ("Provider", "OpenRouter"),
-            ("Served by", "deepinfra/fp8, together"),
-            ("Answered by", "DeepInfra 3"),
-            ("Limits", "Agent 10.00m · 30 turns · 100 model calls · 2 retries · 3 at a time")])
+        self.assertEqual(self.cards(html), {
+            "Benchmark": [("Temperature", "0.2")],
+            "fake": [("Reasoning effort", "high"), ("Max tokens", "4096"), ("Api key", "[REDACTED]"), ("Note", "from [REDACTED]"),
+                     ("Provider", "OpenRouter"), ("Requested", "deepinfra/fp8, together"), ("Answered by", "DeepInfra · 3 calls")],
+            "Trials": [("Agent limit", "10.00m"), ("Turns", "30"), ("Model calls", "100"), ("Retries", "2"), ("At a time", "3")]})
         self.assertNotIn(SECRET, html)
         self.assertEqual(self.text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap $0.50")    # the cap stays under Run totals
-        self.assertIn("fake", self.text(html, r'<div class="run-meta".*?</div>'))                             # the agent and the model, above it
-        self.assertIn("m-1", self.text(html, r'<div class="run-meta".*?</div>'))
+        self.assertIn("Benchmark fakebench 2 Dataset all", self.text(self.header(html), r".*"))             # the names on the cards
+        self.assertIn("fake v1.2 m-1", self.text(self.header(html), r".*"))
+        self.assertRegex(self.header(html), r'^<div class="run-meta run-identity"[^>]*>\s*<div class="run-identity-card">\s*'
+                                            r'<div><span class="k">Runner</span>')                          # the runner has nothing more
 
     def test_names_come_from_the_definitions_and_a_fact_not_recorded_has_no_row(self):
-        self.assertEqual(self.rows(self.page("named")), [("Benchmark", "LoCoMo · RAG mode dialog"), ("Provider", "OpenRouter"),
-                                                         ("Answered by", "DeepInfra 1"), ("Limits", "0 retries · 3 at a time")])
-        self.assertEqual([name for name, _ in self.rows(self.page("nop"))], ["Benchmark", "Limits"])     # a control asks no model
-        self.assertNotIn('id="run-facts"', self.page("harbor"))
-        self.assertIn(("Resources", "CPUs 2 · Memory (MB) 512 · Processes and threads 128 · CPUs Nullius may use 0-1 · GPUs Nullius may use none · Concurrent units 2"),
-                      self.rows(self.page("constrained")))
+        html = self.page("named")
+        self.assertIn("Benchmark LoCoMo", self.text(self.header(html), r".*"))
+        self.assertEqual(self.cards(html), {"Benchmark": [("RAG mode", "dialog")], "fake": [("Provider", "OpenRouter"), ("Answered by", "DeepInfra · 1 call")],
+                                            "Trials": [("Retries", "0"), ("At a time", "3")]})
+        self.assertEqual(list(self.cards(self.page("nop"))), ["Benchmark", "Trials"])                     # a control asks no model
+        self.assertNotIn("dd-chev", self.header(self.page("harbor")))                                    # nothing recorded: no card opens
+        self.assertEqual(self.cards(self.page("constrained"))["Trials"][-6:], [
+            ("CPUs", "2"), ("Memory (MB)", "512"), ("Processes and threads", "128"), ("CPUs Nullius may use", "0-1"),
+            ("GPUs Nullius may use", "none"), ("Concurrent units", "2")])
+
+    def test_with_no_serving_record_the_provider_stays_and_requested_and_answered_by_go(self):
+        self.assertEqual([name for name, _ in self.cards(self.page("unserved"))["fake"]],
+                         ["Reasoning effort", "Max tokens", "Api key", "Note", "Provider"])
 
     def test_the_mean_over_every_trial_planned_stands_beside_the_mean_over_the_trials_scored(self):
         html = self.page("scored")

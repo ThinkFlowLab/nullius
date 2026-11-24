@@ -359,11 +359,6 @@ tr.tone-good .jbar .fill { background: #4cc26a; } tr.tone-warn .jbar .fill { bac
 .run-meta > span + span::before { content: "·"; color: var(--text-faint); margin-right: 14px; }
 .run-meta > .mono { color: var(--text); }
 @media(max-width:640px){.run-meta > span + span::before{display:none}.run-meta{font-size:13px}}
-.run-facts { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 0 0 var(--head-gap); font-size: 13px; line-height: 1.6; color: var(--text-dim); }
-.run-facts > div { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.run-facts dt { color: var(--text-faint); white-space: nowrap; }
-.run-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-.run-facts .mono { color: var(--text); }
 
 .bar {
   display: flex; height: 8px; border-radius: 99px; overflow: hidden;
