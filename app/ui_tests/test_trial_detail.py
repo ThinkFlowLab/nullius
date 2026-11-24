@@ -1,6 +1,7 @@
 """The benchmark's detail on a trial's page: the plain values of its score's detail as a short table, each object of
-flags one level down as a list of what held and what did not, under the driver's own names. A long value is cut with
-its whole text behind a disclosure; every value is text, never markup; a trial whose score has no detail has no panel.
+flags one level down as a list of what held and what did not, under the driver's own names, less those of what the page
+says elsewhere. A long value is cut with its whole text behind a disclosure; every value is text, never markup; a trial
+whose score has no detail, or nothing else, has no panel.
 The runner fixture is copied and its score written by each test; nothing is run."""
 from __future__ import annotations
 
@@ -57,10 +58,12 @@ class TrialDetail(unittest.TestCase):
         return html.split('id="trial-detail">', 1)[1].split('</section>', 1)[0].split('\n</div>\n', 1)[0]
 
     def test_plain_values_are_a_table_and_flags_a_list_under_the_drivers_names(self):
-        html = self.panel(self.page({"variant": "the second", "rank": 42, "cached": False,
+        html = self.panel(self.page({"variant": "the second", "result": 0.0, "by": "run.py, evaluate", "tool_calls": 21,
+                                     "rank": 42, "cached": False,
                                      "checks": {"saved": True, "closed": False}, "notes": {"cursor": "not taken"}}))
         said = text_of(html)
-        self.assertIn("The benchmark's detail variant the second rank 42 cached no", said)
+        self.assertIn("The benchmark's detail variant the second rank 42 cached no", said)   # nothing the page says elsewhere
+        self.assertNotIn("tool_calls", said); self.assertNotIn("run.py", said)
         self.assertIn("checks ✓ saved × closed notes · cursor: not taken", said)
         self.assertRegex(html, r'<span class="ok">✓</span> saved')
         self.assertRegex(html, r'<span class="bad">×</span> closed')
@@ -91,7 +94,7 @@ class TrialDetail(unittest.TestCase):
         self.assertIn("✓</span> held", self.panel(html))
 
     def test_a_score_without_a_detail_has_no_panel(self):
-        for detail in ({}, None, ["a"]):
+        for detail in ({}, None, ["a"], {"result": 0.0, "by": "run.py, evaluate", "tool_calls": 3}):
             with self.subTest(detail=detail):
                 self.assertNotIn('id="trial-detail"', self.page(detail))
         os.remove(os.path.join(self.root, "t1", "verifier", "score.json"))

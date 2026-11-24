@@ -125,7 +125,7 @@ def score_detail(trial_dir: str, leave_out=()) -> dict | None:
     trial's page: ``fields``, each plain value (a list of plain values too, anything deeper as its JSON) with its
     name, its text and, past ``DETAIL_CELL`` characters, the text cut; ``groups``, each object of plain values one
     level down (flags) by its name, each flag ``held`` True or False when it is a boolean, else its text. Names
-    and order are the driver's; ``leave_out``, the names the page already shows elsewhere. Every text is redacted.
+    and order are the driver's; ``leave_out``, the names the page leaves out. Every text is redacted.
     None when the score has no detail, or nothing of it is left to show."""
     said = _read_score(trial_dir)
     detail = said.get("detail") if isinstance(said, dict) else None
