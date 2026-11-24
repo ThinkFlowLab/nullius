@@ -19,7 +19,9 @@ Each page's command, or why there is none.
 | `/agents`, `/capabilities` | `nullius standard list` includes agents, capabilities and their proven ports |
 | A benchmark's *Prove it* | `nullius standard prove KEY` ([Prove](prove.md)) |
 | *Prove its ports* | `nullius standard conform KEY` ([Conform](conform.md)) |
-| `/run` | `nullius standard run` per dataset and choice, `--shard I/N` per machine ([Run](run.md)) |
+| `/run` | `nullius standard run` per dataset and choice, `--shard I/N` per machine, in the shell ([Run](run.md)) |
+| `/new-run`, its Run | `nullius recipes launch <recipe> [--where MACHINE] [--workspace NAME]`, through the server ([Launch a recipe](recipes.md)) |
+| `/recipes` | `nullius recipes list [--json]` |
 
 ## While the app runs
 
@@ -40,7 +42,6 @@ Each page's command, or why there is none.
 | `/judge/…` | `judge.cli job <root> <id> --confirm` |
 | Rename or delete a workspace | `nullius workspace rename`, `nullius workspace delete --yes` |
 | Unlink a workspace's root, delete its folder | `workspace.forget`, `execution.delete`; today `POST /workspaces/<name>/roots/unlink` and `/roots/delete` |
-| `/new-run` | `recipes.cli`; today `POST /new-run/runner` |
 | Delete a launch | `execution.delete`; today `POST /launch/<key>/delete` |
 | `/launches`, add a launch to a workspace | today `POST /launch/<key>/add` |
 

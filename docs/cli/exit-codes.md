@@ -24,7 +24,7 @@ A refusal is one line on stderr, nothing partial written; the standard's command
 | Streams | stdout for output, stderr for diagnostics; `--json` is one document |
 | Job id | The job directory's name, everywhere |
 | Secrets | Read commands make no model call and never print credentials. Job content is redacted |
-| Writes | Reads write nothing, open no socket; import under `-o`; the standard its jobs, and a user definition on `new`, `prove`, `conform`, `fidelity`; migration writes only with `--apply`; `flags` writes only the job's `failure-analysis.json` |
+| Writes | Reads write nothing, open no socket; import under `-o`; the standard its jobs, and a user definition on `new`, `prove`, `conform`, `fidelity`; migration writes only with `--apply`; `flags` writes only the job's `failure-analysis.json`; `recipes launch` writes nothing here and asks the server on this machine, which starts the run |
 
 <div class="grid cards" markdown>
 
