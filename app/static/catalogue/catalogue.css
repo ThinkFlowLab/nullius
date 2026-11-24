@@ -32,13 +32,15 @@ button.card-link:disabled { cursor: not-allowed; }
 .table-wrap .grid tbody tr:has([data-pick]:disabled) > td { color: var(--text-faint); }
 tr:has([data-pick]:disabled) .row-name > :first-child { opacity: .55; }
 tr:has([data-pick]:not(:disabled)) { cursor: pointer; }
-.bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]) { border-color: var(--accent); background: var(--accent-soft);
-  --pick-fill: color-mix(in srgb, var(--accent) 16%, var(--accent-soft)); --pick-line: color-mix(in srgb, var(--accent) 40%, var(--border)); }
-/* inside it, what is filled with --accent-soft (a category tag, a mark) or outlined with --border (a tag) stands out from
-   that background as it does on any card: a shade nearer the accent */
-.bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]) > * { --accent-soft: var(--pick-fill); --border: var(--pick-line); }
+.bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]) { border-color: var(--accent); background: var(--accent-soft); }
+/* inside a chosen card or a chosen row's cell, what is filled with --accent-soft (a category tag, a mark) or outlined with
+   --border (a tag) stands out from that background as it does unchosen: a shade nearer the accent, the outline at 3:1 */
+:is(.bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]), .table-wrap .grid tbody tr:has([data-pick]:checked) > td) {
+  --pick-fill: color-mix(in srgb, var(--accent) 16%, var(--accent-soft)); --pick-line: color-mix(in srgb, var(--accent) 60%, var(--border)); }
+:is(.bench-card:has(> .bench-card-title [data-pick][aria-pressed="true"]), .table-wrap .grid tbody tr:has([data-pick]:checked) > td) > * {
+  --accent-soft: var(--pick-fill); --border: var(--pick-line); }
 .pick-check { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--btn-fg); visibility: hidden; }
-.pick-check .ic { width: 12px; height: 12px; stroke-width: 3; }
+.pick-check .ic { --ic-w16: 2; }   /* 2px: a 1px diagonal breaks up, white on the accent */
 .bench-card:has([data-pick][aria-pressed="true"]) .pick-check { visibility: visible; }
 .bench-card:has(> .bench-card-title [data-pick]:disabled) { opacity: .55; }
 .bench-card:has(> .bench-card-title [data-pick]:disabled):hover { border-color: var(--border-soft); }
@@ -362,7 +364,6 @@ dialog.std-how::backdrop { background: rgba(0, 0, 0, .45); }
 .std-hostreq { margin-top: 14px; }
 /* what some options need on the machine: a note on the card, not a way to run */
 .bench-card-setup { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; font-size: .78rem; color: var(--text-dim); }
-.bench-card-setup svg { width: 13px; height: 13px; flex: none; }
 a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underline dotted; }
 
 .std-setups { --setup-padding: 22px; }

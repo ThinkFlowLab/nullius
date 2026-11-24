@@ -42,9 +42,8 @@ PROTOCOLS = {
     "decisions": {"label": "OpenRouter Decisions", "path": "/decisions", "auth": "authorization"},
     "openai-decisions": {"label": "OpenAI Decisions", "path": "/decisions", "auth": "authorization"},
 }
-# A preset is a provider record whose name, base, key and known endpoints are fixed here. The user adds
-# only endpoints of other protocols, in the setting ``setting`` (``settings.is_record``); its key is
-# the secret setting ``key``. Its ``endpoints`` are also the protocols it serves.
+# A preset has fixed name, base, key setting and endpoints. Custom providers configure their own
+# endpoints. A preset's endpoints are also the protocols it serves.
 PRESETS = {
     "openrouter": {"name": "OpenRouter", "base": "https://openrouter.ai/api/v1", "key": "OPENROUTER_API_KEY",
                    "endpoints": {"chat": "/chat/completions", "responses": "/responses", "systemone": "/systemone",
@@ -72,14 +71,12 @@ def key_setting(choice: str) -> str:
     return PRESETS[p]["key"] if p in PRESETS else endpoint_vars(e)[1]
 
 
-def _entry_problem(entry, host: str = "") -> Optional[str]:
+def _entry_problem(entry) -> Optional[str]:
     """Why ``entry`` cannot be an endpoint: a path starting with one slash, without a ``..`` segment, or a
-    full URL that passes the checks a base gets; on ``host`` only, when one is given (a preset's own)."""
+    full URL that passes the checks a base gets."""
     if not isinstance(entry, str):
         return "a path or a URL"
     if entry.startswith(("http://", "https://")):
-        if host and urllib.parse.urlsplit(entry).hostname != host:
-            return f"a path, or a URL on {host}: the preset's key is sent there"
         return settings.endpoint_url_problem(entry)
     if not entry.startswith("/") or entry.startswith("//") or any(c.isspace() or ord(c) < 32 for c in entry):
         return "a path that starts with / or an http(s) URL"
@@ -91,17 +88,15 @@ def _entry_problem(entry, host: str = "") -> Optional[str]:
 def record_problem(name: str, value: str) -> Optional[str]:
     """Why ``value`` cannot be the record setting ``name``, or None. A JSON object of ``FIELDS``: a name, a
     base the checks of an endpoint's URL pass, the key's setting name (only its own: never a key), and
-    endpoints by protocol, each a path, a full URL or null. A preset's fields and known endpoints are fixed;
-    a full URL it adds is on its own host, the one its key is for."""
+    endpoints by protocol, each a path, a full URL or null. Presets accept no overrides."""
     rec = settings.json_object(value)
     if rec is None:
         return 'a JSON object, such as {"base": "https://…/v1"}'
     preset = next((p for p in PRESETS if p.upper() == name), "")
     if set(rec) - set(FIELDS):
         return "an object of " + ", ".join(FIELDS)
-    fixed = [k for k in ("name", "base", "key") if preset and k in rec]
-    if fixed:
-        return f"a record without {', '.join(fixed)}: they are fixed for {PRESETS[preset]['name']}"
+    if preset and rec:
+        return f"a custom provider instead: endpoints and fields are fixed for {PRESETS[preset]['name']}"
     if rec.get("name") is not None and (not isinstance(rec["name"], str) or not 0 < len(rec["name"]) <= 400
                                         or any(ord(c) < 32 for c in rec["name"])):
         return "a record whose name is one line of 400 characters at most"
@@ -117,9 +112,7 @@ def record_problem(name: str, value: str) -> Optional[str]:
     for proto, entry in ends.items():
         if proto not in PROTOCOLS:
             return f"a record whose endpoints are some of {', '.join(PROTOCOLS)}"
-        if preset and proto in PRESETS[preset]["endpoints"]:
-            return f"a record without the {proto} endpoint: it is fixed for {PRESETS[preset]['name']}"
-        why = entry is not None and _entry_problem(entry, urllib.parse.urlsplit(PRESETS[preset]["base"]).hostname if preset else "")
+        why = entry is not None and _entry_problem(entry)
         if why:
             return f"a record whose {proto} endpoint is {why}"
     return None
@@ -134,8 +127,8 @@ def join(base: str, entry: str) -> str:
 
 
 def record(choice: str, env=None) -> dict:
-    """A provider's record, the three layers merged field by field (the later wins): the preset in code,
-    the file's and then the environment's record setting (``settings.load`` merged those two). A custom
+    """A preset's fixed record, or a custom record from file and environment (``settings.load`` merges
+    those two field by field, the environment winning). A custom
     provider reads its old settings where its record says nothing (a null says: none): MODEL_<ID>_NAME as ``name``,
     MODEL_<ID>_API_URL (MODEL_API_URL, unnamed) as ``base``; ``ignored`` names an old setting the record
     overrides. ``{id, name, base, key, endpoints, preset, ignored}``, where ``key`` is a setting name only."""
@@ -145,10 +138,7 @@ def record(choice: str, env=None) -> dict:
     own = settings.json_object(env.get(setting_of(choice))) if setting_of(choice) else None
     if own is not None and record_problem(setting_of(choice), json.dumps(own)):
         own = None                            # a record that does not validate is no record
-    rec = settings.merge_patch({k: v for k, v in (preset or {}).items()}, own or {})
-    if preset:
-        rec.update({k: preset[k] for k in ("name", "base", "key")},
-                   endpoints={**(rec.get("endpoints") or {}), **preset["endpoints"]})
+    rec = dict(preset) if preset else dict(own or {})
     ignored = []
     if not preset:
         old_name, old_url = (f"MODEL_{e}_NAME" if e else ""), endpoint_vars(e)[0]

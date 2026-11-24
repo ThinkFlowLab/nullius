@@ -6,6 +6,7 @@ import json
 import os
 import re
 import tempfile
+from itertools import combinations
 from dataclasses import replace
 from flask import (
     abort,
@@ -21,7 +22,7 @@ from markupsafe import Markup, escape
 from nullius import execution
 from nullius import importers as harnesses
 from nullius.redact import redact
-from nullius.runs import attempts, classify, feasibility, launches, live, parse
+from nullius.runs import attempts, classify, failure_analysis, feasibility, launches, live, parse
 from nullius import workspace
 from nullius.standard.contract import definitions as standard_definitions
 
@@ -577,11 +578,74 @@ def job(job_id):
         abort(404)
     from . import judge
     board = _live_board_state(j)
-    return render_template("runs/job.html", job=j, live_board=board, view=_view_of(board, j),
+    analysis, versions = _analysis_of(j)
+    return render_template("runs/job.html", job=j, live_board=board, view=_view_of(board, j, ex),
                            execution=ex, csrf=shared._csrf_token(),
                            judgement=judge.job_summary(j) if j.trials else None,
                            control=feasibility.summary_of(j), ended=shared.ended_for(job_id), own=own, deletable=_deletable(job_id, ex),
-                           trial_rows=attempts.grouped(j), pass_k=attempts.for_job(j))
+                           trial_rows=attempts.grouped(j), pass_k=attempts.for_job(j),
+                           filtered=_filtered_of(j, analysis, versions), marks=_marks_of(analysis, versions),
+                           names=_identity_names(j.identity))
+
+
+def _analysis_of(j):
+    """The job's failure analysis and the current version of each flagged task; (None, {}) when its file cannot
+    be read."""
+    try:
+        analysis = failure_analysis.load(j.dir)
+    except failure_analysis.FailureAnalysisError:
+        return None, {}
+    return analysis, failure_analysis.task_versions(j, analysis.flags)    # read for flagged tasks only
+
+
+def _marks_of(analysis, versions):
+    """What the trial table marks: each flagged task (its kind, category, whether it is pending, or names another
+    version of the task) and each labelled trial."""
+    if analysis is None:
+        return {"flags": {}, "labels": {}}
+    flags = {}
+    for task, f in analysis.flags.items():
+        other = f.task_version is not None and versions.get(task) != f.task_version
+        flags[task] = {"kind": f.kind, "category": f.category, "pending": f.status != "accepted", "other": other,
+                       "counts": f.status == "accepted" and not other}
+    return {"flags": flags, "labels": analysis.labels}
+
+
+def _filtered_of(j, analysis, versions):
+    """The Filtered score block: None when the job has no accepted flag, or its file cannot be read. Every
+    combination of the switches is computed here, so the page switches between them without a reload."""
+    if analysis is None:
+        return None
+    on = [k for k in failure_analysis.KINDS if request.args.get(k) == "1"]
+    f = failure_analysis.filtered(j, analysis, on, versions)
+    if not any(f.flagged.values()) and not f.other_version:
+        return None
+    offered = [k for k in failure_analysis.KINDS if f.flagged[k]]
+    if any(k not in offered for k in on):                 # a switch the page does not offer is off
+        on = [k for k in on if k in offered]
+        f = failure_analysis.filtered(j, analysis, on, versions)
+    views = [failure_analysis.filtered(j, analysis, combo, versions)
+             for n in range(1, len(offered) + 1) for combo in combinations(offered, n)]
+    return {"view": f, "views": views}
+
+
+def _identity_names(identity: dict) -> dict:
+    """The names the job page gives what identifies a run (``Job.identity``):
+    its benchmark's title and each option's label, from the definitions the
+    catalogue holds now; where it holds none, the key, its underscores as spaces."""
+    if not identity:
+        return {}
+    key, version = identity.get("benchmark", ""), identity.get("benchmark_version", "")
+    bench = standard_definitions.get("benchmark", f"{key}@{version}" if version else key) if key else None
+    ref = identity.get("agent", "")
+    other = next((d for d in (standard_definitions.get(kind, ref) for kind in ("agent", "capability")) if d), None) if ref else None
+
+    def labels(d, given):
+        declared = (d or {}).get("options") or {}
+        return {k: (declared.get(k) or {}).get("label") or k.replace("_", " ").capitalize() for k in given}
+    return {"benchmark": standard_definitions.title(bench) if bench else " ".join(w for w in (key, version) if w),
+            "benchmark_options": labels(bench, identity.get("benchmark_options") or {}),
+            "agent_options": labels(other, identity.get("agent_options") or {})}
 
 
 def _runs_of(g, owner=None) -> list:
@@ -787,19 +851,16 @@ def launch_delete(key):
     return redirect(back)
 
 
-def _view_of(board, j=None) -> str | None:
-    """Which tab the job page opens on, or None when it has no tabs.
-
-    A job with a board has two views of one page: Live, the feed folded as it
-    grows, and Results, the page rendered from the job's files. ``?view=`` wins,
-    so a link opens the view it was copied from; otherwise Live while the feed
-    says the job is going, Results once it ended - unless there are no results
-    to show: a job with a feed and no result record yet stays on Live. A job with no feed, a broken
-    one or an empty one has no Live view, and no tabs.
-    """
-    if not board or not board.get("initial") or board["initial"]["state"] == "unknown":
-        return None
+def _view_of(board, j=None, ex=None) -> str | None:
+    """Explicit tabs win; launch logs precede a usable live feed."""
+    ready = board and board.get("initial") and board["initial"]["state"] != "unknown"
     asked = request.args.get("view")
+    if asked == "logs" and ex is not None:
+        return "logs"
+    if not ready:
+        if ex is None:
+            return "results" if j is not None and j.is_preparing and not shared.ended_for(j.job_id) else None
+        return "results" if asked == "results" else "logs"
     if asked in ("live", "results"):
         return asked
     return "live" if board["running"] or (j is not None and j.is_preparing) else "results"

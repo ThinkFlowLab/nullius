@@ -6,6 +6,7 @@
   --topbar-height: 56px;
   --ic-sm: 16px;                                 /* an interface icon: inline with text, in a button, a row */
   --ic-lg: 24px;                                 /* an interface icon standing as a tile; a logo in a card, a row or a tile */
+  --ic-xl: 32px;                                 /* an interface icon at its largest drawn size */
   --tool-h: 2.1rem;                               /* a page's buttons and a table's controls: as tall as a small button with its icon */
   --h1-size: clamp(1.75rem, 2.5vw, 2.15rem);
   --head-gap: 1.5rem;                             /* under a page's head, on every page */
@@ -303,12 +304,13 @@ h3 .total { margin-left: .15rem; color: var(--text); font-weight: 600; text-tran
 .judgement-provenance { margin: 0 0 8px; }
 .judgement-hygiene { margin: 0 0 6px; }
 /* the outcome questions as cards */
-.jcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .9rem; margin: 1rem 0 1.6rem; }
+.jcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(230px, calc((100% - 2.7rem) / 4))), 1fr)); gap: .9rem; margin: 1rem 0 1.6rem; }
 .jcard { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .45rem; }
 .jcard-title { color: var(--text-dim); font-size: .85rem; }
-.jcard-value { display: flex; align-items: baseline; gap: .5rem; }
+.jcard-value { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; }
+.jcard-value .jpill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .jcard-value .jnum { font-size: 2rem; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; line-height: 1; }
-.jcard-value .junit { color: var(--text-dim); font-size: .95rem; }
+.jcard-value .junit { white-space: nowrap; color: var(--text-dim); font-size: .95rem; }
 .jcard-blurb { min-height: 2.4em; }
 .jcard-foot { display: flex; justify-content: space-between; border-top: 1px solid var(--border-soft); padding-top: .55rem; margin-top: auto; }
 /* the pill says how an answer reads */
@@ -338,7 +340,7 @@ tr.tone-good .jdot { background: #4cc26a; } tr.tone-warn .jdot { background: #d9
 tr.tone-good .jbar .fill { background: #4cc26a; } tr.tone-warn .jbar .fill { background: #d9a933; } tr.tone-bad .jbar .fill { background: #ee6b7a; }
 .jbar .floor { position: absolute; top: 0; height: 100%; background: repeating-linear-gradient(135deg, rgba(212, 167, 44, 0.55) 0 2px, transparent 2px 5px); }
 .jmore { width: 2rem; text-align: right; }
-.jdisclose { border: 0; background: none; color: var(--text-dim); font-size: 1.2rem; cursor: pointer; padding: 0 .3rem; }
+.jdisclose { display: inline-grid; place-items: center; border: 0; background: none; color: var(--text-dim); font-size: 1.2rem; cursor: pointer; padding: 0 .3rem; }
 .jdisclose[aria-expanded="true"] { transform: rotate(90deg); }
 .flag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.8em; font-weight: 500; border: 1px solid var(--border-soft); }
 .flag.raised { color: var(--bad); border-color: currentColor; }
@@ -393,14 +395,12 @@ button.seg:hover { filter: brightness(1.25); }
 .seg-toggle > [aria-current="true"], .seg-toggle > [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 /* a search box, its icon first (the Settings page's too) */
 .st-search { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: var(--surface-2); color: var(--text-dim); }
-.st-search .ic { flex: none; width: 17px; height: 17px; }
 .st-search input { min-width: 0; width: 100%; padding: 0; border: 0; background: transparent; color: var(--text); font: 13px var(--sans); }
 .st-search input:focus-visible { outline: none; }
 .st-search:focus-within { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 /* the toolkit's one clear control; the browser's own is hidden */
 .st-search [data-search]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .st-search-clear { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin: -2px -4px -2px 0; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-faint); cursor: pointer; }
-.st-search-clear .ic { width: 14px; height: 14px; }
 .st-search-clear:hover { color: var(--text); background: var(--surface); }
 .st-search-clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .menu-wrap { position: relative; }
@@ -536,6 +536,7 @@ button.seg:hover { filter: brightness(1.25); }
 .grid.compare tr.row-differs { background: color-mix(in srgb, var(--patch_failed_tests) 8%, transparent); }
 .grid.compare tr.row-differs td:first-child { box-shadow: inset 2px 0 0 var(--patch_failed_tests); }
 .disclose {
+  display: inline-grid; place-items: center;
   font: inherit; font-size: .8rem; cursor: pointer; width: 1.4rem;
   background: none; border: none; padding: 0; margin-right: .3rem;
   color: var(--text-faint);
@@ -766,6 +767,11 @@ button.seg:hover { filter: brightness(1.25); }
 .wf-tick:first-child { transform: none; }
 .wf-tick:last-child { transform: translateX(-100%); }
 .wf-head .wf-dur { text-align: right; }
+/* a phone: the name column gives way, and the axis keeps its first and last ticks */
+@media (max-width: 640px) {
+  .wf-head, .wf-row { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) 5.5rem; }
+  .wf-tick:not(:first-child):not(:last-child) { display: none; }
+}
 
 .wf-row { height: 24px; position: relative; }
 .wf-row:hover { background: var(--surface-2); }
@@ -1076,7 +1082,7 @@ tr.control-row td { color: var(--text-dim); }
 .attempt-tab:hover { color: var(--text); border-color: var(--text-faint); }
 .attempt-tab[aria-current] { color: var(--text); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
 .attempt-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.attempt-retried { width: 12px; height: 12px; margin-left: -.15rem; flex: none; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.attempt-retried { margin-left: -.15rem; }
 /* an attempt's tries, when its runner kept the ones before its last: tabs of
    their own under the attempt's, underlined, the last the one that counts */
 .try-tabs { display: flex; flex-wrap: wrap; gap: 0 1.2rem; width: fit-content; max-width: 100%; margin-top: .6rem; padding-right: .4rem; border-bottom: 1px solid var(--border); }
@@ -1189,6 +1195,7 @@ pre.msg { color: var(--text); max-height: 220px; }
 .path-row { display: flex; gap: .6rem; margin-bottom: .5rem; align-items: center; }
 .row-x {
   font: inherit; font-size: .9rem; cursor: pointer; flex: none;
+  display: inline-grid; place-items: center; padding: 0;
   width: 2.6rem; height: 2.6rem; border-radius: 8px;
   background: none; color: var(--text-faint);
   border: 1px solid transparent;
@@ -1288,11 +1295,11 @@ input[type=text].invalid:focus { box-shadow: inset 0 0 0 1px var(--bad); }
 .alert { position: relative; padding-right: 2.1rem; }
 .alert-x {
   position: absolute; top: .35rem; right: .4rem;
+  display: grid; place-items: center; padding: 0;
   width: 1.5rem; height: 1.5rem; line-height: 1; cursor: pointer;
   background: none; border: none; border-radius: 6px;
   color: inherit; opacity: .5; font: inherit; font-size: .9rem;
 }
-.alert-x::before { content: "×"; }
 .alert-x:hover { opacity: 1; background: color-mix(in srgb, currentColor 12%, transparent); }
 .alert-x:focus-visible { outline: none; opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
 
@@ -1490,7 +1497,10 @@ a.chip { text-decoration: none; }
 @media (prefers-reduced-motion: no-preference) {
   .shell { transition: grid-template-columns .16s ease; }
 }
-.ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ic { width: var(--ic-sm); height: var(--ic-sm); flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+/* A symbol drawn per size shows its 16-grid drawing unless the icon is sized --ic-lg or --ic-xl: each such rule picks its drawing. */
+.ic-lg { width: var(--ic-lg); height: var(--ic-lg); --ic-d16: none; --ic-d24: inline; --ic-d32: none; }
+.ic-xl { width: var(--ic-xl); height: var(--ic-xl); --ic-d16: none; --ic-d24: none; --ic-d32: inline; }
 
 .side-top { display: flex; align-items: center; justify-content: space-between; gap: .3rem; padding: .1rem .45rem .65rem; min-height: 42px; }
 .side .brand { font-size: 1.35rem; font-weight: 500; gap: .5rem; padding: 0; letter-spacing: -.05em; }
@@ -1531,7 +1541,7 @@ a.chip { text-decoration: none; }
 .ws-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; flex: 1; }
 .ws-caption { font-size: .69rem; color: var(--text-dim); line-height: 1.4; margin-bottom: 3px; }
 .ws-label { font-weight: 500; font-size: .88rem; line-height: 1.35; overflow-wrap: anywhere; }   /* a name wraps, never cut */
-.ws-chev { color: var(--text-faint); width: 16px; height: 16px; }
+.ws-chev { color: var(--text-faint); }
 .ws-pop {
   position: absolute; top: calc(100% + 8px); left: 0; width: 272px; max-width: calc(100vw - 24px); z-index: 30;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
@@ -1598,8 +1608,8 @@ a.chip { text-decoration: none; }
 /* small screens: the rail is a drawer */
 @media (max-width: 900px) {
   .shell, :root[data-rail="collapsed"] .shell { grid-template-columns: 1fr; }
-  .side { position: fixed; left: 0; top: 0; width: var(--rail-w); transform: translateX(-100%); transition: transform .16s ease; box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
-  .side.drawer-open { transform: none; }
+  .side { position: fixed; left: 0; top: 0; width: var(--rail-w); transform: translateX(-100%); transition: transform .16s ease; }
+  .side.drawer-open { transform: none; box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
   body.drawer-active { overflow: hidden; }
   :root[data-rail="collapsed"] .side-top { flex-direction: row; }
   :root[data-rail="collapsed"] .nav { overflow-y: auto; gap: .9rem; }
@@ -1632,7 +1642,7 @@ a.chip { text-decoration: none; }
 }
 .tree-caret:hover { color: var(--text); background: var(--surface); }
 .tree-caret:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
-.tree-caret .ic { width: 15px; height: 15px; transition: transform .12s; }
+.tree-caret .ic { transition: transform .12s; }
 .nav-tree.folded .tree-caret .ic { transform: rotate(-90deg); }
 .tree-kids { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 .2rem .9rem; padding-left: .55rem; border-left: 1px solid var(--border-soft); }
 .tree-item {
@@ -1694,8 +1704,9 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
 .execution-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .run-delete { margin-left: auto; color: var(--text-dim); }
 .execution-stages { container: xs / inline-size; margin: 14px 0 8px; }
-.xs-list { --mark: 1.6rem; list-style: none; margin: 0; padding: 0; display: flex; align-items: flex-start; }
-.xs { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; padding-right: .9rem; font-size: .82rem; line-height: 1.3; color: var(--text-dim); }
+/* more stages than the width holds scroll inside the strip, never the page; the padding keeps the running mark's ring unclipped */
+.xs-list { --mark: 1.6rem; list-style: none; margin: -6px; padding: 6px; display: flex; align-items: flex-start; overflow-x: auto; }
+.xs { position: relative; flex: 1 1 0; min-width: 7rem; display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; padding-right: .9rem; font-size: .82rem; line-height: 1.3; color: var(--text-dim); }
 .xs:last-child { flex: 0 1 auto; padding-right: 0; }
 .xs::before { content: ""; position: absolute; top: calc(var(--mark) / 2 - 1px); left: calc(var(--mark) + .4rem); right: .4rem; height: 2px; border-radius: 1px; background: var(--border-soft); transition: background .3s; }
 .xs:last-child::before { display: none; }
@@ -1709,9 +1720,10 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
 .xs.running { color: var(--text); font-weight: 500; }
 .xs.waiting { color: var(--text-faint); }
 .xs-time { font-family: var(--mono); font-size: .75rem; font-weight: 400; color: var(--text-faint); }
-.xs-detail { font-size: .75rem; font-weight: 400; color: var(--text-faint); overflow-wrap: anywhere; }
+.xs-detail { font-size: .75rem; font-weight: 400; color: var(--text-faint); }
+.xs-label, .xs-detail { overflow-wrap: anywhere; }
 @container xs (max-width: 44rem) {
-  .xs-list { flex-direction: column; }
+  .xs-list { flex-direction: column; margin: 0; padding: 0; overflow: visible; }
   .xs, .xs:last-child { flex: none; width: 100%; min-height: var(--mark); padding: .1rem 0 .95rem calc(var(--mark) + .7rem); }
   .xs:last-child { padding-bottom: 0; }
   .xs::before { top: calc(var(--mark) + .3rem); bottom: .3rem; left: calc(var(--mark) / 2 - 1px); right: auto; width: 2px; height: auto; }
@@ -1739,7 +1751,7 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
 .toast { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 10px 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 13px; box-shadow: 0 12px 32px #0005; overflow: hidden; }
 .toast.bad { border-color: color-mix(in srgb, var(--bad) 55%, var(--border)); }
 .toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.toast-close { flex: none; width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--text-dim); font-size: 18px; line-height: 1; cursor: pointer; }
+.toast-close { flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-dim); font-size: 18px; line-height: 1; cursor: pointer; }
 .toast-close:hover { background: var(--surface-2); color: var(--text); }
 .toast-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--accent); transform-origin: left; animation: toast-time 5s linear forwards; }
 .toast.bad .toast-bar { background: var(--bad); animation-duration: 10s; }
@@ -1842,7 +1854,7 @@ select.ui-select-native { display: none !important; }
 
 /* Bundled upstream agent marks, shared by catalogue pages and the builder. */
 .agent-logo { display: block; width: 100%; height: 100%; object-fit: contain; flex: none; }
-.nav-agent-logo { width: 18px; height: 18px; }
+.nav-agent-logo { width: var(--ic-sm); height: var(--ic-sm); }
 /* A mark with its own version for dark backgrounds: the one that suits the theme. */
 :root[data-theme="dark"] .on-light-bg, :root:not([data-theme="dark"]) .on-dark-bg { display: none; }
 

@@ -39,7 +39,7 @@ Follow the evidence: a recorded rate limit is a provider's failure whatever the 
 
 | Page | Asks |
 | --- | --- |
-| `/trial`, Judgement tab | `task_completed`, `failure_cause`, quality, behaviour flags |
+| `/trial`, Decision model judge and LLM judge tabs | `task_completed`, `failure_cause`, quality, behaviour flags, `failure_label`, `task_flag` |
 | `/job` | *judge* buttons: trials that judge has not judged; *Task instructions*: `instruction_quality` |
 | `/job/<id>/reconcile` | The classifier against the judge |
 | `/compare` | *Better of two*: `task_satisfaction` per side |
@@ -51,6 +51,7 @@ Follow the evidence: a recorded rate limit is a provider's failure whatever the 
 | --- | --- | --- |
 | `task_completed` | Choice | Every judged trial |
 | `failure_cause` | Choice, with `other` | Unresolved trials |
+| `failure_label`, `task_flag` | Choice, with `other` / `cannot_tell` | Unresolved trials: the User judge's two questions, for comparison; only the person's answer sets a task aside |
 | `transcript_quality`, `user_facing_answer` | Score | Every judged trial |
 | `repeated_failed_action`, `cycled_without_progress`, `broke_stated_prohibition`, `ignored_stated_requirement`, `tampered_with_checks`, `stopped_before_finishing`, `claim_unsupported` | Yes/no | Every judged trial |
 | `likely_outcome` | Choice | Trials the classifier left `unknown` |

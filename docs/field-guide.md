@@ -48,6 +48,12 @@ Here n is the attempt count and c the passed count per unit; results are average
 
 The job page and Compare show both for any run that tried every task at least twice, leaving out a task with an infra attempt; an agent error is a fail. A task's pass rate is its passes over the attempts that ran, infra apart.
 
+## User judge {#user-judge}
+
+A person records why a failed attempt failed (`agent`, `model`, `environment` or `evaluator`) and whether its task is `flawed` or `ambiguous`, in the job's `failure-analysis.json`, from the trial page's User judge tab or [`nullius flags`](cli/flags.md). A flag covers every attempt of its task and counts only for the task version it names. The Decision model judge and the LLM judge answer the same two questions, for comparison only.
+
+The job page and Compare offer a switch per kind, off by default. With one on, the filtered score leaves out the trials of flagged tasks, in every Compare column alike; the official scores are unchanged.
+
 ## Compare like with like {#compare}
 
 Whole runs include all their trials. Matched tasks use the intersection of recorded dataset and task identities, without guessing aliases. Every attempt on a matched task contributes to rates, tokens and costs; a task row disagrees when its pass rate or its attempts' outcomes differ.
@@ -135,8 +141,10 @@ How the agent worked, not whether it won. Computed over layer 3.
 | --- | --- | --- | --- |
 | `raw_solve_rate` | Resolved ÷ all trials: Harbor's headline, which counts infra failures as misses. | derived | any |
 | `adjusted_solve_rate` | Resolved ÷ non-infrastructure trials. Only rate limits, API errors, setup errors, spending caps and stopped runs leave the denominator; unknowns remain. Read alongside the raw rate and infrastructure count. | derived | any |
+| `filtered_score` | The adjusted solve rate without the trials of tasks with an accepted flag of the kinds switched on; shown only with a switch on. See [User judge](#user-judge). | derived | any |
 | `n_infra` | Trials removed from the adjusted denominator as infrastructure failures or run-imposed interruptions. | derived | any |
 | `mean_score` | The mean graded score, weighted by each trial's number of scored parts when present. When no trial passes or fails, it is the headline and the rates read —. | derived | mixed |
+| `mean_score_planned` | Each trial's score, averaged over every planned trial; unscored: 0. Whole runs only. | derived | mixed |
 | `score_by_group · parts_by` | The mean score per value of the field the benchmark breaks it down by (a question's category), from `verifier/parts.json`. | derived | mixed |
 | `n_regressions` | Trials whose patch broke a previously passing test. | derived | swe-bench |
 | `counts` | Trials per outcome. | derived | any |
@@ -152,6 +160,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `is_running` | The job records running or pending trials. Numbers are partial. | measured | any |
 | `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Repeated attempts are separate trials, not retries. | measured | any |
 | `retries` | Retries a standard run allows each attempt (`--retries`); 0 elsewhere. | measured | any |
+| `identity` | A standard run's setup: benchmark, agent, model, provider, limits. Empty elsewhere. | measured | any |
 | `dataset` | The dataset folder, `name@version` for a registry fetch, or the task names' shared prefix. | measured | any |
 
 ## Trial metrics, one row per task attempt {#trials}
@@ -169,7 +178,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `dur_total` | Trial wall clock. | measured | any |
 | `dur_env / dur_agent_setup / dur_agent / dur_verifier` | The four phases a trial records, drawn in order. An imported trial charges its whole window to `dur_agent`. | measured | any |
 | `dur_other` | `dur_total` minus the phases: waits and teardown. | derived | any |
-| `n_input_tokens` | Prompt tokens for the trial. | measured | any |
+| `n_input_tokens` | Prompt tokens for the trial; Usage falls back to trial totals when trajectory accounting is unavailable. | measured | any |
 | `n_cache_tokens` | Prompt tokens read from cache, excluding cache writes: a subset, never added to input tokens. | measured | any |
 | `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings are the run's, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
@@ -202,7 +211,7 @@ These fields are stored in the standard's job and trial files ([Run a benchmark]
 | `name_freq` | The tool names behind each category, in the agent's own words. Evidence of what a category folded, never a comparison key. | measured | any |
 | `files_touched` | Files the agent edited, made workspace-relative so two agents' sets compare. | inferred | any |
 | `n_failed_calls` | Tool calls that returned an error. | inferred | any |
-| `token_series` | Input tokens per LLM call, with the cached share shaded, from per-step metrics. | measured | any |
+| `token_series` | Input tokens per recorded LLM call. Usage sums these calls; Prompt growth additionally shows their input when two or more are recorded. | measured | any |
 | `cache` | Cache reads ÷ every input token. Anthropic-style usage has its writes rebuilt from prompt growth; the file's own ratio shows when it differs. | inferred | any |
 | `steps[].dur` | Seconds until the next step opened. | derived | any |
 | `has_step_clock` | False when the step timestamps span under a second. Step durations and time to first edit are then left out, not shown as zeros. | derived | any |

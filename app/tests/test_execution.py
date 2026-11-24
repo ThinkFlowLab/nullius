@@ -98,7 +98,8 @@ class Here(Base):
         that one's URL and key, never the default's or another endpoint's; a run
         on one that is gone fails before it starts, and is never sent to another."""
         held = {"MODEL_API_URL": "http://default/v1", "MODEL_API_KEY": "sk-held-default",
-                "MODEL_GPU_NAME": "GPU box", "MODEL_GPU_API_URL": "http://gpu/v1", "MODEL_GPU_API_KEY": "sk-held-gpu",
+                "MODEL_GPU_NAME": "GPU box", "MODEL_GPU_API_URL": "http://old-gpu/v1", "MODEL_GPU_API_KEY": "sk-held-gpu",
+                "MODEL_GPU": json.dumps({"base": "http://gpu/v1", "endpoints": {"messages": "/messages"}}),
                 "MODEL_LAPTOP_API_URL": "http://laptop/v1", "MODEL_LAPTOP_API_KEY": "sk-held-laptop"}
         url_var, key_var = providers.endpoint_vars("GPU")
         with mock.patch.dict(os.environ, held):
@@ -112,6 +113,11 @@ class Here(Base):
         env = dict(l.split("=", 1) for l in (self.tmp / "gpu" / "run-run.log").read_text().splitlines() if "=" in l)
         self.assertEqual({k: v for k, v in env.items() if v.startswith("sk-held-")}, {n: "sk-held-gpu" for n in execution.KEY_NAMES})
         self.assertEqual({k: v for k, v in env.items() if v.startswith("http://")}, {n: "http://gpu/v1" for n in execution.URL_NAMES})
+        from nullius.standard import cli
+        from nullius.standard.runner import run
+        handed = cli.run_env("custom", env)
+        self.assertEqual(run.provider_endpoint("custom", handed), ("http://gpu/v1", "sk-held-gpu"))
+        self.assertEqual(run.key_header("custom", {"model": {"apis": ["messages"]}}, handed), "x-api-key")
         self.assertEqual((gone.state, gone.step), ("failed", "credentials"))
         self.assertIn("MODEL_GONE_API_URL is not set in Settings", gone.error)
 
@@ -837,11 +843,18 @@ class StandardOnHost(HostBase):
         self.assertIn("NULLIUS_PRICES=", launch[-1])
         self.calls.clear(); self.polls = 0
         price_list.set_own("gpt-5-mini", price_list.row(1, 2))
+        price_list.update(fetch=lambda source: json.dumps({"model-a": {"input_cost_per_token": 2.5e-06, "output_cost_per_token": 1e-05}}).encode())
         self.plan.name = "std-priced"
         ex = self.run_it()
         self.assertEqual((ex.state, ex.exit_code), ("done", 0), ex.lines)
         sent = next(s for c, s in self.calls if c[0] == "ssh" and "cat > " in c[-1] and "/prices.json" in c[-1])
-        self.assertEqual(json.loads(sent)["own"], {"gpt-5-mini": {"input": 1.0, "output": 2.0}})
+        self.assertEqual(json.loads(sent)["own"], {"gpt-5-mini": {"input": 1.0, "output": 2.0}})     # the list and the user's rows, both
+        self.assertEqual(json.loads(sent)["models"], {"model-a": {"input": 2.5, "output": 10.0}})
+        with mock.patch.dict(os.environ, {"NULLIUS_PRICES": os.path.join(self.tmp, "on-host", "prices.json")}):   # read there as a list of before
+            os.makedirs(os.path.join(self.tmp, "on-host"))
+            with open(price_list.path(), "w") as f:
+                f.write(sent)
+            self.assertEqual(price_list.table(), {"model-a": {"input": 2.5, "output": 10.0}, "gpt-5-mini": {"input": 1.0, "output": 2.0}})
         launch = next(c for c, _ in self.calls if c[0] == "ssh" and "setsid nohup" in c[-1])
         self.assertIn('NULLIUS_PRICES="$HOME/.nullius/runs/std-priced/prices.json"', launch[-1])
 
@@ -861,7 +874,8 @@ class StandardOnHost(HostBase):
                          [("plan", None), ("connect", "start"), ("connect", "done"), ("uv", "cached"), ("app", "start"), ("app", "done")])
         got = ex.summary()["stages"]
         self.assertEqual([(s["key"], s["state"]) for s in got["stages"]],
-                         [("connect", "done"), ("uv", "cached"), ("app", "done"), ("image", "done"), ("install:reference", "cached"), ("units", "running")])
+                         [("connect", "done"), ("uv", "cached"), ("app", "done"), ("image", "done"), ("install:reference", "cached"), ("units", "done")])
+        self.assertIsNone(got["current"])
         self.assertEqual((got["units"]["n"], got["units"]["done"], got["units"]["passed"]), (2, 1, 1))
         back = execution.Execution(self.plan, root=str(self.tmp / "runs"), run=self.answer,
                                    record=json.loads((self.tmp / "runs" / "std-shard-2of2" / "run.json").read_text()))

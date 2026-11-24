@@ -5,7 +5,7 @@ import unittest
 from nullius import charts as c
 
 
-def metric(*values, label="Metric", fmt=str):
+def metric(*values, label="Metric", fmt=c.number):
     return c.Metric(label, tuple(c.Value(label=f"run {i}", value=v, text="—" if v is None else str(v))
                                       for i, v in enumerate(values)), fmt)
 
@@ -22,9 +22,9 @@ class Ticks(unittest.TestCase):
         self.assertEqual(c.nice_ticks(0, 3, step_min=1), (0, 1, 2, 3))       # whole counts never step below one
 
     def test_long_tick_labels_that_would_touch_leave_one_out_never_the_last(self):
-        p = c.bars(metric(0, 32, 85, 4, fmt=lambda v: f"${v:.2f}"))
+        p = c.bars(metric(0, 32, 85, 4, fmt=lambda v, step, top: f"${v:.2f}"))
         labels = [t for t in p.texts if t.cls == "tick"]
-        self.assertEqual([t.lines[0] for t in labels], ["0", "$25.00", "$50.00", "$100.00"])
+        self.assertEqual([t.lines[0] for t in labels], ["$0.00", "$25.00", "$50.00", "$100.00"])
         self.assertEqual(len([m for m in p.marks if m.cls == "grid"]) // 4, 5)     # every tick keeps its gridline
 
     def test_one_value_still_has_a_range(self):
