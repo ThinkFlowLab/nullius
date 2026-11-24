@@ -451,6 +451,45 @@ class BuilderStandard(unittest.TestCase):
             self.assertIn(why, r.get_json()["error"])
         self.assertEqual(self.started, [])
 
+    def test_recipes_launch_starts_the_plan_run_starts_into_the_workspace_it_names(self):
+        """`nullius recipes launch` asks the server what the builder asks it: a saved recipe, on a host, starts the
+        plan Run starts for the same recipe, into the workspace named; the launch's key is printed. Run's question is
+        refused without --yes and a recipe that is not there exits 3, nothing started."""
+        import contextlib, datetime, io
+        from nullius import prerequisites
+        from nullius.recipes import cli as recipes, store
+        client, into = self.client, []
+        class Here(recipes.Server):                                            # the server, through the test client
+            def send(self, method, path, body=None):
+                r = client.open(path, method=method, headers={"Origin": "http://localhost", **({"X-CSRF-Token": self.token} if self.token else {})},
+                                **({} if body is None else {"data": json.dumps(body), "content_type": "application/json"}))
+                try:
+                    return r.status_code, r.get_data(as_text=True)
+                finally:
+                    r.close()
+        self.stack.enter_context(patch.dict(os.environ, {"NULLIUS_HOME": str(self.tmp / "home")}))
+        self.stack.enter_context(patch.object(recipes, "Server", Here))
+        self.stack.enter_context(patch.object(prerequisites, "check_host", lambda host, needs, setups=None, standard=False: []))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into_="": into.append(into_)))
+        store.save(self.recipe(name="fake", title="fake on two"))
+        got = recipes.launch(Here("http://localhost"), store.listing()[0]["recipe"], ["me@bench"], "planner", now=datetime.datetime(2026, 1, 1, 12, 0, 0))
+        self.assertEqual((got["launch"], into), ("run:fake-0101-120000-1", ["planner"]))
+        self.assertEqual(self.post("/run", {"name": "fake-0101-120000", "where": "me@bench", "recipe": self.recipe(where="me@bench", title="fake on two")}).get_json()["ok"], True)
+        shell, page = self.started
+        self.assertEqual(shell.to_dict(), page.to_dict())                                  # the same launch
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(recipes.main(["launch", "fake on two", "--server", "http://localhost"]), 0)
+        self.assertRegex(out.getvalue(), r"^launch run:fake-\d{4}-\d{6}-1\n")
+        self.assertEqual(into[-1], "")                                                    # no workspace named: the open one, as Run
+        self.started.clear()
+        store.save(self.recipe(name="every", title="every unit", limit=""))
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(recipes.main(["launch", "every unit", "--server", "http://localhost"]), 4)
+            self.assertEqual(recipes.main(["launch", "nowhere", "--server", "http://localhost"]), 3)
+        self.assertIn("--yes answers yes", err.getvalue())
+        self.assertEqual(self.started, [])
+
 
 class StandardPieces(unittest.TestCase):
     """What the pages say of the standard beyond a pair: an agent's options,

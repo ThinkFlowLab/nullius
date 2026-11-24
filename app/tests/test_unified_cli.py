@@ -81,13 +81,14 @@ raise SystemExit(main(['import', '--list', '--json']))
                                 env=self.env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(set(json.loads(result.stdout)), {"atif", "otel"})
-        for command in ("runs", "compare", "standard", "workspace", "paths"):
+        for command in ("runs", "compare", "standard", "workspace", "paths", "recipes"):
             result = self.run_cli(command, "--help")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("usage:", result.stdout)
 
     def test_errors_keep_the_delegated_exit_status(self):
         self.assertEqual(self.run_cli("import", str(self.root / "missing")).returncode, 3)
+        self.assertEqual(self.run_cli("recipes", "launch", "missing").returncode, 3)
         self.assertEqual(self.run_cli("runs", "unknown").returncode, 2)
         self.assertEqual(self.run_cli("unknown").returncode, 2)
 
