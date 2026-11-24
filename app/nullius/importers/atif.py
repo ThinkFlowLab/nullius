@@ -394,7 +394,7 @@ def convert(root: str, out_root: str, job_name: str = "",
     base = os.path.basename(os.path.normpath(root))
     if os.path.isfile(root):
         base = _trial_name(root, root)
-    job_name, sid = importers.place(out_root, root, f"{NAME}__{base}", job_name, _recorded)
+    job_name, sid = importers.place(out_root, root, f"{NAME}__{base}", job_name, _recorded, NAME)
     return [_write_job(docs, root, out_root, job_name, command, sid)]
 
 

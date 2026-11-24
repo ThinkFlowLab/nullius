@@ -101,6 +101,16 @@ class OneFolderPerSource(unittest.TestCase):
                 self.assertEqual((parse.parse_job(ja).uid, trials(ja)), (ua.uid, kept))
                 self.assertEqual(mtimes(jb), before)                     # the other's untouched
 
+    def test_one_source_in_two_workspaces_has_one_identity(self):
+        for fmt in self.SOURCES:
+            with self.subTest(fmt):
+                a, _, out = self.sources(fmt)
+                [one], [two] = open_again(a, out), open_again(a, out + "-elsewhere")
+                self.assertEqual(parse.parse_job(one).uid, parse.parse_job(two).uid)
+                copy = str(self.tmp / fmt / "copied")                    # a copied job keeps it
+                shutil.copytree(one, copy)
+                self.assertEqual(parse.parse_job(copy).uid, parse.parse_job(one).uid)
+
     def test_a_conversion_from_before_ids_keeps_its_folder_and_identity(self):
         for fmt in self.SOURCES:
             with self.subTest(fmt):

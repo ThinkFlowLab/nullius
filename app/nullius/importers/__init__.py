@@ -28,8 +28,9 @@ the directories under a root the app opened that are one `convert` each.
 Without it a claimed root is one tree, which is how the CLI reads it. The
 picker uses the same boundaries so both surfaces produce the same jobs.
 
-**One source, one job folder.** A tree is a source, known by its absolute
-path. Its first conversion gives it an id of its own (:func:`place`), written
+**One source, one job folder.** A tree is a source, known by its real
+path. Its first conversion gives it an id of its own (:func:`place`), derived
+from the format and that path so every workspace importing it agrees, written
 in the job's ``config.json`` as ``nullius.source`` and read back on every
 reconversion, so the folder and the identity stay its own: a second source of
 one basename gets a folder of its own. A folder converted before the id is
@@ -271,7 +272,17 @@ def _source(cfg: dict) -> tuple:
         return None, None
 
 
-def place(out_root: str, root: str, default: str, job_name: str = "", recorded=None) -> tuple:
+#: fixed for good: changing it changes every import's identity
+NS_SOURCE = uuid.UUID("3b1d7e44-9a0c-4f62-8e15-2c7a9f4d6b08")
+
+
+def source_id(fmt: str, root: str) -> str:
+    """A source's id: a ``uuid5`` over its format and real path, ``"v": 1``; a moved tree is a new source."""
+    facts = {"v": 1, "format": fmt, "path": os.path.realpath(root)}
+    return str(uuid.uuid5(NS_SOURCE, json.dumps(facts, sort_keys=True, separators=(",", ":"))))
+
+
+def place(out_root: str, root: str, default: str, job_name: str = "", recorded=None, fmt: str = "") -> tuple:
     """``(job_name, source id)``: the folder under *out_root* the tree at *root*
     is converted into, and its id, None for a folder converted before ids.
 
@@ -280,7 +291,7 @@ def place(out_root: str, root: str, default: str, job_name: str = "", recorded=N
     source: one recording another path, or an older one whose
     ``recorded(config)`` names another path. A named *job_name* is used as it is.
     """
-    src = os.path.abspath(root)
+    src, new = os.path.realpath(root), source_id(fmt, root)
     names = sorted(os.listdir(out_root)) if not job_name and os.path.isdir(out_root) else []
     for name in names:
         sid, path = _source(_config(os.path.join(out_root, name)))
@@ -291,21 +302,21 @@ def place(out_root: str, root: str, default: str, job_name: str = "", recorded=N
         name = job_name or (default if n == 1 else f"{default}-{n}")
         job_dir = os.path.join(out_root, name)
         if not os.path.isdir(job_dir):
-            return name, str(uuid.uuid4())
+            return name, new
         cfg = _config(job_dir)
         sid, path = _source(cfg)
         if job_name:                     # named: written there as asked; an older folder keeps having no id
-            return name, (sid if path == src else str(uuid.uuid4())) if sid else None
+            return name, (sid if path == src else new) if sid else None
         if not sid:
             old = recorded(cfg) if recorded and cfg else None
-            if not old or os.path.abspath(old) == src or os.path.normpath(old) == os.path.normpath(root):
+            if not old or os.path.realpath(old) == src or os.path.normpath(old) == os.path.normpath(root):
                 return name, None
         n += 1
 
 
 def recorded_as(sid, root: str) -> dict:
     """What a job's ``config.json`` carries of its source: nothing for a folder converted before ids."""
-    return {"nullius": {"source": sid, "source_path": os.path.abspath(root)}} if sid else {}
+    return {"nullius": {"source": sid, "source_path": os.path.realpath(root)}} if sid else {}
 
 
 def labels() -> str:

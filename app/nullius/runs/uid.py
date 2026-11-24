@@ -8,8 +8,9 @@ under this identity, so it follows the job and not the folder.
 - **declared**: the producer wrote one. A Nullius standard job carries
   ``standard.uuid`` in its ``config.json``, made at creation, kept by a run
   resumed into the same folder and new for a merge; an import carries its
-  source's ``nullius.source``, made at the source's first conversion and kept
-  by every reconversion.
+  source's ``nullius.source``, derived from its format and real path at its
+  first conversion, so every workspace importing it agrees, and kept by every
+  reconversion and copy.
 - **derived**: none was written (Harbor, imports and standard jobs from before
   their ids). A ``uuid5`` over fixed facts read from the files: the
   format, the folder name, what ran and when it started. No path is a fact,
