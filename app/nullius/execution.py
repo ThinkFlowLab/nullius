@@ -633,13 +633,13 @@ class Execution:
 
     def stages(self) -> dict:
         """The stages said so far, folded for the page (``progress.fold``).
-        Once the run has failed or been stopped, a stage still running was
-        cut short by it, and nothing is waiting any more."""
+        Once the run has ended, no stage is running or waiting any more.
+        Counts remain exactly what the progress events reported."""
         with self._lock:
             events = list(self.events)
         got = progress.fold(events)
-        if self.state in ("failed", "stopped"):
-            got["stages"] = [dict(r, state="failed") if r["state"] == "running" else r for r in got["stages"] if r["state"] != "waiting"]
+        if self.state in ("done", "failed", "stopped"):
+            got["stages"] = [dict(r, state="done" if self.state == "done" else "failed") if r["state"] == "running" else r for r in got["stages"] if r["state"] != "waiting"]
             got["current"] = None
         return got
 

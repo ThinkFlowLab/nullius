@@ -145,12 +145,27 @@ class Fold(unittest.TestCase):
         got = progress.fold([ev("dataset", "start", 1.0), ev("dataset", "progress", bytes=5_000_000, total=9_000_000)])
         self.assertEqual((got["stages"][0]["bytes"], got["stages"][0]["total"]), (5_000_000, 9_000_000))
 
+    def test_restarting_a_stage_drops_the_previous_attempts_progress(self):
+        events = [ev("driver", "start", 1.0),
+                  ev("driver", "progress", bytes=100, total=200, detail="old download"),
+                  ev("driver", "failed", seconds=8), ev("driver", "start", 10.0)]
+        row = progress.fold(events)["stages"][0]
+        self.assertEqual((row["state"], row["t"]), ("running", 10.0))
+        for field in ("seconds", "bytes", "total", "detail"):
+            self.assertNotIn(field, row)
+        row = progress.fold(events + [ev("driver", "done")])["stages"][0]
+        self.assertNotIn("seconds", row)
+
     def test_a_refusal_ends_the_list_and_says_why(self):
         got = progress.fold([ev("plan", stages="image,install,units"), ev("image", "start"), ev("refused", detail="the container backend: no")])
         self.assertEqual((got["ended"], got["detail"]), ("refused", "the container backend: no"))
         self.assertEqual([(s["stage"], s["state"]) for s in got["stages"]], [("image", "failed")])
         self.assertEqual(progress.refusal([ev("refused", detail="why")]), "why")
         self.assertIsNone(progress.refusal([ev("done")]))
+        finished = progress.fold([ev("units", "start", n=2), ev("unit", "done", outcome="passed"), ev("done")])
+        self.assertEqual(finished["stages"][0]["state"], "done")
+        self.assertIsNone(finished["current"])
+        self.assertEqual((finished["units"]["done"], finished["units"]["n"]), (1, 2))
 
 
 class StandardRun(unittest.TestCase):

@@ -23,7 +23,6 @@
 
 {% from 'traces/_judgement.html' import judgement_panel %}
 {% from 'traces/_attempts.html' import attempt_tabs, attempt_count, try_tabs %}
-{% from 'traces/_head.html' import ran_cards %}
 {% from '_page.html' import page_head %}
 {% block body %}
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
@@ -38,7 +37,7 @@
 {{ page_head(trial.task_base, sub=sub, mono=true) }}
 {# an earlier try of an attempt: evidence only, never judged #}
 {% set replaced = trial.trial_name != attempt.trial_name %}
-{# What ran (traces/_head.html, the same on All attempts), then how it went: the dataset's own
+{# How this trial went: the dataset's own
    checks, the reward or the score, the agent's time and its steps. A value the trial does not
    have has no cell, and a block with no cell is not drawn. #}
 {% set vocab = trial.vocab %}
@@ -52,7 +51,6 @@
   {%- if traj and not traj.error %}<div><span class="k">Steps</span><span class="n">{{ traj.n_steps }}</span></div>{% endif -%}
 {% endset %}
 {% if attempts or tries %}
-<div class="trial-head">{{ ran_cards(job, trial, imported_from, agent_mark) }}</div>
 {% if attempts %}
 <div class="attempt-head">
   <span class="attempt-count">{{ attempt_count(attempts) }}</span>
@@ -61,11 +59,8 @@
 {% endif %}
 {% if tries %}{{ try_tabs(job, tries, trial, request.args.get('workspace')) }}{% endif %}
 {% if cells|trim %}<div class="trial-head"><div class="th-strip">{{ cells }}</div></div>{% endif %}
-{% else %}
-<div class="trial-head">
-  {{ ran_cards(job, trial, imported_from, agent_mark) }}
-  {% if cells|trim %}<div class="th-strip">{{ cells }}</div>{% endif %}
-</div>
+{% elif cells|trim %}
+<div class="trial-head"><div class="th-strip">{{ cells }}</div></div>
 {% endif %}
 
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">

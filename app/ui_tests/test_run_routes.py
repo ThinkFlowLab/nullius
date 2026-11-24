@@ -1320,26 +1320,23 @@ const source = JSON.parse(process.argv[1]);
 (async () => {
   const results = [];
   for (const state of ['preparing', 'running', 'paused', 'stopping', 'done', 'failed', 'stopped']) {
-    for (const headFails of [false, true]) {
+    for (const fetchFails of [false, true]) {
       const timers = [], requests = [];
       const elements = {};
       const element = id => elements[id] ||= {dataset: {run:'/run/test', live:'yes', waiting:'yes'},
         textContent:'', remove(){}, after(){}, addEventListener(){}};
       vm.runInNewContext(source, {
         document: {getElementById:element, createElement:element},
-        location: {pathname:'/job/test', reload(){}},
+        location: {pathname:'/job/test', reload(){ throw Error('unexpected navigation'); }},
         setTimeout: (fn, delay) => timers.push(delay),
         nulliusFetch: async (url, options) => {
           requests.push(options.method || 'GET');
-          if (options.method === 'HEAD') {
-            if (headFails) throw Error('network');
-            return {ok:false};
-          }
+          if (fetchFails) throw Error('network');
           return {ok:true, json:async () => ({state, log:[], lines:0, error:state==='failed'?'failed':null})};
         }
       });
       await new Promise(setImmediate);
-      results.push({state, headFails, requests, timers});
+      results.push({state, fetchFails, requests, timers});
     }
   }
   console.log(JSON.stringify(results));
@@ -1348,6 +1345,5 @@ const source = JSON.parse(process.argv[1]);
         result = subprocess.run([node, "-e", program, json.dumps(source)], check=True, capture_output=True, text=True)
         for row in json.loads(result.stdout):
             with self.subTest(**row):
-                self.assertEqual(row["requests"], ["GET", "HEAD"])
-                self.assertEqual(row["timers"], [] if row["state"] in ("done", "failed", "stopped")
-                                 else [5000 if row["headFails"] else 1000])
+                self.assertEqual(row["requests"], ["GET"])
+                self.assertEqual(row["timers"], [5000] if row["fetchFails"] else [] if row["state"] in ("done", "failed", "stopped") else [1000])

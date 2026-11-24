@@ -205,7 +205,8 @@ class LiveBoard(unittest.TestCase):
             self.assertEqual(page.status_code, 200)
             body = page.get_data(as_text=True)
             self.assertIn('id="preparing"', body); self.assertIn("no trial has started yet", body)
-            self.assertNotIn('id="live-board"', body)                          # nothing to fold yet
+            self.assertIn('data-state="unknown"', body)                       # hidden until the first event
+            self.assertNotIn("location.reload()", body)
             live = self.client.get("/job/launched-run/live"); self.addCleanup(live.close)
             self.assertEqual(live.status_code, 404)                            # what the page polls until the feed lands
 
@@ -381,6 +382,27 @@ class LiveBoard(unittest.TestCase):
         body = old.get_data(as_text=True)
         self.assertEqual(old.status_code, 200)
         self.assertNotIn('id="live-board"', body); self.assertNotIn('role="tablist"', body)   # no feed: one view, no tabs
+
+    def test_launch_logs_precede_the_board_and_remain_selectable(self):
+        from nullius import execution
+        plan = execution.Plan(name="old-run", script="true", jobs=[{"name": "old-run"}])
+        ex = execution.Execution(plan, root=str(self.root / "logs-test"), run=lambda *a, **k: (0, ""))
+        with patch.dict(execution.EXECUTIONS, {ex.id: ex}, clear=True):
+            for jobs in ([], [self.no_feed]):
+                with self.subTest(job_exists=bool(jobs)), patch.object(workspace, "load_jobs", return_value=jobs):
+                    body = self.client.get("/job/old-run").get_data(as_text=True)
+                    self.assertIn('aria-controls="view-logs" aria-selected="true"', body)
+                    self.assertIn('id="view-logs"', body)
+                    self.assertIn('id="execution-lines"', body.split('id="view-logs"', 1)[1])
+                    self.assertIn('data-state="unknown"', body)
+                    self.assertIn('id="view-live" aria-labelledby="tab-live" hidden', body)
+                    self.assertNotIn('location.reload()', body)
+            with patch.object(sys.modules["web.runs"], "_live_board_state", return_value={"running": True, "initial": live.snapshot(self.running.dir)}):
+                body = self.client.get("/job/old-run").get_data(as_text=True)
+                self.assertIn('aria-controls="view-live" aria-selected="true"', body)
+                body = self.client.get("/job/old-run?view=logs").get_data(as_text=True)
+                self.assertIn('aria-controls="view-logs" aria-selected="true"', body)
+                self.assertIn('id="view-live" aria-labelledby="tab-live" hidden', body)
 
     # -- the renderer, executed --------------------------------------------
     def render(self, snapshot, **opts):

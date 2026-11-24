@@ -1,3 +1,4 @@
+{% from 'runs/_live_board.html' import live_panel %}
 {% from 'runs/_execution.html' import execution_strip %}
 {% extends "base.html" %}
 {% from '_page.html' import page_head %}
@@ -6,8 +7,15 @@
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/live-board.css') }}">{% endblock %}
 {% block body %}
 {{ page_head(job_id) }}
-  {% if ex.plan.runner == 'harbor' %}<p class="subtitle">Started from the builder. This page becomes the live board as soon as Harbor writes the job.</p>
-  {% elif ex.plan.runner == 'standard' %}<p class="subtitle">Started from the builder with Nullius. This page becomes the live board as soon as the install is done and the run starts.</p>
-  {% else %}<p class="subtitle">Started from the builder with the {{ ex.plan.runner }} runner. This page becomes the live board as soon as this arm's questions are chosen, after the install.</p>{% endif %}
+<div class="view-tabs" role="tablist" aria-label="Views of this run">
+  <button type="button" role="tab" id="tab-live" data-view-tab="live" aria-controls="view-live" aria-selected="false" tabindex="-1" disabled>Live</button>
+  <button type="button" role="tab" id="tab-results" data-view-tab="results" aria-controls="view-results" aria-selected="false" tabindex="-1" disabled>Results <span id="results-badge" data-stale="1"></span></button>
+  <button type="button" role="tab" id="tab-logs" data-view-tab="logs" aria-controls="view-logs" aria-selected="true">Logs</button>
+</div>
+<div role="tabpanel" id="view-logs" aria-labelledby="tab-logs">
 {{ execution_strip(ex, csrf, waiting=true, own=own, deletable=deletable) }}
+</div>
+<div role="tabpanel" id="view-live" aria-labelledby="tab-live" hidden>{{ live_panel(job_id, trial_base=url_for('job', job_id=job_id)) }}</div>
+<div role="tabpanel" id="view-results" aria-labelledby="tab-results" hidden></div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='runs/live-board.js') }}"></script>{% endblock %}

@@ -577,7 +577,7 @@ def job(job_id):
         abort(404)
     from . import judge
     board = _live_board_state(j)
-    return render_template("runs/job.html", job=j, live_board=board, view=_view_of(board, j),
+    return render_template("runs/job.html", job=j, live_board=board, view=_view_of(board, j, ex),
                            execution=ex, csrf=shared._csrf_token(),
                            judgement=judge.job_summary(j) if j.trials else None,
                            control=feasibility.summary_of(j), ended=shared.ended_for(job_id), own=own, deletable=_deletable(job_id, ex),
@@ -787,19 +787,16 @@ def launch_delete(key):
     return redirect(back)
 
 
-def _view_of(board, j=None) -> str | None:
-    """Which tab the job page opens on, or None when it has no tabs.
-
-    A job with a board has two views of one page: Live, the feed folded as it
-    grows, and Results, the page rendered from the job's files. ``?view=`` wins,
-    so a link opens the view it was copied from; otherwise Live while the feed
-    says the job is going, Results once it ended - unless there are no results
-    to show: a job with a feed and no result record yet stays on Live. A job with no feed, a broken
-    one or an empty one has no Live view, and no tabs.
-    """
-    if not board or not board.get("initial") or board["initial"]["state"] == "unknown":
-        return None
+def _view_of(board, j=None, ex=None) -> str | None:
+    """Explicit tabs win; launch logs precede a usable live feed."""
+    ready = board and board.get("initial") and board["initial"]["state"] != "unknown"
     asked = request.args.get("view")
+    if asked == "logs" and ex is not None:
+        return "logs"
+    if not ready:
+        if ex is None:
+            return "results" if j is not None and j.is_preparing and not shared.ended_for(j.job_id) else None
+        return "results" if asked == "results" else "logs"
     if asked in ("live", "results"):
         return asked
     return "live" if board["running"] or (j is not None and j.is_preparing) else "results"

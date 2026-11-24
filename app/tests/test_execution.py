@@ -861,7 +861,8 @@ class StandardOnHost(HostBase):
                          [("plan", None), ("connect", "start"), ("connect", "done"), ("uv", "cached"), ("app", "start"), ("app", "done")])
         got = ex.summary()["stages"]
         self.assertEqual([(s["key"], s["state"]) for s in got["stages"]],
-                         [("connect", "done"), ("uv", "cached"), ("app", "done"), ("image", "done"), ("install:reference", "cached"), ("units", "running")])
+                         [("connect", "done"), ("uv", "cached"), ("app", "done"), ("image", "done"), ("install:reference", "cached"), ("units", "done")])
+        self.assertIsNone(got["current"])
         self.assertEqual((got["units"]["n"], got["units"]["done"], got["units"]["passed"]), (2, 1, 1))
         back = execution.Execution(self.plan, root=str(self.tmp / "runs"), run=self.answer,
                                    record=json.loads((self.tmp / "runs" / "std-shard-2of2" / "run.json").read_text()))
