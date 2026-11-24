@@ -26,6 +26,7 @@ import json
 import shutil
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -572,6 +573,16 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
     return res
 
 
+def job_uuid(job_dir: str) -> Optional[str]:
+    """The ``standard.uuid`` a job's ``config.json`` already declares, or None."""
+    try:
+        with open(os.path.join(job_dir, "config.json")) as f:
+            got = (json.load(f).get("standard") or {}).get("uuid")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return got if isinstance(got, str) and got else None
+
+
 def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str, provider: str, dataset: str, units: List[str],
                  concurrency: int, granted: bool, judge: str = "", backend: str = "local", image: str = "", boat_size: str = "",
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
@@ -603,9 +614,12 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     (``--served-by``), said only for a run that pinned them.
     ``exchanges`` and ``exchanges_max_mb``: what each unit's relay kept of
     its agent's calls (``run --exchanges``) and its bound in MB, said for
-    every run that gives them."""
+    every run that gives them.
+    ``uuid``: the job's identity, made once; a run resumed into the same
+    folder keeps the one already written."""
+    uid = job_uuid(job_dir) or str(uuid.uuid4())
     ondisk.write_whole(os.path.join(job_dir, "config.json"), json.dumps({"job_name": job, "runner": "standard", "runner_label": "Nullius",
-                   "standard": {"benchmark": bench["key"], **_version(bench), "plugged": other.get("_ref") or other["key"], "kind": other["_kind"], "provider": provider,
+                   "standard": {"uuid": uid, "benchmark": bench["key"], **_version(bench), "plugged": other.get("_ref") or other["key"], "kind": other["_kind"], "provider": provider,
                                 "needs": bench["needs"], "permissions_granted": granted,
                                 "unsandboxed": granted and backend == "local", "backend": backend,
                                 **({"image": image} if image else {}), **({"boat_size": boat_size} if boat_size else {}),

@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import uuid
 from typing import Dict, List, Optional
 
 from nullius.standard.runner import job
@@ -326,6 +327,7 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
     own = len({json.dumps(_at(s["config"], ("standard", "benchmark_options")), sort_keys=True) for s in shards}) > 1
     if own:
         std.pop("benchmark_options", None)
+    std["uuid"] = str(uuid.uuid4())       # a merge is a job of its own, not shard 0
     std["merged_from"] = [{"job": s["name"], "trials": len(s["trials"]),
                            **({"shard": f"{s['shard'].get('index')}/{s['shard'].get('of')}"} if s["shard"] else {}),
                            **({"benchmark_options": _at(s["config"], ("standard", "benchmark_options")) or {}} if own else {}),

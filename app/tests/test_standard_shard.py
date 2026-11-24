@@ -123,6 +123,8 @@ class Merge(unittest.TestCase):
         self.assertEqual(got["notes"], [])
         j = parse.parse_job(got["out"])
         self.assertEqual((j.job_id, j.n_tasks, j.n_total_trials, len(j.trials)), ("run", 10, 10, 10))
+        # a merge is a job of its own: a new identity, none of its shards'
+        self.assertEqual((j.uid_source, len({parse.parse_job(d).uid for d in dirs} | {j.uid})), ("declared", 4))
         self.assertEqual(sorted(t.trial_name for t in j.trials), sorted(f"t-{i}__u{i:04d}" for i in range(10)))
         self.assertEqual(sum(1 for t in j.trials if t.reward == 1.0), 5)                  # the odd ones pass; t-4 ended in an error
         self.assertEqual(j.n_errored_trials, 1)
