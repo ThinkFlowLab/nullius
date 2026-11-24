@@ -87,6 +87,12 @@ class Convert(unittest.TestCase):
         trials = sorted(n for n in os.listdir(job_dir) if os.path.isdir(os.path.join(job_dir, n)))
         self.assertEqual(trials, ["agent_run__abcdef1", "agent_run__" + later])
         self.assertEqual(files("agent_run__abcdef1"), before)
+        os.remove(os.path.join(src, "one.json"))           # gone: its name is still not another trace's
+        os.remove(os.path.join(src, "two.json"))
+        export("three.json", "abcdef1" + "1" * 25)
+        importer.convert(src, self.out)
+        trials = sorted(n for n in os.listdir(job_dir) if os.path.isdir(os.path.join(job_dir, n)))
+        self.assertEqual(trials, ["agent_run__abcdef1" + "1" * 25])
 
     def test_a_refused_file_deeper_down_is_named_by_its_path_under_the_root_once(self):
         src = tempfile.mkdtemp()

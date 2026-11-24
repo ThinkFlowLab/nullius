@@ -128,20 +128,43 @@ class Conversion(unittest.TestCase):
         after = {p.relative_to(job_dir): p.read_bytes() for p in Path(job_dir, "a__b").rglob("*") if p.is_file()}
         self.assertEqual(after, before)
 
+    def test_one_tree_through_a_link_or_with_a_folder_deleted_by_hand_keeps_its_trial(self):
+        for case in ("link", "deleted"):
+            with self.subTest(case):
+                real = tempfile.mkdtemp()
+                src = os.path.join(real, "run")
+                write_doc(src, "a/b.json", minimal(session_id="s-first"))
+                write_doc(src, "c.json", minimal())
+                if case == "link":
+                    os.symlink(src, os.path.join(real, "link"))
+                    job_dir, _ = self.convert(os.path.join(real, "link"), job_name=case)
+                else:
+                    job_dir, _ = self.convert(src, job_name=case)
+                    shutil.rmtree(os.path.join(job_dir, "c"))
+                write_doc(src, "a__b.json", minimal(session_id="s-later"))
+                _, job = self.convert(src, job_name=case)
+                held = {t.trial_name: json.loads(Path(t.dir, "result.json").read_text())["source_document"]["session_id"]
+                        for t in job.trials}
+                self.assertEqual(held["a__b"], "s-first")
+
     def test_a_folder_an_older_conversion_wrote_two_documents_into_is_split(self):
         src = tempfile.mkdtemp()
         write_doc(src, "a__b.json", minimal(session_id="s-flat"))
         write_doc(src, "a/b.json", minimal(session_id="s-nested"))
         job_dir = os.path.join(self.out, "atif__old")
-        os.makedirs(os.path.join(job_dir, "a__b"))
-        Path(job_dir, "a__b", "result.json").write_text(json.dumps(
-            {"source_document": {"path": os.path.join(src, "a", "b.json")}}))
-        Path(job_dir, "result.json").write_text(json.dumps({"n_total_trials": 2}))
-        _, job = self.convert(src, job_name="atif__old")
-        names = sorted(t.trial_name for t in job.trials)
-        self.assertEqual(len(names), 2)
-        for name in names:
-            self.assertRegex(name, r"^a__b__[0-9a-f]{8}$")
+        for name, data in (("result.json", {"n_total_trials": 2}),     # counted, or listed twice
+                           ("config.json", {"tasks": [{"name": "atif/a__b"}, {"name": "atif/a__b"}]})):
+            with self.subTest(name):
+                os.makedirs(os.path.join(job_dir, "a__b"))
+                Path(job_dir, "a__b", "result.json").write_text(json.dumps(
+                    {"source_document": {"path": os.path.join(src, "a", "b.json")}}))
+                Path(job_dir, name).write_text(json.dumps(data))
+                _, job = self.convert(src, job_name="atif__old")
+                names = sorted(t.trial_name for t in job.trials)
+                self.assertEqual(len(names), 2)
+                for trial in names:
+                    self.assertRegex(trial, r"^a__b__[0-9a-f]{8}$")
+                shutil.rmtree(job_dir)
 
     def test_re_converting_updates_in_place_and_drops_a_stale_trial(self):
         src = tempfile.mkdtemp()

@@ -142,46 +142,56 @@ def write_if_changed(path: str, data: bytes) -> bool:
     return True
 
 
-def existing_trials(job_dir: str, identity_of) -> tuple[dict, bool]:
+def existing_trials(job_dir: str, identity_of) -> tuple[dict, set]:
     """The trials a previous conversion left in *job_dir*: name -> the
     document each holds, by ``identity_of(trial_dir)`` (None when the files
-    cannot tell), and whether the job counted more trials than it has folders,
-    which is how two documents once written into one folder show."""
+    cannot tell), and the names of folders two documents were once written
+    into: a name its ``config.json`` lists twice among its tasks, or, without
+    that list, any name when the job counted more trials than it has folders."""
     trials = {}
     if os.path.isdir(job_dir):
         for name in sorted(os.listdir(job_dir)):
             if os.path.isdir(os.path.join(job_dir, name)):
                 trials[name] = identity_of(os.path.join(job_dir, name))
     try:
+        with open(os.path.join(job_dir, "config.json"), encoding="utf-8") as fh:
+            tasks = json.load(fh)["tasks"]
+        listed = Counter(str(t["name"]).split("/", 1)[-1] for t in tasks)
+        return trials, {name for name, n in listed.items() if n > 1}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    try:
         with open(os.path.join(job_dir, "result.json"), encoding="utf-8") as fh:
             counted = json.load(fh)["n_total_trials"]
     except (OSError, ValueError, KeyError, TypeError):
         counted = len(trials)
-    return trials, isinstance(counted, int) and counted > len(trials)
+    # shortcut: a folder deleted by hand also counts, so any collision splits; only jobs without a tasks list
+    return trials, set(trials) if isinstance(counted, int) and counted > len(trials) else set()
 
 
 def unique_names(documents: list[tuple], existing: dict | None = None,
-                 merged: bool = False) -> list[str]:
+                 merged: set = frozenset()) -> list[str]:
     """One trial directory per document, decided before anything is written.
 
     Each document is (identity, name, longer name). A document whose trial
     already exists keeps that trial's name: judgements are keyed by it. A
-    folder whose document cannot be told keeps its name for the first
+    folder whose document is known stays that document's, even when it is
+    gone. A folder whose document cannot be told keeps its name for the first
     document that would take it. Any other document takes its name unless
-    another holds it, else the longer one. A *merged* job (two documents
-    written into one folder by an older conversion) splits that folder: each
-    of its documents takes the longer name. Two documents still left with
-    one name are refused.
+    another holds it, else the longer one. A *merged* folder (two documents
+    written into one by an older conversion) is split: each of its documents
+    takes the longer name. Two documents still left with one name are refused.
     """
     existing = existing or {}
     identities = {identity for identity, _, _ in documents}
     held = {identity: name for name, identity in existing.items() if identity in identities}
-    unknown = {name for name, identity in existing.items() if identity not in identities}
+    unknown = {name for name, identity in existing.items() if identity is None}
+    gone = {name for name, identity in existing.items() if identity is not None and identity not in identities}
     shorts = Counter(name for _, name, _ in documents)
-    split = {name for name, n in shorts.items() if merged and n > 1 and name in existing}
+    split = {name for name, n in shorts.items() if n > 1 and name in existing and name in merged}
     out = [held.get(identity) if held.get(identity) not in split else None
            for identity, _, _ in documents]
-    taken = {name for name in out if name}
+    taken = {name for name in out if name} | gone
     for i, (_, name, longer) in enumerate(documents):
         if out[i] is None:
             free = name not in taken and name not in split
