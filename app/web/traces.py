@@ -288,8 +288,9 @@ def trial(job_id, trial_name):
     named = evidence.declared(t.source)
     head = [x for x in (t.reward, t.score) if x is not None]
     shown = {"result": head, "score": head, "reward_info.reward": head, "steps": [traj.n_steps] if ok else []}
+    above = (("steps", "steps_limit") if steps_of else ()) + (("ended",) if t.ended_by else ())
     detail = parse.score_detail(t.dir, leave_out=("by", "tool_calls", "max_steps", "max_errors",
-                                               "seed", "trial", "split", "attempts", "agent", "judge", "evaluation"),
+                                               "seed", "trial", "split", "attempts", "agent", "judge", "evaluation") + above,
                                 shown=shown) if short and named is None else None
     reply = next((s.message for s in reversed(traj.steps) if s.source == "agent" and s.message), "") if ok else ""
     rows = evidence.rows(t.dir, named, reply) if short and named else []
