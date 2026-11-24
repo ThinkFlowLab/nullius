@@ -134,13 +134,15 @@ window.NulliusTable = {
     const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
     // a modal over the page (the first-visit guide) takes the focus and the clicks without closing the menu under it
     const away = to => !menu.contains(to) && !btn.contains(to) && !to.closest?.('[aria-modal="true"]');
+    let flipped = false;
     btn.addEventListener('click', () => {
       const open = menu.hidden;
       menu.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
-      // one that opens leftwards past the page's edge (a narrow screen) opens rightwards instead
-      menu.style.left = menu.style.right = '';
-      if (open && menu.getBoundingClientRect().left < 0) Object.assign(menu.style, {left: '0', right: 'auto'});
+      // one that opens leftwards past the page's edge (a narrow screen) opens rightwards instead;
+      // only that flip is undone, so a position its caller set is kept
+      if (flipped) { menu.style.left = menu.style.right = ''; flipped = false; }
+      if (open && menu.getBoundingClientRect().left < 0) { Object.assign(menu.style, {left: '0', right: 'auto'}); flipped = true; }
       if (open) menu.querySelector('input:not(:disabled), button, a[href]')?.focus();
     });
     document.addEventListener('click', e => { if (!menu.hidden && away(e.target)) close(); });
