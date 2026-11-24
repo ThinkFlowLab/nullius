@@ -347,8 +347,20 @@ def compare_detail(row, jobs):
     }
 
 
-# A row's tick labels: its difference's unit, but a rate's ticks are rates and a short run's in seconds.
-AXIS = {POINTS: filters._pct, MINUTES: filters._runtime}
+def _axis(*units):
+    """A row's tick labels, each unit ``(size, form, least)``: the first unit whose size the axis's largest tick reaches
+    writes every tick, at the decimals its step needs in that unit, ``least`` at fewest."""
+    def fmt(v, step, top):
+        size, form, least = next((u for u in units if top >= u[0]), units[-1])
+        return form.format(f"{v / size:.{figures.places(step / size, least)}f}")
+    return fmt
+
+
+# A row's axis, by its difference's unit, as its cells read: a rate's ticks are rates, a short run's in seconds.
+AXIS = {COUNT: _axis((1, "{}", 0)), SCORE: _axis((1, "{}", 2)), POINTS: _axis((0.01, "{}%", 0)),
+        MINUTES: _axis((1, "{}m", 0), (1 / 60, "{}s", 0)), filters._usd: _axis((1, "${}", 2)),
+        filters._tokens: _axis((1e6, "{}M", 2), (1e3, "{}k", 1), (1, "{}", 0))}
+BOUNDS = {POINTS: (0, 1)}
 
 
 def chart(rows, columns, jobs, style, keys):
@@ -369,7 +381,7 @@ def chart(rows, columns, jobs, style, keys):
 
     return figures.STYLES[style].draw(*(
         figures.Metric(rows[k]["label"], tuple(value(rows[k], n, c["i"]) for n, c in enumerate(columns, 1) if c["i"] is not None),
-                       AXIS.get(rows[k]["unit"], rows[k]["unit"]))
+                       AXIS.get(rows[k]["unit"], figures.number), BOUNDS.get(rows[k]["unit"], (None, None)))
         for k in keys))
 
 

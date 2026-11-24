@@ -617,5 +617,40 @@ class ScoredRunsCompared(unittest.TestCase):
         self.assertEqual([g["group"] for g in a.score_by_group], ["1", "2"])
 
 
+class ChartAxes(unittest.TestCase):
+    """Every axis of every chart kind writes its ticks in one format, each label its own, within the metric's range."""
+
+    def test_an_axis_s_tick_labels_are_distinct_in_one_format_inside_the_metric_s_range(self):
+        from types import SimpleNamespace
+        from web import compare as web_compare, filters
+        units = {"cost": filters._usd, "tokens": filters._tokens, "minutes": web_compare.MINUTES,
+                 "rate": web_compare.POINTS, "score": web_compare.SCORE}
+        cases = [   # (unit, style, values)
+            ("cost", "dots", (0.01, 0.03)), ("cost", "dots", (0.02,)), ("tokens", "dots", (1000, 1100)),
+            ("minutes", "dots", (1.0, 3.0)), ("score", "dots", (0.001, 0.004)),
+            ("cost", "bars", (0.01,)), ("tokens", "bars", (1000,)), ("tokens", "bars", (1_000_000,)), ("minutes", "bars", (2.0,)), ("minutes", "bars", (0.5,)),
+            ("rate", "dots", (1.0, 1.0)), ("rate", "dots", (0.0,)), ("rate", "scatter", (1.0, 1.0)),
+            ("cost", "bars", (0.5,)), ("rate", "bars", (0.5,)),
+            ("cost", "bars", (0, 0)), ("cost", "dots", (0, 0)), ("cost", "scatter", (0, 0)),
+        ]
+        for unit, style, values in cases:
+            with self.subTest(unit=unit, style=style, values=values):
+                n = len(values)
+                jobs = [SimpleNamespace(agent_label=f"agent {i}", job_id=str(i), model_name="", is_control=False) for i in range(n)]
+                rows = {"m": {"label": "M", "values": list(values), "cells": [str(v) for v in values],
+                              "deltas": [("", "")] * n, "unit": units[unit]}}
+                panel = web_compare.chart(rows, [{"i": i} for i in range(n)], jobs, style, ("m",) * len(web_compare.figures.STYLES[style].axes))
+                ticks = [t for t in panel.texts if t.cls == "tick"]
+                low = max(t.y for t in ticks)       # the x axis's labels, under the plot; a scatter's y labels above it
+                axes = [[t.lines[0] for t in ticks if t.y == low], [t.lines[0] for t in ticks if t.y != low]]
+                for labels in filter(None, axes):
+                    self.assertEqual(len(set(labels)), len(labels), labels)                                     # each its own
+                    self.assertEqual(len({re.sub(r"[\d.]", "", t) for t in labels}), 1, labels)                 # one unit
+                    self.assertEqual(len({len(t.partition(".")[2].rstrip("kMms%")) for t in labels}), 1, labels)  # one precision
+                    self.assertFalse([t for t in labels if "-" in t], labels)                                  # never below zero
+                    if unit == "rate":
+                        self.assertLessEqual(max(float(t.rstrip("%")) for t in labels), 100, labels)
+
+
 if __name__ == "__main__":
     unittest.main()

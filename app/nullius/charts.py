@@ -3,7 +3,7 @@
 The split: this module
 computes the geometry, in SVG user units, and ``templates/_charts.html`` draws it without arithmetic.
 
-A caller passes :class:`Metric` objects, each a label, a tick formatter and one :class:`Value` per item, already
+A caller passes :class:`Metric` objects, each a label, an axis formatter and one :class:`Value` per item, already
 computed and formatted as the caller shows them elsewhere: nothing here recomputes a value. A value of ``None`` is a
 gap, never a zero. A ``check`` item is drawn hollow and named so; nothing here ranks items. An item's ``series``
 gives its marks one colour in every chart, the class ``s1`` to ``s8`` (cycling), which the stylesheet maps to
@@ -63,11 +63,29 @@ class Value:
         return " ".join(filter(None, (self.text or "—", self.note)))
 
 
+def places(step: float, least: int = 0) -> int:
+    """The fewest decimals, ``least`` at fewest, that write every multiple of ``step`` exactly."""
+    p = least
+    while p < 12 and round(step, p) != round(step, 12):
+        p += 1
+    return p
+
+
+def number(v: float, step: float, top: float) -> str:
+    """A plain axis's tick: the decimals its step needs, the same for every tick."""
+    return f"{v:.{places(step)}f}"
+
+
 @dataclass(frozen=True)
 class Metric:
+    """``fmt(v, step, top)`` writes the tick ``v`` of an axis whose ticks are ``step`` apart and reach ``top`` at most
+    in size: one unit and one precision for the whole axis, so that every label is its own. ``bounds`` (low, high),
+    either None, is the range the metric cannot leave (a rate's 0 and 1); the axis keeps to it."""
+
     label: str
     values: tuple
-    fmt: Callable = str     # a tick's label
+    fmt: Callable = number
+    bounds: tuple = (None, None)
 
 
 @dataclass(frozen=True)
@@ -112,13 +130,15 @@ class Panel:
         return f"0 0 {self.width:g} {self.height:g}"
 
 
-def nice_ticks(lo: float, hi: float, count: int = 4, step_min: float = 0.0) -> tuple:
-    """Round ticks enclosing ``[lo, hi]``, about ``count`` steps, none finer than ``step_min``; ints where whole."""
+def nice_ticks(lo: float, hi: float, count: int = 4, step_min: float = 0.0, bounds: tuple = (None, None)) -> tuple:
+    """Round ticks enclosing ``[lo, hi]``, about ``count`` steps, none finer than ``step_min``; ints where whole. One
+    value gets a range around it, inwards only from a bound, and none below zero when it is zero."""
     if hi < lo:
         lo, hi = hi, lo
-    if hi == lo:     # one value: a range around it, and none below zero when it is zero
+    if hi == lo:
         pad = abs(lo) * 0.1
-        lo, hi = (lo - pad, hi + pad) if pad else (0, 1)
+        low, high = bounds
+        lo, hi = (max(lo - pad, low if low is not None else -math.inf), min(hi + pad, high if high is not None else math.inf)) if pad else (0, 1)
     raw = (hi - lo) / count
     mag = 10 ** math.floor(math.log10(raw))
     step = max(next(m * mag for m in (1, 2, 2.5, 5, 10) if m * mag >= raw), step_min)
@@ -131,8 +151,10 @@ def _clean(v: float):
     return int(v) if v == int(v) else v
 
 
-def _tick(fmt: Callable, v) -> str:
-    return "0" if v == 0 else str(fmt(v))
+def _tick_labels(fmt: Callable, ticks: tuple) -> list:
+    """An axis's tick labels, in the one format ``fmt`` gives its step and its largest tick."""
+    step, top = (ticks[1] - ticks[0]) if len(ticks) > 1 else 1, max(abs(t) for t in ticks)
+    return [str(fmt(t, step, top)) for t in ticks]
 
 
 class _Scale:
@@ -145,13 +167,13 @@ class _Scale:
         return round(self.a + (v - self.lo) / (self.hi - self.lo) * (self.b - self.a), 2)
 
 
-def _ticks_for(values: list, with_zero: bool) -> tuple:
+def _ticks_for(values: list, with_zero: bool, bounds: tuple = (None, None)) -> tuple:
     """A metric's ticks: around its present values, from zero when its marks grow from zero."""
     if with_zero:
         values = values + [0]
     lo, hi = (min(values), max(values)) if values else (0, 1)
     whole = values and all(isinstance(v, int) for v in values)
-    return nice_ticks(lo, hi, step_min=1 if whole else 0)
+    return nice_ticks(lo, hi, step_min=1 if whole else 0, bounds=bounds)
 
 
 def _x_labels(scale: _Scale, fmt: Callable, y: float) -> list:
@@ -159,8 +181,7 @@ def _x_labels(scale: _Scale, fmt: Callable, y: float) -> list:
     before it is left out, the last one never: the gridlines still mark every tick."""
     last = len(scale.ticks) - 1
     kept = []
-    for i, t in enumerate(scale.ticks):
-        text = _tick(fmt, t)
+    for i, (t, text) in enumerate(zip(scale.ticks, _tick_labels(fmt, scale.ticks))):
         anchor = "start" if i == 0 else "end" if i == last else "middle"
         x, w = scale(t), len(text) * _CHAR_W
         x0 = {"start": x, "end": x - w, "middle": x - w / 2}[anchor]
@@ -176,7 +197,7 @@ def _rows(metric: Metric, with_zero: bool, mark: Callable) -> Panel:
     gives the marks of ``v`` at the row's centre ``y``, none for a gap, and the x its reading starts at. The
     gridlines and the baseline's reference cross each row's band only, never a name."""
     present = [v.value for v in metric.values if v.value is not None]
-    scale = _Scale(_ticks_for(present, with_zero), _LEFT, WIDTH - _RIGHT)
+    scale = _Scale(_ticks_for(present, with_zero, metric.bounds), _LEFT, WIDTH - _RIGHT)
     base = next((v for v in metric.values if v.baseline and v.value is not None), None)
     base = base if len(present) > 1 else None
     marks, texts, y = [], [], 4.0
@@ -250,12 +271,12 @@ def scatter(x: Metric, y: Metric) -> Panel:
     shown = [(t, a, b) for t, (a, b) in zip(tags, pairs) if a.value is not None and b.value is not None]
     left, right, top, bottom = _S_LEFT, WIDTH - 8, _S_TOP, _S_HEIGHT - _S_BOTTOM
     # the scales inset from the frame, so a dot on the last tick is whole
-    sx = _Scale(_ticks_for([a.value for _, a, _ in shown], False), left + 12, right - 12)
-    sy = _Scale(_ticks_for([b.value for _, _, b in shown], False), bottom - 12, top + 12)
+    sx = _Scale(_ticks_for([a.value for _, a, _ in shown], False, x.bounds), left + 12, right - 12)
+    sy = _Scale(_ticks_for([b.value for _, _, b in shown], False, y.bounds), bottom - 12, top + 12)
     marks = [Mark("line", sx(t), top, x2=sx(t), y2=bottom, cls="grid") for t in sx.ticks]
     marks += [Mark("line", left, sy(t), x2=right, y2=sy(t), cls="grid") for t in sy.ticks]
     texts = _x_labels(sx, x.fmt, bottom + 14)
-    texts += [Text(left - 4, sy(t) + 4, (_tick(y.fmt, t),), "end", "tick") for t in sy.ticks]
+    texts += [Text(left - 4, sy(t) + 4, (text,), "end", "tick") for t, text in zip(sy.ticks, _tick_labels(y.fmt, sy.ticks))]
     texts += [Text(left, 12, (y.label,), cls="axis-title"), Text(right, bottom + 30, (x.label,), "end", "axis-title")]
     places: dict = {}
     for item in shown:
