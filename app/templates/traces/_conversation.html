@@ -1,12 +1,12 @@
 <section class="conversation-reader" id="conversation-reader"
-         data-endpoint="{{ url_for('conversation_data', job_id=job.job_id, trial_name=trial.trial_name) }}"
+         data-endpoint="{{ url_for('conversation_data', job_id=job.job_id, trial_name=trial.trial_name) }}"{% if n_calls %} data-default-kind="calls"{% endif %}
          aria-label="Conversation reader">
-  {% if traj and not traj.error %}
+  {% if (traj and not traj.error) or n_calls %}
   <div class="reader-heading">
-    <span class="reader-total mono">{{ traj.n_steps }} steps</span>
+    <span class="reader-total mono">{% if n_calls %}{{ n_calls }} call{{ 's' if n_calls != 1 }}{% if traj and not traj.error %} · {% endif %}{% endif %}{% if traj and not traj.error %}{{ traj.n_steps }} steps{% endif %}</span>
   </div>
   {% endif %}
-  {% if not traj or traj.error %}
+  {% if (not traj or traj.error) and not n_calls %}
   <div class="panel"><p class="muted" style="margin:0">{% if traj and traj.error %}Trajectory unreadable: {{ traj.error }}{% elif trial.agent_type == 'control' %}This control has no recorded conversation.{% else %}No trajectory recorded for this trial.{% endif %}</p></div>
   {% else %}
   <form class="reader-search" role="search">
@@ -17,7 +17,8 @@
   </form>
   <div class="reader-toolbar">
     <div class="reader-filters" role="group" aria-label="Conversation filter">
-      <button type="button" data-kind="all" aria-pressed="true">All steps</button>
+      {% if n_calls %}<button type="button" data-kind="calls" aria-pressed="true">Calls</button>
+      {% endif %}<button type="button" data-kind="all" aria-pressed="{{ 'false' if n_calls else 'true' }}">All steps</button>
       <button type="button" data-kind="messages" aria-pressed="false">Messages</button>
       <button type="button" data-kind="tools" aria-pressed="false">Tools</button>
       <button type="button" data-kind="errors" aria-pressed="false" title="Tool failures flagged by the existing trajectory reader, not benchmark verdicts">Errors</button>

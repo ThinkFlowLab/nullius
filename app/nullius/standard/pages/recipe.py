@@ -42,7 +42,7 @@ from typing import Callable, Dict, List, Optional
 from nullius import constraints as limits, hosts, providers
 from nullius.providers import PROVIDERS, STEP
 from nullius.standard.backends import boat
-from nullius.standard.calls import ledger, relay
+from nullius.standard.calls import exchanges, ledger, relay
 from nullius.standard.contract import definitions, match, ports
 from nullius.standard.proofs import prove
 from nullius.standard.requirements import hostreq
@@ -413,7 +413,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     ``timeouts``: {phase: minutes}, each phase's time limit forced on every
     job (``--timeout``), empty for the default; ``turns``: the most agent
     turns in a conversation (``--max-turns``); ``max_calls``: the most model
-    calls a unit's agent may make (``--max-calls``).
+    calls a unit's agent may make (``--max-calls``). ``exchanges`` and
+    ``exchanges_max_mb``: what each unit's relay keeps of its agent's calls
+    and its bound in MB (``--exchanges``, ``--exchanges-max-mb``), said on
+    the command only when not the default.
     ``max_usd_per_unit``: each unit's own cap (``--max-usd-per-unit``), given
     whole to every job that calls a model.
     ``unpriced``: asked, for a recipe with a cap, which of the models it
@@ -665,6 +668,18 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     elif _int(calls, 1, 1000000) is None:
         add("limits", "Model calls per unit: a whole number of at least 1, or empty for no cap.")
         calls = None
+    keep = recipe.get("exchanges")              # what each unit's relay keeps of its agent's calls (run --exchanges)
+    if keep in ("", None):
+        keep = exchanges.DEFAULT
+    elif keep not in exchanges.MODES:
+        add("limits", "Model exchanges: whole, text or off, or empty for whole.")
+        keep = exchanges.DEFAULT
+    keep_mb = recipe.get("exchanges_max_mb")
+    if keep_mb in ("", None):
+        keep_mb = exchanges.MAX_MB
+    elif _int(keep_mb, 1) is None:
+        add("limits", f"Model exchanges per unit: a whole number of MB, at least 1, or empty for {exchanges.MAX_MB}.")
+        keep_mb = exchanges.MAX_MB
     turns = recipe.get("turns")
     if turns in ("", None) or "agent.conversation/v1" not in (b.get("needs") or []):     # only a conversation has turns
         turns = None
@@ -819,6 +834,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *[w for k, v in forced.items() for w in ("--timeout", f"{k}={v:g}")],
                  *(["--max-turns", str(turns)] if turns else []),
                  *(["--max-calls", str(calls)] if calls and spends(p) and o.get("_kind") != "capability" else []),
+                 *(["--exchanges", keep] if keep != exchanges.DEFAULT else []),
+                 *(["--exchanges-max-mb", str(keep_mb)] if keep_mb != exchanges.MAX_MB else []),
                  *(["--simulator-model", sim_model] if sim_model and not p["control"] else []),
                  *(["--judge-model", judge_model] if judge_model else []),
                  "--name", job_of(d, p, index), *[w for k, v in given.items() for w in ("--option", f"{k}={v}")],
@@ -935,6 +952,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                      *([[STEP["limits"], "Time limits", " · ".join(f"{k} {v / 60:g} min" for k, v in forced.items())]] if forced else []),
                      *([[STEP["limits"], "Turns per conversation", str(turns)]] if turns else []),
                      *([[STEP["limits"], f"Model calls per {noun}", str(calls)]] if calls else []),
+                     *([[STEP["limits"], "Model exchanges", keep + (f" · at most {keep_mb} MB per {noun}" if keep != "off" else "")]]
+                       if (keep, keep_mb) != (exchanges.DEFAULT, exchanges.MAX_MB) else []),
                      [STEP["where"], "Where", (f"Boat sandboxes · one {boat.SIZES[boat_size]['label']} VM per {noun}" if backend == "boat"
                       else (f"{of} shards, one per machine: " if of > 1 else "")
                       + ", ".join(where_label(t) for t in targets) + f" · {backend} backend")
