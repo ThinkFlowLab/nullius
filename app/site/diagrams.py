@@ -321,7 +321,7 @@ def path_run_here() -> Figure:
     f.self_message(exe, 224, 'RUN.JSON · KEY', room=84)
     f.message(exe + 4, hbr - 4, 320, 'RUN-PART.SH')
     f.message(hbr + 4, llm, 360, 'MODEL CALLS')
-    f.message(hbr - 4, exe + 4, 400, 'JOBS/, EVERY 10 S', 'dashed')
+    f.message(hbr - 4, exe + 4, 400, 'JOBS/, 1 S PAUSE', 'dashed')
     f.message(exe - 4, you, 464, 'JOB PAGE · LIVE', 'accent', at=260)
     f.actor(you, 24, 'You', kind='input')
     f.actor(bld, 24, 'Builder', 'page, recipe core')
@@ -335,13 +335,13 @@ def path_run_here() -> Figure:
 def path_run_host() -> Figure:
     f = Figure('path-run-host', 640, 416, 'Path 3: the same on an SSH host',
                'Execution probes the host, sends the part and the key, starts it detached, then tails '
-               'the log and pulls the jobs back every ten seconds.')
+               'the log and pulls the jobs back, pausing one second between looks.')
     exe, host = 160, 480
     for cx in (exe, host):
         f.lifeline(cx, 72, 368)
     f.activation(exe, 104, 344)
     f.activation(host, 184, 344)
-    f.fragment(136, 224, 368, 120, 'LOOP', '[every 10 s]')
+    f.fragment(136, 224, 368, 120, 'LOOP', '[1 s pause]')
     f.message(exe + 4, host - 4, 112, 'PROBE: DOCKER, UV (INSTALLED IF MISSING)')
     f.message(exe + 4, host - 4, 152, 'SEND WHEELS, TASKS, RUN-PART.SH · KEY OVER STDIN')
     f.message(exe + 4, host - 4, 192, 'START RUN-PART.SH, DETACHED')
@@ -423,7 +423,7 @@ def builder_run() -> Figure:
     f.self_message(nul, 176, 'RUNNER PREPARED ONCE', room=200)
     f.message(nul + 4, tgt - 4, 232, 'SSH: DOCKER, UV · THE RUNNER SENT')
     f.message(nul + 4, tgt - 4, 320, 'RUN-<PART>.SH DETACHED · PID, EXIT FILE')
-    f.self_message(nul, 344, 'EVERY 10 S: LOG TAIL, RSYNC JOBS/', 'dashed', room=200)
+    f.self_message(nul, 344, '1 S PAUSE: LOG TAIL, RSYNC JOBS/', 'dashed', room=200)
     f.message(nul - 4, page, 456, 'PAUSE: CONTINUE OR STOP')
     f.message(nul - 4, page, 536, 'JOB PAGE: RUN LOG, THEN LIVE', 'accent')
     f.actor(page, 24, 'Page', 'the builder', kind='input')
