@@ -142,6 +142,19 @@ class Merge(unittest.TestCase):
         self.assertTrue(os.path.samefile(os.path.join(src, "workspace", "solution.py"),
                                          os.path.join(got["out"], "t-1__u0001", "workspace", "solution.py")))
 
+    def test_the_merged_jobs_config_is_whole_before_its_result_is_written(self):
+        seen = []
+        real = merge.ondisk.write_whole
+
+        def write_whole(path, data, mode=None):
+            if os.path.basename(path) == "result.json" and os.path.dirname(path) == out:
+                seen.append(read(os.path.join(out, "config.json"))["standard"].get("uuid"))
+            return real(path, data, mode)
+        out = os.path.join(self.tmp, "out", "run")
+        with patch.object(merge.ondisk, "write_whole", write_whole):
+            merge.merge(self.shards(), out)
+        self.assertEqual(seen, [read(os.path.join(out, "config.json"))["standard"]["uuid"]])
+
     def retried(self, dirs, retries=1):
         """The launch allowed each attempt one retry, and the first shard's first attempt took it: its try
         before kept under retried/, as a run leaves it. The attempt's name."""

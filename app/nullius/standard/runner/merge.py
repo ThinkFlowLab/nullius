@@ -37,6 +37,7 @@ import shutil
 import uuid
 from typing import Dict, List, Optional
 
+from nullius import ondisk
 from nullius.standard.runner import job
 from nullius.standard.contract.names import backend as backend_name
 
@@ -318,8 +319,6 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
             results.append(_read(os.path.join(out, t, "result.json")))
     summary = result_of(shards, results)
     planned = summary["n_total_trials"]
-    with open(os.path.join(out, "result.json"), "w", encoding="utf-8") as f:
-        json.dump({"id": name, **summary, **({"served": who} if (who := _served(shards, results)) else {})}, f, indent=1)
     cfg = json.loads(json.dumps(shards[0]["config"]))
     cfg["job_name"] = name
     std = cfg.setdefault("standard", {})
@@ -340,7 +339,9 @@ def merge(job_dirs: List[str], out: str, force: bool = False) -> dict:
         std["merged_despite"] = got["differ"]
     if cfg.get("datasets"):
         cfg["datasets"][0]["n_tasks"] = planned
-    with open(os.path.join(out, "config.json"), "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2)
+    # the config first, whole: a reader never sees the merged result without the merge's own uuid
+    ondisk.write_whole(os.path.join(out, "config.json"), json.dumps(cfg, indent=2))
+    ondisk.write_whole(os.path.join(out, "result.json"),
+                       json.dumps({"id": name, **summary, **({"served": who} if (who := _served(shards, results)) else {})}, indent=1))
     return {"out": out, "trials": len(results), "merged_from": [s["name"] for s in shards], "notes": got["notes"],
             "missing": got["missing"]}

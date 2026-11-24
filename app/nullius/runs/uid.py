@@ -31,22 +31,23 @@ NS_JOB = uuid.UUID("6f0f3a52-5c1e-4d39-9a2b-6a4c1f0e7d21")
 FEED = "events.jsonl"
 
 
-def _start(job_dir: str, res: dict):
-    """When the job started, earliest source first so a later one never
-    precedes it: the feed's ``job.start`` (written as the job begins), else
-    ``result.json``'s ``started_at`` (a standard job writes it at the end),
-    else None."""
-    try:
-        with open(os.path.join(job_dir, FEED), encoding="utf-8") as fh:
-            for _, line in zip(range(32), fh):
-                try:
-                    ev = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(ev, dict) and ev.get("event") == "job.start" and ev.get("ts"):
-                    return str(ev["ts"])
-    except OSError:
-        pass
+def _start(job_dir: str, res: dict, feed: bool):
+    """When the job started, from one source per format so it never changes during the job's
+    life: a standard job, the feed's ``job.start`` (written as it begins), else
+    ``result.json``'s ``started_at`` (written at its end); a Harbor job (``feed`` false),
+    ``result.json`` only, since the feed is Nullius's and may appear after it. None without."""
+    if feed:
+        try:
+            with open(os.path.join(job_dir, FEED), encoding="utf-8", errors="replace") as fh:
+                for _, line in zip(range(32), fh):
+                    try:
+                        ev = json.loads(line)
+                    except ValueError:
+                        continue
+                    if isinstance(ev, dict) and ev.get("event") == "job.start" and ev.get("ts"):
+                        return str(ev["ts"])
+        except OSError:
+            pass
     return str(res["started_at"]) if res.get("started_at") else None
 
 
@@ -68,11 +69,12 @@ def _has_trial(job_dir: str) -> bool:
 def facts(job_dir: str, cfg: dict, res: dict):
     """The fixed facts a derived identity is made of, as strings, or None for
     a job with no trial and no start."""
-    start = _start(job_dir, res)
     std = cfg.get("standard") if isinstance(cfg.get("standard"), dict) else {}
     agents = [a for a in cfg.get("agents") or [] if isinstance(a, dict)]
     if isinstance(cfg.get("harness"), str):          # an import: its folder names its source
+        # shortcut: two imports of one source basename share an identity; a per-source id replaces this.
         return {"v": 1, "format": cfg["harness"], "folder": os.path.basename(job_dir)}
+    start = _start(job_dir, res, feed=bool(std))
     if start is None and not _has_trial(job_dir):
         return None
     if std:

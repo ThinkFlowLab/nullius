@@ -34,9 +34,9 @@ class JobUid(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="nullius-uid-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
-    def config(self, d, name="run"):
+    def config(self, d, name="run", model="m", dataset="all", other=AGENT):
         os.makedirs(d, exist_ok=True)
-        job.write_config(d, job=name, bench=BENCH, other=AGENT, model="m", provider="openai", dataset="all",
+        job.write_config(d, job=name, bench=BENCH, other=other, model=model, provider="openai", dataset=dataset,
                          units=["a"], concurrency=1, granted=True)
         return read(os.path.join(d, "config.json"))["standard"]["uuid"]
 
@@ -58,7 +58,61 @@ class JobUid(unittest.TestCase):
         j = parse.parse_job(d)
         self.assertEqual((j.uid, j.uid_source), (first, "declared"))
 
-    def test_a_copy_or_a_move_keeps_the_identity_and_another_start_is_another_job(self):
+    def test_another_job_under_the_same_name_gets_a_uuid_of_its_own(self):
+        d = os.path.join(self.tmp, "run")
+        first = self.config(d)
+        for what, kw in (("model", {"model": "m2"}), ("dataset", {"dataset": "hard"}),
+                         ("plugged", {"other": dict(AGENT, key="other", _ref="other")})):
+            with self.subTest(what):
+                self.assertNotEqual(self.config(d, **kw), first)
+                first = self.config(d)                          # back to the first job: a new one again
+        self.assertEqual(self.config(d), first)
+
+    def test_resuming_a_job_from_before_uuids_declares_the_identity_it_was_read_under(self):
+        d = self.older_standard(self.tmp, "2026-01-01T00:00:00Z")
+        cfg = read(os.path.join(d, "config.json"))
+        write(os.path.join(d, "config.json"), dict(cfg, datasets=[{"name": "fakebench/all"}]))
+        before = parse.parse_job(d)
+        self.assertEqual(before.uid_source, "derived")
+        self.assertEqual(self.config(d), before.uid)
+        self.assertEqual((parse.parse_job(d).uid, parse.parse_job(d).uid_source), (before.uid, "declared"))
+        with self.subTest("another job under its name"):
+            other = self.older_standard(os.path.join(self.tmp, "b"), "2026-01-01T00:00:00Z")
+            derived = parse.parse_job(other).uid
+            self.assertNotEqual(self.config(other, model="m2"), derived)
+
+    def test_a_harbor_jobs_identity_does_not_follow_the_feed(self):
+        d = shutil.copytree(HARBOR, os.path.join(self.tmp, "h", "liveboard-oracle-x4"))
+        feed = os.path.join(d, "events.jsonl")
+        if os.path.exists(feed):
+            os.remove(feed)
+        without = parse.parse_job(d).uid
+        with open(feed, "w") as f:
+            f.write(json.dumps({"event": "job.start", "ts": "2020-01-01T00:00:00Z"}) + "\n")
+        self.assertEqual(parse.parse_job(d).uid, without)
+
+    def test_a_feed_that_is_not_utf8_is_read_not_raised(self):
+        d = self.older_standard(self.tmp, "2026-01-01T00:00:00Z")
+        with open(os.path.join(d, "events.jsonl"), "wb") as f:
+            f.write(b"\xff\xfe not text\n" + json.dumps({"event": "job.start", "ts": "2026-01-01T00:00:01Z"}).encode() + b"\n")
+        j = parse.parse_job(d)
+        self.assertEqual(j.uid_source, "derived")
+
+    def test_two_jobs_alike_but_for_their_folder_or_their_start_are_two_jobs(self):
+        for name, make in (("harbor", lambda root: shutil.copytree(HARBOR, os.path.join(root, "liveboard-oracle-x4"))),
+                           ("older standard", lambda root: self.older_standard(root, "2026-01-01T00:00:00Z"))):
+            with self.subTest(name):
+                src = make(os.path.join(self.tmp, name, "a"))
+                renamed = shutil.copytree(src, os.path.join(self.tmp, name, "b", "renamed"))   # its files untouched
+                self.assertNotEqual(parse.parse_job(renamed).uid, parse.parse_job(src).uid)
+                later = shutil.copytree(src, os.path.join(self.tmp, name, "c", os.path.basename(src)))
+                res = read(os.path.join(later, "result.json"))
+                write(os.path.join(later, "result.json"), dict(res, started_at="2026-03-03T00:00:00Z"))
+                if os.path.exists(os.path.join(later, "events.jsonl")):
+                    os.remove(os.path.join(later, "events.jsonl"))
+                self.assertNotEqual(parse.parse_job(later).uid, parse.parse_job(src).uid)
+
+    def test_a_copy_or_a_move_keeps_the_identity(self):
         for name, make in (("harbor", lambda root: shutil.copytree(HARBOR, os.path.join(root, "liveboard-oracle-x4"))),
                            ("older standard", lambda root: self.older_standard(root, "2026-01-01T00:00:00Z"))):
             with self.subTest(name):
@@ -71,13 +125,6 @@ class JobUid(unittest.TestCase):
                 os.makedirs(os.path.dirname(moved))
                 os.rename(src, moved)
                 self.assertEqual({parse.parse_job(copy).uid, parse.parse_job(moved).uid}, {j.uid})
-                again = os.path.join(base, "d", os.path.basename(src))
-                shutil.copytree(copy, again)
-                res = read(os.path.join(again, "result.json"))
-                write(os.path.join(again, "result.json"), dict(res, started_at="2026-02-02T00:00:00Z"))
-                if os.path.exists(os.path.join(again, "events.jsonl")):
-                    os.remove(os.path.join(again, "events.jsonl"))       # its start is then the result's
-                self.assertNotEqual(parse.parse_job(again).uid, j.uid)
 
     def test_a_job_with_no_trial_and_no_start_is_pending(self):
         d = os.path.join(self.tmp, "preparing")
