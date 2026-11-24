@@ -2,7 +2,7 @@
   "schema": "nullius.agent/v1",
   "key": "jiuwenswarm",
   "label": "JiuwenSwarm",
-  "summary": "openJiuwen's agent.",
+  "summary": "openJiuwen's WorkSwarm agent.",
   "start": {
     "acp": [
       "{install}/.venv/bin/python",
@@ -68,6 +68,54 @@
         "pip": [
           "workswarm==0.2.8",
           "openjiuwen @ git+https://github.com/openJiuwen-ai/agent-core.git@79f6ec656f513dadc412aaafa13f60ecf7f0fc04"
+        ]
+      }
+    },
+    "0.2.9": {
+      "upstream": {
+        "repository": "https://github.com/openJiuwen-ai/jiuwenswarm",
+        "tag": "v0.2.9",
+        "tested": "453dce3054babf7f3a7000c8e57e068de01d8d2e",
+        "package": "workswarm",
+        "license": "Apache-2.0",
+        "core": "openjiuwen 0.1.21 and openjiuwen-agent-gateway 0.1.0, pinned by upstream"
+      },
+      "install": {
+        "python": "3.12",
+        "wheels": [
+          {
+            "url": "https://github.com/openJiuwen-ai/jiuwenswarm/releases/download/v0.2.9/workswarm-0.2.9-py3-none-any.whl",
+            "sha256": "241ed07f9a23f989984b68474e2b5147ad6907323c92fb8d139be8da6705130f"
+          }
+        ]
+      },
+      "options": {
+        "web_max_fetches": {
+          "label": "Page fetch limit",
+          "summary": "Pages fetched per invocation.",
+          "pattern": "(?:[1-9]|[1-9][0-9]|100)",
+          "example": "6",
+          "default": "3"
+        }
+      },
+      "model": {
+        "apis": [
+          "chat"
+        ],
+        "env": {
+          "NULLIUS_BASE_URL": "{base_url}",
+          "NULLIUS_KEY": "{key}",
+          "NULLIUS_MODEL": "{model}",
+          "NULLIUS_REASONING": "{opt_reasoning_effort}",
+          "WEB_RESEARCH_MAX_FETCHES": "{opt_web_max_fetches}"
+        }
+      },
+      "fidelity": {
+        "command": [
+          "{install}/.venv/bin/python",
+          "{here}/agent.py",
+          "--cli",
+          "{prompt}"
         ]
       }
     }
