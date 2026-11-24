@@ -209,7 +209,7 @@ class AttemptRoutes(unittest.TestCase):
         kept, first = "/trial/retried-run/0001__u0000r2", "/trial/retried-run/0001__u0000r2.try-1"
         page = self.get(kept)
         self.assertEqual(try_tabs(page), [("rate_limited", first, False, "1"), ("resolved", kept, True, "2")])
-        self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="page">Attempt 2<svg class="attempt-retried"', page)
+        self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="page">Attempt 2<svg class="ic attempt-retried"', page)
         # The attempts, this attempt's tries, then this try's numbers.
         order = [page.index(part) for part in ('<div class="attempt-head">', '<nav class="try-tabs"', 'class="th-strip"')]
         self.assertEqual(order, sorted(order))
@@ -221,7 +221,7 @@ class AttemptRoutes(unittest.TestCase):
         self.assertIn('<span class="tag oc-rate_limited">Rate limited</span>', page)
         # the page is Try 1's: its attempt's tab, which leads to the attempt's last try, is where it is, not it
         self.assertEqual([cur for _, cur in tabs(page)], [False, False, False, False])
-        self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="true">Attempt 2<svg class="attempt-retried"', page)
+        self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="true">Attempt 2<svg class="ic attempt-retried"', page)
         self.assertEqual(try_tabs(page), [("rate_limited", first, True, "1"), ("resolved", kept, False, "2")])
         self.assertNotIn('id="tab-judgement"', page)
         self.assertNotIn('id="tab-llm-judge"', page)

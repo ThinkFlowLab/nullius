@@ -106,6 +106,12 @@ class Fold(unittest.TestCase):
         got = progress.fold([ev("plan", stages="install,units"), ev("install", "start", agent="codex@2.2.2")])
         self.assertEqual([(s["key"], s["label"]) for s in got["stages"]], [("install:codex@2.2.2", "Install codex@2.2.2"), ("units", "Units")])
 
+    def test_an_image_digest_is_shown_short_with_the_full_label_kept(self):
+        digest = "sha256:" + "0123456789ab" + "c" * 52
+        got = progress.fold([ev("environment", "start", name="tasks@" + digest), ev("install", "start", agent="terminus-2")])
+        self.assertEqual([(s["label"], s.get("full")) for s in got["stages"]],
+                         [("Environment tasks@sha256:0123456789ab", "Environment tasks@" + digest), ("Install terminus-2", None)])
+
     def test_a_planned_stage_a_later_one_overtook_was_not_needed(self):
         got = progress.fold([ev("plan", stages="image,dataset,install"), ev("image", "cached"), ev("install", "start", agent="a")])
         self.assertEqual([s["stage"] for s in got["stages"]], ["image", "install"])

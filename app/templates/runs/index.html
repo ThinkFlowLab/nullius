@@ -42,6 +42,7 @@
         <td class="lh-state"><span class="la-state {{ r.state|replace(' ', '-') }}"{% if r.state == 'not in this workspace' %} title="Its run ended, and Harbor's job for it is not under this workspace's roots"{% elif r.state == 'refused' %} title="Refused before it started: {{ r.why }}"{% endif %}><i aria-hidden="true"></i>{{ r.state }}</span></td>
         <td>{% if j and j.scored_only %}
           <div class="la-rate la-score" title="This benchmark gives a score and no pass or fail: the mean score{% if j.n_scored_parts %} over its {{ j.n_scored_parts }} scored{% endif %}, no solve rate"><b>{{ '%.2f'|format(j.mean_score) }}</b><span class="la-scale"><i style="width:{{ '%.1f'|format(100 * j.mean_score) }}%"></i></span></div>
+          {% if j.mean_score_planned is not none %}<small class="mean-planned faint">{{ '%.2f'|format(j.mean_score_planned) }} planned</small>{% endif %}
           {%- elif j and j.adjusted_solve_rate is not none %}
           <div class="la-rate"><b>{{ j.adjusted_solve_rate|pct }}</b><span class="la-scale" title="Adjusted {{ j.adjusted_solve_rate|pct }} (the bar), raw {{ j.raw_solve_rate|pct }} (the tick)"><i style="width:{{ '%.1f'|format(100 * j.adjusted_solve_rate) }}%"></i><s style="left:{{ '%.1f'|format(100 * j.raw_solve_rate) }}%"></s></span></div>
           {%- else %}<div class="la-rate na"><b>—</b><span class="la-scale"></span></div>{% endif %}
@@ -238,7 +239,7 @@
       {% set score_title = "This benchmark gives a score and no pass or fail: the mean score" ~ (" over its " ~ j.n_scored_parts ~ " scored" if j.n_scored_parts else "") ~ ", no solve rate" %}
       <td data-col="solved" data-sort="-1" class="align-right faint" title="{{ score_title }}">—</td>
       <td data-col="raw" data-sort="-1" class="align-right faint" title="{{ score_title }}">—</td>
-      <td data-col="adjusted" data-sort="{{ j.mean_score }}" class="align-right strong" title="{{ score_title }}">{{ '%.2f'|format(j.mean_score) }}</td>
+      <td data-col="adjusted" data-sort="{{ j.mean_score }}" class="align-right strong" title="{{ score_title }}">{{ '%.2f'|format(j.mean_score) }}{% if j.mean_score_planned is not none %} <small class="mean-planned faint">{{ '%.2f'|format(j.mean_score_planned) }} planned</small>{% endif %}</td>
       {% else %}
       <td data-col="solved" data-sort="{{ j.n_resolved }}" class="align-right">{{ j.n_resolved }}</td>
       {# A run nothing scored (a standalone trajectory, a span export) has no

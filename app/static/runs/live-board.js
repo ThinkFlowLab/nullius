@@ -256,7 +256,7 @@
       : t.state === 'running' ? `${PHASE_LABEL[t.phase] || t.phase}, ${clock(t.elapsed_sec)} of ${t.timeout_sec ? clock(t.timeout_sec) : 'no limit'}`
       : stateOf(s) === 'finished' ? 'Not run' : `Queued${t.position != null ? ', position ' + (t.position + 1) : ''}`;
     const href = trialHref(t, opts);
-    return `<header><h3>${esc(shortTask(t))}<small>${esc(state)}${t.agent ? ' · ' + esc(t.agent) : ''}</small></h3><button class="lb-x" type="button" data-close aria-label="Close trial detail">×</button></header>
+    return `<header><h3>${esc(shortTask(t))}<small>${esc(state)}${t.agent ? ' · ' + esc(t.agent) : ''}</small></h3><button class="lb-x" type="button" data-close aria-label="Close trial detail"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></header>
       <div class="lb-river"><div class="lb-rl"><span>${t0 == null ? 'not started' : hms(starts[keys[0]])}</span><span>${tl.ended ? 'ended ' + hms(tl.ended) : limEnd ? 'limit ' + clock(limEnd - t0) + ' in' : ''}</span></div>
         <div class="lb-track">${segs}</div><div class="lb-pl">${phases}</div></div>
       ${t.state !== 'running' && (t.activity || t.last_line) ? `<p class="lb-last"><span>Last line, redacted</span>${redacted(t.activity || t.last_line)}</p>` : ''}

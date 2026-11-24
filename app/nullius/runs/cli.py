@@ -89,6 +89,8 @@ def job_detail(job: parse.Job) -> dict:
     data = asdict(job)
     data.update(job_row(job))
     data["harbor_label"] = job.harbor_label
+    data["mean_score"] = job.mean_score
+    data["mean_score_planned"] = job.mean_score_planned
     for trial, raw in zip(job.trials, data["trials"]):
         raw["outcome_label"] = trial.outcome_label
         raw["is_infra"] = trial.is_infra
@@ -269,6 +271,10 @@ def _show(args) -> int:
     mix = " · ".join(f"{k} {v}" for k, v in row["counts"].items() if v)
     if mix:
         print(f"  outcomes: {mix}")
+    if job.mean_score is not None:
+        planned = job.mean_score_planned
+        print(f"  mean score {job.mean_score:.2f} over the trials scored"
+              + ("" if planned is None else f" · {planned:.2f} over the {max(job.n_planned, len(job.trials))} planned"))
     width = max((len(t.trial_name) for t in job.trials), default=0)
     for t in job.trials:
         line = f"  {t.trial_name:<{width}}  {t.outcome}"

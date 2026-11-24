@@ -11,11 +11,11 @@ from .test_routes import web
 from nullius import workspace
 
 # whole runs: every summary row a scored run with categories, a runner and tokens shows
-WHOLE = ["Workspace", "Run", "Agent", "Model", "Benchmark", "Dataset", "Runner", "Outcome mix", "Trials", "Mean score", "Category 1", "Category 2",
+WHOLE = ["Workspace", "Run", "Agent", "Model", "Benchmark", "Dataset", "Runner", "Outcome mix", "Trials", "Mean score", "Mean over planned", "Category 1", "Category 2",
          "Solved", "Raw rate", "Adjusted rate", "Infra errors", "Broke tests", "Prompt size", "Fresh prompt", "Cached",
          "Cached ratio", "Output tokens", "Cost (estimated)", "Run wall time", "Rerun"]
-# matched tasks: no run wall time, which no subset of a run has
-MATCHED = [label for label in WHOLE if label != "Run wall time"]
+# matched tasks: no run wall time and no mean over the trials planned, which no subset of a run has
+MATCHED = [label for label in WHOLE if label not in ("Run wall time", "Mean over planned")]
 # a task's detail row
 DETAIL = ["Outcome", "Score", "Fail → Pass", "Pass → Pass", "Agent time", "Env / Verify", "Steps", "Tool calls", "Failed calls", "Tool mix", "First edit",
           "Edit → test cycles", "Redundant reads", "Retried failed calls", "Exploration per edit", "Prompt size",

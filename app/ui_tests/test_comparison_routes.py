@@ -91,6 +91,22 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertNotIn("left-only", matched)
         self.assertNotIn("right-only", matched)
 
+    def test_matched_scores_omit_the_unknown_planned_denominator(self):
+        for scores in ((1, 1, 1, 1), (1, 1, 1, None)):
+            with self.subTest(scores=scores):
+                for run, side in ((self.left, "left"), (self.right, "right")):
+                    run.n_total_trials = 10
+                    run.trials = [trial(f"shared-{i}", "api_error" if score is None else "scored",
+                                        reward=None, score=score) for i, score in enumerate(scores)]
+                    run.trials.append(trial(f"{side}-only", "scored", reward=None, score=0.5))
+                whole = self.get()
+                matched = self.get(cohort="matched")
+                expected = f"{(sum(score or 0 for score in scores) + 0.5) / 10:.2f}"
+                self.assertEqual(self.cells(whole, "Mean over planned"), [expected, expected])
+                self.assertEqual(self.cells(matched, "Trials"), ["4", "4"])
+                self.assertEqual(self.cells(matched, "Mean score"), ["1.00", "1.00"])
+                self.assertNotIn("Mean over planned", matched)
+
     def test_record_links_keep_duplicate_run_ids_in_their_own_workspace(self):
         urls = [urlsplit(attrs["href"]) for body in (self.get(cohort="matched"), self.get(cohort="matched", view="tasks"))
                 for tag, attrs in Elements(body).elements if tag == "a" and "href" in attrs]
@@ -615,6 +631,49 @@ class ScoredRunsCompared(unittest.TestCase):
         self.assertEqual((rows["Category 1"]["cells"], rows["Category 2"]["cells"]), (["0.75", "0.50"], ["0.25", "0.75"]))
         self.assertIn("best", rows["Category 1"]["classes"][0]); self.assertIn("best", rows["Category 2"]["classes"][1])
         self.assertEqual([g["group"] for g in a.score_by_group], ["1", "2"])
+
+
+class ChartAxes(unittest.TestCase):
+    """Every axis of every chart kind writes its ticks in one format, each label its own, within the metric's range;
+    the origin keeps its unit and drops its decimals, and a rate or a token count takes the fewest decimals."""
+
+    def test_an_axis_s_tick_labels_are_distinct_in_one_format_inside_the_metric_s_range(self):
+        from types import SimpleNamespace
+        from web import compare as web_compare, filters
+        units = {"cost": filters._usd, "tokens": filters._tokens, "minutes": web_compare.MINUTES,
+                 "rate": web_compare.POINTS, "score": web_compare.SCORE}
+        exact = {("rate", "dots", (1.0, 1.0)): ["90%", "95%", "100%"], ("tokens", "dots", (1000, 1100)): ["1.00k", "1.05k", "1.10k"],
+                 ("tokens", "bars", (1000,)): ["0k", "0.5k", "1.0k"], ("cost", "bars", (0.5,)): ["$0", "$0.20", "$0.40", "$0.60"],
+                 ("minutes", "bars", (2.0,)): ["0m", "0.5m", "1.0m", "1.5m", "2.0m"]}
+        cases = [   # (unit, style, values)
+            ("cost", "dots", (0.01, 0.03)), ("cost", "dots", (0.02,)), ("tokens", "dots", (1000, 1100)),
+            ("minutes", "dots", (1.0, 3.0)), ("score", "dots", (0.001, 0.004)),
+            ("cost", "bars", (0.01,)), ("tokens", "bars", (1000,)), ("tokens", "bars", (1_000_000,)), ("minutes", "bars", (2.0,)), ("minutes", "bars", (0.5,)),
+            ("rate", "dots", (1.0, 1.0)), ("rate", "dots", (0.0,)), ("rate", "scatter", (1.0, 1.0)),
+            ("cost", "bars", (0.5,)), ("rate", "bars", (0.5,)),
+            ("cost", "bars", (0, 0)), ("cost", "dots", (0, 0)), ("cost", "scatter", (0, 0)),
+        ]
+        for unit, style, values in cases:
+            with self.subTest(unit=unit, style=style, values=values):
+                n = len(values)
+                jobs = [SimpleNamespace(agent_label=f"agent {i}", job_id=str(i), model_name="", is_control=False) for i in range(n)]
+                rows = {"m": {"label": "M", "values": list(values), "cells": [str(v) for v in values],
+                              "deltas": [("", "")] * n, "unit": units[unit]}}
+                panel = web_compare.chart(rows, [{"i": i} for i in range(n)], jobs, style, ("m",) * len(web_compare.figures.STYLES[style].axes))
+                ticks = [t for t in panel.texts if t.cls == "tick"]
+                low = max(t.y for t in ticks)       # the x axis's labels, under the plot; a scatter's y labels above it
+                axes = [[t.lines[0] for t in ticks if t.y == low], [t.lines[0] for t in ticks if t.y != low]]
+                for labels in filter(None, axes):
+                    self.assertEqual(len(set(labels)), len(labels), labels)                                     # each its own
+                    self.assertEqual(len({re.sub(r"[\d.]", "", t) for t in labels}), 1, labels)                 # one unit
+                    origin = [t for t in labels if not re.sub(r"[^1-9]", "", t)]
+                    self.assertFalse([t for t in origin if "." in t], labels)                                 # a bare origin
+                    self.assertLessEqual(len({len(t.partition(".")[2].rstrip("kMms%")) for t in labels if t not in origin}), 1, labels)  # one precision
+                    self.assertFalse([t for t in labels if "-" in t], labels)                                  # never below zero
+                    if unit == "rate":
+                        self.assertLessEqual(max(float(t.rstrip("%")) for t in labels), 100, labels)
+                if (unit, style, values) in exact:
+                    self.assertEqual(axes[0], exact[unit, style, values])
 
 
 if __name__ == "__main__":
