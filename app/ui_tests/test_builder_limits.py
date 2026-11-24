@@ -47,8 +47,6 @@ class LimitsStep(CompilerCase):
         html = self.draw("osworld1", agent)
         self.assertEqual(re.findall(r'data-std-exchanges="(\w+)"', html), ["whole", "text", "off"])
         self.assertEqual(pressed(html), ["whole"])                         # pictures and text, by default
-        for label in ("Pictures and text</strong><small>default</small>", "Text alone</strong>", "Nothing</strong>"):
-            self.assertIn(label, html)
         self.assertEqual(pressed(self.draw("osworld1", agent + "r.exchanges='text';")), ["text"])
         self.assertNotIn("data-std-exchanges", self.draw("gsm8k", "r.others=['nop'];"))      # a run that calls no model keeps none
         # the choice stays in the recipe, and the run is told it

@@ -809,8 +809,8 @@
   // What each unit's relay keeps of its agent's calls, read on the trial's Conversation tab (recipe.py: run --exchanges):
   // the pictures and the text, the text alone (each picture's size and kind kept), or nothing; small cards, the first the default
   const KEEPS = [['whole', 'Pictures and text'], ['text', 'Text alone'], ['off', 'Nothing']];
-  const exchangesKept = rec => '<div class="nb-sectionhead std-wherehead"><h3 title="What each trial keeps of its calls to the model, shown on its Conversation tab. The pictures take most of the room.">Model calls kept</h3></div>'
-    + `<div class="std-valgrid" style="--w:17ch" role="radiogroup" aria-label="Model calls kept">${KEEPS.map(([v, t]) => `<button type="button" class="nb-tile std-val" data-std-exchanges="${v}" aria-pressed="${(rec.exchanges || 'whole') === v}"><strong>${t}</strong>${v === 'whole' ? '<small>default</small>' : ''}</button>`).join('')}</div>`;
+  const exchangesKept = rec => '<div class="std-exchanges-row"><span class="ui-field-copy" title="What each trial keeps of its calls to the model, shown on its Conversation tab. The pictures take most of the room.">Model calls saved</span>'
+    + `<div class="std-valgrid std-exchanges" role="radiogroup" aria-label="Model calls saved">${KEEPS.map(([v, t]) => `<button type="button" class="nb-tile std-val" data-std-exchanges="${v}" aria-pressed="${(rec.exchanges || 'whole') === v}"><strong>${t}</strong></button>`).join('')}</div></div>`;
   // The bounds the benchmark's upstream has of its own (its steps, its errors: options with ``limit``), in a section
   // of the benchmark's name after the run's scope and its time limits: those the chosen datasets and participants
   // take, each empty at its default, shown greyed - an agent's own under ``by`` (OSWorld's agents' steps).

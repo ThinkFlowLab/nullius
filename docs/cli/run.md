@@ -88,21 +88,21 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 
 ## The exchange record
 
-Each unit's relay keeps every call of its agent whole, its side calls included: the request as sent and the reply as it arrived. `--exchanges off` keeps the call record alone.
+Each trial saves its agent's model requests and replies, including side calls. This uses disk space, not extra model tokens.
 
-| Rule | Detail |
+| Choice or limit | Effect |
 | --- | --- |
-| Where | The trial's `.work/relay/exchanges/`: a line per call (`<unit>.jsonl`), each distinct message, tool or system text once (`parts.jsonl`), each distinct inline picture once (`blobs/`: PNG, JPEG, WebP, GIF) |
-| Its version | Each `.jsonl` file's first line names its format, `{"schema": "nullius.exchanges/v1"}`; a file without it is version 1. A later version is refused, never guessed: the message names both, and a later Nullius reads it |
-| What a call keeps | The request after the relay's changes (the model it sends, a pin) and its sha256, the headers sent without the credentials, the reply's status and body. `agent/calls.jsonl` numbers the same calls (`n`) |
-| Stored as sent | Prompts and pictures are not redacted: a secret the agent typed or a screenshot showed is in the job's folder. Only the relay's key is cut out; a request that held it no longer rebuilds to its hash |
-| `text` | The same without the pictures' bytes: their hash, type and size |
-| The bound | `--exchanges-max-mb`, 256 MB a unit by default. Past it, a call's line and every later one say `cut`; the call record goes on |
-| Never in the way | A failure to write it (a full disk) leaves the agent's reply as it was; the call's line says what failed |
-| Not kept | The judge's and the simulated user's calls, and an option's embeddings: their call record alone |
-| Retries | A retried try's record goes with it under `retried/`; the next try starts its own |
-| A request rebuilt | `nullius runs show <root> <job> <trial> --call N --request` prints call N's request as sent and says whether its sha256 is the recorded one ([Read jobs](read-jobs.md)) |
-| The result | `config.json`: `standard.exchanges` and `standard.exchanges_max_mb`; a recipe's `exchanges` and `exchanges_max_mb` |
+| `--exchanges whole` (default) | Save text and inline pictures; repeated pictures are stored once per trial. |
+| `--exchanges text` | Save text and picture metadata, without picture bytes. |
+| `--exchanges off` | Keep only the abridged call record. |
+| `--exchanges-max-mb N` | 256 MB per unit by default; once reached, stop saving full exchanges. Calls continue. |
+| Privacy | Prompts and pictures are unredacted. Credential headers are excluded and the relay's key is removed. |
+| Coverage | Agent calls only; judges, simulated users and option embeddings keep their call records alone. |
+| Write failure | Recording failure does not change the model's reply. |
+| Retries | Each try keeps its own record. |
+| Newer format | Read a refused newer record with a newer Nullius. |
+
+Inspect saved calls or reconstruct a request with [Read jobs](read-jobs.md). Reconstruction verifies the request's hash; missing pictures or removed secrets prevent an exact match.
 
 ## A spending cap
 

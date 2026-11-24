@@ -288,3 +288,9 @@
 /* its outlined pills (Protocol, Proven) want more air than snug's text beside text; a phone keeps snug's, for the pinned name */
 @media (min-width: 641px) { #nullius-builder :is(#nb-bench-grid, #nb-agent-grid) .grid.snug :is(th, td):not(.pick-col) { padding-left: .6rem; padding-right: .6rem; } }   /* the card's ring (catalogue.css), not a box round the name */
 #nullius-builder .st-search input:focus-visible { outline: none; }   /* the search box draws the focus ring itself (style.css .st-search:focus-within), not its input */
+
+/* Model-call retention uses the same type size as the adjacent form controls. */
+#nullius-builder .std-exchanges .std-val strong { font: 13px/1.5 var(--sans); }
+#nullius-builder .std-exchanges-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 16px 0; border-bottom: 1px solid var(--nb-line); }
+#nullius-builder .std-exchanges { display: flex; flex-wrap: wrap; gap: 8px; }
+#nullius-builder .std-exchanges .std-val { flex: 0 0 auto; min-width: max-content; padding: 6px 11px; }
