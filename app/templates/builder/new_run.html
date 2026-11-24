@@ -17,9 +17,9 @@
   {{ page_head('Set up the next experiment.', actions=actions) }}
   {#- a message is a toast at the bottom left.
        A popover, so it shows above the Saved recipes dialog too -#}
-  <div id="nb-status" class="nb-toast" role="status" aria-live="polite" popover="manual"><span class="nb-toast-text"></span><button type="button" class="nb-toast-close" aria-label="Dismiss">×</button><span class="nb-toast-bar" aria-hidden="true"></span></div>
+  <div id="nb-status" class="nb-toast" role="status" aria-live="polite" popover="manual"><span class="nb-toast-text"></span><button type="button" class="nb-toast-close" aria-label="Dismiss"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button><span class="nb-toast-bar" aria-hidden="true"></span></div>
   <dialog id="nb-saved" class="nb-dialog nb-saved" aria-labelledby="nb-saved-title">
-    <div class="nb-dialoghead"><h2 id="nb-saved-title">Saved recipes</h2><button type="button" class="nb-dialogclose" id="nb-saved-close" aria-label="Close">×</button></div>
+    <div class="nb-dialoghead"><h2 id="nb-saved-title">Saved recipes</h2><button type="button" class="nb-dialogclose" id="nb-saved-close" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     <div id="nb-saved-list"></div>
   </dialog>
   <dialog id="nb-save-dialog" class="nb-dialog" aria-labelledby="nb-save-title">

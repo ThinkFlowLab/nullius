@@ -403,11 +403,11 @@
 <script src="{{ url_for('static', filename='onboarding.js') }}" data-state="{{ url_for('onboarding_state') }}" data-tour="{{ onb_tour|tojson|forceescape }}"></script>
 {% endif %}
 {#- Every notice a page is sent (Flask's flash) is a toast at the bottom left, as the builder's: it goes after a
-    few seconds - an error after twice as many - its bar counting them, paused while pointed at, or on its ×. #}
+    few seconds - an error after twice as many - its bar counting them, paused while pointed at, or on its close. #}
 {% set notices = get_flashed_messages(with_categories=true) %}
 {% if notices %}
 <div class="toasts" role="status" aria-live="polite">
-  {% for category, message in notices %}<div class="toast {{ 'bad' if category == 'error' else 'ok' }}"><span class="toast-text">{{ message }}</span><button type="button" class="toast-close" aria-label="Dismiss">×</button><span class="toast-bar" aria-hidden="true"></span></div>{% endfor %}
+  {% for category, message in notices %}<div class="toast {{ 'bad' if category == 'error' else 'ok' }}"><span class="toast-text">{{ message }}</span><button type="button" class="toast-close" aria-label="Dismiss"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button><span class="toast-bar" aria-hidden="true"></span></div>{% endfor %}
 </div>
 <script>
 document.querySelectorAll('.toast').forEach(t => {
@@ -422,7 +422,7 @@ document.querySelectorAll('.toast').forEach(t => {
 <dialog id="settings-modal" class="settings-modal" aria-labelledby="settings-modal-title">
   <header class="settings-modal-head">
     <h2 id="settings-modal-title" tabindex="-1" autofocus>Settings</h2>
-    <button type="button" class="icon-btn" data-settings-close aria-label="Close Settings">×</button>
+    <button type="button" class="icon-btn" data-settings-close aria-label="Close Settings"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
   </header>
   <iframe aria-label="Settings" id="settings-frame"></iframe>
 </dialog>
