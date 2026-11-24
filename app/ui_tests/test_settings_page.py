@@ -1105,7 +1105,8 @@ class SettingsPage(unittest.TestCase):
         self.assertIn('name="cache_write_1h"', section)
         self.assertNotIn('name="value:', section)                                       # outside Save: nothing of it lands in the file
         state = json.loads(html_text.unescape(re.search(r"data-state='([^']*)'", section).group(1)))
-        self.assertEqual(state, {"n": 0, "from": "", "on": "", "own": {}})               # nothing ships with Nullius
+        self.assertEqual(state, {"n": 0, "from": "", "on": "", "own": {}, "problems": []})   # nothing ships with Nullius
+        self.assertIn("data-own-problems", section)
         headers = {"Origin": "http://localhost", "X-CSRF-Token": self.token()}
         listing = json.dumps({"model-a": {"input_cost_per_token": 2.5e-06, "output_cost_per_token": 1e-05}}).encode()
         with patch.object(prices, "_fetch", lambda source: listing):
@@ -1128,6 +1129,11 @@ class SettingsPage(unittest.TestCase):
         r = self.client.post("/settings/prices/remove", data={"model": "model-a"}, headers=headers); self.addCleanup(r.close)
         self.assertEqual(r.json["own"], {})
         self.assertEqual(self.client.post("/settings/prices/remove", data={"model": "model-a"}, headers=headers).status_code, 404)
+        with open(prices.own_path(), "w") as f:                                      # a row written by hand that cannot price: said
+            json.dump({"own": {"typo": {"input": 1}}}, f)
+        page = self.page()
+        state = json.loads(html_text.unescape(re.search(r"data-state='([^']*)'", page[page.index('id="prices"'):]).group(1)))
+        self.assertEqual((state["own"], state["problems"]), ({}, ["typo prices nothing: set its input and output prices again"]))
         # the same guards as Save: token, origin, loopback
         for route in ("update", "set", "remove"):
             for kw in ({"headers": {"Origin": "http://localhost"}}, {"headers": headers, "environ_base": {"REMOTE_ADDR": "10.0.0.7"}}):

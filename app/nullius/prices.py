@@ -1,16 +1,20 @@
 """Model prices, the user's own: what a call's cost is estimated from when
 the provider's reply does not carry one.
 
-Nullius ships no price. The list lives in one file of the user's
-configuration, ``prices.json`` (``NULLIUS_PRICES`` names another: the file a
-host is sent), in two parts:
+Nullius ships no price. The prices live in two files of the user's
+configuration (``NULLIUS_PRICES`` names another list, the file a host is sent;
+the user's rows then sit beside it):
 
-``models``  a public list, fetched on request and before a capped run (``update``) and kept whole
-            with where it came from and when: LiteLLM's
-            ``model_prices_and_context_window.json``, keyed by the model
-            names the providers themselves use
-``own``     the user's rows, which win over the list: a price it lacks, a
-            negotiated one, a model served under a name of one's own
+``prices.json``      ``models``, a public list, fetched on request and before a capped run (``update``) and
+                     replaced whole, with where it came from and when: LiteLLM's
+                     ``model_prices_and_context_window.json``, keyed by the model names the providers themselves use
+``prices-own.json``  ``own``, the user's rows, which win over the list: a price it lacks, a
+                     negotiated one, a model served under a name of one's own. Written only when
+                     the user sets or removes one; a row that cannot price is kept and said (``problems``)
+
+A ``prices.json`` of before held ``own`` too: while there is no ``prices-own.json``, its
+``own`` is the user's rows, and a refetch keeps it; the first change of a row moves them.
+A host is sent the list and the user's rows as such a file.
 
 A row is USD per million tokens: ``input`` and ``output``, optionally
 ``cached`` (input a cache served), ``cache_write``, ``cache_write_1h``, and ``max_output``,
@@ -28,6 +32,7 @@ A run reads the file; ``cli run`` fetches the list first when the run has a spen
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import time
@@ -48,23 +53,55 @@ def path(env=None) -> str:
     return paths.prices_file(env)
 
 
-def load(env=None) -> dict:
-    """The file as ``{from, on, models, own}``; missing or unreadable, empty:
-    no price is better than a run that cannot start for its price list."""
-    doc = {"from": "", "on": "", "models": {}, "own": {}}
+def own_path(env=None) -> str:
+    return paths.own_prices_file(env)
+
+
+def _read(file: str):
+    """``file``'s JSON object; None when it is missing, ``False`` when it does not read as one."""
     try:
-        with open(path(env), encoding="utf-8") as f:
+        with open(file, encoding="utf-8") as f:
             got = json.load(f)
+    except FileNotFoundError:
+        return None
     except (OSError, ValueError):
-        return doc
-    if isinstance(got, dict):
-        for k in ("from", "on"):
-            if isinstance(got.get(k), str):
-                doc[k] = got[k]
-        for k in ("models", "own"):
-            if isinstance(got.get(k), dict):
-                doc[k] = {n: r for n, r in got[k].items() if _usable(r)}
+        return False
+    return got if isinstance(got, dict) else False
+
+
+def _own(env=None):
+    """The user's rows as written, a row that cannot price too, and what is wrong with
+    their file (None when nothing). Before ``prices-own.json``: the ``own`` of ``prices.json``."""
+    got = _read(own_path(env))
+    if got is None:
+        got = _read(path(env)) or {}
+        rows = got.get("own", {})
+        return (rows, None) if isinstance(rows, dict) else ({}, None)     # a list of before that does not read: nothing of the user's to keep
+    rows = got.get("own", {}) if got is not False else None
+    if not isinstance(rows, dict):
+        return {}, f"{own_path(env)} does not read as your prices: fix it or remove it"
+    return rows, None
+
+
+def load(env=None) -> dict:
+    """The prices as ``{from, on, models, own}``, each row one that can price; a file
+    missing or unreadable, empty: no price is better than a run that cannot start for its price list."""
+    doc = {"from": "", "on": "", "models": {}, "own": {}}
+    got = _read(path(env)) or {}
+    for k in ("from", "on"):
+        if isinstance(got.get(k), str):
+            doc[k] = got[k]
+    if isinstance(got.get("models"), dict):
+        doc["models"] = {n: r for n, r in got["models"].items() if _usable(r)}
+    doc["own"] = {n: r for n, r in _own(env)[0].items() if _usable(r)}
     return doc
+
+
+def problems(env=None) -> list:
+    """What keeps one of the user's rows from pricing, one line each: kept as written, never dropped."""
+    rows, why = _own(env)
+    return ([why] if why else []) + [f"{n} prices nothing: set its input and output prices again"
+                                     for n, r in sorted(rows.items()) if not _usable(r)]
 
 
 def _usable(r) -> bool:
@@ -75,9 +112,8 @@ def _number(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
 
 
-def save(doc: dict, env=None) -> None:
+def _save(out: str, doc: dict) -> None:
     """Written whole beside the file, then renamed: a reader never finds half a list."""
-    out = path(env)
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     ondisk.write_whole(out, json.dumps(doc, indent=1, sort_keys=True) + "\n")
 
@@ -184,26 +220,43 @@ def update(source: Optional[str] = None, env=None, fetch: Optional[Callable[[str
         models = convert(json.loads(raw))
     except ValueError as e:
         raise ValueError(f"{source}: {e}")
-    doc = load(env)
-    doc.update({"from": source, "on": today or time.strftime("%Y-%m-%d"), "models": models})
-    save(doc, env)
+    doc = {"from": source, "on": today or time.strftime("%Y-%m-%d"), "models": models}
+    before = _read(path(env))
+    if before and "own" in before and not os.path.exists(own_path(env)):
+        doc["own"] = before["own"]              # a list of before holds the user's rows until their first change moves them
+    _save(path(env), doc)
     return {"n": len(models), "from": doc["from"], "on": doc["on"]}
+
+
+@contextlib.contextmanager
+def _changing_own(env=None):
+    """The user's rows as written, for one change, then written to their own file;
+    one change at a time across processes. Refused when their file does not read:
+    writing over it would lose every row in it."""
+    out = own_path(env)
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    with ondisk.locked(out + ".lock"):
+        rows, why = _own(env)
+        if why:
+            raise ValueError(why)
+        rows = dict(rows)
+        yield rows
+        _save(out, {"own": rows})
 
 
 def set_own(name: str, r: dict, env=None) -> None:
     name = str(name).strip()
     if not name or not _usable(r):
         raise ValueError("a model's name, and its input and output prices")
-    doc = load(env)
-    doc["own"][name] = r
-    save(doc, env)
+    with _changing_own(env) as rows:
+        rows[name] = r
 
 
 def remove_own(name: str, env=None) -> bool:
-    doc = load(env)
-    if doc["own"].pop(str(name).strip(), None) is None:
+    if str(name).strip() not in _own(env)[0]:
         return False
-    save(doc, env)
+    with _changing_own(env) as rows:
+        rows.pop(str(name).strip(), None)
     return True
 
 
@@ -211,7 +264,7 @@ def state(env=None) -> dict:
     """What Settings shows: how many models the list prices, where it came
     from and when, and the user's own rows."""
     doc = load(env)
-    return {"n": len(doc["models"]), "from": doc["from"], "on": doc["on"], "own": doc["own"]}
+    return {"n": len(doc["models"]), "from": doc["from"], "on": doc["on"], "own": doc["own"], "problems": problems(env)}
 
 
 def said(name: str, r: dict) -> str:
@@ -262,14 +315,18 @@ def main(argv=None) -> int:
     doc, names = load(), list(getattr(a, "models", None) or [])
     both = {**doc["models"], **doc["own"]}
     if getattr(a, "json", False):
-        print(json.dumps({"file": path(), "from": doc["from"], "on": doc["on"], "n": len(doc["models"]), "own": doc["own"],
+        print(json.dumps({"file": path(), "own_file": own_path(), "from": doc["from"], "on": doc["on"], "n": len(doc["models"]), "own": doc["own"],
+                          "problems": problems(),
                           "models": {n: both.get(n) for n in names}}, indent=2))
         return 0
     print(f"file: {path()}")
+    print(f"own:  {own_path()}")
     print(f"list: {len(doc['models'])} models, from {doc['from']} on {doc['on']}" if doc["models"]
           else "list: none yet - nullius prices update")
     for n, r in sorted(doc["own"].items()):
         print("own  " + said(n, r))
+    for line in problems():
+        print("bad  " + line)
     for n in names:
         print(said(n, both[n]) if n in both else f"{n}: no price")
     return 0

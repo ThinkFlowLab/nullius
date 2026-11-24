@@ -149,8 +149,99 @@ class Own(Profile):
         with mock.patch.dict(os.environ, {"NULLIUS_PRICES": other}):
             prices.set_own("m", prices.row(1, 2))
             self.assertEqual(prices.table(), {"m": {"input": 1.0, "output": 2.0}})
-        self.assertTrue(os.path.isfile(other))
+        self.assertTrue(os.path.isfile(os.path.join(self.tmp, "sent", "prices-own.json")))     # the user's rows, beside the list it names
         self.assertEqual(prices.table(), {})
+
+
+class Apart(Profile):
+    """The user's rows in a file of their own, the fetched list in another."""
+
+    def test_nullius_paths_names_the_users_rows_file(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            prices.paths.main(["--json"])
+        listed = json.loads(out.getvalue())
+        self.assertEqual((listed["prices"], listed["own prices"]), (prices.path(), prices.own_path()))
+
+    def touched(self, change):
+        """The files ``change`` opens and writes."""
+        opened, wrote = [], []
+        real_open, real_write = open, prices.ondisk.write_whole
+        def watch_open(file, *a, **k):
+            opened.append(os.path.abspath(file)); return real_open(file, *a, **k)
+        def watch_write(file, data, mode=None):
+            wrote.append(os.path.abspath(file)); return real_write(file, data, mode)
+        with mock.patch("builtins.open", watch_open), mock.patch.object(prices.ondisk, "write_whole", watch_write):
+            change()
+        return opened, wrote
+
+    def test_a_refetch_neither_opens_nor_writes_the_users_rows(self):
+        prices.set_own("mine", prices.row(1, 2))
+        with open(prices.own_path(), "rb") as f:
+            kept = f.read()
+        opened, wrote = self.touched(lambda: prices.update(fetch=self.fetch()))
+        self.assertEqual(wrote, [prices.path()])
+        self.assertNotIn(prices.own_path(), opened)
+        with open(prices.path(), "w") as f:                                       # the list unreadable: a refetch replaces it
+            f.write("{not json")
+        opened, wrote = self.touched(lambda: prices.update(fetch=self.fetch()))
+        self.assertNotIn(prices.own_path(), opened + wrote)
+        with open(prices.own_path(), "rb") as f:
+            self.assertEqual(f.read(), kept)
+        self.assertEqual(prices.table()["mine"], {"input": 1.0, "output": 2.0})
+
+    def test_setting_or_removing_a_row_does_not_write_the_list(self):
+        prices.update(fetch=self.fetch())
+        listed = self.read()
+        for change in (lambda: prices.set_own("mine", prices.row(1, 2)), lambda: prices.remove_own("mine")):
+            self.assertEqual(self.touched(change)[1], [prices.own_path()])
+        self.assertEqual(self.read(), listed)
+        self.assertNotIn("own", json.loads(self.read()))
+
+    def test_a_users_row_wins_over_the_list_for_the_same_model(self):
+        prices.update(fetch=self.fetch())
+        prices.set_own("model-a", prices.row(1, 2))
+        self.assertEqual(prices.table()["model-a"], {"input": 1.0, "output": 2.0})
+        self.assertEqual(prices.table()["model-b"]["input"], 3.0)
+
+    def test_a_list_of_before_is_read_for_both_and_its_rows_move_at_their_first_change(self):
+        os.makedirs(os.path.dirname(prices.path()))
+        with open(prices.path(), "w") as f:
+            json.dump({"from": "here", "on": "2026-11-01", "models": {"model-a": {"input": 2.5, "output": 10.0}, "model-b": {"input": 3, "output": 15}},
+                       "own": {"model-a": {"input": 1.0, "output": 2.0}, "old": {"input": 0.5, "output": 1.0}}}, f)
+        self.assertEqual(prices.table(), {"model-a": {"input": 1.0, "output": 2.0}, "model-b": {"input": 3, "output": 15},
+                                          "old": {"input": 0.5, "output": 1.0}})
+        self.assertEqual(prices.state()["own"], {"model-a": {"input": 1.0, "output": 2.0}, "old": {"input": 0.5, "output": 1.0}})
+        prices.update(fetch=self.fetch())                                          # a refetch keeps them where they are
+        self.assertFalse(os.path.exists(prices.own_path()))
+        self.assertEqual(prices.table()["old"], {"input": 0.5, "output": 1.0})
+        prices.set_own("new", prices.row(4, 5))                                    # the first change moves them
+        with open(prices.own_path()) as f:
+            self.assertEqual(sorted(json.load(f)["own"]), ["model-a", "new", "old"])
+        prices.remove_own("old")
+        self.assertNotIn("old", prices.table())                                    # the list's file no longer speaks for them
+
+    def test_a_row_that_cannot_price_is_kept_and_said(self):
+        os.makedirs(os.path.dirname(prices.own_path()))
+        with open(prices.own_path(), "w") as f:
+            json.dump({"own": {"typo": {"input": "1", "output": 2}, "fine": {"input": 1, "output": 2}}}, f)
+        self.assertEqual(prices.table(), {"fine": {"input": 1, "output": 2}})
+        self.assertEqual(prices.state()["problems"], ["typo prices nothing: set its input and output prices again"])
+        prices.set_own("more", prices.row(3, 4))
+        with open(prices.own_path()) as f:
+            self.assertEqual(json.load(f)["own"]["typo"], {"input": "1", "output": 2})     # still there
+        self.assertTrue(prices.remove_own("typo"))
+        self.assertEqual(prices.state()["problems"], [])
+        with open(prices.own_path(), "w") as f:                                        # a file that does not read: never written over
+            f.write("{not json")
+        self.assertEqual(prices.state()["problems"], [f"{prices.own_path()} does not read as your prices: fix it or remove it"])
+        with self.assertRaises(ValueError):
+            prices.set_own("m", prices.row(1, 2))
+        self.assertEqual(self.read_own(), "{not json")
+
+    def read_own(self):
+        with open(prices.own_path()) as f:
+            return f.read()
 
 
 class Exactly(Profile):
@@ -189,6 +280,12 @@ class Cli(Profile):
         self.assertEqual(prices.table()["m"], {"input": 1.0, "output": 2.0, "cache_write": 1.25, "cache_write_1h": 2.0})
         self.assertEqual(prices.table()["old"], {"input": 1.0, "output": 2.0})
         self.assertIn("cache write 1h 2", self.say("list", "m")[1])
+        with open(prices.own_path()) as f:
+            doc = json.load(f)
+        doc["own"]["typo"] = {"input": 1}
+        with open(prices.own_path(), "w") as f:
+            json.dump(doc, f)
+        self.assertIn("bad  typo prices nothing: set its input and output prices again", self.say("list")[1])
 
     def test_a_bad_price_is_refused_with_its_reason(self):
         err = io.StringIO()
