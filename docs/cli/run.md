@@ -84,24 +84,16 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | Not exact | Calls in flight together may pass it by the few already sent |
 | The upstream's own | A step limit of the benchmark's (τ³-bench's `--max-steps`, an OSWorld agent's `--max_steps`) still holds; this cap is on top |
 | The result | `config.json` records it under `standard.max_calls` |
-| No default | A run without `--max-calls` has no cap, whatever the benchmark |
 
 ## A unit cut at a limit
 
-A benchmark whose loop can be ended from outside may score an agent's unit that a limit cut short, as OSWorld scores a task at its step limit: `limits.scored_cuts` in its [definition](../standard.md#driver-ops) names the cuts (OSWorld1: all three). Elsewhere each stays the error above, as it does for an agent started as a command rather than over a session.
+A benchmark that names a cut in `limits.scored_cuts` still scores an agent's unit that cut ends; elsewhere the cut stays an error. A unit where nothing moved, or whose last call the provider refused, stays an error.
 
-| Cut | When | Then |
-| --- | --- | --- |
-| `time` | The agent's time runs out | Its turn is cancelled, the benchmark told the turn ended, the unit scored as it stands |
-| `calls` | The cap refuses the agent's next model call; the answer before it may still act | The same, at once |
-| `end` | The benchmark's own loop ended (`done`, `fail`, its steps used up) and the agent's turn goes on 60 s later | The same; the unit keeps the benchmark's score |
-
-| Rule | Detail |
+| Cut | When |
 | --- | --- |
-| Still errors | A time run out while the provider refused the agent's last call (the unit is tried again); a unit where nothing moved, no model call answered and no step counted |
-| An action in flight | On the computer port, a call the agent made before the cut runs on until the benchmark is told the turn ended, seconds later, at its score; what is left of it then is not run, nor is any call after |
-| The record | `standard.cut` in the trial's `result.json`; the job page, the trial page and `nullius runs show` say what ended the work: the agent, the benchmark (`done`, `fail`, its steps, or its own text, redacted; a long value has a preview on the pages with the full text in its tooltip), the time or the cap. A unit no limit cut is written as before |
-| Not here yet | A run with no time limit; telling the agent its time or its cap of model calls |
+| `time` | The agent's time ran out: its turn is cancelled and the unit scored. |
+| `calls` | The cap refused the agent's next model call; the unit is scored at once. |
+| `end` | The agent's turn went on 60 s after the benchmark's own loop ended. |
 
 ## A spending cap
 

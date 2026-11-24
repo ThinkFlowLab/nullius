@@ -52,7 +52,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 ## Good to know
 
-- A task an agent's time (2 hours) or a run's cap of model calls cuts short is scored as the desktop then stands, as OSWorld scores a task at its step limit; so is one whose agent goes on a minute after the task ended. The trial says what ended the work.
+- A task cut by the agent's time limit or the cap on model calls is still scored, as at its step limit.
 - Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.
 - Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.
 - At this version only the null control has run through Nullius. OSWorld's agents are the same code as in main (044bc33), where M3, PromptAgent and Qwen-CUA completed tasks.
