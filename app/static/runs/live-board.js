@@ -399,7 +399,8 @@
       history.replaceState(null, '', u);
     }
     doc.addEventListener('live-ready', () => {
-      if (!new URL(location.href).searchParams.has('view')) show('live');
+      const requested = new URL(location.href).searchParams.get('view');
+      if (requested !== 'logs' && requested !== 'results') show('live');
     });
     tabs.forEach(t => {
       t.addEventListener('click', () => show(t.dataset.viewTab));

@@ -212,7 +212,10 @@ def _start(plan: execution.Plan):
     started, problem, status = begin([plan])
     if problem:
         return jsonify(ok=False, error=problem), status
-    return jsonify(ok=True, open=url_for("index", view="launch"), **started[0].summary())
+    summary = started[0].summary()
+    jobs = summary["job_ids"]
+    destination = url_for("job", job_id=jobs[0]) if len(jobs) == 1 else url_for("index", view="launch")
+    return jsonify(ok=True, open=destination, **summary)
 
 
 @app.route("/run/<run_id>")
