@@ -2,10 +2,10 @@
    into (the macros of templates/_tables.html; their styles in style.css,
    "the table toolkit"), and the card toolkit's (templates/_cards.html). */
 window.NulliusTable = {
-  /* Whether `text` holds every word of `query`, in any order and case. */
+  /* Whether `text` holds every word of `query`, in any order and case, - _ / : aside. */
   matches(text, query) {
-    const t = (text ?? '').toLowerCase();
-    return query.toLowerCase().split(/\s+/).every(w => t.includes(w));
+    const plain = s => s.toLowerCase().replace(/[-_/:]/g, ''), t = plain(text ?? '');
+    return query.split(/\s+/).every(w => t.includes(plain(w)));
   },
 
   /* A header with data-type sorts its column on a click or Enter; num sorts

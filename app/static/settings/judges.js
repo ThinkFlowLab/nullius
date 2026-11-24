@@ -37,34 +37,7 @@
     const modelField = card.querySelector('.st-field[id$="_MODEL"]');
     modelField.hidden = !on;
     const model = modelField.querySelector('input.st-input');
-    const list = model?.list;
-    if (list) {
-      list.replaceChildren();
-      for (const value of (on?.dataset.models || '').split('|').filter(Boolean)) {
-        const option = document.createElement('option'); option.value = value; list.append(option);
-      }
-    }
     if (model) model.placeholder = on?.dataset.default || '';
-  }
-  // A provider with no list of its own here: its catalogue, asked once when the field is first used; a live list
-  // replaces the one drawn with the page. Typing a model still works.
-  const catalogues = new Map();
-  async function offerCatalogue(card, model) {
-    const on = chosen(card);
-    if (!on || (on.dataset.models && !('live' in on.dataset)) || !model.list) return;
-    const provider = on.value.replace(/^local(?=$|:)/, 'custom');   // local:<id>, a named endpoint, is the builder's custom:<id>
-    const url = 'live' in on.dataset ? '/settings/decision/models' : '/new-run/models';
-    if (!catalogues.has(url + provider)) {
-      catalogues.set(url + provider, nulliusFetch(url, {method: 'POST', headers: {'Content-Type': 'application/json',
-        'X-CSRF-Token': document.querySelector('#settings-form [name=csrf]').value}, body: JSON.stringify({provider})})
-        .then(r => { if (!r.ok) throw new Error("Model catalogue unavailable"); return r.json(); }).then(j => { if (j.error) throw new Error(j.error); return j.models || []; }).catch(() => { catalogues.delete(url + provider); return []; }));
-    }
-    const models = await catalogues.get(url + provider);
-    if (!models.length) return;
-    if (chosen(card) !== on) return;
-    model.list.replaceChildren(...models.map(m => {
-      const option = document.createElement('option'); option.value = m.id; if (m.name !== m.id) option.label = m.name; return option;
-    }));
   }
   cards.forEach(card => {
     // Runs before autosave's listener on the form: a protocol picked here is named, so it is saved.
@@ -75,7 +48,6 @@
       }
       if (event.target.matches('[data-picker], [data-protocol-picker]')) update(card);
     });
-    card.addEventListener('focusin', event => { if (event.target.matches('input.st-input')) offerCatalogue(card, event.target); });
   });
   // Initialize after autosave records the server state, so a sole replacement
   // for an unavailable saved provider is persisted rather than merely displayed.

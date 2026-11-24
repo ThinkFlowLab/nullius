@@ -15,7 +15,7 @@
 {% set chosen = (hosts_row.shown.split(',') | map('trim') | select | list) if hosts_row else [] %}
 {#- mode, in a provider's editor: 'plain' is edited in place (a name, an endpoint's URL); 'key' is written,
     never shown, and replaced; 'optional-key' may also be removed. Elsewhere, Replace and Remove. -#}
-{% macro field(r, label, writable, options=none, mode='', placeholder='', tip='') %}
+{% macro field(r, label, writable, options=none, mode='', placeholder='', tip='', picker='') %}
 {% set plain = mode == 'plain' %}
 <article class="st-field st-row" id="{{ r.name }}" data-source="{{ r.source }}" data-secret="{{ 'yes' if r.secret else 'no' }}">
   <label class="st-row-label" for="value-{{ r.name }}"{% if tip %} title="{{ tip }}"{% endif %}>{{ label }}</label>
@@ -30,7 +30,7 @@
       <input type="hidden" name="clear:{{ r.name }}" value="">{% if mode != 'key' %}<button type="button" class="btn sm ghost st-remove" data-unset="{{ r.name }}">{{ 'Remove key' if mode == 'optional-key' else 'Remove' }}</button>{% endif %}
     </div>
     {% endif %}
-    <input class="st-input" id="value-{{ r.name }}" type="{{ 'password' if r.secret else 'text' }}" name="value:{{ r.name }}" aria-label="{{ label if plain else ('New value for ' if r.source != 'unset') ~ r.name }}"{% if plain %} value="{{ r.shown }}"{% endif %}{% if r.secret %} autocomplete="off" data-1p-ignore data-lpignore="true"{% endif %} spellcheck="false" {% if not r.secret %}maxlength="4000"{% endif %}{% if r.kind == 'localkey' %} placeholder="(optional)"{% elif placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if options is not none %} list="options-{{ r.name }}"{% endif %}{% if r.source != 'unset' and not plain %} hidden{% endif %}{% if r.problem %} aria-invalid="true" aria-describedby="problem-{{ r.name }}"{% endif %}>
+    <input class="st-input" id="value-{{ r.name }}" type="{{ 'password' if r.secret else 'text' }}" name="value:{{ r.name }}" aria-label="{{ label if plain else ('New value for ' if r.source != 'unset') ~ r.name }}"{% if plain %} value="{{ r.shown }}"{% endif %}{% if r.secret %} autocomplete="off" data-1p-ignore data-lpignore="true"{% endif %} spellcheck="false" {% if not r.secret %}maxlength="4000"{% endif %}{% if r.kind == 'localkey' %} placeholder="(optional)"{% elif placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if options is not none %} list="options-{{ r.name }}"{% endif %}{% if picker %} data-model-picker="{{ picker }}"{% endif %}{% if r.source != 'unset' and not plain %} hidden{% endif %}{% if r.problem %} aria-invalid="true" aria-describedby="problem-{{ r.name }}"{% endif %}>
     {% if r.problem %}<p class="st-note st-bad" id="problem-{{ r.name }}">{{ r.problem }}</p>{% endif %}
     {% if options is not none %}<datalist id="options-{{ r.name }}">{% for o in options %}<option value="{{ o }}"></option>{% endfor %}</datalist>{% endif %}
     {% if r.source == 'environment' %}<p class="st-note" title="Held by the process the application runs in; the file cannot override it">Also set in the process environment: the running process keeps that value until it is restarted; the file applies then.</p>{% endif %}
@@ -223,7 +223,7 @@
     <fieldset class="st-card{{ ' st-card-unset' if not decision }}" data-judge-card>
       <legend><svg class="ic st-icon" aria-hidden="true"><use href="#i-gavel"/></svg>Decision model</legend>
       {{ judge_rows('DECISION', decision_providers, decision, 'Where the Decision model is asked') }}
-      {{ field(by['DECISION_MODEL'], 'Model', writable, decision_providers[decision.provider].models) }}
+      {{ field(by['DECISION_MODEL'], 'Model', writable, picker='[data-picker]') }}
     </fieldset>
     {% endif %}
     {% set prow = by.get('LLM_JUDGE_PROVIDER') %}
@@ -231,7 +231,7 @@
     <fieldset class="st-card{{ ' st-card-unset' if not llm }}" data-judge-card>
       <legend><svg class="ic st-icon" aria-hidden="true"><use href="#i-text"/></svg>LLM</legend>
       {{ judge_rows('LLM_JUDGE', llm_providers, llm, "The LLM judge's provider") }}
-      {{ field(by['LLM_JUDGE_MODEL'], 'Model', writable, []) }}
+      {{ field(by['LLM_JUDGE_MODEL'], 'Model', writable, picker='[data-picker]') }}
     </fieldset>
     {% endif %}
   </section>
@@ -473,6 +473,8 @@
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='tables.js') }}"></script>
+<script src="{{ url_for('static', filename='model-picker.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/judges.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/navigation.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/providers.js') }}"></script>

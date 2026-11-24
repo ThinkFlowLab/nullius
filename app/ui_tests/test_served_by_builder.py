@@ -199,7 +199,7 @@ class TheRows(CompilerCase):
 
 class ThePicker(unittest.TestCase):
     """model-picker.js, as the Model row and each Served by use it: what typing keeps, and what Enter takes."""
-    PICKER = Path(__file__).resolve().parents[1] / 'static' / 'builder' / 'model-picker.js'
+    PICKER = Path(__file__).resolve().parents[1] / 'static' / 'model-picker.js'
     ROWS = [{'id': 'deepinfra/fp8', 'name': 'DeepInfra · fp8'}, {'id': 'together', 'name': 'Together · fp8'}, {'id': 'novita/bf16', 'name': 'Novita · bf16'}]
 
     @classmethod
@@ -209,13 +209,30 @@ class ThePicker(unittest.TestCase):
             raise unittest.SkipTest('Node is required for the picker')
 
     def js(self, code):
-        program = 'const P=require(' + json.dumps(str(self.PICKER)) + ');const ROWS=' + json.dumps(self.ROWS) + ';\n' + code
+        program = ('global.window={};global.document={readyState:"loading",addEventListener(){}};require('
+                   + json.dumps(str(self.PICKER.with_name('tables.js'))) + ');const P=require(' + json.dumps(str(self.PICKER)) + ');const ROWS=' + json.dumps(self.ROWS) + ';\n' + code)
         return json.loads(subprocess.run([self.node, '-'], input=program, check=True, capture_output=True, text=True).stdout)
 
     def test_typing_filters_a_models_providers(self):
         out = self.js('const ids=x=>x.map(m=>m.id);process.stdout.write(JSON.stringify([ids(P.matching(ROWS,"nov")),ids(P.matching(ROWS,"DEEP")),'
                       'ids(P.matching(ROWS,"fp8")),ids(P.matching(ROWS,"fp8",["deepinfra/fp8"])),ids(P.matching(ROWS,"")).length,ids(P.matching(ROWS,"zz"))]));')
         self.assertEqual(out, [['novita/bf16'], ['deepinfra/fp8'], ['deepinfra/fp8', 'together'], ['together'], 3, []])
+
+    def test_a_model_is_found_by_its_words_in_any_order_whatever_joins_them(self):
+        rows = [{'id': 'qwen/qwen-2.5-coder-32b-instruct', 'name': 'Qwen2.5 Coder 32B Instruct'}, {'id': 'qwen/qwen3-8b', 'name': 'Qwen: Qwen3 8B'}]
+        for query in ('Qwen 32b', '32B qwen', 'qwen 2.5 32b', 'qwen_2.5 32b', 'qwen/qwen-2.5', ' qwen2.5 '):
+            with self.subTest(query=query):
+                out = self.js(f'process.stdout.write(JSON.stringify(P.matching({json.dumps(rows)},{json.dumps(query)}).map(m=>m.id)));')
+                self.assertEqual(out, [rows[0]['id']])
+        rows.append({'id': 'qwen/qwen3.6-35b', 'name': 'Qwen3.6 35B'})
+        self.assertEqual(self.js(f'process.stdout.write(JSON.stringify(P.matching({json.dumps(rows)},"qwen 3.5")));'), [])   # a version's dot counts: 35b is not 3.5
+
+    def test_a_provider_names_its_own_list_its_live_one_or_its_catalogue(self):
+        out = self.js('const at=(value,dataset)=>P.sourceOf({value,dataset});process.stdout.write(JSON.stringify(['
+                      'at("typesafe",{models:"a|b"}).models.map(m=>m.id),at("openrouter",{models:"a",live:""}),at("local:lab",{}),at("openai",{})]));')
+        self.assertEqual(out, [['a', 'b'], {'url': '/settings/decision/models', 'provider': 'openrouter', 'listed': ['a']},
+                               {'url': '/new-run/models', 'provider': 'custom:lab', 'listed': []},
+                               {'url': '/new-run/models', 'provider': 'openai', 'listed': []}])
 
     def test_enter_takes_a_slug_the_list_lacks_in_a_field_of_several(self):
         out = self.js('process.stdout.write(JSON.stringify([P.entered([],-1," my-provider/fp8 ",true),P.entered(ROWS,1,"x",true),'
