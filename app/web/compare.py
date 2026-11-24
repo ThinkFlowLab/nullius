@@ -353,8 +353,23 @@ def compare_detail(row, jobs):
     }
 
 
-# A row's tick labels: its difference's unit, but a rate's ticks are rates and a short run's in seconds.
-AXIS = {POINTS: filters._pct, MINUTES: filters._runtime}
+def _axis(*units, fewest=False):
+    """A row's tick labels and, with ``fewest``, its unit (``Metric.size``), each unit ``(size, form, least)``: the first
+    unit whose size the axis's largest tick reaches writes every tick, at the decimals its step needs in that unit,
+    ``least`` at fewest, and the origin with none."""
+    unit = lambda top: next((u for u in units if top >= u[0]), units[-1])
+
+    def fmt(v, step, top):
+        size, form, least = unit(top)
+        return form.format(f"{v / size:.{0 if v == 0 else figures.places(step / size, least)}f}")
+    return fmt, (lambda top: unit(top)[0]) if fewest else None
+
+
+# A row's axis, by its difference's unit, as its cells read: a rate's ticks are rates, a short run's in seconds.
+AXIS = {COUNT: _axis((1, "{}", 0)), SCORE: _axis((1, "{}", 2)), POINTS: _axis((0.01, "{}%", 0), fewest=True),
+        MINUTES: _axis((1, "{}m", 0), (1 / 60, "{}s", 0)), filters._usd: _axis((1, "${}", 2)),
+        filters._tokens: _axis((1e6, "{}M", 0), (1e3, "{}k", 0), (1, "{}", 0), fewest=True)}
+BOUNDS = {POINTS: (0, 1)}
 
 
 def chart(rows, columns, jobs, style, keys):
@@ -373,10 +388,12 @@ def chart(rows, columns, jobs, style, keys):
                              text=str(row["cells"][i]), note=row["deltas"][i][0], check=check, baseline=n == 1 and i == 0,
                              tag=str(n), series=n)
 
-    return figures.STYLES[style].draw(*(
-        figures.Metric(rows[k]["label"], tuple(value(rows[k], n, c["i"]) for n, c in enumerate(columns, 1) if c["i"] is not None),
-                       AXIS.get(rows[k]["unit"], rows[k]["unit"]))
-        for k in keys))
+    def metric(row):
+        fmt, size = AXIS.get(row["unit"], (figures.number, None))
+        return figures.Metric(row["label"], tuple(value(row, n, c["i"]) for n, c in enumerate(columns, 1) if c["i"] is not None),
+                              fmt, BOUNDS.get(row["unit"], (None, None)), size)
+
+    return figures.STYLES[style].draw(*(metric(rows[k]) for k in keys))
 
 
 def _charts_requested():

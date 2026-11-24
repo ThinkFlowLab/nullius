@@ -130,6 +130,12 @@
       r.style.transition = 'transform .28s var(--ease)'; r.style.transform = ''; });
   }));
 
+  // a split that would open past the window's right edge (a narrow screen) opens leftwards instead
+  $$('.pop', page).forEach(d => d.addEventListener('toggle', () => {
+    const m = $('.popm', d); m.style.left = m.style.right = '';
+    if (d.open && m.getBoundingClientRect().right > innerWidth) Object.assign(m.style, {left: 'auto', right: '0'});
+  }));
+
   // ---- Esc closes what is open, else clears the filters ----
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;

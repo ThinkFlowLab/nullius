@@ -61,7 +61,6 @@ body.onb-open .shell { margin-right: 310px; }
 .onb-rail { position: relative; }
 .onb-rail .onb-x { position: absolute; right: .35rem; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; display: grid; place-items: center;
   border: 0; border-radius: 5px; background: none; color: var(--text-faint); cursor: pointer; padding: 0; }
-.onb-rail .onb-x .ic { width: 13px; height: 13px; }
 .onb-rail .onb-count { margin-right: 22px; }
 .onb-rail .onb-x:hover { background: var(--surface-2); color: var(--text); }
 :root[data-rail="collapsed"] .onb-rail .onb-x { display: none; }

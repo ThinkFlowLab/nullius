@@ -388,7 +388,7 @@
 .run-identity-more>summary{cursor:pointer;list-style:none}
 .run-identity-more>summary::-webkit-details-marker{display:none}
 .run-identity-more[open]>summary{border-color:var(--text-faint)}
-.run-identity-more .dd-chev{width:16px;height:16px;color:var(--text-dim)}
+.run-identity-more .dd-chev{color:var(--text-dim)}
 .run-identity-more[open] .dd-chev{transform:rotate(180deg)}
 .run-identity-details{position:absolute;z-index:6;left:0;top:calc(100% + 6px);display:grid;grid-template-columns:auto minmax(0,auto);gap:4px 24px;margin:0;padding:10px 16px;width:max-content;max-width:min(36rem,calc(100vw - 32px));border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2);box-shadow:var(--shadow);font-size:14px;line-height:1.5}
 .run-identity-details dt{color:var(--text-dim)}
