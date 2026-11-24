@@ -98,7 +98,8 @@ class Here(Base):
         that one's URL and key, never the default's or another endpoint's; a run
         on one that is gone fails before it starts, and is never sent to another."""
         held = {"MODEL_API_URL": "http://default/v1", "MODEL_API_KEY": "sk-held-default",
-                "MODEL_GPU_NAME": "GPU box", "MODEL_GPU_API_URL": "http://gpu/v1", "MODEL_GPU_API_KEY": "sk-held-gpu",
+                "MODEL_GPU_NAME": "GPU box", "MODEL_GPU_API_URL": "http://old-gpu/v1", "MODEL_GPU_API_KEY": "sk-held-gpu",
+                "MODEL_GPU": json.dumps({"base": "http://gpu/v1", "endpoints": {"messages": "/messages"}}),
                 "MODEL_LAPTOP_API_URL": "http://laptop/v1", "MODEL_LAPTOP_API_KEY": "sk-held-laptop"}
         url_var, key_var = providers.endpoint_vars("GPU")
         with mock.patch.dict(os.environ, held):
@@ -112,6 +113,11 @@ class Here(Base):
         env = dict(l.split("=", 1) for l in (self.tmp / "gpu" / "run-run.log").read_text().splitlines() if "=" in l)
         self.assertEqual({k: v for k, v in env.items() if v.startswith("sk-held-")}, {n: "sk-held-gpu" for n in execution.KEY_NAMES})
         self.assertEqual({k: v for k, v in env.items() if v.startswith("http://")}, {n: "http://gpu/v1" for n in execution.URL_NAMES})
+        from nullius.standard import cli
+        from nullius.standard.runner import run
+        handed = cli.run_env("custom", env)
+        self.assertEqual(run.provider_endpoint("custom", handed), ("http://gpu/v1", "sk-held-gpu"))
+        self.assertEqual(run.key_header("custom", {"model": {"apis": ["messages"]}}, handed), "x-api-key")
         self.assertEqual((gone.state, gone.step), ("failed", "credentials"))
         self.assertIn("MODEL_GONE_API_URL is not set in Settings", gone.error)
 

@@ -32,9 +32,12 @@ class RegistryPins(unittest.TestCase):
         with self.assertRaisesRegex(run.Refused, "does not serve"):
             run.Run(self.bench, self.agent, **options)
         env["OPENROUTER"] = json.dumps({"endpoints": {"messages": "/messages"}})
+        with self.assertRaisesRegex(run.Refused, "does not serve"):
+            run.Run(self.bench, self.agent, **options)
+        self.agent["model"]["apis"] = ["chat"]
         started = run.Run(self.bench, self.agent, **options)
         self.assertEqual((started.base, started.key_header, started.serving),
-                         (providers.PRESETS["openrouter"]["base"], "x-api-key", {"m": ["prov-a"]}))
+                         (providers.PRESETS["openrouter"]["base"], "authorization", {"m": ["prov-a"]}))
         with patch.dict(os.environ, env):
             compiled = recipe.compile(recipes.a_recipe(model="m", served_by={"model": ["prov-a"]}), self.defs)
         self.assertEqual(compiled["errors"], [])
