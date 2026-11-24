@@ -47,7 +47,7 @@ EVERY = 5.0
 
 # What the page calls each stage. One not here is shown by its own name.
 LABELS = {"connect": "Connect", "uv": "uv", "tasks": "Send the tasks", "app": "Send app/", "harbor": "Harbor",
-          "image": "Base image", "environment": "Environment", "upstream": "Benchmark source", "dataset": "Dataset",
+          "models": "Check models", "requirements": "Check requirements", "image": "Base image", "environment": "Environment", "upstream": "Benchmark source", "dataset": "Dataset",
           "driver": "Driver environment", "install": "Install", "runtime": "Agent runtime", "units": "Units"}
 
 _WORD = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)=("(?:[^"\\]|\\.)*"|\S*)')
