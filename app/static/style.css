@@ -1599,8 +1599,8 @@ a.chip { text-decoration: none; }
 /* small screens: the rail is a drawer */
 @media (max-width: 900px) {
   .shell, :root[data-rail="collapsed"] .shell { grid-template-columns: 1fr; }
-  .side { position: fixed; left: 0; top: 0; width: var(--rail-w); transform: translateX(-100%); transition: transform .16s ease; box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
-  .side.drawer-open { transform: none; }
+  .side { position: fixed; left: 0; top: 0; width: var(--rail-w); transform: translateX(-100%); transition: transform .16s ease; }
+  .side.drawer-open { transform: none; box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
   body.drawer-active { overflow: hidden; }
   :root[data-rail="collapsed"] .side-top { flex-direction: row; }
   :root[data-rail="collapsed"] .nav { overflow-y: auto; gap: .9rem; }
