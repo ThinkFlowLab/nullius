@@ -90,6 +90,7 @@ class StandardWhere(CompilerCase):
         agent = self.draw(None, "r.others=[C.standardOthers(r).find(o=>!o.setup&&!o.control&&!o.why.length).key];")["osworld1 local"]
         self.assertIn("data-std-unsandboxed", agent)
         self.assertNotRegex(agent, r"data-std-unsandboxed[^>]*checked")             # never ticked for the person
+        self.assertIn('class="nb-field nb-consent"><span><input type="checkbox" data-field="unsandboxed"', agent)   # its error is said under it
         self.assertIn("<h3>Docker for the tasks&#39; VMs</h3>", agent)               # the requirement under its label
         # a saved container recipe is brought back to the machine: a container cannot start the VMs
         self.assertNotIn("data-std-backend", self.draw(None)["osworld2 docker"])

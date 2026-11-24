@@ -293,9 +293,10 @@ class MachineDocker(unittest.TestCase):
 
     def test_an_agents_run_is_asked_the_tick_alone_since_no_container_starts_the_vms(self):
         out = recipe.compile(self.a_recipe(["codex"], model_choice="any", model="vendor/m", unsandboxed=False))
-        said = [e["message"] for e in out["errors"] if "not sandboxed" in e["message"]]
+        said = [e for e in out["errors"] if "not sandboxed" in e["message"]]
         self.assertEqual(len(said), 1, out["errors"])
-        self.assertNotIn("choose Docker", said[0])
+        self.assertNotIn("choose Docker", said[0]["message"])
+        self.assertEqual(said[0].get("field"), "unsandboxed")        # said under the box that resolves it
         self.assertEqual(recipe.compile(self.a_recipe(["codex"], model_choice="any", model="vendor/m", unsandboxed=True))["errors"], [])
 
     def test_the_null_control_is_refused_as_it_starts_on_a_machine_without_docker(self):

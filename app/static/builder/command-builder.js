@@ -470,8 +470,9 @@
     return ds.length > 1 ? `<span class="std-ctls">${ds.map(chip).join('')}</span>` : chip(ds[0]); };
   const checkChip = (name, proven, failed, says) => { const p = proofOf(proven, failed); if (p.state === 'ok') { p.title = [says, proven.passed, p.title].filter(Boolean).join(' · '); p.text = '✓'; }
     return `<span class="std-ctl std-checkchip"><b>${esc(name)}</b>${proofSpan(p)}</span>`; };
-  // The yes to an agent running as you: asked only for the local backend, where it is no sandbox.
-  const consentBox = rec => `<label class="nb-field nb-consent"><span><input type="checkbox" data-std-unsandboxed ${rec.unsandboxed ? 'checked' : ''}> Run it as me, not sandboxed</span></label>`;
+  // The yes to an agent running as you: asked only for the local backend, where it is no sandbox. Its field names the
+  // error asking for it, said under the box (fieldErrors).
+  const consentBox = rec => `<label class="nb-field nb-consent"><span><input type="checkbox" data-field="unsandboxed" data-std-unsandboxed ${rec.unsandboxed ? 'checked' : ''}> Run it as me, not sandboxed</span></label>`;
   // A benchmark whose units each boot a VM of their own (OSWorld's guest): a Where option has a value declaring
   // one (needs.<value>.vm); vmMemory, that VM's memory in GB under the chosen values, 0 for none.
   const bootsVms = b => Object.values((b || {}).options || {}).some(o => o.step === 'where' && Object.values(o.needs || {}).some(n => n && n.vm));
@@ -1189,6 +1190,7 @@
     const el=event.target,d=el.dataset,rec=r();
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
     if(d.servedBy!==undefined)return;   // what is typed in a Served by filters its menu: a pick, or Enter, adds it (nb-pick)
+    if(d.stdUnsandboxed!==undefined)return;   // a box's value is no tick: its change sets the recipe
     if(d.providerModel && rec.modelFormat !== 'provider-id'){for(const key of ['model','userModel','evalModel'])if(typeof rec[key]==='string')rec[key]=C.bareModel(rec[key]);rec.modelFormat='provider-id';}
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
       const value=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;
