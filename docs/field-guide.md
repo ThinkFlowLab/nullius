@@ -176,7 +176,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `dur_total` | Trial wall clock. | measured | any |
 | `dur_env / dur_agent_setup / dur_agent / dur_verifier` | The four phases a trial records, drawn in order. An imported trial charges its whole window to `dur_agent`. | measured | any |
 | `dur_other` | `dur_total` minus the phases: waits and teardown. | derived | any |
-| `n_input_tokens` | Prompt tokens for the trial. | measured | any |
+| `n_input_tokens` | Prompt tokens for the trial; Usage falls back to trial totals when trajectory accounting is unavailable. | measured | any |
 | `n_cache_tokens` | Prompt tokens read from cache, excluding cache writes: a subset, never added to input tokens. | measured | any |
 | `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings are the run's, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
@@ -209,7 +209,7 @@ These fields are stored in the standard's job and trial files ([Run a benchmark]
 | `name_freq` | The tool names behind each category, in the agent's own words. Evidence of what a category folded, never a comparison key. | measured | any |
 | `files_touched` | Files the agent edited, made workspace-relative so two agents' sets compare. | inferred | any |
 | `n_failed_calls` | Tool calls that returned an error. | inferred | any |
-| `token_series` | Input tokens per LLM call, with the cached share shaded, from per-step metrics. | measured | any |
+| `token_series` | Input tokens per recorded LLM call. Usage sums these calls; Prompt growth additionally shows their input when two or more are recorded. | measured | any |
 | `cache` | Cache reads ÷ every input token. Anthropic-style usage has its writes rebuilt from prompt growth; the file's own ratio shows when it differs. | inferred | any |
 | `steps[].dur` | Seconds until the next step opened. | derived | any |
 | `has_step_clock` | False when the step timestamps span under a second. Step durations and time to first edit are then left out, not shown as zeros. | derived | any |

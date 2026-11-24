@@ -1,8 +1,7 @@
-"""The trial page's head: what ran and how it went, in one row of blocks.
+"""The trial page's head: its own metrics, without repeated run metadata.
 
-A block says only what the trial has: no dash under a label, no benchmark or
-runner for a trial an importer wrote, and Harbor named only for Harbor's own
-job trees. Jobs are synthetic, from tests.test_feasibility, and the scored
+A block says only what the trial has: no dash under a label and no repeated
+benchmark, runner, agent or model cards. Jobs are synthetic, from tests.test_feasibility, and the scored
 runner fixture; nothing is run."""
 from __future__ import annotations
 
@@ -47,21 +46,58 @@ class TrialHead(unittest.TestCase):
         self.addCleanup(response.close)
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        block = html.split('<div class="trial-head">', 1)[1].split('<nav class="trial-tabs"', 1)[0]
+        block = html.split('<nav class="trial-tabs"', 1)[0].partition('<div class="trial-head">')[2]
         return text_of(block), block
 
-    def test_a_harbor_trial_names_its_benchmark_harbor_its_agent_and_its_model(self):
+    def test_a_trial_keeps_its_metrics_and_leaves_run_metadata_on_the_overview(self):
         job = write_job(self.tmp.name, "tb-agent", "my-agent", {"good": 1})
         said, html = self.head(job, "good__x")
-        self.assertEqual(said, "Benchmark Terminal-Bench Runner Harbor m my-agent openai/x Reward 1")
-        self.assertRegex(html, r'<span class="th-mark" aria-hidden="true">\s*m\s*</span>')   # no mark in the catalogue: its initial
+        self.assertEqual(said, "Reward 1")
+        self.assertNotIn('th-card', html)
+        with patch.object(web.shared, "_jobs_for_request", return_value=[job]):
+            response = self.client.get(f"/job/{job.job_id}")
+        self.addCleanup(response.close)
+        overview = response.get_data(as_text=True)
+        self.assertIn("my-agent", overview)
+        self.assertIn("openai/x", overview)
+
+    def test_usage_summary_covers_calls_totals_and_missing_records(self):
+        from types import SimpleNamespace
+        from nullius.traces.trajectory import CacheAccounting
+
+        trial = SimpleNamespace(n_input_tokens=100, n_cache_tokens=20, n_output_tokens=30)
+        def trajectory(series, cache=None, final=None, error=""):
+            series = [dict(step_id=i, sent=100, cached=20, new=80, **p) for i, p in enumerate(series)]
+            return SimpleNamespace(token_series=series, cache=cache, final_metrics=final or {},
+                                   total_reasoning_tokens=None, error=error)
+        cases = [
+            ("one call", trajectory([dict(completion=30)], CacheAccounting("openai", 20, 80, 100, 20)), 100, 20, 30),
+            ("multiple calls", trajectory([dict(completion=30), dict(completion=40)], CacheAccounting("anthropic", 120, 180, 200, 120)), 300, 120, 70),
+            ("final metrics", trajectory([], CacheAccounting("openai", 40, 160, 200, 40), {"total_completion_tokens": 50}), 200, 40, 50),
+            ("trial totals", None, 100, 20, 30),
+            ("unreadable trajectory", trajectory([], error="bad JSON"), 100, 20, 30),
+        ]
+        with web.app.test_request_context():
+            panel = web.app.jinja_env.get_template("traces/_usage.html").module.usage_panel
+            for name, traj, sent, cached, output in cases:
+                with self.subTest(name=name):
+                    html = panel(trial, traj)
+                    self.assertIn(f'aria-label="Input {sent} tokens, {cached} from cache; output {output} tokens"', html)
+                    self.assertNotIn("asks its model once", html)
+                    self.assertEqual("Prompt growth" in html, bool(traj and len(traj.token_series) > 1))
+            empty = SimpleNamespace(n_input_tokens=0, n_cache_tokens=0, n_output_tokens=0)
+            html = panel(empty, None)
+            self.assertIn("Token usage not recorded", html)
+            self.assertNotIn('id="usage-mix"', html)
+            empty.n_output_tokens = 12
+            self.assertIn('id="usage-mix"', panel(empty, None))
 
     def test_a_value_the_trial_has_not_has_no_cell_and_no_dash(self):
         """No verifier record: no Reward. No trajectory: no Steps. No agent
         window: no Agent time. With nothing to say, the strip is not drawn."""
         job = write_job(self.tmp.name, "tb-none", "my-agent", {"lost": None})
         said, html = self.head(job, "lost__x")
-        self.assertEqual(said, "Benchmark Terminal-Bench Runner Harbor m my-agent openai/x")
+        self.assertEqual(said, "")
         self.assertNotIn("th-strip", html)
         self.assertNotIn("—", said)
 
@@ -77,10 +113,8 @@ class TrialHead(unittest.TestCase):
         self.assertNotIn("Fail → Pass", bare); self.assertNotIn("Pass → Pass", bare); self.assertNotIn("Patch applied", bare)
         self.assertNotIn("—", bare)
 
-    def test_an_imported_trial_says_its_importer_and_no_benchmark_or_runner(self):
-        """An importer writes its name as the job's ``harness`` and each trial's
-        ``source``: the head says where the trial came from, and claims neither
-        a benchmark nor that Harbor ran it."""
+    def test_an_imported_trial_does_not_repeat_run_metadata(self):
+        """Imported trials follow the same compact header as benchmark trials."""
         write_job(self.tmp.name, "imported-run", "claude-code", {"session": None})
         at = os.path.join(self.tmp.name, "imported-run", "config.json")
         with open(at) as f:
@@ -88,7 +122,7 @@ class TrialHead(unittest.TestCase):
         with open(at, "w") as f:
             json.dump(dict(cfg, harness="atif"), f)
         said, _ = self.head(parse.parse_job(os.path.join(self.tmp.name, "imported-run")), "session__x")
-        self.assertEqual(said, "Imported from ATIF c claude-code openai/x")
+        self.assertEqual(said, "")
         for word in ("Harbor", "Benchmark", "Runner", "Reward"):
             self.assertNotIn(word, said)
 
@@ -100,7 +134,7 @@ class TrialHead(unittest.TestCase):
         self.assertNotIn("Reward", said)
         self.assertIn(f"The mean score of its {trial.n_parts} parts", html)
         self.assertNotIn("Harbor", said)                             # a runner's job: its runner, in its own word
-        self.assertIn(f"Runner {job.runner}", said)
+        self.assertNotIn("Runner", said)
 
 
 class RecordDownload(unittest.TestCase):

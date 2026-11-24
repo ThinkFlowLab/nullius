@@ -1,3 +1,4 @@
+{% from 'runs/_live_board.html' import live_panel %}
 {% from 'runs/_execution.html' import execution_strip %}
 {% from 'traces/_attempts.html' import attempt_count %}
 {% extends "base.html" %}
@@ -9,18 +10,33 @@
 {% block body %}{% set oc = job.counts %}
 
 {% set meta %}
-  <div class="run-meta" aria-label="Run details">
-    {% if job.agent_label %}<span>{{ job.agent_label }}{% if job.agent_version %} <span class="mono faint" title="Resolved agent version, recorded in the trial's agent_info">v{{ job.agent_version }}</span>{% endif %}</span>{% endif %}
-    <span class="mono">{{ job.model_name }}</span>
-    <span title="{{ job.dataset }}">{{ job.dataset|dsname }}</span>
+  <div class="run-meta run-identity" aria-label="Run details">
+    {% set dataset = nav_catalog.dataset(job.dataset) if nav_catalog else none %}
+    {% set sources = job.trials|map(attribute='source')|select|unique|list %}
+    {% set benchmark = dataset.benchmark if dataset else (sources[0] if sources|length == 1 else none) %}
+    <div class="run-identity-card">
+      {% if not job.runner %}<svg class="run-runner-logo" aria-hidden="true"><use href="{{ url_for('static', filename='brand/marks.svg') }}#harbor"/></svg>{% endif %}
+      <div><span class="k">Runner</span><span class="v mono" title="{{ job.runner_commit if job.runner else job.harbor_label }}">{% if job.runner %}{{ job.runner }}{% if job.runner_commit %} <span class="mono">{{ job.runner_commit }}</span>{% endif %}{% else %}harbor{% if job.harbor_label %} {{ job.harbor_label }}{% endif %}{% endif %}</span></div>
+    </div>
+    {% if job.dataset %}<div class="run-identity-card">
+      {% if benchmark %}<div><span class="k">Benchmark</span><span class="v">{{ benchmark }}</span></div><span class="run-identity-sep" aria-hidden="true"></span>{% endif %}
+      <div><span class="k">Dataset</span><span class="v" title="{{ job.dataset }}">{{ job.dataset|dsname }}</span></div>
+    </div>{% endif %}
+    {% if job.agent_label or job.model_name %}
+    <div class="run-identity-card">
+      {% if job.agent_label %}<span class="run-identity-mark" aria-hidden="true">{{ agent_mark('agent', job.agent_name, job.agent_label) }}</span>{% endif %}
+      <div>{% if job.agent_label %}<span class="v">{{ job.agent_label }}{% if job.agent_version %} <span class="mono faint" title="Recorded agent version">v{{ job.agent_version }}</span>{% endif %}</span>{% endif %}
+      {% if job.model_name %}<span class="run-identity-model mono">{{ job.model_name }}</span>{% endif %}</div>
+    </div>
+    {% endif %}
     {% if control %}<span class="chip-control" title="Harbor control: never calls a model">control</span>
     <span class="control-verdict {{ control.state }}" id="control-verdict" data-state="{{ control.state }}"
       title="{{ control.control }} must be {{ control.expected }} on every task; this is a check on the tasks, not a score">{{ control.label }}</span>{% endif %}
-    {% if job.runner %}<span title="What ran: the runner, and the upstream commit its install resolved">{{ job.runner }}{% if job.runner_commit %} <span class="mono">{{ job.runner_commit }}</span>{% endif %}</span>
-    {% else %}<span title="What ran, from the job\'s lock.json">harbor {% if job.harbor_label %}<span class="mono">{{ job.harbor_label }}</span>{% else %}<span class="faint">unknown</span>{% endif %}</span>{% endif %}
-    <span>{{ job.trials|length }}{% if job.n_planned and job.n_planned != job.trials|length %} of {{ job.n_planned }} planned{% endif %} trials</span>
-    {% if job.n_retries %}<span class="warn" title="Trials Harbor restarted after an error">{{ job.n_retries }} retried</span>{% endif %}
-    {% if job.duration_min %}<span>{{ job.duration_min|runtime }}</span>{% endif %}
+    <div class="run-identity-card">
+      <div><span class="k">Trials</span><span class="v">{{ job.trials|length }}{% if job.n_planned and job.n_planned != job.trials|length %} of {{ job.n_planned }} planned{% endif %}</span></div>
+      {% if job.duration_min is not none %}<span class="run-identity-sep" aria-hidden="true"></span><div><span class="k">Duration</span><span class="v">{{ job.duration_min|runtime }}</span></div>{% endif %}
+      {% if job.n_retries %}<span class="run-identity-sep" aria-hidden="true"></span><div><span class="k">Retried</span><span class="v warn" title="Trials Harbor restarted after an error">{{ job.n_retries }}</span></div>{% endif %}
+    </div>
   </div>{% endset %}
 {% set actions %}
     {% if execution and execution.plan.recipe %}<a class="btn sm ghost" href="{{ url_for('new_run', run=job.job_id) }}"
@@ -32,14 +48,14 @@
       title="{{ job.harbor_command }}">Copy command</button>{% endif %}{% endset %}
 {{ page_head(job.job_id, sub=meta, actions=actions) }}
 
-{% if execution %}{{ execution_strip(execution, csrf, own=own if execution.plan.steps()|length > 1 else none, deletable=deletable) }}{% endif %}
+{% set board_ready = live_board and live_board.initial and live_board.initial.state != 'unknown' %}
 {% if job.is_preparing and not live_board and not ended %}
 {# Launched, not started: Harbor has written the configuration and nothing
    else. There is no result record and no feed to fold yet, so this page
-   waits for the feed and reloads itself when it appears. #}
+   waits for the feed and opens Live when it appears. #}
 <div class="alert warn" id="preparing" data-live="{{ url_for('job_live', job_id=job.job_id) }}">
-  <strong>Preparing</strong> — this run was launched and {{ job.runner or 'Harbor' }} has written its configuration; no trial has started yet.
-  The live board appears here as soon as the first event lands. This page refreshes itself.
+  <strong>Preparing</strong> — this run was launched and {% if job.runner %}{{ job.runner }}{% if job.runner_commit %} <span class="mono">{{ job.runner_commit }}</span>{% endif %}{% else %}harbor{% if job.harbor_label %} {{ job.harbor_label }}{% endif %}{% endif %} has written its configuration; no trial has started yet.
+  The live board appears here as soon as the first event lands.
 </div>
 {% elif (job.is_running or job.is_preparing) and ended %}
 {# Harbor's record says trials are running; the runner that started it says
@@ -68,39 +84,20 @@
 <div class="alert warn"><strong>The live feed could not be read</strong> — <span class="mono">{{ live_board.error }}</span>. The sections below come from the trial results and are unaffected.</div>
 {% endif %}
 {% if view %}
-{# Two views of one page. Live: the job's events.jsonl folded every second while it runs, and kept once it ended as the
-   record of how it ran. Results: the page rendered from the job's files when this page loaded. ?view= picks; without
-   it, Live while the feed says the job is going. At job.end Live stops asking and says Results is ready; no reload. #}
 <div class="view-tabs" role="tablist" aria-label="Views of this run">
-  <button type="button" role="tab" id="tab-live" data-view-tab="live" aria-controls="view-live" aria-selected="{{ 'true' if view == 'live' else 'false' }}"{% if view != 'live' %} tabindex="-1"{% endif %}><span class="live-dot{{ ' on' if live_board.running }}" id="live-dot" aria-hidden="true"></span>Live</button>
-  <button type="button" role="tab" id="tab-results" data-view-tab="results" aria-controls="view-results" aria-selected="{{ 'true' if view == 'results' else 'false' }}"{% if view != 'results' %} tabindex="-1"{% endif %}>Results <span class="results-badge" id="results-badge" data-trials="{{ job.trials|length }}">{{ 'as of load' if live_board.running else '' }}</span></button>
+  <button type="button" role="tab" id="tab-live" {% if not board_ready %}disabled{% endif %} data-view-tab="live" aria-controls="view-live" aria-selected="{{ 'true' if view == 'live' else 'false' }}"{% if view != 'live' %} tabindex="-1"{% endif %}><span class="live-dot{{ ' on' if (live_board and live_board.running) }}" id="live-dot" aria-hidden="true"></span>Live</button>
+  <button type="button" role="tab" id="tab-results" data-view-tab="results" aria-controls="view-results" aria-selected="{{ 'true' if view == 'results' else 'false' }}"{% if view != 'results' %} tabindex="-1"{% endif %}>Results <span class="results-badge" id="results-badge" data-trials="{{ job.trials|length }}">{{ 'as of load' if (live_board and live_board.running) else '' }}</span></button>
+  {% if execution %}<button type="button" role="tab" id="tab-logs" data-view-tab="logs" aria-controls="view-logs" aria-selected="{{ 'true' if view == 'logs' else 'false' }}"{% if view != 'logs' %} tabindex="-1"{% endif %}>Logs</button>{% endif %}
 </div>
+{% if execution %}
+<div role="tabpanel" id="view-logs" aria-labelledby="tab-logs"{% if view != 'logs' %} hidden{% endif %}>
+{{ execution_strip(execution, csrf, own=own if execution.plan.steps()|length > 1 else none, deletable=deletable) }}
+</div>
+{% endif %}
 <div role="tabpanel" id="view-live" aria-labelledby="tab-live"{% if view != 'live' %} hidden{% endif %}>
-<section class="lb" id="live-board" aria-label="Live board" data-state="{{ live_board.initial.state }}"
-         data-endpoint="{{ url_for('job_live', job_id=job.job_id) }}"
-         data-trial-base="{{ '' if job.runner and not job.standard and not job.trials else url_for('job', job_id=job.job_id) }}"
-         data-noun="{{ job.runner_items[0] if job.runner_items else '' }}">
-  <div class="lb-headline">
-    <span class="lb-state"><i aria-hidden="true"></i><span data-lb-state>{{ live_board.initial.state|capitalize }}</span></span>
-    <span class="lb-clock" data-lb-head></span>
-    <span class="lb-meta" data-lb-meta></span>
-  </div>
-  <div class="lb-stats" data-lb-stats></div>
-  <div class="lb-mix">
-    <div class="lb-mixbar" data-lb-mixbar role="img" aria-label="Outcome mix of finished trials, as the feed reports them"></div>
-    <ul class="lb-legend" data-lb-legend aria-label="Filter trials by outcome"></ul>
-    <div class="lb-lanes" data-lb-lanes hidden></div>
-  </div>
-  <div class="lb-body">
-    <div class="lb-main">
-      <div class="lb-tiles-wrap"><span data-lb-tiles-label>All trials</span><div class="lb-tiles" data-lb-tiles></div></div>
-      <div data-lb-flight></div>
-    </div>
-    <aside class="lb-drawer" data-lb-drawer aria-label="Trial detail" hidden></aside>
-  </div>
-  <p class="lb-foot" data-lb-foot hidden><span data-lb-status></span></p>
-</section>
-<script id="live-board-initial" type="application/json">{{ live_board.initial | tojson }}</script>
+{% if board_ready or execution or job.is_preparing %}
+{{ live_panel(job.job_id, live_board, '' if job.runner and not job.standard and not job.trials else url_for('job', job_id=job.job_id), job.runner_items[0] if job.runner_items else '') }}
+{% endif %}
 </div>
 <div role="tabpanel" id="view-results" aria-labelledby="tab-results"{% if view != 'results' %} hidden{% endif %}>
 {% if job.is_running and not ended %}
@@ -110,18 +107,6 @@
 </div>
 {% endif %}
 {% endif %}
-{% if job.is_preparing and not live_board and not ended %}
-<script>
-// Ask for the feed every second while preparing. Reload when it appears or
-// the runner reports an end.
-(() => {
-  const url = document.getElementById('preparing').dataset.live;
-  const tick = async () => { if (document.hidden) return; try { const r = await nulliusFetch(url, {cache: 'no-store'}); if (r.ok) location.reload(); } catch {} };
-  setInterval(tick, 1000);
-})();
-</script>
-{% endif %}
-
 {#-
     Board counts are whole-run and never change under a filter; the trial rows are rendered here, and job.js only filters,
     sorts and links them. Every lane and tally count is nullius.judge.lanes, which is reconcile's. -#}

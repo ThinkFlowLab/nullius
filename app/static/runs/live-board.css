@@ -1,4 +1,4 @@
-/* The job page's two views, and the Live board.
+/* The job page's views, and the Live board.
    Scoped to .lb; the phase and outcome hues are the app's own. */
 
 /* ---- the two views ---- */
@@ -183,3 +183,5 @@
 .lb-open-row:hover { text-decoration: underline; }
 /* the board counts the trials itself: the run strip's own task bar would say it twice */
 body:has(#live-board) #execution-units { display: none; }
+
+.view-tabs [role="tab"]:disabled { color: var(--text-faint); cursor: default; }

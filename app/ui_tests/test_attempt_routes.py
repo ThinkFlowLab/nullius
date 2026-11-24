@@ -126,6 +126,7 @@ class AttemptRoutes(unittest.TestCase):
 
     def test_all_attempts_lists_each_attempt_once_with_its_link(self):
         html = self.get("/trial/repeat-run/auth-token__b/attempts")
+        self.assertNotIn('class="th-card"', html)
         self.assertEqual(tabs(html)[-1], ("/trial/repeat-run/auth-token__c/attempts", True))
         rows = re.findall(r'<td><a href="(/trial/repeat-run/[^"]+)">Attempt (\d)</a></td>', html)
         self.assertEqual(rows, [("/trial/repeat-run/auth-token__c", "1"), ("/trial/repeat-run/auth-token__a", "2"),
@@ -209,8 +210,8 @@ class AttemptRoutes(unittest.TestCase):
         page = self.get(kept)
         self.assertEqual(try_tabs(page), [("rate_limited", first, False, "1"), ("resolved", kept, True, "2")])
         self.assertIn('title="Attempt 2: Resolved on try 2" aria-current="page">Attempt 2<svg class="attempt-retried"', page)
-        # what ran, the attempts, this attempt's tries, then this try's numbers
-        order = [page.index(part) for part in ('<div class="trial-head">', '<div class="attempt-head">', '<nav class="try-tabs"', 'class="th-strip"')]
+        # The attempts, this attempt's tries, then this try's numbers.
+        order = [page.index(part) for part in ('<div class="attempt-head">', '<nav class="try-tabs"', 'class="th-strip"')]
         self.assertEqual(order, sorted(order))
         self.assertIn('id="tab-judgement"', page)
         # the first try: its own evidence, under its attempt's tab, never judged

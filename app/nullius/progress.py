@@ -271,6 +271,10 @@ def fold(events: Iterable[dict]) -> dict:
                 stages[key]["key"] = key
             stages.setdefault(key, {"key": key, "stage": st, "label": label(ev), "state": "waiting"})
         row = stages[key]
+        if state == "start":
+            # A later part or retry starts this stage afresh.
+            for field in ("seconds", "bytes", "total", "detail"):
+                row.pop(field, None)
         row["label"] = label(ev)
         if ev.get("detail") is not None:
             row["detail"] = ev["detail"]
@@ -295,7 +299,7 @@ def fold(events: Iterable[dict]) -> dict:
     last = seen[-1] if seen else -1
     rows = [r for i, r in enumerate(rows) if r["state"] != "waiting" or i > last]
     if ended:                                   # a run that ended has nothing running, nor anything still to come
-        rows = [dict(r, state="failed") if r["state"] == "running" and ended == "refused" else r
+        rows = [dict(r, state="failed" if ended == "refused" else "done") if r["state"] == "running" else r
                 for r in rows if r["state"] != "waiting"]
     current = next((r for r in rows if r["state"] == "running"), None)
     return {"stages": rows, "units": units, "current": current["key"] if current else None, "ended": ended, "detail": detail}

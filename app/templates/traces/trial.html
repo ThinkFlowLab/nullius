@@ -23,7 +23,6 @@
 
 {% from 'traces/_judgement.html' import judgement_panel %}
 {% from 'traces/_attempts.html' import attempt_tabs, attempt_count, try_tabs %}
-{% from 'traces/_head.html' import ran_cards %}
 {% from '_page.html' import page_head %}
 {% block body %}
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
@@ -39,7 +38,7 @@
 {{ page_head(trial.task_base, sub=sub, mono=true) }}
 {# an earlier try of an attempt: evidence only, never judged #}
 {% set replaced = trial.trial_name != attempt.trial_name %}
-{# What ran (traces/_head.html, the same on All attempts), then how it went: the dataset's own
+{# How this trial went: the dataset's own
    checks, the reward or the score, the agent's time and its steps. A value the trial does not
    have has no cell, and a block with no cell is not drawn. #}
 {% set vocab = trial.vocab %}
@@ -53,7 +52,6 @@
   {%- if traj and not traj.error %}<div><span class="k">Steps</span><span class="n">{{ traj.n_steps }}</span></div>{% endif -%}
 {% endset %}
 {% if attempts or tries %}
-<div class="trial-head">{{ ran_cards(job, trial, imported_from, agent_mark) }}</div>
 {% if attempts %}
 <div class="attempt-head">
   <span class="attempt-count">{{ attempt_count(attempts) }}</span>
@@ -62,11 +60,8 @@
 {% endif %}
 {% if tries %}{{ try_tabs(job, tries, trial, request.args.get('workspace')) }}{% endif %}
 {% if cells|trim %}<div class="trial-head"><div class="th-strip">{{ cells }}</div></div>{% endif %}
-{% else %}
-<div class="trial-head">
-  {{ ran_cards(job, trial, imported_from, agent_mark) }}
-  {% if cells|trim %}<div class="th-strip">{{ cells }}</div>{% endif %}
-</div>
+{% elif cells|trim %}
+<div class="trial-head"><div class="th-strip">{{ cells }}</div></div>
 {% endif %}
 
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">
@@ -105,8 +100,9 @@
 {# The phase bar reads only trial.*, so it renders whether or not a trajectory
    was recorded: a trial that failed before writing one still shows its timing. #}
 {% set total = trial.dur_phases + trial.dur_other %}
+<div class="task-activity">
+<div class="task-activity-left">
 {% if total %}
-<div class="overview-tiles">
 <div class="panel">
   <h3 style="margin-top:0">Where the time went{% if trial.dur_total is not none %} <b class="total">{{ trial.dur_total|secs }}</b>{% endif %}</h3>
   {# The phases the trial recorded, Harbor's four names for them. On a runner's trial Env is the
@@ -130,70 +126,10 @@
     {% endfor %}
   </div>
 </div>
-</div>
 {% endif %}
-
-{% if traj and traj.error %}
-  <div class="panel err"><h3 style="margin-top:0">Trajectory unreadable</h3><pre>{{ traj.error }}</pre></div>
-{% elif traj %}
-  {# usage and tool calls; a trajectory with neither (one answer, no per-step usage) has no panel #}
-  {% if traj.token_series or traj.total_reasoning_tokens is not none or traj.calls %}
-  <div class="panel">
-    {% set has_growth = traj.token_series|length > 1 %}
-    {% if has_growth %}
-    <h3 style="margin-top:0">Prompt growth</h3>
-    {% set max_sent = traj.token_series|map(attribute='sent')|max %}
-    <div class="spark">
-      {% for p in traj.token_series %}
-        {% set h = (56 * p.sent / max_sent)|round(1) if max_sent else 0 %}
-        {% set ch = (56 * p.cached / max_sent)|round(1) if max_sent else 0 %}
-        <span class="spark-col"
-              title="step {{ p.step_id }} · input {{ p.sent|tokens('control') }} ({{ p.cached|tokens('control') }} cached, {{ p.new|tokens('control') }} new) · output {{ p.completion|tokens('control') }}">
-          <span class="sp-fresh" style="height:{{ [h - ch, 1]|max }}px"></span>
-          {% if ch >= 1 %}<span class="sp-cached" style="height:{{ ch }}px"></span>{% endif %}
-        </span>
-      {% endfor %}
-    </div>
-    <div class="legend" style="margin:.6rem 0 0">
-      <span class="chip sp-fresh-chip">new tokens</span>
-      <span class="chip sp-cached-chip">served from cache</span>
-      {% if traj.cache and traj.cache.hit is not none %}
-        <span class="chip" title="Reads ÷ every input token, both usage conventions on the same ruler: {{ traj.cache.reads|tokens('control') }} read from cache, {{ traj.cache.new|tokens('control') }} new (cache writes + fresh)">
-          cache hit <b>{{ traj.cache.hit|hitrate }}</b></span>
-        {% if traj.cache.reported_diverges %}
-          <span class="chip" title="{% if traj.cache.convention == 'anthropic' %}The file's own cached ÷ prompt: this agent reports Anthropic-style usage, whose prompt_tokens excludes cache writes, so the ratio is ~100% by construction{% else %}The file's own cached ÷ prompt: its final_metrics disagree with the per-call series{% endif %}">
-            reported {{ traj.cache.reported_hit|hitrate }}</span>
-        {% endif %}
-      {% endif %}
-      {% if traj.total_reasoning_tokens is not none %}
-        <span class="chip" title="Summed from per-step metrics, or the trajectory's final metrics">reasoning <b>{{ traj.total_reasoning_tokens|tokens('control') }}</b></span>
-      {% endif %}
-    </div>
-    <p class="muted small">One column per LLM step, height ∝ input tokens; the gray band is what came from cache.
-      {%- if traj.cache and traj.cache.convention == 'anthropic' %} Anthropic-style usage: cache writes are added back onto the step that paid for them.{%- endif %}</p>
-    {% elif traj.token_series or traj.total_reasoning_tokens is not none %}
-    {# one call: no growth to draw, so the call itself - what came from cache, what was new, what the model wrote #}
-    {% set p = traj.token_series[0] if traj.token_series else none %}
-    <h3 style="margin-top:0">Usage</h3>
-    {% if p and p.sent %}
-    <div class="mix-bar" id="usage-mix" role="img" aria-label="Input {{ p.sent }} tokens, {{ p.cached }} from cache; output {{ p.completion }} tokens">
-      {% if p.cached %}<span class="mix-cached" style="flex:{{ p.cached }}" title="served from cache: {{ p.cached|tokens('control') }}"></span>{% endif %}
-      {% if p.new %}<span class="mix-new" style="flex:{{ p.new }}" title="new input: {{ p.new|tokens('control') }}"></span>{% endif %}
-      {% if p.completion %}<span class="mix-out" style="flex:{{ p.completion }}" title="output: {{ p.completion|tokens('control') }}"></span>{% endif %}
-    </div>
-    {% endif %}
-    <div class="legend">
-      {% if p %}<span class="chip sp-cached-chip">served from cache <b>{{ p.cached|tokens('control') }}</b></span>
-      <span class="chip sp-fresh-chip">new input <b>{{ p.new|tokens('control') }}</b></span>
-      <span class="chip mix-out-chip">output <b>{{ p.completion|tokens('control') }}</b></span>
-      {% if p.sent %}<span class="chip" title="Served from cache ÷ input">cache hit <b>{{ (p.cached / p.sent)|hitrate }}</b></span>{% endif %}{% endif %}
-      {% if traj.total_reasoning_tokens is not none %}<span class="chip" title="From the trajectory's final metrics">reasoning <b>{{ traj.total_reasoning_tokens|tokens('control') }}</b></span>{% endif %}
-    </div>
-    <p class="muted small">{% if job.runner %}{{ job.runner }} asks its model once for each of its {{ job.runner_items[1] if job.runner_items else 'items' }}, so the bar is that one call: its input, from cache or new, and what it wrote. An agent's run charts its calls one after another instead, as its context grows.{% else %}One step carried usage: the bar is that call; the growth strip needs two.{% endif %}</p>
-    {% endif %}
-
-    {% if traj.calls %}
-    <h3{% if not has_growth %} style="margin-top:0"{% endif %}>Tool calls</h3>
+  {% if traj and not traj.error and traj.calls %}
+  <div class="panel" id="task-tools">
+    <h3 style="margin-top:0">Tool calls</h3>
     <div class="flow">
       {% for c in traj.calls %}
         <span class="flow-cell cat-{{ c.category }}{% if c.failure %} failed{% endif %}"
@@ -212,7 +148,7 @@
     </div>
     {% if traj.name_freq %}
     {# Each tool once, under the server that offers it. #}
-    <table class="grid compact tool-names" style="margin-top:.6rem">
+    <div class="usage-tools-table"><table class="grid compact tool-names" style="margin-top:.6rem">
       <thead><tr><th>Tool</th><th>Category</th><th class="num">Calls</th><th class="num">Failed</th><th class="num">Time</th></tr></thead>
       <tbody>
       {% for t in traj.tools %}
@@ -226,12 +162,19 @@
         </tr>
       {% endfor %}
       </tbody>
-    </table>
-    {% endif %}
+    </table></div>
     {% endif %}
   </div>
   {% endif %}
 
+</div>
+{% from 'traces/_usage.html' import usage_panel %}
+{{ usage_panel(trial, traj) }}
+</div>
+
+{% if traj and traj.error %}
+  <div class="panel err"><h3 style="margin-top:0">Trajectory unreadable</h3><pre>{{ traj.error }}</pre></div>
+{% elif traj %}
   {% if loc %}
   <div class="panel">
     <h3 style="margin-top:0">Against the gold patch</h3>
