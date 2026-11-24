@@ -119,8 +119,8 @@ subagent), report it as an open question and leave it unwritten.
 |---|---|---|
 | tasks and a way to score them, meant for any agent | benchmark, `agent` family | driver + `standard.json` |
 | questions over a history, meant for a memory or retriever | benchmark, `capability` family | driver with `produce` + `standard.json` |
-| a program that does tasks with a model (CLI agent, coding agent) | agent | the `import-agent` skill (`.claude/skills/import-agent/SKILL.md`); its Agent part below if invoked here |
-| a component a benchmark calls (memory, retriever) | capability | the `import-capability` skill (`.claude/skills/import-capability/SKILL.md`); its Capability part below if invoked here |
+| a program that does tasks with a model (CLI agent, coding agent) | agent | the `import-agent` skill (`.agents/skills/import-agent/SKILL.md`); its Agent part below if invoked here |
+| a component a benchmark calls (memory, retriever) | capability | the `import-capability` skill (`.agents/skills/import-capability/SKILL.md`); its Capability part below if invoked here |
 | a benchmark Harbor already runs, for Harbor agents | not this skill | `import-benchmark` |
 | the user's own source of a benchmark already here (a fork with a fix, any repository, private included) | a version of that benchmark | `versions.<name>.upstream`, below |
 
@@ -362,7 +362,7 @@ output to stderr: stdout carries the JSON lines.
    for every changed definition (`python3 app/tests/catalogue_docs.py --write`),
    run `python3 app/tests/parallel.py`, the route suite
    (`uv run --no-project --with-requirements app/requirements.txt python app/tests/parallel.py app/ui_tests`),
-   and `python3 .claude/skills/docs-drift/scripts/check_docs.py` from the source
+   and `python3 .agents/skills/docs-drift/scripts/check_docs.py` from the source
    root. Keep the test profile/catalogue isolated from personal entries.
 
 Do not bake the importing machine's package or

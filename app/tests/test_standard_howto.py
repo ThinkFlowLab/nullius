@@ -82,7 +82,7 @@ class Prompt(unittest.TestCase):
         for kind, command in (("agent", "/import-agent"), ("capability", "/import-capability"), ("benchmark", "/import-benchmark")):
             text = howto.prompt(kind)
             self.assertIn(command, text)
-            self.assertIn(f".claude/skills/{command[1:]}/SKILL.md", text)
+            self.assertIn(f".agents/skills/{command[1:]}/SKILL.md", text)
             self.assertIn("docs/standard.md", text)
             for slot in ("{name}", "{source}", "{remark}"):
                 self.assertEqual(text.count(slot), 1, (kind, slot))

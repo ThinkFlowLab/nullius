@@ -208,7 +208,7 @@ run only if your instructions already say yes.
    `python3 app/tests/catalogue_docs.py --write`, run `python3 app/tests/parallel.py`,
    the route suite (`uv run --no-project --with-requirements app/requirements.txt
    python app/tests/parallel.py app/ui_tests`), and
-   `python3 .claude/skills/docs-drift/scripts/check_docs.py`. Use an isolated
+   `python3 .agents/skills/docs-drift/scripts/check_docs.py`. Use an isolated
    profile with an empty user catalogue so personal overrides cannot mask the
    contributed files. Personal imports finish with definition checks, authorized
    proofs/trials and focused UI checks; report any unavailable prerequisites.

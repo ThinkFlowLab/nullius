@@ -159,7 +159,7 @@ When they do, write it locally:
   `app/tests` and `app/ui_tests`, and the legacy dataset description where
   relevant. Refresh `python3 app/tests/catalogue_docs.py --write`; run the
   backend and route suites from AGENTS.md, and
-  `python3 .claude/skills/docs-drift/scripts/check_docs.py`. Use an isolated
+  `python3 .agents/skills/docs-drift/scripts/check_docs.py`. Use an isolated
   profile and an empty user catalogue so personal overrides cannot mask the
   bundled entry. Ask what, if anything, goes upstream only when
   publication was not already authorized.

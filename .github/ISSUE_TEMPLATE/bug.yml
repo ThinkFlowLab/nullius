@@ -1,68 +1,57 @@
 name: Bug
-description: Something the application does wrong. Every field is what the judge and the fixer read.
+description: Something the application does wrong.
 labels: ["bug"]
 type: Bug
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Under 150 words, most need 80. The point first, one fact per line, fragments are fine. Cut facts, not grammar. No key, address or private link. A security problem goes to SECURITY.md's address instead.
   - type: dropdown
     id: priority
     attributes:
       label: Priority
-      description: How deep it reaches. low, the surface (docs, templates, static files) · medium, the web layer or the catalogue · high, the backend · extreme, what runs and proves (the standard, execution, hosts, keys).
+      description: How deep it reaches. low, docs and pages · medium, web layer or catalogue · high, backend · extreme, what runs and proves
       options: [low, medium, high, extreme]
     validations:
       required: true
-  - type: checkboxes
-    id: components
-    attributes:
-      label: Components
-      description: What it touches.
-      options:
-        - label: app/nullius (backend)
-        - label: app/web (routes)
-        - label: templates and static files
-        - label: docs and the site
-        - label: catalogue (benchmarks, agents, capabilities)
-        - label: the standard (ports, kits, relay, runs)
-        - label: CI, workflows and skills
   - type: textarea
     id: evidence
     attributes:
       label: Evidence
-      description: What was observed, quoted rather than characterised. Output, an error, a path, a count. No key, no address, no private link.
+      description: What was observed, quoted. A screenshot when it is visible.
+      placeholder: |
+        Run builder, Model: `Qwen 32b` says "No matching models". OpenRouter lists two.
     validations:
       required: true
-  - type: textarea
-    id: screenshot
-    attributes:
-      label: Screenshot
-      description: When it is visible, a picture of what is wrong. Paste or drop it here.
   - type: textarea
     id: reproduction
     attributes:
       label: Reproduction
-      description: The smallest steps or input that show it.
+      description: The fewest steps that show it.
       placeholder: |
-        1.
-        2.
+        1. Run builder, GSM8K, provider OpenRouter.
+        2. Model: type `Qwen 32b`.
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
       label: Expected
-      description: What should have happened instead.
+      placeholder: Both Qwen 32B models are listed.
   - type: textarea
     id: acceptance
     attributes:
       label: Acceptance
-      description: One box per criterion. The judge gives each its own row on the pull request that closes this.
+      description: |
+        One box per criterion, checkable in the diff; the judge gives each its own row. Example: `- [ ] Words match in any order and case`
       value: |
         - [ ]
     validations:
       required: true
-  - type: textarea
+  - type: input
     id: related
     attributes:
-      label: Dependencies and related
-      description: Issues or pull requests this waits on or touches, with their state; the repository that owns the cause when it is not this one.
-      placeholder: none
+      label: Related
+      description: What this waits on; the repository that owns the cause when it is not this one.
+      placeholder: "#124"

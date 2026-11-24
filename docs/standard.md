@@ -587,7 +587,7 @@ An agent or a capability may keep several versions in its one file: an older rel
 | `/import-capability` | A capability |
 
 The prompt includes your writable catalogue path. An assistant on another
-machine uses a source checkout and asks you to update Nullius. Skills live under `.claude/skills/<name>/SKILL.md`;
+machine uses a source checkout and asks you to update Nullius. Skills live under `.agents/skills/<name>/SKILL.md`;
 install them in the assistant or give it the checkout.
 
 Use pinned upstream code. Review any proposed custom implementation before it

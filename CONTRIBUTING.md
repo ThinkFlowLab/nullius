@@ -44,7 +44,7 @@ The tests require a Flask-free backend, one provider of `nullius`, and the templ
 
 Use the import skills rather than writing an entry by hand: `/import-benchmark`,
 `/import-standard`, `/import-agent` and `/import-capability` under
-`.claude/skills/`. Each pins the upstream, wraps the upstream's own code and
+`.agents/skills/`. Each pins the upstream, wraps the upstream's own code and
 proves what fits. Nullius is a facilitator, not a re-implementer: anything
 beyond glue is asked about first. The *+ Add* button on the Benchmarks, Agents
 and Capabilities pages writes the prompt for any assistant.
@@ -87,8 +87,8 @@ decision by the repository owner.
 
 - **Small and targeted.** One change per pull request; no refactoring of
   unrelated areas on the way.
-- **Fill in the template.** The PR judge compares the description with the
-  diff and with the linked issue's acceptance list.
+- **Fill in the template, short.** It holds an example. The PR judge compares it
+  with the diff and with the linked issue's acceptance list.
 - **Reference the issue** so it shows in the issue's Development panel.
 - **Say what you verified.** Tests run, browser checks made, widths tried.
   "Not verified" is an honest answer.
@@ -96,7 +96,6 @@ decision by the repository owner.
 
 Commit messages are about the change and why it was made. No machine
 attribution: no `Co-Authored-By: Claude`, no session metadata, no generated-by
-signature. A hook rejects them; do not bypass it. A real person who contributed
-is named as a co-author as usual.
+signature. A real person who contributed is named as a co-author as usual.
 
 Nothing merges without the repository owner's word.
