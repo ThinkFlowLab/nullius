@@ -8,9 +8,12 @@ and redact on the way in.
 from __future__ import annotations
 
 import functools
+import json
 import os
 import re
 import shlex
+import stat
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
@@ -70,6 +73,102 @@ def _retries_of(res: dict) -> int:
     std = res.get("standard") if isinstance(res.get("standard"), dict) else {}
     n = std.get("retries")
     return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
+
+
+SCORE_BYTES = 1024 * 1024
+
+
+def _read_score(trial_dir: str):
+    """Read at most SCORE_BYTES from a regular score file without following links inside the trial."""
+    try:
+        with ExitStack() as opened:
+            flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+            trial = os.open(trial_dir, flags)
+            opened.callback(os.close, trial)
+            folder = os.open("verifier", flags, dir_fd=trial)
+            opened.callback(os.close, folder)
+            fd = os.open("score.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=folder)
+            opened.callback(os.close, fd)
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_size > SCORE_BYTES:
+                return None
+            raw = os.read(fd, SCORE_BYTES + 1)
+        return json.loads(raw) if 0 < len(raw) <= SCORE_BYTES else None
+    except (OSError, ValueError):
+        return None
+
+
+# A value of a score's detail longer than this is cut on the trial's page, its whole text a click away
+DETAIL_CELL = 200
+
+
+def _plain(value) -> bool:
+    return value is None or isinstance(value, (str, int, float, bool))
+
+
+def _shown(value) -> str:
+    """A value of a score's detail as the page writes it: text as written, a boolean as yes or no, none for null or
+    empty text, a list of plain values joined, anything deeper as its JSON."""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if value is None or value == "":
+        return "none"
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    if isinstance(value, list) and all(_plain(x) for x in value):
+        return ", ".join(_shown(x) for x in value) if value else "none"
+    return json.dumps(value, ensure_ascii=False)
+
+
+def read_detail(trial_dir: str) -> dict | None:
+    """The detail beside a score's reward, redacted, or None."""
+    said = _read_score(trial_dir)
+    detail = said.get("detail") if isinstance(said, dict) else None
+    return _options(detail) if isinstance(detail, dict) else None
+
+
+def score_detail(trial_dir: str, leave_out=(), shown=None) -> dict | None:
+    """Redacted score evidence for display. Nested objects become named groups,
+    structured lists become numbered groups; no object is rendered as raw JSON.
+    ``leave_out`` excludes top-level metadata; ``shown`` suppresses duplicate numbers
+    by their full path. Long text keeps a preview and its full value."""
+    detail = read_detail(trial_dir)
+    if detail is None:
+        return None
+    fields, groups = [], []
+
+    def cell(name, value):
+        text = redact(_shown(value))
+        return {"name": redact(str(name)), "text": text,
+                "cut": text[:DETAIL_CELL] if len(text) > DETAIL_CELL else ""}
+
+    def visit(values, path=""):
+        flags = []
+        for name, value in values.items():
+            full = f"{path}.{name}" if path else str(name)
+            if (not path and name in leave_out) or (
+                    isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and value in (shown or {}).get(full, ())):
+                continue
+            if isinstance(value, dict):
+                visit(value, full)
+            elif isinstance(value, list) and not all(_plain(x) for x in value):
+                visit({str(i + 1): x for i, x in enumerate(value)}, full)
+            elif path:
+                item = cell(name, value)
+                if not item["cut"]:
+                    item.pop("cut")
+                item["held"] = value if isinstance(value, bool) else None
+                if isinstance(value, bool):
+                    item["text"] = ""
+                flags.append(item)
+            else:
+                fields.append(cell(name, value))
+        if flags:
+            groups.append({"name": redact(path), "flags": flags})
+
+    visit(detail)
+    return {"fields": fields, "groups": groups} if fields or groups else None
 
 
 def count_rate_limits(path: str) -> int | None:
