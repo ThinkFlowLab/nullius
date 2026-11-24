@@ -39,5 +39,19 @@
     }
   ],
   "citation": "@article{maharana2024evaluating,\n  title={Evaluating very long-term conversational memory of llm agents},\n  author={Maharana, Adyasha and Lee, Dong-Ho and Tulyakov, Sergey and Bansal, Mohit and Barbieri, Francesco and Fang, Yuwei},\n  journal={arXiv preprint arXiv:2402.17753},\n  year={2024}\n}",
-  "citation_source": "https://github.com/snap-research/locomo"
+  "citation_source": "https://github.com/snap-research/locomo",
+  "evidence": [
+    {
+      "label": "Question",
+      "path": "question"
+    },
+    {
+      "label": "Answer",
+      "path": "answer"
+    },
+    {
+      "label": "Expected answer",
+      "path": "reference"
+    }
+  ]
 }

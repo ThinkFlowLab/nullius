@@ -91,6 +91,7 @@
    "citation_source",
    "datasets",
    "domain",
+   "evidence",
    "good_to_know",
    "harness",
    "key",
@@ -98,6 +99,7 @@
    "limitations",
    "origin",
    "published",
+   "records",
    "report",
    "route_case",
    "routes",
@@ -151,8 +153,10 @@
    "y2"
   ],
   "Metric": [
+   "bounds",
    "fmt",
    "label",
+   "size",
    "values"
   ],
   "Panel": [

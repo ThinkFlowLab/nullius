@@ -64,32 +64,13 @@
 <div class="trial-head"><div class="th-strip">{{ cells }}</div></div>
 {% endif %}
 
+{% set fell_short = evidence or detail or trial.is_regression or trial.f2p_failures %}
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">
-  {% for name, label in [('overview', 'Overview'), ('judgement', 'Decision model judge'), ('llm-judge', 'LLM judge'), ('failure', 'User judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] if not (replaced and name in ('judgement', 'llm-judge')) and not (name == 'failure' and failure is none) %}
+  {% for name, label in [('overview', 'Overview'), ('judgement', 'Decision model judge'), ('llm-judge', 'LLM judge'), ('failure', 'User judge'), ('evidence', 'Failure analysis'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] if not (replaced and name in ('judgement', 'llm-judge')) and not (name == 'failure' and failure is none) and not (name == 'evidence' and not fell_short) %}
   <button id="tab-{{ name }}" role="tab" type="button" data-tab="{{ name }}" aria-controls="trial-{{ name }}" aria-selected="{{ 'true' if name == 'overview' else 'false' }}" tabindex="{{ '0' if name == 'overview' else '-1' }}">{{ label }}</button>
   {% endfor %}
 </nav>
 <section class="trial-tab" id="trial-overview" role="tabpanel" aria-labelledby="tab-overview">
-{% if trial.is_regression %}
-<div class="panel danger-panel">
-  <h3 style="margin-top:0">⚠ This patch broke {{ trial.p2p_fail }} previously-passing test{{ '' if trial.p2p_fail == 1 else 's' }}</h3>
-  <p class="muted small" style="margin-top:0">These passed before the patch was applied and fail after it — a
-    regression, not just a missed fix.</p>
-  <ul class="test-list">
-    {% for name in trial.p2p_failures %}<li class="mono bad">{{ name }}</li>{% endfor %}
-  </ul>
-</div>
-{% endif %}
-
-{% if trial.f2p_failures %}
-<div class="panel">
-  <h3 style="margin-top:0">Tests that had to pass, still failing</h3>
-  <ul class="test-list">
-    {% for name in trial.f2p_failures %}<li class="mono faint">{{ name }}</li>{% endfor %}
-  </ul>
-</div>
-{% endif %}
-
 {% if trial.exception_type %}
 <div class="panel err">
   <h3 style="margin-top:0">{{ trial.exception_type }}</h3>
@@ -229,6 +210,42 @@
 {% endif %}
 {% if failure is not none %}<section class="trial-tab" id="trial-failure" role="tabpanel" aria-labelledby="tab-failure">
 {% include "traces/_failure.html" %}
+</section>{% endif %}
+{# What the benchmark recorded of a trial that fell short: its named rows, else its whole detail. #}
+{% macro recorded(text) %}{% if '\n' in text or text|length > 200 %}<pre class="instruction">{{ text }}</pre>{% else %}{{ text }}{% endif %}{% endmacro %}
+{% if fell_short %}<section class="trial-tab" id="trial-evidence" role="tabpanel" aria-labelledby="tab-evidence">
+{% if trial.is_regression %}
+<div class="panel danger-panel">
+  <h3 style="margin-top:0">⚠ This patch broke {{ trial.p2p_fail }} previously-passing test{{ '' if trial.p2p_fail == 1 else 's' }}</h3>
+  <p class="muted small" style="margin-top:0">These passed before the patch was applied and fail after it — a
+    regression, not just a missed fix.</p>
+  <ul class="test-list">
+    {% for name in trial.p2p_failures %}<li class="mono bad">{{ name }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if trial.f2p_failures %}
+<div class="panel">
+  <h3 style="margin-top:0">Tests that had to pass, still failing</h3>
+  <ul class="test-list">
+    {% for name in trial.f2p_failures %}<li class="mono faint">{{ name }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% if evidence or (detail and detail.fields) %}<table class="grid compact trial-evidence"><tbody>
+  {% for r in evidence %}<tr><td class="muted">{{ r.label }}</td><td>{{ recorded(r.text) }}</td></tr>
+  {% endfor %}
+  {% for f in (detail.fields if detail else []) %}<tr><td class="muted">{{ f.name[:1]|upper }}{{ f.name[1:]|replace("_", " ") }}</td><td>{{ recorded(f.text) }}</td></tr>
+  {% endfor %}
+</tbody></table>{% endif %}
+{% if detail %}{% for g in detail.groups %}
+<h3>{{ g.name|replace("_", " ")|replace(".", " / ") }}</h3>
+<ul class="files" style="list-style:none;padding-left:0">
+  {% for x in g.flags %}<li style="overflow-wrap:anywhere">{% if x.held is sameas true %}<span class="ok">✓</span>{% elif x.held is sameas false %}<span class="bad">×</span>{% else %}<span class="faint">·</span>{% endif %} {{ x.name|replace("_", " ") }}{% if x.text %}: {% if x.cut %}<details class="faint"><summary>{{ x.cut }}…</summary>{{ x.text }}</details>{% else %}<span class="faint">{{ x.text }}</span>{% endif %}{% endif %}</li>
+  {% endfor %}
+</ul>
+{% endfor %}{% endif %}
 </section>{% endif %}
 <section class="trial-tab" id="trial-task" role="tabpanel" aria-labelledby="tab-task">
 {# The task's instruction, scored on its own text: once per dataset and task, the same for every attempt,
@@ -567,9 +584,13 @@
   {% if artifacts %}
   <div class="panel">
     <table class="grid"><thead><tr><th>Record</th><th class="num">Size</th><th></th></tr></thead><tbody>
+    {#- the benchmark's own records, after Nullius's, under one heading row #}
+    {% set seen = namespace(declared=false) %}
     {% for artifact in artifacts %}
-      <tr><td>{{ artifact.label }}</td><td class="num mono muted">{{ '%.2f'|format(artifact.size / 1024) }} KB</td>
+      {% if artifact.declared and not seen.declared %}{% set seen.declared = true %}<tr class="artifact-declared"><td colspan="3" class="muted">The benchmark's own records</td></tr>{% endif %}
+      <tr><td>{{ artifact.label }}{% if artifact.part %} <span class="mono muted">{{ artifact.part }}</span>{% endif %}</td><td class="num mono muted">{{ '%.2f'|format(artifact.size / 1024) }} KB</td>
         <td><span class="artifact-actions"><a class="btn ghost sm" href="{{ artifact.url }}">Read</a><a class="btn ghost sm" href="{{ artifact.download }}" download>Download</a></span></td></tr>
+      {% if artifact.more %}<tr><td colspan="3" class="muted">More records in {{ artifact.label }}.</td></tr>{% endif %}
     {% endfor %}
     </tbody></table>
   </div>
