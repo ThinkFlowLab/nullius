@@ -116,9 +116,9 @@ def nice_ticks(lo: float, hi: float, count: int = 4, step_min: float = 0.0) -> t
     """Round ticks enclosing ``[lo, hi]``, about ``count`` steps, none finer than ``step_min``; ints where whole."""
     if hi < lo:
         lo, hi = hi, lo
-    if hi == lo:
-        pad = abs(lo) * 0.1 or 1.0
-        lo, hi = lo - pad, hi + pad
+    if hi == lo:     # one value: a range around it, and none below zero when it is zero
+        pad = abs(lo) * 0.1
+        lo, hi = (lo - pad, hi + pad) if pad else (0, 1)
     raw = (hi - lo) / count
     mag = 10 ** math.floor(math.log10(raw))
     step = max(next(m * mag for m in (1, 2, 2.5, 5, 10) if m * mag >= raw), step_min)
@@ -150,8 +150,6 @@ def _ticks_for(values: list, with_zero: bool) -> tuple:
     if with_zero:
         values = values + [0]
     lo, hi = (min(values), max(values)) if values else (0, 1)
-    if with_zero and lo == hi == 0:
-        hi = 1
     whole = values and all(isinstance(v, int) for v in values)
     return nice_ticks(lo, hi, step_min=1 if whole else 0)
 

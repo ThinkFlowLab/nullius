@@ -31,6 +31,16 @@ class Ticks(unittest.TestCase):
         ticks = c.nice_ticks(5, 5)
         self.assertLess(ticks[0], 5); self.assertGreater(ticks[-1], 5)
 
+    def test_an_all_zero_axis_starts_at_zero_in_every_chart_kind(self):
+        usd = lambda v: f"${v:.4f}" if v < 0.01 else f"${v:.2f}"      # the cost column's own format
+        for name, panel in (("bars", c.bars(metric(0, 0, fmt=usd))), ("dots", c.dots(metric(0, 0, fmt=usd))),
+                            ("scatter", c.scatter(metric(0, 0, fmt=usd), metric(0, 0, fmt=usd)))):
+            with self.subTest(name):
+                ticks = [t.lines[0] for t in panel.texts if t.cls == "tick"]
+                self.assertEqual(ticks[0], "0")
+                self.assertFalse([t for t in ticks if "-" in t], ticks)
+                self.assertEqual({len(t.split(".")[-1]) for t in ticks if t != "0"}, {2}, ticks)   # one format past the origin
+
 
 class Bars(unittest.TestCase):
     def test_a_bar_per_present_value_from_zero_on_the_metric_s_own_axis(self):
