@@ -1,5 +1,5 @@
 """A standard trial's detail as its page shows it (``parse.score_detail``): the driver's plain values with their
-names, each object of plain values one level down as flags, nothing renamed and nothing of any one benchmark known."""
+names and nested evidence as groups, without benchmark-specific parsing."""
 from __future__ import annotations
 
 import json
@@ -37,17 +37,18 @@ class ScoreDetail(unittest.TestCase):
             {"name": "b", "held": True, "text": ""}, {"name": "a", "held": False, "text": ""},
             {"name": "c", "held": None, "text": "not taken"}, {"name": "d", "held": None, "text": "none"}]}])
 
-    def test_anything_deeper_is_its_json_in_one_cell_cut_past_the_cells_length(self):
+    def test_nested_objects_and_structured_lists_are_groups_and_long_text_is_cut(self):
         deep = {"inner": {"list": [1, {"x": 2}]}}
         got = self.detail({"deep": deep, "rows": [{"kind": "front"}], "long": "x" * (parse.DETAIL_CELL + 1),
                            "short": "y" * parse.DETAIL_CELL, "nothing": {}})
         cells = {f["name"]: f for f in got["fields"]}
-        self.assertEqual(json.loads(cells["deep"]["text"]), deep)
-        self.assertEqual(json.loads(cells["rows"]["text"]), [{"kind": "front"}])
+        groups = {g["name"]: g["flags"] for g in got["groups"]}
+        self.assertEqual(groups["deep.inner.list.2"], [{"name": "x", "text": "2", "held": None}])
+        self.assertEqual(groups["deep.inner.list"], [{"name": "1", "text": "1", "held": None}])
+        self.assertEqual(groups["rows.1"], [{"name": "kind", "text": "front", "held": None}])
         self.assertEqual((cells["long"]["text"], cells["long"]["cut"]), ("x" * (parse.DETAIL_CELL + 1), "x" * parse.DETAIL_CELL))
         self.assertEqual(cells["short"]["cut"], "")
-        self.assertEqual(cells["nothing"]["text"], "{}")
-        self.assertEqual(got["groups"], [])
+        self.assertNotIn("nothing", cells)
 
     def test_the_names_the_page_shows_elsewhere_are_left_out(self):
         got = self.detail({"steps": 3, "steps_limit": 10, "ended": "done", "rank": 7}, ("steps", "steps_limit", "ended"))

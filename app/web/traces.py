@@ -272,11 +272,12 @@ def trial(job_id, trial_name):
                 bench_parts["shows"] = list(dict.fromkeys(k for x in bench_parts["parts"] if isinstance(x.get("shows"), dict) for k in x["shows"]))
         except (OSError, ValueError):
             pass
-    # left out of a driver's detail: tool_calls, the Tool calls panel's count; by, the code that scored the trial, the
-    # same on every trial of the run; and a result, score or steps that is a number the head shows (text stays)
+    # Keep trial evidence, excluding execution metadata and numbers already shown above.
     head = [x for x in (t.reward, t.score) if x is not None]
-    shown = {"result": head, "score": head, "steps": [traj.n_steps] if ok else []}
-    detail = parse.score_detail(t.dir, leave_out=("by", "tool_calls"), shown=shown) if j.runner else None
+    shown = {"result": head, "score": head, "reward_info.reward": head, "steps": [traj.n_steps] if ok else []}
+    detail = parse.score_detail(t.dir, leave_out=("by", "tool_calls", "max_steps", "max_errors",
+                                               "seed", "trial", "split", "attempts", "agent", "judge", "evaluation"),
+                                shown=shown) if j.runner else None
     loc = _gold_localization(j, t, traj) if ok else None
 
     # `trace` opens a

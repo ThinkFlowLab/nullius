@@ -121,31 +121,47 @@ def _shown(value) -> str:
 
 
 def score_detail(trial_dir: str, leave_out=(), shown=None) -> dict | None:
-    """The detail of a standard trial's score (``verifier/score.json``), as its benchmark's driver wrote it, for the
-    trial's page: ``fields``, each plain value (a list of plain values too, anything deeper as its JSON) with its
-    name, its text and, past ``DETAIL_CELL`` characters, the text cut; ``groups``, each object of plain values one
-    level down (flags) by its name, each flag ``held`` True or False when it is a boolean, else its text. Names
-    and order are the driver's; ``leave_out``, the names the page leaves out; ``shown``, by name, the numbers it
-    shows elsewhere, a value that is one of them left out. Every text is redacted.
-    None when the score has no detail, or nothing of it is left to show."""
+    """Redacted score evidence for display. Nested objects become named groups,
+    structured lists become numbered groups; no object is rendered as raw JSON.
+    ``leave_out`` excludes top-level metadata; ``shown`` suppresses duplicate numbers
+    by their full path. Long text keeps a preview and its full value."""
     said = _read_score(trial_dir)
     detail = said.get("detail") if isinstance(said, dict) else None
     if not isinstance(detail, dict):
         return None
     fields, groups = [], []
-    for name, value in _options(detail).items():
-        if name in leave_out or (isinstance(value, (int, float)) and not isinstance(value, bool)
-                                 and value in (shown or {}).get(name, ())):
-            continue
-        if isinstance(value, dict) and value and all(_plain(x) for x in value.values()):
-            groups.append({"name": redact(str(name)), "flags": [
-                {"name": redact(str(k)), "held": x if isinstance(x, bool) else None,
-                 "text": (text := "" if isinstance(x, bool) else redact(_shown(x))),
-                 **({"cut": text[:DETAIL_CELL]} if len(text) > DETAIL_CELL else {})} for k, x in value.items()]})
-            continue
+
+    def cell(name, value):
         text = redact(_shown(value))
-        fields.append({"name": redact(str(name)), "text": text,
-                       "cut": text[:DETAIL_CELL] if len(text) > DETAIL_CELL else ""})
+        return {"name": redact(str(name)), "text": text,
+                "cut": text[:DETAIL_CELL] if len(text) > DETAIL_CELL else ""}
+
+    def visit(values, path=""):
+        flags = []
+        for name, value in values.items():
+            full = f"{path}.{name}" if path else str(name)
+            if (not path and name in leave_out) or (
+                    isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and value in (shown or {}).get(full, ())):
+                continue
+            if isinstance(value, dict):
+                visit(value, full)
+            elif isinstance(value, list) and not all(_plain(x) for x in value):
+                visit({str(i + 1): x for i, x in enumerate(value)}, full)
+            elif path:
+                item = cell(name, value)
+                if not item["cut"]:
+                    item.pop("cut")
+                item["held"] = value if isinstance(value, bool) else None
+                if isinstance(value, bool):
+                    item["text"] = ""
+                flags.append(item)
+            else:
+                fields.append(cell(name, value))
+        if flags:
+            groups.append({"name": redact(path), "flags": flags})
+
+    visit(_options(detail))
     return {"fields": fields, "groups": groups} if fields or groups else None
 
 

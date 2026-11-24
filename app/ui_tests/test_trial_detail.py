@@ -1,8 +1,5 @@
-"""The benchmark's detail on a trial's page: the plain values of its score's detail as a short table, each object of
-flags one level down as a list of what held and what did not, under the driver's own names, less those of what the page
-says elsewhere. A long value is cut with its whole text behind a disclosure; every value is text, never markup; a trial
-whose score has no detail, or nothing else, has no panel.
-The runner fixture is copied and its score written by each test; nothing is run."""
+"""Trial evidence renders as escaped, redacted fields and nested groups, without
+execution metadata or duplicate scores. Fixtures never execute a benchmark."""
 from __future__ import annotations
 
 import json
@@ -73,6 +70,23 @@ class TrialDetail(unittest.TestCase):
         self.assertEqual(len(lists), 2)
         for ul in lists:                                     # each flag's mark is its only one: no bullet before it
             self.assertIn("list-style:none", ul)
+
+    def test_nested_scoring_evidence_excludes_configuration_and_duplicate_reward(self):
+        detail = {"domain": "airline", "termination": "user_stop", "tool_errors": 0,
+                  "evaluation": "all", "max_steps": 200, "max_errors": 10, "seed": 626729,
+                  "trial": 0, "split": "base", "attempts": 1,
+                  "reward_info": {"reward": 0.5, "db_check": {"db_match": True, "db_reward": 1.0},
+                                  "reward_breakdown": {"DB": 1.0, "COMMUNICATE": 0.0}}}
+        html = self.panel(self.page(detail))
+        said = text_of(html)
+        for name in ("evaluation", "max steps", "max errors", "seed", "trial", "split", "attempts"):
+            self.assertNotIn(name, said)
+        self.assertIn("domain airline termination user_stop tool errors 0", said)
+        self.assertIn("reward info / db check ✓ db match", said)
+        self.assertIn("COMMUNICATE: 0.0", said)
+        self.assertNotIn("0.5", said)
+        self.assertNotIn("{", said)
+        self.assertNotIn("&quot;", html)
 
     def test_a_long_value_is_cut_with_its_whole_text_behind_a_disclosure(self):
         long, text = "word " * 60, "x" * 100_000 + "<end>"
