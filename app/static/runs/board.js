@@ -66,9 +66,11 @@
     facets.forEach(paint);
     sync();
   }
+  // what lies open over the page: its own menus, and the header's cards above it
+  const opened = () => [...$$('.facet details[open], .pop[open]', page), ...$$('.run-identity-more[open]')];
   // a legend row or segment sets the outcome; a cause outcome + cause + status; a flag line the flag. Pressed again: off.
   document.addEventListener('click', e => {
-    $$('.facet details[open], .pop[open]', page).forEach(d => { if (!d.contains(e.target)) d.open = false; });
+    opened().forEach(d => { if (!d.contains(e.target)) d.open = false; });
     const el = e.target.closest && e.target.closest('.fx'); if (!el || !page.contains(el)) return;
     e.preventDefault();
     const ks = KEYS.filter(k => k in el.dataset), menu = el.closest('details');
@@ -137,7 +139,7 @@
   // ---- Esc closes what is open, else clears the filters ----
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    const open = $$('.facet details[open], .pop[open]', page);
+    const open = opened();
     if (open.length) { open.forEach(d => { d.open = false; }); hide(); $('summary', open[0]).focus(); return; }
     if (tipFor) { hide(); return; }
     if (KEYS.some(k => st[k])) { KEYS.forEach(k => { st[k] = ''; }); apply(); light(null); }

@@ -91,6 +91,22 @@ class ComparisonRoutes(unittest.TestCase):
         self.assertNotIn("left-only", matched)
         self.assertNotIn("right-only", matched)
 
+    def test_matched_scores_omit_the_unknown_planned_denominator(self):
+        for scores in ((1, 1, 1, 1), (1, 1, 1, None)):
+            with self.subTest(scores=scores):
+                for run, side in ((self.left, "left"), (self.right, "right")):
+                    run.n_total_trials = 10
+                    run.trials = [trial(f"shared-{i}", "api_error" if score is None else "scored",
+                                        reward=None, score=score) for i, score in enumerate(scores)]
+                    run.trials.append(trial(f"{side}-only", "scored", reward=None, score=0.5))
+                whole = self.get()
+                matched = self.get(cohort="matched")
+                expected = f"{(sum(score or 0 for score in scores) + 0.5) / 10:.2f}"
+                self.assertEqual(self.cells(whole, "Mean over planned"), [expected, expected])
+                self.assertEqual(self.cells(matched, "Trials"), ["4", "4"])
+                self.assertEqual(self.cells(matched, "Mean score"), ["1.00", "1.00"])
+                self.assertNotIn("Mean over planned", matched)
+
     def test_record_links_keep_duplicate_run_ids_in_their_own_workspace(self):
         urls = [urlsplit(attrs["href"]) for body in (self.get(cohort="matched"), self.get(cohort="matched", view="tasks"))
                 for tag, attrs in Elements(body).elements if tag == "a" and "href" in attrs]
