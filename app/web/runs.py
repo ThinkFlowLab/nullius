@@ -612,8 +612,7 @@ def _marks_of(analysis, versions):
 
 def _filtered_of(j, analysis, versions):
     """The Filtered score block: None when the job has no accepted flag, or its file cannot be read. Every
-    combination of the switches is computed here, so the page switches between them without a reload; each
-    switch is also a link that turns its filter on or off and keeps the page's other query values."""
+    combination of the switches is computed here, so the page switches between them without a reload."""
     if analysis is None:
         return None
     on = [k for k in failure_analysis.KINDS if request.args.get(k) == "1"]
@@ -626,13 +625,7 @@ def _filtered_of(j, analysis, versions):
         f = failure_analysis.filtered(j, analysis, on, versions)
     views = [failure_analysis.filtered(j, analysis, combo, versions)
              for n in range(1, len(offered) + 1) for combo in combinations(offered, n)]
-    links = {}
-    for k in failure_analysis.KINDS:
-        args = {a: v for a, v in request.args.items() if a != k}
-        if k not in on:
-            args[k] = "1"
-        links[k] = url_for("job", job_id=j.job_id, _anchor="filtered-score", **args)
-    return {"view": f, "links": links, "views": views}
+    return {"view": f, "views": views}
 
 
 def _runs_of(g, owner=None) -> list:

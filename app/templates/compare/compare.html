@@ -112,16 +112,17 @@
 {% if jobs %}
 {% if cohort == 'matched' and not n_shared %}<p class="alert warn">No shared cohort is available. Choose runs with overlapping coverage or return to whole runs.</p>{% endif %}
 {% set ff = flag_filter %}{% if ff and ((ff.flagged.values()|sum) or ff.unreadable) %}
-<div class="compare-flags" id="compare-flags" role="group" aria-label="Leave out flagged tasks">
-  <span class="lead">Leave out</span>
+<form method="get" action="{{ url_for('compare') }}" class="compare-flags" id="compare-flags" aria-label="Exclude flagged tasks">
+  {% if ff.flagged.values()|sum %}<span class="filter-heading">Exclude:</span>{% endif %}
+  {% for key, value in request.args.items(multi=True) if key not in ('flawed', 'ambiguous') %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
   {% for k in ('flawed', 'ambiguous') %}{% if ff.flagged[k] %}
-  <a class="chip{{ ' active' if k in ff.on }}" id="compare-filter-{{ k }}" href="{{ ff.links[k] }}" aria-pressed="{{ 'true' if k in ff.on else 'false' }}"
-     data-tip="Tasks a person flagged {{ k }} in any of these runs">{{ ff.flagged[k] }} {{ k }}</a>
+  <label class="filter-choice" title="Tasks a person flagged {{ k }} in any of these runs"><input type="checkbox" aria-label="Exclude {{ ff.flagged[k] }} {{ k }} task{{ '' if ff.flagged[k] == 1 else 's' }}" id="compare-filter-{{ k }}" name="{{ k }}" value="1"{{ ' checked' if k in ff.on }}> {{ k|capitalize }}</label>
   {% endif %}{% endfor %}
+  {% if ff.flagged.values()|sum %}<noscript><button type="submit" class="btn sm">Apply</button></noscript>{% endif %}
   {% if ff.on %}<span class="small" id="compare-set-aside">Filtered: {{ ff.set_aside|length }} task{{ '' if ff.set_aside|length == 1 else 's' }} set aside in every column</span>{% endif %}
   {% if ff.unreadable %}<span class="small warn" id="compare-flags-unreadable">Flags unreadable: {{ ff.unreadable|join(', ') }}</span>{% endif %}
-  {% if ff.differ %}<span class="small warn" id="compare-flags-differ" data-tip="{{ ff.differ|join(', ') }}">Flags differ on {{ ff.differ|length }} task{{ '' if ff.differ|length == 1 else 's' }}</span>{% endif %}
-</div>
+  {% if ff.differ %}<span class="small warn" id="compare-flags-differ" title="{{ ff.differ|join(', ') }}">Flags differ on {{ ff.differ|length }} task{{ '' if ff.differ|length == 1 else 's' }}</span>{% endif %}
+</form>
 {% endif %}
 {% if comparison.datasets_known and not comparison.datasets_match %}<p class="compare-warn">The recorded datasets differ: pick runs of the baseline's dataset to compare the same tasks.</p>{% endif %}
 {% endif %}
@@ -347,6 +348,12 @@
 <script>
   NulliusCompare.wire({values: {{ picks|tojson }}, lists: {{ lists|tojson }}, dataset: {{ baseline|tojson }},
                        runs: {{ url_for('compare_runs')|tojson }}});
+
+  (() => {
+    const flags = document.getElementById('compare-flags'); if (!flags) return;
+    flags.addEventListener('change', () => flags.requestSubmit());
+    addEventListener('pageshow', () => flags.reset());        // Back shows the boxes as this page was filtered
+  })();
 
   /* ---- drag a task table's column header to reorder ----
      Order is carried by qualified ?pick= params, so a drop navigates to the
