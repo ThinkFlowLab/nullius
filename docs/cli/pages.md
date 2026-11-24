@@ -29,7 +29,7 @@ Each page's command, or why there is none.
 | --- | --- |
 | The live board | `/job/<id>/live` |
 | A trial's conversation, spans, artifacts | `/trial/…/conversation`, `/trial/…/trace-span`, `/trial/…/artifact/<key>`, `/trial/…/artifact/<key>/download` |
-| A picture the agent sent its model | `/trial/…/picture/<sha256>`: only one its trial's [exchange record](run.md#the-exchange-record) lists |
+| A picture the agent sent its model | `/trial/…/picture/<sha256>` |
 | One task side by side | `/compare/task/<task>` |
 
 ## No command yet
