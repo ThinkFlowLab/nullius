@@ -212,9 +212,8 @@ def _start(plan: execution.Plan):
     started, problem, status = begin([plan])
     if problem:
         return jsonify(ok=False, error=problem), status
-    summary = started[0].summary()
-    jobs = summary["job_ids"]
-    destination = url_for("job", job_id=jobs[0]) if len(jobs) == 1 else url_for("index", view="launch")
+    summary, jobs = started[0].summary(), plan.jobs
+    destination = url_for("job", job_id=str(jobs[0].get("name"))) if len(jobs) == 1 else url_for("index", view="launch")
     return jsonify(ok=True, open=destination, **summary)
 
 
