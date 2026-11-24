@@ -211,7 +211,7 @@ def settings_host_key():
         user, host, port = _host_form()
         if upload is None or not upload.filename:
             raise ValueError("no key file")
-        path = hosts.save_key(user, host, upload.read(20001))
+        path = hosts.save_key(user, host, upload.read(20001), port=port)
     except ValueError as e:
         return jsonify(ok=False, error=str(e)), 400
     except OSError as e:
