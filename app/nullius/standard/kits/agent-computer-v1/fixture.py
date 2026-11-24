@@ -17,6 +17,8 @@ It reads what to draw from the kit on its stdin, as one JSON object:
 Words and labels are drawn as bitmaps from the glyphs below: no widget holds
 their text, and Tk's ``send`` is removed, so no other program can read them
 but from the screen. The window fills the screen, so every press lands on it.
+Like an application's window, it names its machine and its process
+(``WM_CLIENT_MACHINE`` and ``_NET_WM_PID``).
 
 Each press, release, scroll and key goes to ``events.jsonl`` in the fixture's
 home, a folder only ``fixture`` reads, one JSON object a line: ``kind``, the
@@ -35,6 +37,7 @@ the window lives on, on its own, until the desktop ends.
 """
 import json
 import os
+import socket
 import struct
 import sys
 import time
@@ -207,6 +210,7 @@ class Fixture:
         self.root = tk.Tk()
         self.root.tk.call("rename", "send", "")            # no other X client may run Tcl in this one
         self.root.title(TITLE)
+        self.root.wm_client(socket.gethostname())          # with it Tk sets _NET_WM_PID as the window maps
         self.root.configure(background=BACKGROUND)
         self.root.attributes("-fullscreen", True)
         self.images, self.names, self.field, self.texts = [], {}, None, []

@@ -588,6 +588,25 @@ def _from_corner(cells):
     return sorted((c - c0, r - r0) for c, r in cells)
 
 
+# What the desktop's Python reads of the active window: the process and the machine it names, the command line of
+# that process, and the desktop's host name.
+_WINDOW_OWNER = r"""
+import json, socket
+from Xlib import X, Xatom, display
+d = display.Display(":0")
+root = d.screen().root
+active = root.get_full_property(d.intern_atom("_NET_ACTIVE_WINDOW"), X.AnyPropertyType).value[0]
+w = d.create_resource_object("window", active)
+pid = w.get_full_property(d.intern_atom("_NET_WM_PID"), Xatom.CARDINAL)
+machine = w.get_full_property(Xatom.WM_CLIENT_MACHINE, X.AnyPropertyType)
+pid = int(pid.value[0]) if pid else None
+machine = machine.value if machine else None
+command = open(f"/proc/{pid}/cmdline", "rb").read().decode().split("\0") if pid else []
+print(json.dumps({"pid": pid, "machine": machine.decode() if isinstance(machine, bytes) else machine,
+                  "command": command, "host": socket.gethostname()}))
+"""
+
+
 _PREFIX = os.environ.get("NULLIUS_TEST_CONTAINER_PREFIX", "nullius-test")
 
 
@@ -677,6 +696,14 @@ class DockerDesktop(unittest.TestCase):
         v = checks.verdict("click", exp, self.d.events(), self.d.actions, "")
         self.assertFalse(v["passed"])
         self.assertIn("outside every action", v["why"])
+
+    def test_the_fixture_window_names_its_process_and_its_machine(self):
+        self.d.start_fixture(checks.draw("type")[0])
+        said = self.d.python(_WINDOW_OWNER)
+        self.assertEqual(said["returncode"], 0, said["error"])
+        owner = json.loads(said["output"])
+        self.assertEqual(owner["machine"], owner["host"])
+        self.assertIn("/opt/desktop/fixture.py", owner["command"])
 
     def test_a_word_typed_by_an_action_passes(self):
         values, exp = checks.draw("type")
