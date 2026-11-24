@@ -166,6 +166,11 @@ def workspace_delete(name):
     read. The open one closes first. Takes the form token."""
     shared._require_csrf()
     ws = shared.STATE["workspace"]
+    try:
+        workspace.check_deletable(shared.WS_HOME, name)
+    except ValueError as e:
+        flash(str(e), "error")
+        return redirect(url_for("workspaces_page"))
     if ws is not None and ws.name == name:
         shared.close_workspace()
     if workspace.delete(shared.WS_HOME, name):

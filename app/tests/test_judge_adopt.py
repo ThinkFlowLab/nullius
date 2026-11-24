@@ -25,7 +25,7 @@ def rec(asked_at, choice="x"):
 
 
 def job(job_id, uid, trials=("t0",)):
-    return NS(job_id=job_id, uid=uid, dataset="", dataset_path="", trials=[NS(trial_name=t) for t in trials])
+    return NS(job_id=job_id, uid=uid, dataset="", dataset_path="", trials=[NS(trial_name=t, key=t, n_retries=0) for t in trials])
 
 
 class Adopt(unittest.TestCase):
@@ -44,7 +44,7 @@ class Adopt(unittest.TestCase):
         self.assertEqual(store.load(self.home, "uid-1", "t0")["answers"]["failure_cause"]["choice"], "agent_error")
         self.assertEqual(store.load(self.home, "uid-1", "t0", lane="llm")["answers"]["failure_cause"]["choice"], "environment_error")
         with open(os.path.join(self.home, "judgements", "uid-1", "t0.json")) as f:
-            self.assertEqual(list(json.load(f)), [Q.VERSION])
+            self.assertEqual(list(json.load(f)), [Q.VERSION, store.ADOPTED])
         self.assertEqual(open(os.path.join(self.a, "judgements", "job-x", "t0.json")).read(), before)
 
     def test_a_trial_judged_in_two_workspaces_shows_the_newer_and_keeps_the_other(self):
@@ -79,6 +79,70 @@ class Adopt(unittest.TestCase):
         self.assertTrue(store.load(self.home, j.uid, j.trials[0].trial_name))
         [kept] = os.listdir(os.path.join(self.home, "judgements-of-deleted-workspaces"))
         self.assertTrue(os.path.isfile(os.path.join(self.home, "judgements-of-deleted-workspaces", kept, "judgements", "job-gone", "t0.json")))
+
+    def test_an_earlier_try_is_read_under_its_trial_filed_under_its_try(self):
+        first, last = "2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"
+        store.save(self.a, "job-x", "t0.try-1", rec("2026-01-01T00:30:00Z", "first try"), started=first)
+        store.save(self.a, "job-x", "t0", rec("2026-01-01T01:30:00Z", "last try"), started=last)
+        run = job("job-x", "uid-1"); run.trials[0].n_retries = 1
+        old = store.overlay(self.a, run)
+        for name, read in (("read", lambda **k: store.load(self.home, "uid-1", "t0", old=old, **k)),
+                           ("copied", lambda **k: store.load(self.home, "uid-1", "t0", **k))):
+            with self.subTest(name):
+                if name == "copied":
+                    store.adopt(self.a, run)
+                self.assertEqual(read(started=first)["answers"]["q"]["choice"], "first try")
+                self.assertEqual(read(started=last)["answers"]["q"]["choice"], "last try")
+
+    def test_a_record_copied_once_is_not_copied_again_after_a_save_changed_it(self):
+        store.save(self.a, "job-x", "t0", rec("2026-01-01T00:00:00Z"))
+        run = job("job-x", "uid-1")
+        store.adopt(self.a, run)
+        store.save(self.home, "uid-1", "t0", dict(rec("2026-01-02T00:00:00Z"), answers={"other": {"choice": "y"}}))
+        store.adopt(self.a, run)
+        shown = store.load(self.home, "uid-1", "t0", old=store.overlay(self.a, run))
+        self.assertEqual(set(shown["answers"]), {"q", "other"})
+        with open(os.path.join(self.home, "judgements", "uid-1", "t0.json")) as f:
+            self.assertEqual(sorted(json.load(f)), [Q.VERSION, store.ADOPTED])           # no second slot of the same record
+
+    def test_an_old_file_that_holds_no_object_is_skipped(self):
+        d = os.path.join(self.a, "judgements", "job-x"); os.makedirs(d)
+        for name, body in (("t0", [1, 2]), ("t1", {Q.VERSION: [1]})):
+            with open(os.path.join(d, name + ".json"), "w") as f:
+                json.dump(body, f)
+        run = job("job-x", "uid-1", trials=("t0", "t1"))
+        self.assertIsNone(store.load(self.home, "uid-1", "t0", old=store.overlay(self.a, run)))
+        store.adopt(self.a, run)
+        self.assertEqual(list(store.all_records(self.home, "uid-1")), [])
+
+    def test_a_store_file_that_cannot_be_read_is_never_written_over(self):
+        store.save(self.a, "job-x", "t0", rec("2026-01-01T00:00:00Z"))
+        path = os.path.join(self.home, "judgements", "uid-1", "t0.json"); os.makedirs(os.path.dirname(path))
+        with open(path, "w") as f:
+            f.write('{"judgement.questions.v2": {"questi')                                  # cut short
+        for name, write in (("a save", lambda: store.save(self.home, "uid-1", "t0", rec("2026-01-02T00:00:00Z"))),
+                            ("a copy", lambda: store.adopt(self.a, job("job-x", "uid-1")))):
+            with self.subTest(name), self.assertRaises(store.Unreadable):
+                write()
+            self.assertEqual(open(path).read(), '{"judgement.questions.v2": {"questi')
+
+    def test_the_move_waits_for_a_root_that_cannot_be_read(self):
+        root = os.path.join(self.tmp, "jobs"); _job_dir(root, "job-a")
+        home_dir = os.path.join(self.tmp, "ws")
+        ws = workspace.create(home_dir, [root], label="w")
+        [j] = workspace.load_jobs(ws, ws.roots)
+        store.save(ws.dir, "job-a", j.trials[0].trial_name, rec("2026-01-01T00:00:00Z"))
+        os.rename(root, root + ".away")
+        self.assertEqual(store.move(home_dir), ["w"])
+        self.assertFalse(store.moved())
+        with self.assertRaisesRegex(ValueError, "cannot be read"):
+            workspace.delete(home_dir, ws.name)
+        self.assertTrue(os.path.isdir(ws.dir))
+        os.rename(root + ".away", root)
+        self.assertEqual(store.move(home_dir), [])
+        self.assertTrue(store.moved())
+        self.assertEqual(store.old_stores(home_dir), [])
+        self.assertTrue(store.load(self.home, j.uid, j.trials[0].trial_name))
 
 
 if __name__ == "__main__":

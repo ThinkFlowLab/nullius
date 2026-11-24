@@ -35,7 +35,7 @@ class TaskSlot(unittest.TestCase):
         stack.enter_context(patch.object(web.judge.batch, "ask_states", return_value=dict(SCORED)))
 
     def job(self, job_id, dataset, path=""):
-        trial = NS(task_base="fix-bug", trial_name="fix-bug__1", has_trajectory=True)
+        trial = NS(task_base="fix-bug", trial_name="fix-bug__1", key="fix-bug__1", has_trajectory=True)
         return NS(job_id=job_id, uid="uid-" + job_id, dir="/jobs/" + job_id, dataset=dataset, dataset_path=path, trials=[trial]), trial
 
     def test_a_changed_instruction_is_judged_again(self):

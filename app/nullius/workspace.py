@@ -220,7 +220,9 @@ def touch(ws: Workspace) -> None:
 def delete(home_dir: str, name: str) -> bool:
     """Remove a workspace: its record, its parse cache and its converted
     imports. The job roots it pointed at are not touched, nor the
-    judgements of their jobs (`_keep_judgements`). True when something was removed."""
+    judgements of their jobs (`_keep_judgements`). True when something was
+    removed; ValueError, nothing removed, while it holds judgements kept
+    before and one of its roots cannot be read."""
     ws = load(home_dir, name)
     if ws is None:
         return False
@@ -229,17 +231,38 @@ def delete(home_dir: str, name: str) -> bool:
     return True
 
 
+def check_deletable(home_dir: str, name: str) -> None:
+    """Raise as `delete` would refuse the workspace *name*, removing nothing."""
+    ws = load(home_dir, name)
+    if ws is not None:
+        _check_roots(ws)
+
+
+def _check_roots(ws: Workspace) -> None:
+    """ValueError while *ws* holds judgements kept before by job id, not yet copied into the
+    user's store, and one of its roots cannot be read: its jobs, and so their records, are unknown."""
+    from nullius.judge import store
+    if store.moved() or not any(os.path.isdir(os.path.join(ws.dir, r)) for r in store.ROOTS.values()):
+        return
+    unread = [r for r in ws.job_roots or ws.roots if not os.path.isdir(r)]
+    if unread:
+        raise ValueError(f"{ws.label} stays: {unread[0]} cannot be read, so its judgements cannot be kept. Reconnect it or remove the root first.")
+
+
 def _keep_judgements(ws: Workspace) -> None:
     """The judgements a workspace kept before they were kept by job
     (``<workspace>/judgements{,-llm}/``): copied into the user's store under
     each job its roots hold, then its files moved there whole, so none is
-    lost with it - a job its roots no longer reach included."""
+    lost with it - a job its roots no longer reach included. Refused while a
+    root cannot be read, since its jobs' records could not be copied."""
     from nullius.judge import store
     old = [d for r in store.ROOTS.values() if os.path.isdir(d := os.path.join(ws.dir, r))]
     if not old:
         return
-    for job in load_jobs(ws, ws.job_roots or ws.roots):
-        store.adopt(ws.dir, job)
+    _check_roots(ws)
+    if not store.moved():
+        for job in load_jobs(ws, ws.job_roots or ws.roots):
+            store.adopt(ws.dir, job)
     keep = os.path.join(store.home(), "judgements-of-deleted-workspaces", f"{ws.name}~{datetime.now(timezone.utc):%Y%m%dT%H%M%S%fZ}")
     os.makedirs(keep)
     for d in old:

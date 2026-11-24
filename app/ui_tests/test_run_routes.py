@@ -716,7 +716,7 @@ class RunDelete(unittest.TestCase):
         self.assertIn('<button type="button" class="btn sm ghost danger launch-delete-btn" aria-haspopup="dialog">Delete launch</button>', html)
         self.assertEqual(html.count('<dialog class="std-how launch-delete" id="launch-delete" aria-labelledby="launch-delete-h"></dialog>'), 1)
         said = re.sub(r"<[^>]+>", " ", re.search(r'<template class="launch-ask">(.*?)</template>', html, re.S).group(1))
-        self.assertRegex(" ".join(said.split()), r"^Delete launch r1-\* \S+ \S+ 1 folder · \d+(\.\d)? (Bytes|kB) · 1 judgement · "
+        self.assertRegex(" ".join(said.split()), r"^Delete launch r1-\* \S+ \S+ 1 folder · \d+(\.\d)? (Bytes|kB) · up to 1 judgement · "
                                                  r"workspaces (witty pelican, sharp lemur|sharp lemur, witty pelican) Keep it Delete launch$")
         self.assertIn('<button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete launch</button>', html)
         self.assertNotIn('name="host"', html)                                              # ran here: no host copy

@@ -1830,28 +1830,35 @@ def deletable(names: List[str], root: Optional[str] = None) -> None:
         _deletable(n, root)
 
 
-def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, ends: dict) -> dict:
+def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, ends: dict, final: bool = False) -> dict:
+    """What deleting the run *name* removes. Its judgements are counted, the
+    older records its workspaces kept included, nothing written; *final* (the
+    delete itself) copies those older records in first and keeps the
+    judgements of a job a copy of which is found elsewhere (`_judged_elsewhere`)."""
     path, rec = _deletable(name, root)
     plan = rec.get("plan") or {}
     # a run refused at the name check never made the host folder: one of that name there is not its own
     host = hosts.parse(plan["host"]) if plan.get("host") and (rec.get("launched") or rec.get("step") not in ("connect", "name")) else None
-    held = []
+    held, olds = [], []
     for ws, roots in holding(path):
         dirs = parse.find_job_dirs(roots)
         jobs = workspace.load_jobs(ws, roots, ends)
-        for j in jobs:                       # the workspace's records from before, in the user's store first: they are counted there
-            judgements.adopt(ws.dir, j)
+        for j in jobs:                       # the workspace's records from before: copied in when it goes, else counted as they are
+            if final:
+                judgements.adopt(ws.dir, j)
+            else:
+                olds.append(judgements.overlay(ws.dir, j))
         ids = [j.job_id for j in jobs]
         # a job of the same id from another root shares these judgements: they stay
         others = {e.get("job_id") for d, e in workspace.job_index(ws).items() if d not in dirs}
         judged = judgements.job_dirs(ws.dir, [i for i in ids if i.split("~")[0] not in others])
         held.append({"ws": ws, "roots": roots, "jobs": dirs, "judged": judged})
     uids = {parse.parse_job(d, trials=False).uid for d in parse.find_job_dirs([os.path.join(path, "jobs")])} - {""}
-    judged = judgements.job_dirs(judgements.home(), sorted(uids))
-    if judged:
-        judged = judgements.job_dirs(judgements.home(), sorted(uids - _judged_elsewhere(home, path, uids)))
-    return {"name": name, "dir": path, "bytes": size_of(path), "host": host, "workspaces": held, "judged": judged,
-            "judgements": judgements.count_in(judged)}
+    if final and judgements.job_dirs(judgements.home(), sorted(uids)):
+        uids -= _judged_elsewhere(home, path, uids)
+    return {"name": name, "dir": path, "bytes": size_of(path), "host": host, "workspaces": held,
+            "judged": judgements.job_dirs(judgements.home(), sorted(uids)),
+            "judgements": judgements.records_of(judgements.home(), uids, olds)}
 
 
 def _judged_elsewhere(home: str, path: str, uids: set) -> set:
@@ -1872,16 +1879,18 @@ def _judged_elsewhere(home: str, path: str, uids: set) -> set:
     return kept | ({parse.parse_job(d, trials=False).uid for d in parse.find_job_dirs(others)} & uids)
 
 
-def deletion(names: List[str], home: str, root: Optional[str] = None, holding: Optional[Callable] = None) -> dict:
+def deletion(names: List[str], home: str, root: Optional[str] = None, holding: Optional[Callable] = None,
+             final: bool = False) -> dict:
     """What deleting the runs *names* of one launch removes: per run (``runs``)
     its folder and size, the host copy that is its own, and per workspace that
     holds it its roots, parsed jobs and judgement folders; the totals, and the
     number of copies per host. ValueError when any of them is alive or is not
     a run: nothing goes then. ``holding``: a run folder's ``workspace.holding``,
-    when the caller has it already."""
+    when the caller has it already. The judgements are those of every job of
+    the runs until *final*, the delete's own (`_run_deletion`)."""
     holding = holding or (lambda path: workspace.holding(home, path))
     ends = run_ends()
-    runs = [_run_deletion(n, home, root, holding, ends) for n in dict.fromkeys(names)]
+    runs = [_run_deletion(n, home, root, holding, ends, final) for n in dict.fromkeys(names)]
     copies: Dict[str, int] = {}
     for r in runs:
         if r["host"]:
@@ -1897,7 +1906,7 @@ def delete(names: List[str], home: str, root: Optional[str] = None, copies=(), r
     *copies*. Returns ``deletion``'s answer, with ``stays``: the runs whose
     folder could not go (they keep everything else), and ``kept``: one line
     per thing that stays."""
-    gone = deletion(names, home, root)
+    gone = deletion(names, home, root, final=True)
     gone["stays"], gone["kept"] = [], []
     for r in gone["runs"]:
         try:

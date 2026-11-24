@@ -68,20 +68,25 @@ def ws_dir(name=None):
 
 
 def job_key(job, name=None) -> str:
-    """The job's key in the user's store: its identity (``Job.uid``). The
-    records the workspace that holds it on screen (`ws_dir`) kept for it
-    before are copied in first, once per request (`store.adopt`)."""
-    d = ws_dir(name)
-    memo = shared.request_memo("judgements_adopted")
-    if d and (d, job.dir, job.job_id) not in memo:
-        memo[(d, job.dir, job.job_id)] = store.adopt(d, job)
+    """The job's key in the user's store: its identity (``Job.uid``)."""
     return job.uid
 
 
+def old_of(job, name=None) -> dict:
+    """The records the workspace that holds the job on screen (`ws_dir`) kept
+    for it before, read with the user's store (`store.overlay`) and never
+    written by a read; once per request."""
+    d = ws_dir(name)
+    memo = shared.request_memo("judgements_old")
+    if (d, job.dir, job.job_id) not in memo:
+        memo[(d, job.dir, job.job_id)] = store.overlay(d, job)
+    return memo[(d, job.dir, job.job_id)]
+
+
 def batch_calibration() -> dict:
-    """The store's calibration, read once for a batch and passed to each
+    """The calibration over the open workspace's jobs, read once for a batch and passed to each
     call; {} when there is no sample, so no call reads the store again."""
-    return store.calibration(store.home()) or {}
+    return store.calibration(store.home(), [j.uid for j in shared._jobs_for_request()]) or {}
 
 
 def started_of(trial) -> str | None:
@@ -96,7 +101,7 @@ def started_by_name(job) -> dict:
 
 
 def judgement_of(job, trial, lane: str = "decision") -> dict | None:
-    return store.load(store.home(), job_key(job), trial.key, lane=lane, started=started_of(trial))
+    return store.load(store.home(), job_key(job), trial.key, lane=lane, started=started_of(trial), old=old_of(job))
 
 
 def panel(job, trial, lane: str = "decision") -> dict:
@@ -275,7 +280,7 @@ def judge_trial(job, trial, api_key: str, post=None, calibration=None) -> dict:
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
     return batch.ask_and_store(store.home(), job_key(job), trial.key, _trial_ids_and_states(trial, traj), api_key, post=post,
-                               calibration=calibration, started=started_of(trial))
+                               calibration=calibration, started=started_of(trial), old=old_of(job))
 
 
 def _guard():
@@ -310,13 +315,13 @@ def judge_trial_route(job_id, trial_name):
 def judge_job_route(job_id):
     """Judge the job's unjudged trials with one judge, the form's ``lane``
     (Decision unless it names the LLM judge): the click is the request."""
+    _guard()
     job = shared._job_for_request(job_id)
     if job is None:
         abort(404)
     lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "decision"
-    judged = store.for_job(store.home(), job_key(job), started_by_name(job), lane=lane)
+    judged = store.for_job(store.home(), job_key(job), started_by_name(job), lane=lane, old=old_of(job))
     todo = [t for t in job.trials if t.has_trajectory and t.key not in judged]
-    _guard()
     k, cal = key(lane), batch_calibration()
     done, failed = run_batch(todo, lambda t: judge_trial(job, t, k, calibration=cal), lambda t: t.trial_name)
     from flask import flash
@@ -333,8 +338,8 @@ def job_summary(job) -> dict:
     number on the page is its place here, raised or not - and `lanes` is
     the board's record -> judge lanes (`nullius.judge.lanes`), whose status
     for each trial is also in `by_trial`."""
-    d, uid = store.home(), job_key(job)
-    judged = store.for_job(d, uid, started_by_name(job))
+    d, uid, old = store.home(), job_key(job), old_of(job)
+    judged = store.for_job(d, uid, started_by_name(job), old=old)
     flag_ids = [q for q in Q.group_ids("trial") if Q.QUESTIONS[q].get("flag")]
     board = lanes.board(job, judged)
     by_trial = {}
@@ -359,7 +364,7 @@ def job_summary(job) -> dict:
     return {"judged": len(judged), "trials": len(job.trials), "unjudged": len([t for t in job.trials if t.trial_name not in judged]),
             "causes": sorted(causes.items(), key=lambda kv: -kv[1]), "n_cause": sum(causes.values()), "keyed": bool(key()),
             "flags": sorted(raised.items(), key=lambda kv: (-kv[1], kv[0])), "by_trial": by_trial,
-            "truncation": store.truncation_report(d, uid) if judged else None,
+            "truncation": store.truncation_report(d, uid, old=old) if judged else None,
             "unresolved": sum(1 for t in job.trials if t.outcome != "resolved"),
             "flag_ids": flag_ids, "lanes": board, "llm": _llm_count(d, job)}
 
@@ -367,7 +372,7 @@ def job_summary(job) -> dict:
 def _llm_count(d, job) -> dict:
     """The LLM judge's own count for the job's button: it judges apart from
     Decision, so a trial judged by one is still unjudged by the other."""
-    judged = store.for_job(d, job_key(job), started_by_name(job), lane="llm")
+    judged = store.for_job(d, job_key(job), started_by_name(job), lane="llm", old=old_of(job))
     return {"unjudged": len([t for t in job.trials if t.trial_name not in judged]), "keyed": bool(key("llm"))}
 
 
@@ -401,7 +406,7 @@ def side_of(job, trial, column) -> dict | None:
     """One side's score as the compare page shows it, from the trial's own
     current record, the job opened from its column's workspace `column`: the expectation, the level it rounds to, the judge's
     confidence, the provenance. None until scored under the current vocabulary."""
-    rec = store.load(store.home(), job_key(job, column), trial.key, started=started_of(trial))
+    rec = store.load(store.home(), job_key(job, column), trial.key, started=started_of(trial), old=old_of(job, column))
     if not rec or not store.is_current(rec):
         return None
     a = (rec.get("answers") or {}).get(SIDE_QUESTION)
@@ -418,9 +423,9 @@ def pair_records(view) -> dict:
     model's own pick - under job A. Read, never written."""
     if not view.selected or len(view.jobs) != 2:
         return {}
-    out, uid = {}, job_key(view.jobs[0], view.selected[0].workspace)
+    out, uid, old = {}, job_key(view.jobs[0]), old_of(view.jobs[0], view.selected[0].workspace)
     for task, a, b in pairs_of(view):
-        rec = store.load(store.home(), uid, store.pair_key(a.trial_name, b.trial_name))
+        rec = store.load(store.home(), uid, store.pair_key(a.trial_name, b.trial_name), old=old)
         if rec and (rec.get("answers") or {}).get(LEGACY_QUESTION):
             out[task] = rec
     return out
@@ -460,7 +465,7 @@ def judge_side(job, trial, column, api_key: str, post=None, calibration=None) ->
     when it has them all."""
     if not trial.has_trajectory:
         raise client.JudgeError(0, "this trial has no trajectory to judge")
-    rec = store.load(store.home(), job_key(job, column), trial.key, started=started_of(trial))
+    rec = store.load(store.home(), job_key(job, column), trial.key, started=started_of(trial), old=old_of(job, column))
     have = (rec.get("answers") or {}) if store.is_current(rec) else {}
     ids = [q for q in side_ids(trial) if q not in have]
     if not ids:
@@ -469,7 +474,7 @@ def judge_side(job, trial, column, api_key: str, post=None, calibration=None) ->
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
     return batch.ask_and_store(store.home(), job_key(job, column), trial.key, _states_for(trial, traj, ids), api_key, post=post,
-                               calibration=calibration, started=started_of(trial))
+                               calibration=calibration, started=started_of(trial), old=old_of(job, column))
 
 
 def _sides_todo(view) -> list:
@@ -555,7 +560,7 @@ def judge_control(side, jobs, api_key: str, post=None, calibration=None) -> dict
     if trial is None:
         raise client.JudgeError(0, f"{side.control} trial {side.trial_name} is not in this workspace")
     return batch.ask_and_store(store.home(), job_key(job), trial.key, control_states(side, trial), api_key, post=post,
-                               calibration=calibration, started=started_of(trial))
+                               calibration=calibration, started=started_of(trial), old=old_of(job))
 
 
 def triage_summary(report, jobs) -> dict:
@@ -565,7 +570,7 @@ def triage_summary(report, jobs) -> dict:
     rows, judged, todo = {}, 0, []
     for row, s in sides:
         job, _ = _control_trial(s, jobs)
-        rec = store.load(store.home(), job_key(job), s.trial_name) if job else None
+        rec = store.load(store.home(), job_key(job), s.trial_name, old=old_of(job)) if job else None
         a = ((rec.get("answers") or {}).get("control_failure_cause")) if store.is_current(rec) else None
         if a:
             rows.setdefault(row.task_base, {})[s.control] = _choice_row("control_failure_cause", a)
@@ -579,9 +584,7 @@ def triage_summary(report, jobs) -> dict:
 # -- task-instruction quality: once per dataset, task and instruction text ---------------
 
 def task_key(job) -> str:
-    """The dataset a job's task judgements are kept under (`store.task_dataset`),
-    its earlier records copied in first (`job_key`)."""
-    job_key(job)
+    """The dataset a job's task judgements are kept under (`store.task_dataset`)."""
     return store.task_dataset(job)
 
 
@@ -592,7 +595,7 @@ def task_slot(trial) -> str:
 
 
 def task_record(job, trial) -> dict | None:
-    rec = store.load(store.home(), task_key(job), task_slot(trial), lane=store.TASKS)
+    rec = store.load(store.home(), task_key(job), task_slot(trial), lane=store.TASKS, old=old_of(job))
     return rec if store.is_current(rec) else None
 
 
@@ -667,4 +670,33 @@ def judge_task(job, trial, api_key: str, post=None, calibration=None) -> dict | 
         raise client.JudgeError(0, f"no instruction can be read for {trial.task_base}")
     states = batch.states_for(Q.group_ids("task"), lambda kind: judge_state.build(kind, None, instruction=instruction))
     return batch.ask_and_store(store.home(), task_key(job), task_slot(trial), states, api_key, post=post, calibration=calibration,
-                               lane=store.TASKS)
+                               lane=store.TASKS, old=old_of(job))
+
+
+# -- the move of the judgements workspaces kept before into the user's store ---------------
+
+@app.template_global()
+def judgements_unmoved() -> bool:
+    """Whether the judgements workspaces kept before may still wait to be moved (`store.moved`)."""
+    return not store.moved()
+
+
+@app.route("/judgements/move", methods=["GET", "POST"])
+def judgements_move():
+    """GET: the workspaces whose store from before holds judgements, and how
+    many each (`store.old_stores`). POST: every one of them copied into the
+    user's store (`store.move`), the old files kept; ``unread``, the
+    workspaces left for a later move."""
+    if request.method == "GET":
+        return jsonify(workspaces=[{"label": ws.label, "n": n} for ws, n in store.old_stores(shared.WS_HOME)])
+    shared._require_csrf()
+    if not shared._local_client():
+        abort(403)
+    try:
+        unread = store.move(shared.WS_HOME)
+    except store.Unreadable as e:
+        return jsonify(ok=False, error=str(e)), 409
+    if unread:
+        return jsonify(ok=False, error="Not moved: " + ", ".join(unread) + (" has" if len(unread) == 1 else " have")
+                       + " a root that cannot be read."), 409
+    return jsonify(ok=True)

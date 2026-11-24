@@ -11,8 +11,10 @@ leaves it.
 
 Every function takes the store's base first: ``home()``, or a workspace's
 folder for the store judgements were kept in before (``<workspace>/
-judgements{,-llm}/<job id>/``), which is still read: `adopt` copies a job's
-records from it, never deleting them.
+judgements{,-llm}/<job id>/``). Until `move` has copied every workspace's
+into the user's store, a read merges a job's older records in memory
+(`overlay`, passed as ``old``) and writes nothing; a save copies in those of
+the file it writes (`adopt`). The older files are never deleted or rewritten.
 
 Every version is kept, and under each every try of a retried trial: the
 try judged last under the version, each earlier one under
@@ -36,6 +38,14 @@ _SAFE = re.compile(r"[^A-Za-z0-9._@+-]")
 
 ROOTS = {"decision": "judgements", "llm": "judgements-llm"}     # one directory per judge
 TASKS = "task"                       # the lane of task-instruction judgements, by dataset (`task_dataset`)
+ADOPTED = "~adopted"                 # in a file: the digests of the older records copied in, so none is copied twice
+MOVED = ".moved"                     # in ``<home>/judgements/``: every workspace's older records are in the user's store
+
+
+class Unreadable(client.JudgeError, ValueError):
+    """A judgement file of the user's store that cannot be read: left as it is, never written over."""
+    def __init__(self, path: str):
+        super().__init__(0, f"{path} cannot be read; it is left as it is. Repair or remove it, then try again.")
 
 
 def home() -> str:
@@ -71,17 +81,32 @@ def _paths(base: str, job_id: str, trial_name: str, lane: str = "decision") -> l
     return [os.path.join(root, j, t + ".json") for j in _names(job_id) for t in _names(trial_name)]
 
 
-def _read(paths) -> dict:
-    """The first judgement file of `paths` there is, read; {} when there is none or it cannot be read."""
+def _read(paths, strict: bool = False) -> dict:
+    """The first judgement file of `paths` there is, read; {} when there is none. One that
+    cannot be read, or holds no JSON object: {}, or `Unreadable` when `strict` (a write)."""
     for path in paths:
         try:
             with open(path, encoding="utf-8") as fh:
-                return json.load(fh) or {}
+                data = json.load(fh)
         except FileNotFoundError:
             continue
         except (OSError, ValueError):
+            data = False
+        if data is None:
             return {}
+        if not isinstance(data, dict):
+            if strict:
+                raise Unreadable(path)
+            return {}
+        return data
     return {}
+
+
+def _with(data: dict, old) -> dict:
+    """`data` with the older records `old` (a list of files' contents) merged in, in memory (`_merged`)."""
+    for d in old or ():
+        data = _merged(data, d)
+    return data
 
 
 def _versions(version: Optional[str]) -> tuple:
@@ -110,13 +135,15 @@ def _pick(data: dict, version: Optional[str], started: Optional[str] = None) -> 
 
 
 def load(base: str, job_id: str, trial_name: str, version: Optional[str] = None, lane: str = "decision",
-         started: Optional[str] = None) -> Optional[dict]:
+         started: Optional[str] = None, old: Optional[dict] = None) -> Optional[dict]:
     """The record under `version`; with none named, the current version or
     the newest earlier one that has a record. `started`: the trial's own
-    start, so a record of an earlier try under its name is none of its."""
+    start, so a record of an earlier try under its name is none of its.
+    `old`: the job's older records (`overlay`), read with it."""
     if not job_id:                   # a job with no identity yet (Job.uid_source "pending") has no judgement
         return None
-    return _pick(_read(_paths(base, job_id, trial_name, lane)), version, started)
+    found = _paths(base, job_id, trial_name, lane)
+    return _pick(_with(_read(found), (old or {}).get(found[0])), version, started)
 
 
 def is_current(record: Optional[dict]) -> bool:
@@ -125,18 +152,20 @@ def is_current(record: Optional[dict]) -> bool:
 
 
 def save(base: str, job_id: str, trial_name: str, record: dict, lane: str = "decision",
-         started: Optional[str] = None) -> dict:
+         started: Optional[str] = None, old: Optional[dict] = None) -> dict:
     """The record under its question version, returned as stored; other versions kept. A
     record's answers and hygiene readings merge over the version's earlier
     ones, so judging one question later does not drop the others. Saves to
-    one file take turns, across processes; each writes through a temporary file of its own."""
+    one file take turns, across processes; each writes through a temporary file of its own.
+    `old`: the job's older records (`overlay`), those of this file copied in first.
+    `Unreadable` when the file is there and cannot be read: nothing is written."""
     if not job_id:
         raise ValueError("a judgement needs the job's identity")
     found = _paths(base, job_id, trial_name, lane)
     path = found[0]
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with _locked(path):
-        data = _read(found)
+        data = _with(_read(found, strict=True), (old or {}).get(path))
         version = record.get("questions", Q.VERSION)
         earlier = data.get(version) or {}
         if not _of(earlier, started):        # another try's: kept beside, and none of its answers are this one's
@@ -151,13 +180,14 @@ def save(base: str, job_id: str, trial_name: str, record: dict, lane: str = "dec
     return merged
 
 
-def for_job(base: str, job_id: str, started: dict, version: Optional[str] = None, lane: str = "decision") -> dict:
+def for_job(base: str, job_id: str, started: dict, version: Optional[str] = None, lane: str = "decision",
+            old: Optional[dict] = None) -> dict:
     """The judged trials of a job: {trial_name: record} for each trial of
     `started` - {trial_name: its start}, every trial of the job - that has
     one, as `load` picks it."""
     out = {}
     for name, start in started.items():
-        rec = load(base, job_id, name, version, lane, start)
+        rec = load(base, job_id, name, version, lane, start, old)
         if rec:
             out[name] = rec
     return out
@@ -173,42 +203,37 @@ def count_in(dirs) -> int:
     return sum(n.endswith(".json") for d in dirs for _, _, names in os.walk(d) for n in names)
 
 
-def all_records(base: str, job_id: Optional[str] = None, lane: str = "decision"):
+def all_records(base: str, job_id: Optional[str] = None, lane: str = "decision", old: Optional[dict] = None):
     """Every stored record, every version: yields (job_id, trial_name,
-    version, record). One job's when `job_id` is given."""
+    version, record). One job's when `job_id` is given, with its older
+    records `old` (`overlay`)."""
     root = _root(base, lane)
     try:
         jobs = list(_names(job_id)) if job_id else sorted(os.listdir(root))
     except OSError:
-        return
+        jobs = []
+    files = {}
     for j in jobs:
-        d = os.path.join(root, j)
         try:
-            names = sorted(os.listdir(d))
+            files.update((os.path.join(root, j, n), None) for n in os.listdir(os.path.join(root, j)) if n.endswith(".json"))
         except OSError:
             continue
-        for n in names:
-            if not n.endswith(".json"):
-                continue
-            try:
-                with open(os.path.join(d, n), encoding="utf-8") as fh:
-                    data = json.load(fh) or {}
-            except (OSError, ValueError):
-                continue
-            for version, rec in data.items():
-                if isinstance(rec, dict):
-                    yield j, n[:-5], version, rec
+    files.update((p, None) for p in old or {} if os.path.dirname(os.path.dirname(p)) == root)
+    for path in sorted(files):
+        for version, rec in _with(_read([path]), (old or {}).get(path)).items():
+            if isinstance(rec, dict):
+                yield os.path.basename(os.path.dirname(path)), os.path.basename(path)[:-5], version, rec
 
 
-def calibration(base: Optional[str]) -> Optional[dict]:
-    """The judge's observed characters per token over the stored calls
-    (`client.calibrate`); None with no store or no sample."""
+def calibration(base: Optional[str], job_ids=()) -> Optional[dict]:
+    """The judge's observed characters per token over the stored calls of
+    the jobs `job_ids` (`client.calibrate`); None with no store or no sample."""
     if not base:
         return None
-    return client.calibrate(rec for _, _, _, rec in all_records(base))
+    return client.calibrate(rec for j in dict.fromkeys(job_ids) if j for _, _, _, rec in all_records(base, j))
 
 
-def truncation_report(base: str, job_id: str, limit: Optional[int] = None) -> dict:
+def truncation_report(base: str, job_id: str, limit: Optional[int] = None, old: Optional[dict] = None) -> dict:
     """Which state kinds were cut to the limit over a job's stored calls,
     and how often - counted here. `kinds[kind]` is {calls, truncated,
     max_chars}, most-truncated first; `untyped` counts records that say
@@ -217,7 +242,7 @@ def truncation_report(base: str, job_id: str, limit: Optional[int] = None) -> di
     limit = judge_state.LIMIT if limit is None else limit
     kinds: dict = {}
     records = truncated = untyped = 0
-    for _, _, _, rec in all_records(base, job_id):
+    for _, _, _, rec in all_records(base, job_id, old=old):
         records += 1
         if rec.get("truncated"):
             truncated += 1
@@ -249,52 +274,85 @@ def _digest(rec) -> str:
     return hashlib.sha256(json.dumps(rec, sort_keys=True).encode("utf-8")).hexdigest()[:10]
 
 
-def _merge_into(path: str, data: dict) -> None:
-    """Records of an older store into the file at `path`: each one not there
-    yet is added. Where the file has another under its key, the one shown
-    stays there and the other is kept beside: of two tries, the later try's
-    shown and the earlier under its own start (`_try`); of one try, the
-    newer by `asked_at` shown and the other under ``<key>~<its digest>``.
-    Nothing is dropped, and adding the same record again changes nothing."""
+def _merged(cur: dict, data: dict) -> dict:
+    """`cur`, a file's records, with the records `data` of an older store
+    added: each one not there yet. Where `cur` has another under its key, the
+    one shown stays there and the other is kept beside: of two tries, the
+    later try's shown and the earlier under its own start (`_try`); of one
+    try, the newer by `asked_at` shown and the other under ``<key>~<its
+    digest>``. Nothing is dropped, and a record copied in once is never
+    copied again (`ADOPTED`), even after a save has changed it."""
+    cur = dict(cur)
+    adopted = set(cur.get(ADOPTED) or ())
+    have = {_digest(r) for r in cur.values() if isinstance(r, dict)}
+    for k, rec in data.items():
+        if not isinstance(rec, dict) or k == ADOPTED:
+            continue
+        d = _digest(rec)
+        if d in adopted or d in have:
+            adopted.add(d)
+            continue
+        adopted.add(d)
+        now = cur.get(k)
+        if not isinstance(now, dict):
+            cur[k] = rec
+        else:
+            a, b = now.get("trial_started_at"), rec.get("trial_started_at")
+            tries = bool(a and b and a != b)
+            newer = str(b) > str(a) if tries else str(rec.get("asked_at") or "") > str(now.get("asked_at") or "")
+            shown, other = (rec, now) if newer else (now, rec)
+            slot = _try(k, other["trial_started_at"]) if tries else f"{k}~{_digest(other)}"
+            if slot in cur:
+                slot = f"{slot}~{_digest(other)}"
+            cur[k], cur[slot] = shown, other
+        have |= {_digest(r) for r in cur.values() if isinstance(r, dict)}
+    if adopted:
+        cur[ADOPTED] = sorted(adopted)
+    return cur
+
+
+def _merge_into(path: str, old) -> None:
+    """The older records `old` (a list of files' contents) into the file at `path` (`_merged`),
+    under its lock; nothing written when nothing is new. `Unreadable` when the file cannot be read."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with _locked(path):
-        cur = _read([path])
-        have = {_digest(r) for r in cur.values()}
-        changed = False
-        for k, rec in data.items():
-            if not isinstance(rec, dict) or _digest(rec) in have:
-                continue
-            now = cur.get(k)
-            if now is None:
-                cur[k] = rec
-            else:
-                a, b = now.get("trial_started_at"), rec.get("trial_started_at")
-                tries = bool(a and b and a != b)
-                newer = str(b) > str(a) if tries else str(rec.get("asked_at") or "") > str(now.get("asked_at") or "")
-                shown, other = (rec, now) if newer else (now, rec)
-                slot = _try(k, other["trial_started_at"]) if tries else f"{k}~{_digest(other)}"
-                if slot in cur:
-                    slot = f"{slot}~{_digest(other)}"
-                cur[k], cur[slot] = shown, other
-            have |= {_digest(r) for r in cur.values()}
-            changed = True
-        if changed:
-            ondisk.write_whole(path, json.dumps(cur, indent=1), mode=0o600)
+        cur = _read([path], strict=True)
+        got = _with(cur, old)
+        if got != cur:
+            ondisk.write_whole(path, json.dumps(got, indent=1), mode=0o600)
 
 
-def adopt(ws_dir: str, job, into: Optional[str] = None) -> None:
-    """Copy what the workspace's store from before (`ws_dir`) holds for `job`
-    - under its job id, its trials' and its dataset's task records - into
-    the user's store (`into`, `home()` by default) under the job's identity.
-    Two jobs of one id in that workspace each get the same records, as each
-    showed them before. The workspace's files are left as they are."""
-    if not job.uid:
-        return
+def moved(into: Optional[str] = None) -> bool:
+    """Whether `move` has copied every workspace's older records into the user's store."""
+    return os.path.exists(os.path.join(_root(into or home(), "decision"), MOVED))
+
+
+def _try_file(data: dict, n: int) -> dict:
+    """An older store's record of try `n` of a trial (``<trial>.try-N.json``), filed under its try:
+    each version's under ``<version>@<its start>``, as `save` keeps an earlier try."""
+    return {k if "@" in k or not isinstance(rec, dict) else _try(k, rec.get("trial_started_at") or f"try-{n}"): rec
+            for k, rec in data.items()}
+
+
+def overlay(ws_dir: Optional[str], job, into: Optional[str] = None) -> dict:
+    """What the workspace's store from before (`ws_dir`) holds for `job` -
+    under its job id, its trials' (a try's ``<trial>.try-N`` under its trial,
+    filed under its try) and its dataset's task records - as {the file of the
+    user's store (`into`, `home()` by default) it belongs in: [its contents]}.
+    Read only. Two jobs of one id in that workspace each get the same
+    records, as each showed them before. {} once `move` is done."""
     into = into or home()
-    names = {n: key(t.trial_name) for t in job.trials for n in _names(t.trial_name)}
+    if not ws_dir or not job.uid or moved(into):
+        return {}
+    names = {}
+    for t in job.trials:
+        names.update((n, (key(t.key), 0)) for n in _names(t.trial_name))
+        for i in range(1, min(getattr(t, "n_retries", 0) or 0, 99) + 1):
+            names.update((n, (key(t.key), i)) for n in _names(f"{t.trial_name}.try-{i}"))
     places = [(lane, j, job.uid, names) for lane in ROOTS for j in _names(job.job_id)]
     # before, a dataset's task records were a job of their own, named `task:<dataset>`, and a job naming none its id
     places += [(TASKS, j, task_dataset(job), {}) for j in _names("task:" + (job.dataset_path or job.dataset or "job:" + job.job_id))]
+    out: dict = {}
     for lane, old, new, rename in places:
         src = os.path.join(_root(ws_dir, "decision" if lane == TASKS else lane), old)
         try:
@@ -303,5 +361,57 @@ def adopt(ws_dir: str, job, into: Optional[str] = None) -> None:
             continue
         for f in files:
             data = _read([os.path.join(src, f)])
+            name, n = rename.get(f[:-5], (f[:-5], 0))
             if data:
-                _merge_into(os.path.join(_root(into, lane), key(new), rename.get(f[:-5], f[:-5]) + ".json"), data)
+                out.setdefault(os.path.join(_root(into, lane), key(new), name + ".json"), []).append(_try_file(data, n) if n else data)
+    return out
+
+
+def adopt(ws_dir: str, job, into: Optional[str] = None) -> None:
+    """Copy `overlay` into the user's store, file by file under each file's lock. The workspace's files are
+    left as they are."""
+    for path, old in overlay(ws_dir, job, into).items():
+        _merge_into(path, old)
+
+
+def records_of(base: str, uids, olds=()) -> int:
+    """How many trial records the jobs `uids` have in the user's store, their older records `olds`
+    (`overlay`s) counted with them, nothing copied."""
+    dirs = {os.path.join(_root(base, lane), key(u)) for lane in ROOTS for u in uids if u}
+    found = {os.path.join(d, n) for d in dirs if os.path.isdir(d) for n in os.listdir(d) if n.endswith(".json")}
+    return len(found | {p for o in olds for p in o if os.path.dirname(p) in dirs})
+
+
+def old_stores(home_dir: str, into: Optional[str] = None) -> list:
+    """[(workspace, its count of older records)] for each workspace whose store from before holds any,
+    until `move` is done."""
+    from nullius import workspace
+    if moved(into):
+        return []
+    out = []
+    for ws in workspace.list_all(home_dir):
+        n = sum(f.endswith(".json") for r in ROOTS.values() for _, _, fs in os.walk(os.path.join(ws.dir, r)) for f in fs)
+        if n:
+            out.append((ws, n))
+    return out
+
+
+def move(home_dir: str, into: Optional[str] = None) -> list:
+    """Copy every workspace's older records into the user's store (`adopt`, for every job its
+    roots hold) and record that it is done (`moved`), so reads stop consulting the older stores.
+    The older files stay as they are. A workspace with a root that cannot be read is left for a
+    later move, which is then not done: its labels are returned. Safe to run again."""
+    from nullius import workspace
+    into = into or home()
+    unread = []
+    for ws, _ in old_stores(home_dir, into):
+        roots = ws.job_roots or ws.roots
+        if not all(os.path.isdir(r) for r in roots):
+            unread.append(ws.label)
+            continue
+        for job in workspace.load_jobs(ws, roots):
+            adopt(ws.dir, job, into)
+    if not unread:
+        os.makedirs(_root(into, "decision"), exist_ok=True)
+        ondisk.write_whole(os.path.join(_root(into, "decision"), MOVED), "")
+    return unread

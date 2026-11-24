@@ -82,5 +82,84 @@ class JudgementFollowsTheJob(unittest.TestCase):
         self.assertEqual(seen, {"one": True, "two": False})
 
 
+def tree(root: Path) -> dict:
+    """Every file under *root* and its bytes, and every folder."""
+    return {str(p.relative_to(root)): p.read_bytes() if p.is_file() else None for p in sorted(root.rglob("*"))} if root.exists() else {}
+
+
+class JudgementsKeptBefore(unittest.TestCase):
+    """Records a workspace kept before are shown by a read that writes
+    nothing, and copied into the user's store only by the move."""
+    def setUp(self):
+        stack = ExitStack()
+        self.addCleanup(stack.close)
+        self.tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="nullius-judge-move-")))
+        stack.enter_context(patch.object(web.shared, "WS_HOME", str(self.tmp / "workspaces")))
+        stack.enter_context(patch.object(web.judge.store, "home", return_value=str(self.tmp / "data")))
+        stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}, clear=True))
+        copy_job(self.tmp / "runs" / "job-x")
+        self.ws = workspace.create(web.shared.WS_HOME, [str(self.tmp / "runs")], "A")
+        old = Path(self.ws.dir) / "judgements" / "job-x"
+        old.mkdir(parents=True)
+        (old / f"{TRIAL}.json").write_text(json.dumps({Q.VERSION: {
+            "questions": Q.VERSION, "answers": {"failure_cause": {"choice": "agent_error"}}, "judge": {"model": "m"},
+            "asked_at": "2026-11-01T00:00:00Z"}}))
+        web.shared.open_workspace(self.ws)
+        self.client = web.app.test_client()
+
+    def get(self, url):
+        r = self.client.get(url, follow_redirects=True); self.addCleanup(r.close)
+        self.assertEqual(r.status_code, 200, url)
+        return r
+
+    def token(self):
+        self.get("/settings")
+        with self.client.session_transaction() as s:
+            return s["csrf"]
+
+    def shown(self) -> bool:
+        with web.app.test_request_context(f"/trial/job-x/{TRIAL}"):
+            job, trial = web.traces._trial_evidence("job-x", TRIAL)
+            return bool(web.judge.judgement_of(job, trial))
+
+    def test_a_job_page_shows_them_and_writes_nothing(self):
+        self.get("/")                                                    # the workspace parsed, as any page leaves it
+        before = tree(self.tmp / "data"), tree(Path(self.ws.dir) / "judgements")
+        page = self.get("/job/job-x").get_data(as_text=True)
+        self.get(f"/trial/job-x/{TRIAL}")
+        self.assertEqual((tree(self.tmp / "data"), tree(Path(self.ws.dir) / "judgements")), before)
+        self.assertTrue(self.shown())
+        self.assertIn("judgements-move.js", page)
+
+    def test_the_move_copies_them_once_and_says_so_where_it_is_offered(self):
+        self.assertEqual(self.get("/judgements/move").get_json(), {"workspaces": [{"label": "A", "n": 1}]})
+        self.assertIn("data-move-judgements", self.get("/settings").get_data(as_text=True))
+        self.assertEqual(self.client.post("/judgements/move", data={"csrf": "stale"}).status_code, 403)
+        self.assertFalse((self.tmp / "data").exists())
+        old = tree(Path(self.ws.dir) / "judgements")
+        for _ in range(2):                                               # twice: the second changes nothing
+            r = self.client.post("/judgements/move", headers={"X-CSRF-Token": self.token()}); self.addCleanup(r.close)
+            self.assertEqual(r.get_json(), {"ok": True})
+            if not _:
+                moved = tree(self.tmp / "data")
+        self.assertEqual(tree(self.tmp / "data"), moved)
+        self.assertEqual(tree(Path(self.ws.dir) / "judgements"), old)    # the old files stay as they were
+        self.assertTrue(self.shown())
+        self.assertEqual(self.get("/judgements/move").get_json(), {"workspaces": []})
+        self.assertNotIn("data-move-judgements", self.get("/settings").get_data(as_text=True))
+        self.assertNotIn("judgements-move.js", self.get("/").get_data(as_text=True))
+
+    def test_judging_a_job_checks_the_form_token_first(self):
+        r = self.client.post("/judge/job/no-such-job", data={"csrf": "stale"}); self.addCleanup(r.close)
+        self.assertEqual(r.status_code, 403)
+
+    def test_a_workspace_with_a_root_that_cannot_be_read_is_not_deleted(self):
+        shutil.rmtree(self.tmp / "runs")
+        r = self.client.post(f"/workspaces/delete/{self.ws.name}", data={"csrf": self.token()}); self.addCleanup(r.close)
+        self.assertTrue(Path(self.ws.dir, "judgements", "job-x", f"{TRIAL}.json").is_file())
+        self.assertIsNotNone(web.shared.STATE["workspace"])                  # left open, as it was
+        self.assertIn("cannot be read", self.get("/workspaces").get_data(as_text=True))
+
+
 if __name__ == "__main__":
     unittest.main()

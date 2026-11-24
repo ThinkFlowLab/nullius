@@ -83,12 +83,17 @@ class RunDelete(unittest.TestCase):
         uid = self.judged(self.jobs, "job-a")
         twin = os.path.join(self.tmp, "twin"); shutil.copytree(os.path.join(self.jobs, "job-a"), os.path.join(twin, "job-a"))
         d = workspace.create(self.home, [twin], label="d")
-        self.assertEqual(execution.deletion(["r1"], self.home, self.root)["judgements"], 0)
-        shutil.rmtree(twin)                                                          # d's root is gone: who owns them is unknown
-        self.assertEqual(execution.deletion(["r1"], self.home, self.root)["judgements"], 0)
-        workspace.delete(self.home, d.name)
-        self.assertEqual(execution.deletion(["r1"], self.home, self.root)["judgements"], 2)
+        self.assertEqual(execution.deletion(["r1"], self.home, self.root)["judgements"], 2)     # asked: its jobs' all, nothing checked
         execution.delete(["r1"], self.home, self.root)
+        self.assertTrue(store.job_dirs(self.data, [uid]))                                       # a copy is in d
+        shutil.rmtree(twin)                                                          # d's root is gone: who owns them is unknown
+        self.run_("r2")
+        self.assertEqual(self.uid("job-a", os.path.join(self.root, "r2", "jobs")), uid)
+        execution.delete(["r2"], self.home, self.root)
+        self.assertTrue(store.job_dirs(self.data, [uid]))
+        workspace.delete(self.home, d.name)
+        self.run_("r3")
+        execution.delete(["r3"], self.home, self.root)
         self.assertEqual(store.job_dirs(self.data, [uid]), [])
 
     def test_another_job_of_the_same_name_does_not_keep_them(self):
