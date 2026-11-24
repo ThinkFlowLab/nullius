@@ -764,6 +764,8 @@ class SettingsPage(unittest.TestCase):
         for said in ("Reached Not tested", "Host name Not tested", "Programs Not tested", "Engine Not tested", "Capacity Not tested",
                      "Containers Not tested", "Local processes Not tested", "Drivers Not tested", "Tested Never"):
             self.assertIn(said, never)
+        self.assertRegex(info(rows["bench"]), r"Tested \d{4}-\d\d-\d\d \d\d:\d\d:\d\d ")   # kept in UTC, shown in local time with no zone
+        self.assertEqual(info(rows["bench"]).split("Tested ")[1].split(" ")[:2], constraints.tested_at(constraints.load()["bench"]["at"]).split(" "))
         for said in ("In 42 ms", "ecs-1", "uv, docker", "missing Harbor", "Podman 5.8.9, rootless", "16 CPUs, 31789 MB", "GPU 0: RTX, 4096 MB",
                      'title="Asked CPUs 0: the engine did not apply it (cpuset is not available)">CPUs Nullius may use',
                      'title="Asked CPUs 0: systemd did not apply it (cat: cpuset.cpus.effective: No such file or directory); '
