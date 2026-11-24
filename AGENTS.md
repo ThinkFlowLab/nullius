@@ -39,12 +39,12 @@ and its resources.
   workspace and its jobs, path resolution, the catalogue cache, the query
   helpers, the form-token guard), `filters` (template filters, page context),
   then `runs`, `traces`, `compare`, `builder`, `catalogue`, `agents`,
-  `settings`, `workspaces`, `execute`, `judge`, `feasibility`, `reconcile`, `judge_tasks`, `onboarding` (`agents` is the Agents
+  `settings`, `workspaces`, `execute`, `judge`, `feasibility`, `reconcile`, `judge_tasks`, `onboarding`, `failure` (`agents` is the Agents
   and Capabilities tabs and conformance Kits catalogue). Cross-module names are reached as
   attributes (`shared.STATE`, `traces._trial_evidence`): patch one, patched for all.
 - `app/nullius/` — its backend, one package per purpose: `runs/` (reading one
   Harbor job tree: `parse`, `classify`, `live`, `artifacts`,
-  `feasibility`, `launches`, `verifier` - a verifier's report read by its
+  `feasibility`, `failure_analysis` - a job's failure labels and task flags, beside its result.json, written by `flags_cli` too -, `launches`, `verifier` - a verifier's report read by its
   benchmark's report block - `attempts`, a task's attempts in one job with
   their pass count and pass@k, and the `cli`), `traces/` (`trace`, the reader, with its span tree `spans`,
   `fold`, time accounting `breakdown` and layout `waterfall`; `trajectory`,

@@ -44,7 +44,8 @@ class Vocabulary(unittest.TestCase):
     def test_the_behaviour_flags_are_atomic_nouls_asked_of_every_trial(self):
         # the flags ride the trial call: same state, no new call, asked resolved or not; failure_cause alone is skipped when resolved
         self.assertEqual(questions.for_trial(resolved=True), ["task_completed", "transcript_quality", "user_facing_answer"] + self.FLAGS)
-        self.assertEqual(questions.for_trial(resolved=False), ["task_completed", "failure_cause", "transcript_quality", "user_facing_answer"] + self.FLAGS)
+        self.assertEqual(questions.for_trial(resolved=False), ["task_completed", "failure_cause", "transcript_quality", "user_facing_answer"] + self.FLAGS
+                         + ["failure_label", "task_flag"])            # the User judge's two questions, on the failure state failure_cause already reads
         for q in self.FLAGS:
             spec = questions.QUESTIONS[q]
             self.assertEqual((spec["type"], spec["state"], spec.get("flag"), spec.get("when")), ("noul", "trial", True, None), q)

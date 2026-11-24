@@ -154,3 +154,22 @@
 
   apply();
 })();
+
+// Each checkbox independently excludes one flag kind. The GET form works without JavaScript.
+(() => {
+  const box = document.getElementById('filtered-score'); if (!box) return;
+  const choices = [...box.querySelectorAll('input[data-kind]')], rates = [...box.querySelectorAll('.filtered-rate')];
+  const said = document.getElementById('filtered-live');
+  const show = () => {
+    const on = choices.filter(c => c.checked).map(c => c.dataset.kind);
+    let shown = null;
+    rates.forEach(p => { const hit = p.dataset.kinds === on.join(','); p.hidden = !hit; if (hit) { p.id = 'filtered-rate'; shown = p; } else p.removeAttribute('id'); });
+    const url = new URL(location.href);
+    choices.forEach(c => { if (c.checked) url.searchParams.set(c.dataset.kind, '1'); else url.searchParams.delete(c.dataset.kind); });
+    const table = document.querySelector('.tt[data-leave-out]'); if (table) table.dataset.leaveOut = on.join(' ');
+    url.hash = ''; history.replaceState(null, '', url);
+    if (said) said.textContent = shown ? shown.textContent.replace(/\s+/g, ' ').trim() : 'Filtered score off';
+  };
+  choices.forEach(c => c.addEventListener('change', show));
+  box.addEventListener('submit', e => { e.preventDefault(); show(); });
+})();

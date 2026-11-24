@@ -303,12 +303,13 @@ h3 .total { margin-left: .15rem; color: var(--text); font-weight: 600; text-tran
 .judgement-provenance { margin: 0 0 8px; }
 .judgement-hygiene { margin: 0 0 6px; }
 /* the outcome questions as cards */
-.jcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .9rem; margin: 1rem 0 1.6rem; }
+.jcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(230px, calc((100% - 2.7rem) / 4))), 1fr)); gap: .9rem; margin: 1rem 0 1.6rem; }
 .jcard { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .45rem; }
 .jcard-title { color: var(--text-dim); font-size: .85rem; }
-.jcard-value { display: flex; align-items: baseline; gap: .5rem; }
+.jcard-value { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; }
+.jcard-value .jpill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .jcard-value .jnum { font-size: 2rem; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; line-height: 1; }
-.jcard-value .junit { color: var(--text-dim); font-size: .95rem; }
+.jcard-value .junit { white-space: nowrap; color: var(--text-dim); font-size: .95rem; }
 .jcard-blurb { min-height: 2.4em; }
 .jcard-foot { display: flex; justify-content: space-between; border-top: 1px solid var(--border-soft); padding-top: .55rem; margin-top: auto; }
 /* the pill says how an answer reads */

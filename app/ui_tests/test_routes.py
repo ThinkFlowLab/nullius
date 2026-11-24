@@ -287,7 +287,7 @@ class Routes(unittest.TestCase):
     def test_a_trial_has_two_judgements_in_two_tabs(self):
         with patch.dict(os.environ, {"TYPESAFE_API_KEY": "", "OPENROUTER_API_KEY": "sk-or-route-test", "LLM_JUDGE_MODEL": ""}):
             html = self.get_ok("/trial/active-run/task-001").get_data(as_text=True)
-        self.assertIn('id="tab-judgement" role="tab" type="button" data-tab="judgement"', html); self.assertIn(">Decision model</button>", html)
+        self.assertIn('id="tab-judgement" role="tab" type="button" data-tab="judgement"', html); self.assertIn(">Decision model judge</button>", html)
         self.assertIn('id="tab-llm-judge"', html); self.assertIn(">LLM judge</button>", html)
         self.assertIn('id="judgement"', html); self.assertIn('id="llm-judgement"', html)
         self.assertIn("LLM judge not configured: needs a model", html)                     # the OpenRouter key is set, the model is not

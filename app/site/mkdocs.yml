@@ -101,6 +101,7 @@ nav:
           - cli/README.md
           - Read jobs: cli/read-jobs.md
           - Import a run: cli/import.md
+          - Task flags: cli/flags.md
           - Definitions: cli/definitions.md
           - Run a benchmark: cli/run.md
           - Prove a benchmark: cli/prove.md

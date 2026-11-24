@@ -137,6 +137,7 @@ class Comparison:
     datasets_match: bool
     datasets_known: bool
     pass_k: tuple[dict | None, ...] = ()
+    set_aside_trials: tuple[int, ...] = ()   # trials of flagged tasks left out of each column
 
     @property
     def references(self) -> list[str]:
@@ -147,7 +148,13 @@ class Comparison:
         return sum(row.differs for row in self.tasks)
 
 
-def build(selected: Sequence[SelectedRun], cohort: str = "whole") -> Comparison:
+def task_key(selection: SelectedRun, task_base: str) -> tuple[str, str]:
+    """A task's identity across columns: its recorded dataset and its name. Missing dataset identities cannot
+    prove that identical short names refer to the same task; a per-column sentinel keeps their rows apart."""
+    return selection.job.dataset or f"[unidentified:{selection.value}]", task_base
+
+
+def build(selected: Sequence[SelectedRun], cohort: str = "whole", set_aside: frozenset = frozenset()) -> Comparison:
     """Build a whole-run or exact shared-task view without changing any Job.
 
     Matching uses the dataset string as recorded, without alias/path guessing.
@@ -158,6 +165,8 @@ def build(selected: Sequence[SelectedRun], cohort: str = "whole") -> Comparison:
     differ.
     Unknown outcomes remain in the adjusted-rate denominator because Job owns
     the arithmetic. A cohort cannot manufacture a new wall-clock run interval.
+    *set_aside*: ``(dataset, task_base)`` keys whose trials leave every column, after
+    the cohort: the flagged tasks of the page's filters, the same for all runs.
     """
     if cohort not in {"whole", "matched"}:
         raise ValueError("Choose whole runs or matched tasks as the comparison cohort.")
@@ -166,25 +175,24 @@ def build(selected: Sequence[SelectedRun], cohort: str = "whole") -> Comparison:
     datasets_match = len({selection.job.dataset for selection in selected}) <= 1
 
     def key(selection, trial):
-        # Missing dataset identities cannot prove that identical short names
-        # refer to the same task. A per-column sentinel keeps their rows apart.
-        dataset = selection.job.dataset or f"[unidentified:{selection.value}]"
-        return dataset, trial.task_base
+        return task_key(selection, trial.task_base)
 
     sets = [{key(selection, trial) for trial in selection.job.trials} for selection in selected]
     common = set.intersection(*sets) if sets else set()
     # each task's attempts, one list per run, the tasks in the order they appear
-    jobs, excluded, repeated, by_task = [], [], [], {}
+    jobs, excluded, repeated, aside, by_task = [], [], [], [], {}
     for column, selection in enumerate(selected):
         original = selection.job
-        trials = [trial for trial in original.trials
-                  if cohort == "whole" or key(selection, trial) in common]
+        cohort_trials = [trial for trial in original.trials
+                         if cohort == "whole" or key(selection, trial) in common]
+        trials = [trial for trial in cohort_trials if key(selection, trial) not in set_aside]
+        aside.append(len(cohort_trials) - len(trials))
         # Aggregate properties derive from trials; copied clocks are suppressed
         # for matched views because their interval still belongs to the full run.
         view = replace(original, trials=trials,
-                       **({"started_at": None, "finished_at": None} if cohort == "matched" else {}))
+                       **({"started_at": None, "finished_at": None} if cohort == "matched" or set_aside else {}))
         jobs.append(view)
-        excluded.append(len(original.trials) - len(trials))
+        excluded.append(len(original.trials) - len(cohort_trials))
         repeated.append(len(trials) - len({key(selection, trial) for trial in trials}))
         for trial in trials:
             by_task.setdefault(key(selection, trial), [[] for _ in selected])[column].append(trial)
@@ -198,8 +206,8 @@ def build(selected: Sequence[SelectedRun], cohort: str = "whole") -> Comparison:
     # pass@k from the rows' own tasks, so the summary and the table count alike
     pass_k = tuple(task_attempts.for_tasks(row.tried[column].trials for row in rows if row.tried[column])
                    for column in range(len(selected)))
-    return Comparison(selected, cohort, tuple(jobs), tuple(rows), len(common),
-                      tuple(excluded), tuple(repeated), datasets_match, known, pass_k)
+    return Comparison(selected, cohort, tuple(jobs), tuple(rows), len(common - set_aside),
+                      tuple(excluded), tuple(repeated), datasets_match, known, pass_k, tuple(aside))
 
 
 

@@ -27,6 +27,7 @@
 {% from '_page.html' import page_head %}
 {% block body %}
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/conversation.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='traces/failure.css') }}">
 
 
 {% set sub %}
@@ -69,7 +70,7 @@
 {% endif %}
 
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">
-  {% for name, label in [('overview', 'Overview'), ('judgement', 'Decision model'), ('llm-judge', 'LLM judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] if not (replaced and name in ('judgement', 'llm-judge')) %}
+  {% for name, label in [('overview', 'Overview'), ('judgement', 'Decision model judge'), ('llm-judge', 'LLM judge'), ('failure', 'User judge'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] if not (replaced and name in ('judgement', 'llm-judge')) and not (name == 'failure' and failure is none) %}
   <button id="tab-{{ name }}" role="tab" type="button" data-tab="{{ name }}" aria-controls="trial-{{ name }}" aria-selected="{{ 'true' if name == 'overview' else 'false' }}" tabindex="{{ '0' if name == 'overview' else '-1' }}">{{ label }}</button>
   {% endfor %}
 </nav>
@@ -283,6 +284,9 @@
 {{ judgement_panel(llm_judgement, job, trial, csrf) }}
 </section>
 {% endif %}
+{% if failure is not none %}<section class="trial-tab" id="trial-failure" role="tabpanel" aria-labelledby="tab-failure">
+{% include "traces/_failure.html" %}
+</section>{% endif %}
 <section class="trial-tab" id="trial-task" role="tabpanel" aria-labelledby="tab-task">
 {# The task's instruction, scored on its own text: once per dataset and task, the same for every attempt,
    nothing of any run read. The score changes no outcome. #}
@@ -629,6 +633,7 @@
   {% endif %}
 </section>
 <script src="{{ url_for('static', filename='traces/conversation.js') }}"></script>
+<script src="{{ url_for('static', filename='traces/failure.js') }}"></script>
 <script>
 (() => {
   /* Every filter and zoom control is a link to this page with another query. Followed here, it puts in the

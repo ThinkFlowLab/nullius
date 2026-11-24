@@ -12,6 +12,7 @@ From a source checkout, replace `nullius` with
 | [Launch](../getting-started.md) | `nullius serve [roots...]` |
 | [Read jobs](read-jobs.md) | `nullius runs`, `nullius compare`, `nullius workspace`, `nullius standard traces` |
 | [Import a run](import.md) | `nullius import` |
+| [Task flags](flags.md) | `nullius flags list`, `set`, `accept`, `remove`, `copy`, `import`, `feasibility` |
 | [Definitions](definitions.md) | `nullius standard list`, `check`, `fit`, `pins`, `new` |
 | [Run a benchmark](run.md) | `nullius standard run` |
 | [Prove a benchmark](prove.md) | `nullius standard prove` |

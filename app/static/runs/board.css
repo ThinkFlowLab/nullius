@@ -103,7 +103,7 @@
 .rp .meter .bar1 span.x { background: none; box-shadow: inset 0 0 0 1.5px var(--track-res); }
 .rp .meter b { font: 500 13px/1 var(--sans); color: var(--text); white-space: nowrap; }
 .rp .board.pv .meter i.lit { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text); }
-.rp .hk { margin: 14px 18px 0; font-size: 12px; line-height: 22px; }
+.rp .hk { margin: 24px 18px 0; font-size: 12px; line-height: 22px; }
 .rp .hk p { margin: 0; color: var(--text-faint); white-space: nowrap; }
 .rp .hk dl { display: grid; grid-template-columns: auto auto; justify-content: start; column-gap: 6px; margin: 0; }
 .rp .hk dt { color: var(--text-faint); white-space: nowrap; }
@@ -372,3 +372,22 @@
   box-shadow: var(--shadow); font: 12px/1.45 var(--sans); color: var(--text); pointer-events: none; }
 
 @media (prefers-reduced-motion: reduce) { .rp *, .rp *::before, .rp *::after { transition: none !important; } }
+/* the Filtered score under the adjusted rate: a switch per kind of flag, and the rate without those tasks */
+.rp .filtered { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; margin: 1rem 18px 0; }
+.rp .filtered .filter-heading { flex-basis: 100%; color: var(--text-faint); font-size: .8rem; }
+.rp .filtered .filter-choice { display: flex; align-items: center; gap: .5rem; flex-basis: 100%; font-size: .8rem; cursor: pointer; }
+.rp .filtered input[type=checkbox] { margin: 0; flex: none; accent-color: var(--accent); }
+.rp .filtered p { margin: .5rem 0 0; flex-basis: 100%; color: var(--text-dim); font-size: 1rem; }
+.rp .filtered p b { color: var(--text); font-weight: 600; font-size: 1.4rem; margin-left: .2rem; }
+
+/* the trial table's marks: a task's flag and a trial's failure label; a task left out of the Filtered score fades */
+.rp .tt .w-fa { width: 7.5rem; }
+.rp .tt td.fa { white-space: nowrap; }
+.rp .tt .tflag + .tlabel { margin-left: .3rem; }
+.rp .tt .tflag, .rp .tt .tlabel { display: inline-block; padding: 0 .35rem; border-radius: 3px;
+  font-size: .72rem; line-height: 1.35; white-space: nowrap; vertical-align: middle; }
+.rp .tt .tflag { border: 1px solid var(--text-dim); color: var(--text-dim); }
+.rp .tt .tflag.tf-pending, .rp .tt .tflag.tf-other { border-style: dashed; color: var(--text-faint); border-color: var(--text-faint); }
+.rp .tt .tlabel { border: 1px solid var(--text-faint); color: var(--text); font-style: italic; }
+.rp .tt[data-leave-out~="flawed"] tr[data-task-flag="flawed"] > td,
+.rp .tt[data-leave-out~="ambiguous"] tr[data-task-flag="ambiguous"] > td { opacity: .45; }
