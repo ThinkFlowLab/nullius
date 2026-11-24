@@ -32,10 +32,13 @@ FEED = "events.jsonl"
 
 
 def _start(job_dir: str, res: dict, feed: bool):
-    """When the job started, from one source per format so it never changes during the job's
-    life: a standard job, the feed's ``job.start`` (written as it begins), else
-    ``result.json``'s ``started_at`` (written at its end); a Harbor job (``feed`` false),
+    """When the job started, read so that a source appearing later never changes it:
+    ``result.json``'s ``started_at`` when it has one; else, for a standard job (``feed``),
+    the feed's ``job.start``, the only start a killed one has (a job this runner starts declares
+    its uuid before either is written, so only an older build's run moves between them). A Harbor job reads
     ``result.json`` only, since the feed is Nullius's and may appear after it. None without."""
+    if res.get("started_at"):
+        return str(res["started_at"])
     if feed:
         try:
             with open(os.path.join(job_dir, FEED), encoding="utf-8", errors="replace") as fh:
@@ -48,7 +51,7 @@ def _start(job_dir: str, res: dict, feed: bool):
                         return str(ev["ts"])
         except OSError:
             pass
-    return str(res["started_at"]) if res.get("started_at") else None
+    return None
 
 
 def _declared(cfg: dict):

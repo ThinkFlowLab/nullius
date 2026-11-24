@@ -576,8 +576,8 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
 def job_uuid(job_dir: str, *, benchmark: str, plugged: str, model: str, dataset: str) -> Optional[str]:
     """The identity a job already in ``job_dir`` keeps when the run is the same job: its
     ``config.json`` names the same benchmark, plugged agent or capability, model and dataset.
-    Its declared ``standard.uuid``, or for a job from before one was written the uid it was
-    read under (``nullius.runs.uid``), so what was recorded against it still finds it. None
+    The uid it is read under (``nullius.runs.uid``): its declared ``standard.uuid`` when that
+    is a UUID, else the derived one, so what was recorded against it still finds it. None
     otherwise: another job under the same name is a job of its own."""
     from nullius.runs import uid as job_uid
     try:
@@ -593,8 +593,6 @@ def job_uuid(job_dir: str, *, benchmark: str, plugged: str, model: str, dataset:
     if (std.get("benchmark"), std.get("plugged"), (agents[0] if agents else {}).get("model_name"),
             (datasets[0] if datasets else {}).get("name")) != (benchmark, plugged, model, dataset):
         return None
-    if isinstance(std.get("uuid"), str) and std["uuid"]:
-        return std["uuid"]
     try:
         with open(os.path.join(job_dir, "result.json"), encoding="utf-8") as f:
             res = json.load(f)

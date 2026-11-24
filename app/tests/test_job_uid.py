@@ -91,12 +91,48 @@ class JobUid(unittest.TestCase):
             f.write(json.dumps({"event": "job.start", "ts": "2020-01-01T00:00:00Z"}) + "\n")
         self.assertEqual(parse.parse_job(d).uid, without)
 
-    def test_a_feed_that_is_not_utf8_is_read_not_raised(self):
-        d = self.older_standard(self.tmp, "2026-01-01T00:00:00Z")
+    def feed(self, d, ts, junk=b""):
         with open(os.path.join(d, "events.jsonl"), "wb") as f:
-            f.write(b"\xff\xfe not text\n" + json.dumps({"event": "job.start", "ts": "2026-01-01T00:00:01Z"}).encode() + b"\n")
-        j = parse.parse_job(d)
-        self.assertEqual(j.uid_source, "derived")
+            f.write(junk + json.dumps({"event": "job.start", "ts": ts}).encode() + b"\n")
+
+    def test_a_feed_that_is_not_utf8_is_read_not_raised(self):
+        clean, bad, none = (self.older_standard(os.path.join(self.tmp, n), None) for n in "abc")   # killed: no start in result.json
+        self.feed(clean, "2026-01-01T00:00:01Z")
+        self.feed(bad, "2026-01-01T00:00:01Z", junk=b"\xff\xfe not text\n")
+        j = parse.parse_job(bad)
+        self.assertEqual((j.uid, j.uid_source), (parse.parse_job(clean).uid, "derived"))
+        self.assertNotEqual(j.uid, parse.parse_job(none).uid)
+
+    def test_an_older_standard_jobs_start_is_its_result_else_its_feed(self):
+        with self.subTest("ended: a feed that appears or goes leaves it"):
+            d = self.older_standard(os.path.join(self.tmp, "ended"), "2026-01-01T00:00:00Z")
+            before = parse.parse_job(d).uid
+            self.feed(d, "2026-02-02T00:00:00Z")                      # a re-run in place, or a copy with its feed
+            self.assertEqual(parse.parse_job(d).uid, before)
+        with self.subTest("killed: the feed's start, and another start is another job"):
+            a, b = (self.older_standard(os.path.join(self.tmp, n), None) for n in ("k1", "k2"))
+            self.feed(a, "2026-01-01T00:00:00Z")
+            self.feed(b, "2026-01-01T00:00:09Z")
+            self.assertNotEqual(parse.parse_job(a).uid, parse.parse_job(b).uid)
+
+    def test_a_resumed_job_whose_uuid_is_not_one_keeps_the_identity_it_was_read_under(self):
+        d = self.older_standard(self.tmp, "2026-01-01T00:00:00Z")
+        cfg = read(os.path.join(d, "config.json"))
+        write(os.path.join(d, "config.json"), dict(cfg, standard=dict(cfg["standard"], uuid="run-1"),
+                                                   datasets=[{"name": "fakebench/all"}]))
+        read_as = parse.parse_job(d)
+        self.assertEqual(read_as.uid_source, "derived")
+        self.assertEqual(self.config(d), read_as.uid)
+        self.assertEqual((parse.parse_job(d).uid, parse.parse_job(d).uid_source), (read_as.uid, "declared"))
+
+    def test_a_config_that_cannot_be_written_leaves_the_one_before_whole(self):
+        d = os.path.join(self.tmp, "run")
+        first = self.config(d)
+        with self.assertRaises(TypeError):
+            job.write_config(d, job="run", bench=BENCH, other=AGENT, model="m", provider="openai", dataset="all",
+                             units=["a"], concurrency=1, granted=True, options={"x": object()})
+        self.assertEqual(read(os.path.join(d, "config.json"))["standard"]["uuid"], first)
+        self.assertEqual(os.listdir(d), ["config.json"])
 
     def test_two_jobs_alike_but_for_their_folder_or_their_start_are_two_jobs(self):
         for name, make in (("harbor", lambda root: shutil.copytree(HARBOR, os.path.join(root, "liveboard-oracle-x4"))),
