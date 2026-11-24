@@ -767,6 +767,11 @@ button.seg:hover { filter: brightness(1.25); }
 .wf-tick:first-child { transform: none; }
 .wf-tick:last-child { transform: translateX(-100%); }
 .wf-head .wf-dur { text-align: right; }
+/* a phone: the name column gives way, and the axis keeps its first and last ticks */
+@media (max-width: 640px) {
+  .wf-head, .wf-row { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) 5.5rem; }
+  .wf-tick:not(:first-child):not(:last-child) { display: none; }
+}
 
 .wf-row { height: 24px; position: relative; }
 .wf-row:hover { background: var(--surface-2); }
@@ -1714,7 +1719,8 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
 .xs.running { color: var(--text); font-weight: 500; }
 .xs.waiting { color: var(--text-faint); }
 .xs-time { font-family: var(--mono); font-size: .75rem; font-weight: 400; color: var(--text-faint); }
-.xs-detail { font-size: .75rem; font-weight: 400; color: var(--text-faint); overflow-wrap: anywhere; }
+.xs-detail { font-size: .75rem; font-weight: 400; color: var(--text-faint); }
+.xs-label, .xs-detail { overflow-wrap: anywhere; }
 @container xs (max-width: 44rem) {
   .xs-list { flex-direction: column; }
   .xs, .xs:last-child { flex: none; width: 100%; min-height: var(--mark); padding: .1rem 0 .95rem calc(var(--mark) + .7rem); }
@@ -1722,6 +1728,12 @@ pre.instruction { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32
   .xs::before { top: calc(var(--mark) + .3rem); bottom: .3rem; left: calc(var(--mark) / 2 - 1px); right: auto; width: 2px; height: auto; }
   .xs i { position: absolute; top: 0; left: 0; margin: 0; }
 }
+/* more stages than one row holds stack at any width */
+.xs-list:has(> :nth-child(9)) { flex-direction: column; }
+.xs-list:has(> :nth-child(9)) > .xs { flex: none; width: 100%; min-height: var(--mark); padding: .1rem 0 .95rem calc(var(--mark) + .7rem); }
+.xs-list:has(> :nth-child(9)) > .xs:last-child { padding-bottom: 0; }
+.xs-list:has(> :nth-child(9)) > .xs::before { top: calc(var(--mark) + .3rem); bottom: .3rem; left: calc(var(--mark) / 2 - 1px); right: auto; width: 2px; height: auto; }
+.xs-list:has(> :nth-child(9)) > .xs i { position: absolute; top: 0; left: 0; margin: 0; }
 .xs-units { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .xs-units progress { flex: 1; max-width: 220px; height: 8px; accent-color: var(--ok); }
 @keyframes xs-beat { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 10%, transparent); } }
