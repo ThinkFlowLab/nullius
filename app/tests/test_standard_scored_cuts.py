@@ -129,6 +129,22 @@ class ScoredCutsTest(unittest.TestCase):
             self.assertNotIn("cut", records[u]["standard"])
             self.assertNotIn("retryable", records[u]["exception_info"])
 
+    def test_a_call_begun_before_the_time_cut_and_refused_after_it_is_the_providers(self):
+        """Its refusal lands while the benchmark scores: rate limited, not a miss."""
+        answer = Echo.do_POST
+
+        def late(handler):
+            time.sleep(8)
+            Echo.status = 429
+            answer(handler)
+        b = self.bench(["quick"], cuts=["time"], driver=CUT_DRIVER.replace("def score(unit, dir, transcript, answer):",
+                                                                           "def score(unit, dir, transcript, answer):\n    import time; time.sleep(9)")
+                       .replace('"reward": 1.0, "passed": True', '"reward": 0.0, "passed": False'))
+        with mock.patch.object(Echo, "do_POST", late):
+            trials, records = self.go(b)
+        self.assertEqual((trials["quick"].exception_type, trials["quick"].reward), ("RateLimitError", None))
+        self.assertEqual(trials["quick"].ended_tag, "")
+
     def test_a_unit_whose_agent_reached_the_cap_on_model_calls_is_scored_once_the_next_call_is_refused(self):
         """An agent that goes on calling: its turn is cut once the cap refused its next call, long before its time,
         and the unit scored; without the declaration, the cap's error, as before."""
@@ -208,6 +224,24 @@ class CutWatchTest(unittest.TestCase):
             self.assertTrue(watch.event.is_set())
             self.assertEqual(watch.by, "end")
 
+    def test_a_refusal_after_the_benchmarks_end_is_its_end_not_the_cap(self):
+        with tempfile.TemporaryDirectory() as trial:
+            record = os.path.join(trial, "calls.jsonl")
+            with open(record, "w") as f:
+                f.write(json.dumps({"refused": "calls"}) + "\n")
+            for ended, kinds, by in (("done", ["calls", "end"], "end"), ("", ["calls", "end"], "calls"), ("done", ["calls"], "calls")):
+                with self.subTest(ended=ended, kinds=kinds):
+                    with open(os.path.join(trial, "progress.json"), "w") as f:
+                        json.dump({"ended": ended}, f)
+                    self.assertEqual(run.CutWatch(kinds, trial, record, "progress.json").look(), by)
+
+    def test_a_side_call_neither_recovers_nor_answers_for_the_agent_at_its_time(self):
+        cut_of = lambda calls: run.Run.cut_of(None, run.CutWatch(["time"], "/nowhere", None), mock.Mock(calls=lambda tag: calls), "u")
+        ok, refused, side = {"t0": 1, "status": 200}, {"t0": 2, "status": 429}, {"t0": 3, "status": 200, "side": True}
+        self.assertEqual(cut_of([ok, side]), "time")
+        self.assertIsNone(cut_of([ok, refused, side]))
+        self.assertIsNone(cut_of([side]))
+
 
 class EndedByTest(unittest.TestCase):
     """What the reader says ended a trial's work, for each way one ends: from the record's cut first, then the
@@ -230,12 +264,12 @@ class EndedByTest(unittest.TestCase):
 
     def test_each_way_a_unit_can_end(self):
         """Its known ends by their labels. An end the pages have no label for is said as the benchmark's detail wrote
-        it, before a cut after the benchmark's end, kept whole with a short form past ENDED_CHARS; a value that is
+        it, before a cut after the benchmark's end, a tag up to ENDED_CHARS and a stop reason past it; a value that is
         not text is none."""
         long = "x" * (parse.ENDED_CHARS + 1)
         cases = [((None, "turn"), "agent", "Agent"), ((None, "done"), "done", "Done"), ((None, "fail"), "fail", "Fail"),
                  ((None, "steps"), "steps", "Step limit"), (("time", "turn"), "time", "Time limit"),
-                 (("calls", "turn"), "calls", "Call cap"), (("end", "steps"), "steps", "Step limit"),
+                 (("calls", "turn"), "calls", "Call limit"), (("end", "steps"), "steps", "Step limit"),
                  (("end", None), "end", "Task end"), ((None, None), "", ""),
                  ((None, "guard"), "guard", "guard"), (("end", "guard"), "guard", "guard"), ((None, " its own "), "its own", "its own"),
                  (("time", "guard"), "time", "Time limit"), ((None, long), long, long), (("end", long), long, long),
@@ -244,7 +278,8 @@ class EndedByTest(unittest.TestCase):
             with self.subTest(cut=cut, ended=ended):
                 t = self.trial(cut, ended)
                 self.assertEqual((t.ended_by, t.ended_label), (by, label))
-                self.assertEqual(t.ended_preview, long[:parse.ENDED_CHARS] + "…" if label == long else label)
+                self.assertEqual(t.ended_tag, "" if label == long or by in ("agent", "done", "fail") else label)
+                self.assertEqual(t.stop_reason, long if label == long else "")
         self.assertEqual(self.trial(ended="done", standard=False).ended_by, "")     # not a run of the standard
         self.assertEqual(self.trial(scored=False).ended_by, "")                     # no score to read
 

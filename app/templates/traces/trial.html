@@ -29,9 +29,9 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='traces/failure.css') }}">
 
 
+{% from 'runs/_ending.html' import ending %}
 {% set sub %}
   <span class="tag oc-{{ trial.outcome }}">{{ trial.outcome_label }}</span>
-  {% if trial.ended_by %}<span class="faint ended-by" title="{% if trial.ended_label != trial.ended_preview %}{{ trial.ended_label }}{% else %}What ended the agent's work{% endif %}">{{ trial.ended_preview }}</span>{% endif %}
   {# The recorded exception type, beside the label that came from it. For an
      Unknown it says which class the classifier has no side for, named for triage. #}
   {% if trial.exception_type %}<span class="mono faint exception-type"
@@ -49,9 +49,10 @@
   {%- if vocab.has_patch and trial.patch_exists is not none %}<div><span class="k">Patch applied</span><span class="n">{{ 'Yes' if trial.patch_applied else 'No' }}</span></div>{% endif -%}
   {%- if trial.reward is not none %}<div title="{{ "The benchmark's verdict on this trial: 1 when it counts as right" if job.runner else "The verifier's reward for this trial, what Harbor's headline mean averages" }}"><span class="k">Reward</span><span class="n">{{ trial.reward }}</span></div>{% endif -%}
   {%- if trial.score is not none %}<div title="{% if trial.n_parts %}The mean score of its {{ trial.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it"><span class="k">Score</span><span class="n">{{ '%.2f'|format(trial.score) }}</span></div>{% endif -%}
-  {%- if trial.dur_agent is not none %}<div><span class="k">Agent time</span><span class="n">{{ trial.dur_agent|secs }}</span></div>{% endif -%}
-  {%- if steps_of %}<div title="The benchmark's own count of this trial's steps, of its limit"><span class="k">Steps</span><span class="n">{{ steps_of.steps }}<small> of {{ steps_of.limit }}</small></span></div>{% endif -%}
-  {%- if traj and not traj.error %}<div{% if steps_of %} title="The items of the agent's session, as its trajectory records them"{% endif %}><span class="k">{{ 'Session items' if steps_of else 'Steps' }}</span><span class="n">{{ traj.n_steps }}</span></div>{% endif -%}
+  {%- if trial.dur_agent is not none %}<div><span class="k">Agent time</span><span class="n">{{ trial.dur_agent|secs }}{% if trial.ended_by == 'time' %}{{ ending(trial, true) }}{% endif %}</span></div>{% endif -%}
+  {%- if steps_of %}<div title="The benchmark's own count of this trial's steps, of its limit"><span class="k">Steps</span><span class="n">{{ steps_of.steps }}<small> of {{ steps_of.limit }}</small>{% if trial.ended_by == 'steps' %}{{ ending(trial, true) }}{% endif %}</span></div>{% endif -%}
+  {%- if traj and not traj.error and not steps_of %}<div><span class="k">Trace steps</span><span class="n">{{ traj.n_steps }}</span></div>{% endif -%}
+  {%- if trial.ended_tag and not (trial.ended_by == 'time' and trial.dur_agent is not none) and not (trial.ended_by == 'steps' and steps_of) %}<div><span class="k">Stopped by</span><span class="n stop">{{ ending(trial) }}</span></div>{% endif -%}
 {% endset %}
 {% if attempts or tries %}
 {% if attempts %}
@@ -66,7 +67,7 @@
 <div class="trial-head"><div class="th-strip">{{ cells }}</div></div>
 {% endif %}
 
-{% set fell_short = evidence or detail or trial.is_regression or trial.f2p_failures %}
+{% set fell_short = stop_reason or evidence or detail or trial.is_regression or trial.f2p_failures %}
 <nav class="trial-tabs" role="tablist" aria-label="Trial evidence">
   {% for name, label in [('overview', 'Overview'), ('judgement', 'Decision model judge'), ('llm-judge', 'LLM judge'), ('failure', 'User judge'), ('evidence', 'Failure analysis'), ('task', 'Task instruction'), ('trace', 'Trace'), ('conversation', 'Conversation'), ('artifacts', 'Artifacts')] if not (replaced and name in ('judgement', 'llm-judge')) and not (name == 'failure' and failure is none) and not (name == 'evidence' and not fell_short) %}
   <button id="tab-{{ name }}" role="tab" type="button" data-tab="{{ name }}" aria-controls="trial-{{ name }}" aria-selected="{{ 'true' if name == 'overview' else 'false' }}" tabindex="{{ '0' if name == 'overview' else '-1' }}">{{ label }}</button>
@@ -235,8 +236,9 @@
   </ul>
 </div>
 {% endif %}
-{% if evidence or (detail and detail.fields) %}<table class="grid compact trial-evidence"><tbody>
-  {% for r in evidence %}<tr><td class="muted">{{ r.label }}</td><td>{{ recorded(r.text) }}</td></tr>
+{% if stop_reason or evidence or (detail and detail.fields) %}<table class="grid compact trial-evidence"><tbody>
+  {% if stop_reason %}<tr id="stop-reason"><td class="muted">Stopped by</td><td>{{ recorded(stop_reason) }}</td></tr>
+  {% endif %}  {% for r in evidence %}<tr><td class="muted">{{ r.label }}</td><td>{{ recorded(r.text) }}</td></tr>
   {% endfor %}
   {% for f in (detail.fields if detail else []) %}<tr><td class="muted">{{ f.name[:1]|upper }}{{ f.name[1:]|replace("_", " ") }}</td><td>{{ recorded(f.text) }}</td></tr>
   {% endfor %}

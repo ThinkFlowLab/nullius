@@ -76,10 +76,10 @@ def _retries_of(res: dict) -> int:
 
 
 # What ended an agent's work on a standard trial (`Trial.ended_by`), by its name; any other end a benchmark's
-# detail names reads as written, with a preview of at most ENDED_CHARS characters on the pages.
+# detail names reads as written: a tag up to ENDED_CHARS characters, a longer one in failure analysis.
 ENDED_LABELS = {"agent": "Agent", "done": "Done", "fail": "Fail", "steps": "Step limit", "time": "Time limit",
-                "calls": "Call cap", "end": "Task end"}
-ENDED_CHARS = 40
+                "calls": "Call limit", "end": "Task end"}
+ENDED_CHARS = 16
 SCORE_BYTES = 1024 * 1024
 
 
@@ -101,30 +101,6 @@ def _read_score(trial_dir: str):
         return json.loads(raw) if 0 < len(raw) <= SCORE_BYTES else None
     except (OSError, ValueError):
         return None
-
-
-def _ended_by(res: dict, trial_dir: str) -> str:
-    """What ended the agent's work on a standard trial: the run's cut when its record has one (``standard.cut``:
-    ``time``, the agent's time; ``calls``, the run's cap on its model calls); else the benchmark's own end as its
-    score's detail says it (``detail.ended``: ``done``, ``fail``, ``steps``; ``turn``, the agent ended its turn
-    first: ``agent``; any other text of the benchmark's, redacted); ``end`` for a turn cut
-    after the benchmark's end with no detail to name it. "" when the trial says none of these."""
-    std = res.get("standard") if isinstance(res.get("standard"), dict) else None
-    if std is None:
-        return ""
-    cut = std.get("cut")
-    if cut in ("time", "calls"):
-        return cut
-    said = _read_score(trial_dir)
-    detail = said.get("detail") if isinstance(said, dict) else None
-    ended = detail.get("ended") if isinstance(detail, dict) else None
-    if ended in ("done", "fail", "steps"):
-        return ended
-    if isinstance(ended, str) and ended.strip() and ended != "turn":
-        return redact(ended.strip())               # the benchmark's own end, which the pages have no label for
-    if cut == "end":
-        return "end"
-    return "agent" if ended == "turn" else ""
 
 
 # A value of a score's detail longer than this is cut on the trial's page, its whole text a click away
@@ -198,6 +174,30 @@ def score_detail(trial_dir: str, leave_out=(), shown=None) -> dict | None:
 
     visit(detail)
     return {"fields": fields, "groups": groups} if fields or groups else None
+
+
+def _ended_by(res: dict, trial_dir: str) -> str:
+    """What ended the agent's work on a standard trial: the run's cut when its record has one (``standard.cut``:
+    ``time``, the agent's time; ``calls``, the run's cap on its model calls); else the benchmark's own end as its
+    score's detail says it (``detail.ended``: ``done``, ``fail``, ``steps``; ``turn``, the agent ended its turn
+    first: ``agent``; any other text of the benchmark's, redacted); ``end`` for a turn cut
+    after the benchmark's end with no detail to name it. "" when the trial says none of these."""
+    std = res.get("standard") if isinstance(res.get("standard"), dict) else None
+    if std is None:
+        return ""
+    cut = std.get("cut")
+    if cut in ("time", "calls"):
+        return cut
+    said = _read_score(trial_dir)
+    detail = said.get("detail") if isinstance(said, dict) else None
+    ended = detail.get("ended") if isinstance(detail, dict) else None
+    if ended in ("done", "fail", "steps"):
+        return ended
+    if isinstance(ended, str) and ended.strip() and ended != "turn":
+        return redact(ended.strip())               # the benchmark's own end, which the pages have no label for
+    if cut == "end":
+        return "end"
+    return "agent" if ended == "turn" else ""
 
 
 def count_rate_limits(path: str) -> int | None:
@@ -335,9 +335,14 @@ class Trial:
         return ENDED_LABELS.get(self.ended_by, self.ended_by)
 
     @property
-    def ended_preview(self) -> str:
-        text = self.ended_label
-        return text[:ENDED_CHARS] + "…" if len(text) > ENDED_CHARS else text
+    def ended_tag(self) -> str:
+        """What cut the agent's work short, for a tag: "" for a normal end and for a reason too long for one."""
+        return "" if self.is_infra or self.ended_by in ("agent", "done", "fail") or len(self.ended_label) > ENDED_CHARS else self.ended_label
+
+    @property
+    def stop_reason(self) -> str:
+        """The benchmark's own reason when it is too long for a tag."""
+        return self.ended_label if len(self.ended_label) > ENDED_CHARS else ""
 
     @property
     def dur_phases(self) -> float:

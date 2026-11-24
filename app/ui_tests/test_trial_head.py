@@ -138,8 +138,7 @@ class TrialHead(unittest.TestCase):
         self.assertNotIn("Runner", said)
 
     def test_steps_are_the_benchmarks_own_count_of_its_limit_where_the_score_gives_them(self):
-        """The score's count of steps and its limit: Steps says them, and the session's items keep a card of
-        their own under their name. A trial whose score does not give both shows its session's items as Steps."""
+        """The score's count of steps and its limit: Steps says them without a second session count. A trial whose score does not give both shows its trajectory's as Trace steps."""
         root = os.path.join(self.tmp.name, "parts-arm")
         shutil.copytree(NATIVE / "parts-arm", root)
         items = trajectory.load(os.path.join(root, "t1", "agent", "trajectory.json")).n_steps
@@ -152,31 +151,30 @@ class TrialHead(unittest.TestCase):
                     f.write(json.dumps({"reward": 1.0, "detail": detail}) if detail is not None else "not json")
                 said, _ = self.head(parse.parse_job(root), "t1")
                 if steps:
-                    self.assertTrue(said.endswith(f"Steps {steps} Session items {items}"), said)
+                    self.assertTrue(said.endswith(f"Steps {steps}"), said)
                 else:
-                    self.assertTrue(said.endswith(f"Steps {items}"), said)
+                    self.assertTrue(said.endswith(f"Trace steps {items}"), said)
                     self.assertNotIn("Session items", said)
         os.remove(score)
         said, _ = self.head(parse.parse_job(root), "t1")
-        self.assertTrue(said.endswith(f"Steps {items}"), said)
+        self.assertTrue(said.endswith(f"Trace steps {items}"), said)
 
-    def test_what_ended_the_work_is_beside_the_outcome_on_the_trial_and_the_jobs_table(self):
-        """The record's cut, else the score's own end: by its name beside the outcome, on the trial's page and in
-        its row of the job's table; a benchmark's own word for it past 40 characters in a short form, the whole
-        text in its tooltip; nothing for a trial that says neither."""
+    def test_stop_reasons_are_separate_from_outcomes_and_normal_completion_is_quiet(self):
+        """Limits belong with metrics and under the outcome in the job's table; normal completion has no badge."""
         root = os.path.join(self.tmp.name, "parts-arm")
         shutil.copytree(NATIVE / "parts-arm", root)
         path = os.path.join(root, "t1", "result.json")
         score = os.path.join(root, "t1", "verifier", "score.json")
-        badge = re.compile(r'<span class="[^"]*ended-by" title="([^"]*)">([^<]*)</span>')
+        badge = re.compile(r'<span class="[^"]*ended-by">([^<]*)</span>')
         long = 'launcher stopped after the window focus changed <"again">'
         with open(path) as f:
             res = json.load(f)
-        for cut, ended, label in ((None, "steps", "Step limit"), ("time", "steps", "Time limit"), ("calls", "steps", "Call cap"),
-                                  (None, long, long[:parse.ENDED_CHARS] + "…")):
+        for cut, ended, label in ((None, "steps", "Step limit"), ("time", "steps", "Time limit"), ("calls", "steps", "Call limit"),
+                                  (None, "done", None), (None, "fail", None), (None, "turn", None),
+                                  (None, "x" * parse.ENDED_CHARS, "x" * parse.ENDED_CHARS), (None, long, None)):
             with self.subTest(cut=cut, ended=ended):
                 with open(score, "w") as f:
-                    json.dump({"reward": 1.0, "detail": {"steps": 60, "steps_limit": 60, "ended": ended}}, f)
+                    json.dump({"reward": 0.5, "detail": {"steps": 60, "steps_limit": 60, "ended": ended}}, f)
                 with open(path, "w") as f:
                     json.dump(dict(res, standard=dict(res.get("standard") or {}, **({"cut": cut} if cut else {}))), f)
                 job = parse.parse_job(root)
@@ -186,14 +184,23 @@ class TrialHead(unittest.TestCase):
                 self.addCleanup(trial.close)
                 self.addCleanup(table.close)
                 pages = trial.get_data(as_text=True), table.get_data(as_text=True)
-                head = pages[0].split('<div class="page-head-sub">', 1)[1].split("</div>", 1)[0]
+                subtitle = pages[0].split('<div class="page-head-sub">', 1)[1].split("</div>", 1)[0]
+                self.assertNotIn('ended-by', subtitle)
+                head = pages[0].split('<nav class="trial-tabs"', 1)[0].partition('<div class="trial-head">')[2]
                 row = pages[1].split('data-trial="t1"', 1)[1].split("</tr>", 1)[0]
+                self.assertNotIn('<"again">', pages[0])
+                stop = pages[0].partition('id="stop-reason"')[2].partition("</tr>")[0]
+                self.assertEqual(long in unescape(stop), ended == long)
+                if label:
+                    self.assertIn('class="stop-reason"', row)
                 for page, part in zip(pages, (head, row)):
                     said = badge.search(part)
-                    self.assertEqual(unescape(said[2]), label)
-                    if ended == long:
-                        self.assertEqual(unescape(said[1]), long)
-                        self.assertNotIn('<"again">', page)
+                    if label is None:
+                        self.assertIsNone(said)
+                        continue
+                    self.assertIsNotNone(said)
+                    expected = label + " reached" if part == head and cut != "calls" and ended == "steps" else label
+                    self.assertEqual(unescape(said[1]), expected)
         os.remove(score)
         with open(path, "w") as f:
             json.dump(dict(res, standard=dict(res.get("standard") or {})), f)

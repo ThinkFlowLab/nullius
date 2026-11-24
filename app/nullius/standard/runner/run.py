@@ -646,10 +646,14 @@ class CutWatch:
     def look(self) -> Optional[str]:
         """``calls`` or ``end`` when that cut has come, as the files read now; None otherwise."""
         if "calls" in self.kinds and self.refused():
-            return "calls"
+            return self.capped()
         if "end" in self.kinds and self.loop_ended() and time.monotonic() - self.ended_at >= END_GRACE_SECONDS:
             return "end"
         return None
+
+    def capped(self) -> str:
+        """What a refusal at the run's cap cut: ``end`` when the benchmark's own loop had ended, else ``calls``."""
+        return "end" if "end" in self.kinds and self.loop_ended() else "calls"
 
     def refused(self) -> bool:
         """Whether the run's cap on model calls has refused one of the agent's calls: the record's lines ended since
@@ -1783,8 +1787,10 @@ class Run:
         failed = relay.failure(calls, words, agent=True)
         if failed and clock.get("cut") and failed[0] not in (ledgers.ERROR, ledgers.UNIT_ERROR):
             # its agent's work was cut and the unit went on to its score (``cut_of``): the cap's refusal, or one
-            # after the benchmark's own end, is not how it ended
-            failed = None
+            # after the benchmark's own end, is not how it ended. At its time, a call begun before the cut whose
+            # refusal came after it is the provider's, as one that came before it
+            failed = relay.failure([c for c in calls if c.get("t0", 0) <= clock.get("cut_at", 0)], words, agent=True) \
+                if clock["cut"] == "time" else None
         if failed and failed[0] not in (ledgers.ERROR, ledgers.UNIT_ERROR, relay.CALLS_ERROR) and exc is None \
                 and self.bench["score"]["kind"] == "pass" and score.get("reward") == 1.0:
             # a passed unit's failed last call came after its answer (jiuwenswarm's image probe, which some
@@ -2585,15 +2591,15 @@ class Run:
         last call (the unit is tried again); a unit where nothing moved, no model call answered and no step counted."""
         if watch is None:
             return None
-        by = watch.by or ("calls" if "calls" in watch.kinds and watch.refused() else None)
+        by = watch.by or (watch.capped() if "calls" in watch.kinds and watch.refused() else None)
         if by is None and "end" in watch.kinds and watch.loop_ended():
             by = "end"                           # its time ran out within the grace: the benchmark's end came first
         if by is not None or "time" not in watch.kinds:
             return by
         calls = rl.calls(tag)
-        if relay.failure(calls) is not None:
+        if relay.failure(calls, agent=True) is not None:
             return None
-        if not any(c.get("status") == 200 for c in calls) and not watch.steps():
+        if not any(c.get("status") == 200 and not c.get("side") for c in calls) and not watch.steps():
             return None
         return "time"
 
@@ -2669,7 +2675,7 @@ class Run:
                     answer = turn.text
                     transcript.append({"role": "agent", "text": turn.text, "stop": turn.stop})
                     if watch is not None and "calls" in kinds and watch.refused():
-                        cut = "calls"            # it ended its turn once the cap refused its next call
+                        cut = watch.capped()     # it ended its turn once the cap refused its next call
                         break
                     if "agent.conversation/v1" not in self.bench["needs"]:
                         break
@@ -2686,12 +2692,14 @@ class Run:
                 events = c.events
             except acp.Timeout as e:
                 events = c.events
+                if clock is not None:
+                    clock["cut_at"] = time.time()
                 cut = self.cut_of(watch, rl, tag)
                 if cut is None:
                     raise _Ended("AgentTimeoutError", str(e), job.trajectory_from_events(events, rl.calls(tag), a, self.model, f"{self.name}/{unit}"))
             except acp.AgentFailed as e:
                 events = c.events
-                cut = "calls" if watch is not None and "calls" in kinds and watch.refused() else None
+                cut = watch.capped() if watch is not None and "calls" in kinds and watch.refused() else None
                 if cut is None:                  # an agent that ends once the cap refused its next call is cut by the cap
                     raise _Ended("NonZeroAgentExitCodeError", str(e), job.trajectory_from_events(events, rl.calls(tag), a, self.model, f"{self.name}/{unit}"))
             except TimeoutError as e:

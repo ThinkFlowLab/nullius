@@ -87,7 +87,7 @@
       {# Emit these two unconditionally. pane-stats is a grid, so a panel with
          fewer items shifts every later metric up a row and the columns stop
          lining up. #}
-      <div><dt>Steps</dt><dd>{% if p.traj %}{{ p.traj.n_steps }}{% else %}<span class="faint">—</span>{% endif %}</dd></div>
+      <div><dt>Trace steps</dt><dd>{% if p.traj %}{{ p.traj.n_steps }}{% else %}<span class="faint">—</span>{% endif %}</dd></div>
       <div><dt>Tool calls</dt><dd>
         {%- if p.traj %}{{ p.traj.calls|length }}
         {%- if p.traj.n_failed_calls %} <span class="bad">({{ p.traj.n_failed_calls }} failed)</span>{% endif %}

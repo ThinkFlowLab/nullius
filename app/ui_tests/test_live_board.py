@@ -339,8 +339,8 @@ class LiveBoard(unittest.TestCase):
             hero = html.split('id="run-hero"', 1)[1].split("</div>\n  </div>", 1)[0]
             self.assertIn(">Mean score<", hero); self.assertIn('id="adjusted-rate">0.67<', hero)        # two of the three cases, not the mean of two tasks
             self.assertNotIn("Adjusted rate", hero); self.assertIn("No pass or fail in this benchmark: no rate", hero)
-            self.assertIn('<span class="oc oc-scored"><i></i>Scored</span>', html)                     # neither resolved nor failed: an outcome of its own
-            self.assertRegex(html, r'class="badge trial-score" title="The mean score of its 2 parts[^"]*">0\.50<')
+            self.assertRegex(html, r'<b title="The mean score of its 2 parts[^"]*">0\.50</b>')          # neither resolved nor failed: its score
+            self.assertIn('<span class="oc-word sr">Scored</span>', html)
             trial = self.client.get("/trial/parts-arm/t1"); self.addCleanup(trial.close)
             html = trial.get_data(as_text=True)
             self.assertEqual(trial.status_code, 200)
@@ -524,20 +524,20 @@ for (const query of ['', '?view=live', '?view=logs', '?view=results']) {
         return self.render(dict(s, trials=[dict(t, **fields)]), selected=t["trial"])
 
     def test_renderer_draws_the_steps_of_the_limit_and_the_calls_of_a_running_trial(self):
-        """Both numbers when both are known: a bar and "37 of 100 steps", then the calls of the cap."""
+        """Both numbers when both are known: a bar and "37 of 100", then the calls of the cap."""
         out = self.running_with(step=37, step_limit=100, calls=41, calls_limit=100)
         flight = visible(out["flight"])
-        self.assertIn("telecom-0 agent run 2:40 of 1:00:00 37 of 100 steps 41 of 100 calls 182.4k", flight)
+        self.assertIn("telecom-0 agent run 2:40 of 1:00:00 37 of 100 41 of 100 182.4k", flight)
         self.assertIn("width:37.0%", out["flight"])
         self.assertIn(">Steps<", out["flight"]); self.assertIn(">Model calls<", out["flight"])
         drawer = visible(out["drawer"])
         self.assertIn("Steps 37 of 100", drawer); self.assertIn("Model calls 41 of 100", drawer)
         full = self.running_with(step=120, step_limit=100)                                     # past its limit: a full bar, never more
-        self.assertIn('width:100.0%', full["flight"]); self.assertIn("120 of 100 steps", visible(full["flight"]))
+        self.assertIn('width:100.0%', full["flight"]); self.assertIn("120 of 100", visible(full["flight"]))
 
     def test_renderer_says_the_calls_with_and_without_a_cap(self):
-        for fields, said in (({"calls": 41}, "41 calls"), ({"calls": 1}, "1 call"), ({"calls": 0}, "0 calls"),
-                             ({"calls": 41, "calls_limit": 100}, "41 of 100 calls"), ({"calls": 1, "calls_limit": 100}, "1 of 100 calls")):
+        for fields, said in (({"calls": 41}, "41"), ({"calls": 1}, "1"), ({"calls": 0}, "0"),
+                             ({"calls": 41, "calls_limit": 100}, "41 of 100"), ({"calls": 1, "calls_limit": 100}, "1 of 100")):
             with self.subTest(fields):
                 out = self.running_with(**fields)
                 self.assertRegex(visible(out["flight"]), rf"2:40 of 1:00:00 8 {said} 182\.4k")   # no step limit: the bare step, as before

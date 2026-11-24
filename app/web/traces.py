@@ -325,19 +325,23 @@ def trial(job_id, trial_name):
         except (OSError, ValueError):
             pass
     steps_of = None
-    said = parse.read_detail(t.dir) if j.runner else None   # the benchmark's own count of the trial's steps and its limit
-    whole = lambda v, least: isinstance(v, int) and not isinstance(v, bool) and v >= least
-    if said and whole(said.get("steps"), 0) and whole(said.get("steps_limit"), 1):
-        steps_of = {"steps": said["steps"], "limit": said["steps_limit"]}
+    if j.runner:
+        # the benchmark's own count of the trial's steps and its limit, as its score said them
+        counted = parse.read_detail(t.dir) or {}
+        whole = lambda v, least: isinstance(v, int) and not isinstance(v, bool) and v >= least
+        if whole(counted.get("steps"), 0) and whole(counted.get("steps_limit"), 1):
+            steps_of = {"steps": counted["steps"], "limit": counted["steps_limit"]}
     # What the benchmark recorded of a trial that fell short: the rows its entry names, else its whole detail,
     # excluding execution metadata and numbers already shown above.
     short = bool(j.runner) and t.outcome != "resolved" and not (t.score is not None and t.score >= 1)
     named = evidence.declared(t.source)
+    # its end is left out where the page says it already
+    said_end = (parse.read_detail(t.dir) or {}).get("ended") in ("done", "fail", "steps", "turn", t.ended_by) if j.runner else False
     head = [x for x in (t.reward, t.score) if x is not None]
     shown = {"result": head, "score": head, "reward_info.reward": head, "steps": [traj.n_steps] if ok else []}
-    above = (("steps", "steps_limit") if steps_of else ()) + (("ended",) if t.ended_by else ())
     detail = parse.score_detail(t.dir, leave_out=("by", "tool_calls", "max_steps", "max_errors",
-                                               "seed", "trial", "split", "attempts", "agent", "judge", "evaluation") + above,
+                                               "seed", "trial", "split", "attempts", "agent", "judge", "evaluation",
+                                               *(("ended",) if said_end else ()), *(("steps", "steps_limit") if steps_of else ())),
                                 shown=shown) if short and named is None else None
     reply = next((s.message for s in reversed(traj.steps) if s.source == "agent" and s.message), "") if ok else ""
     rows = evidence.rows(t.dir, named, reply) if short and named else []
@@ -366,8 +370,8 @@ def trial(job_id, trial_name):
         if notice:
             flash(notice, "error")
     return render_template(
-        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts, steps_of=steps_of,
-        detail=detail, evidence=rows,
+        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts, detail=detail, evidence=rows, steps_of=steps_of,
+        stop_reason=t.stop_reason if short else "",
         trace=tr, charts=ch, viewing=viewing, imported_from=_imported_from(j),
         chart_filter=cfilt, default_save_name=SAVED_TRACE_DEFAULT,
         artifacts=records, pictures=pictures, attempt=attempt, attempts=task_attempts.of(j, attempt), tries=_tries(attempt),
@@ -392,7 +396,7 @@ def trial_attempts(job_id, trial_name):
     j, t = _trial_evidence(job_id, trial_name, tries=True)
     t = _attempt_of(j, t)
     # a task tried once has no tab that leads here; its one line still answers
-    attempts = task_attempts.of(j, t) or task_attempts.Attempts((t,))
+    attempts = task_attempts.of(j, t) or task_attempts.Attempts((t,), j.scored_only)
     tries = {a.trial_name: _tries(a) for a in attempts.trials if a.n_retries}
     return render_template("traces/attempts.html", job=j, trial=t, attempts=attempts, tries=tries,
                            imported_from=_imported_from(j))

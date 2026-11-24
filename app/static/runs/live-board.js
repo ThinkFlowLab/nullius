@@ -57,14 +57,14 @@
   const pressure = t => (t.timeout_sec && t.elapsed_sec != null ? t.elapsed_sec / t.timeout_sec : 0);
   // the steps of the limit where the benchmark counts them (a bar while the trial runs), else the bare count
   function stepsCell(t, bar) {
-    if (t.step == null) return '<td class="num na">—</td>';
-    if (!(t.step_limit > 0)) return `<td class="num">${esc(t.step)}</td>`;
-    const text = `<b>${esc(t.step)}</b> of ${esc(t.step_limit)} steps`;
-    return bar ? `<td><span class="lb-limit lb-steps"><span class="lb-bar"><i style="width:${(100 * Math.min(1, t.step / t.step_limit)).toFixed(1)}%"></i></span><span>${text}</span></span></td>`
-      : `<td class="num">${text}</td>`;
+    if (t.step == null) return '<td class="num lb-stepcell na">—</td>';
+    if (!(t.step_limit > 0)) return `<td class="num lb-stepcell">${esc(t.step)}</td>`;
+    const text = `<b>${esc(t.step)}</b> of ${esc(t.step_limit)}`;
+    return bar ? `<td class="num lb-stepcell"><span class="lb-limit lb-steps"><span class="lb-bar"><i style="width:${(100 * Math.min(1, t.step / t.step_limit)).toFixed(1)}%"></i></span><span>${text}</span></span></td>`
+      : `<td class="num lb-stepcell">${text}</td>`;
   }
   const callsCell = t => t.calls == null ? '<td class="num na">—</td>'
-    : `<td class="num">${esc(t.calls)}${t.calls_limit ? ' of ' + esc(t.calls_limit) : ''} ${t.calls === 1 && !t.calls_limit ? 'call' : 'calls'}</td>`;
+    : `<td class="num">${esc(t.calls)}${t.calls_limit ? ' of ' + esc(t.calls_limit) : ''}</td>`;
   const ofLimit = t => `<b>${clock(t.elapsed_sec)}</b>${t.timeout_sec ? ' of ' + clock(t.timeout_sec) : ''}`;
   function stateOf(s) {
     const C = s.counts || {};
@@ -231,7 +231,7 @@
     const said = [busy ? (opts.showAll ? `All ${running.length} in flight` : `${rows.length} of ${running.length} in flight`) + ', nearest their limit first' : '',
       many ? (opts.showAll ? `all ${done.length} ended` : `the last ${doneRows.length} of ${done.length} ended`) : ''].filter(Boolean).join(' · ');
     const more = busy || many ? `<div class="lb-more"><span>${said}</span><button type="button" class="btn sm ghost" data-show-all>${opts.showAll ? 'Show fewer' : 'Show all'}</button></div>` : '';
-    return `<div class="lb-scroll"><table class="lb-table"><thead><tr><th>${busy ? 'Trial, the running nearest their limit first' : 'Trial'}</th><th>Phase, or how it ended</th><th>Time in phase, of its limit</th>${has.steps ? '<th class="num">Steps</th>' : ''}${has.calls ? '<th class="num">Model calls</th>' : ''}${has.tokens ? '<th class="num">Tokens</th>' : ''}${has.line ? '<th>Last line, redacted</th>' : ''}<th class="lb-go" aria-label="Trial page"></th></tr></thead><tbody>${body}</tbody></table></div>${more}`;
+    return `<div class="lb-scroll"><table class="lb-table"><thead><tr><th>${busy ? 'Trial, the running nearest their limit first' : 'Trial'}</th><th>Phase, or how it ended</th><th>Time in phase, of its limit</th>${has.steps ? '<th>Steps</th>' : ''}${has.calls ? '<th class="num">Model calls</th>' : ''}${has.tokens ? '<th class="num">Tokens</th>' : ''}${has.line ? '<th>Last line, redacted</th>' : ''}<th class="lb-go" aria-label="Trial page"></th></tr></thead><tbody>${body}</tbody></table></div>${more}`;
   }
   // One trial: its phases on its own clock, from the feed's own phase events
   // (the route carries them as `timeline`), the time left in the phase it is in,
