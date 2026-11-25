@@ -284,7 +284,7 @@ prints the writable folder under the active user catalogue. Work there, then:
   commit, any repository (a private one is fetched with this machine's git
   credentials) - is an Experiment version, never a second folder and never a patch
   of ours: `cli new version KEY NAME`, then `versions.NAME.upstream` =
-  `{repository, tag?, tested}` (a branch pinned by its commit). Fetch it into
+  `{repository, tag?, tested, origin: "experiment"}` (a branch pinned by its commit). Fetch it into
   the scratchpad, diff it against the pinned upstream (`git diff
   <tested>..<fork commit> --stat`, then what changed in the code the driver
   calls) and say what the fork changes; hash each dataset again (its own

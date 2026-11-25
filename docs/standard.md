@@ -533,6 +533,7 @@ An agent or a capability may keep several versions in its one file: an older rel
 | `cli new version KEY VERSION` | Adds one from the default's block, nothing proven; a file without `versions` is turned into one first, proofs kept |
 | Proof per version | A version runs nothing until `cli conform KEY@VERSION` passes; without `versions`, a proof on another `upstream.version` does not count |
 | In jobs | In the job name (`…__codex-2.2.2`) and the trial's `agent_info` |
+| `upstream.origin` | `official` (default) or `experiment`, another source or someone's fixes; unsaid, a version with `upstream.fixes`, or another `repository` than the shared one, is an experiment, and a benchmark's takes its `benchmark.json` `origin` |
 | `upstream.core` | Which core an adapter runs; pin it in `install` when the adapter names a range (Codex 2.2.2 pins `@openai/codex@0.160.1`) |
 | Schema | Stays `nullius.agent/v1` (`nullius.capability/v1`): a file without `versions` is one version |
 

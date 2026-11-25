@@ -9,7 +9,7 @@
 {% set ways = (['the Nullius standard'] if 'standard' in b.harness else []) + (['Harbor'] if 'harbor' in b.harness else []) %}{% set runs_with = ways|join(' or ') if ways else 'no harness here' %}
 <article class="bench-page" data-route-case="{{ b.route_case }}">
   {% set mark %}<svg class="bench-mark"><use href="{{ url_for('static', filename='catalogue/marks.svg') }}#bm-{{ b.key }}"/></svg>{% endset %}
-  {% set tags %}{% if b.category %}<span class="cat-tag">{{ b.category }}</span>{% endif %}<span class="origin-tag {{ b.origin }}">{{ b.label }}</span>{% endset %}
+  {% set tags %}{% if b.category %}<span class="cat-tag">{{ b.category }}</span>{% endif %}{% for y in views %}<span class="origin-tag {{ y.origin }}{{ ' std-version' if y.version }}"{% if y.version %} data-version="{{ y.version }}"{% endif %}{% if not y.current %} hidden{% endif %}>{{ y.origin|capitalize }}</span>{% endfor %}{% endset %}
   {% set actions %}
       {% if b.usable_routes %}<a class="btn sm" data-build-run href="{{ url_for('new_run', standard=std.ref if std else b.key) if 'standard' in b.harness else url_for('new_run', dataset=(b.datasets[0] if b.datasets else none)) }}">Build a run <span aria-hidden="true">→</span></a>{% endif %}
       {% if b.citation %}<a class="btn ghost sm" href="#citation">Cite</a>{% endif %}
@@ -36,7 +36,7 @@
       {#- Each version is the whole page once: its pin, proofs, setup, options, tasks and limitations. A click swaps them in place. -#}
       <nav class="std-versions" aria-label="Versions">
         <span>Versions</span>
-        {% for x in versions %}<a href="{{ url_for('benchmark_page', key=b.key, v=x.version) }}"{% if x.current %} aria-current="page"{% endif %} data-ref="{{ x.ref }}"><b>{{ x.label or x.version }}</b><small>{{ x.proven }}/{{ x.checks }} proven{{ ' · default' if x.default else '' }}</small></a>{% endfor %}
+        {% for x in versions %}<a href="{{ url_for('benchmark_page', key=b.key, v=x.version) }}"{% if x.current %} aria-current="page"{% endif %} data-ref="{{ x.ref }}"><b>{{ x.label or x.version }}</b><small>{{ x.proven }}/{{ x.checks }} proven{{ ' · default' if x.default else '' }} · {{ x.origin|capitalize }}</small></a>{% endfor %}
       </nav>
       {% endif %}
       {%- macro vattr(y, cls='') %} class="{{ (cls ~ ' std-version')|trim }}"{% if y.version %} data-version="{{ y.version }}"{% endif %}{% if not y.current %} hidden{% endif %}{% endmacro %}

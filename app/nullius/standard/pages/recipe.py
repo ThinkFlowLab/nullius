@@ -124,7 +124,8 @@ def benchmarks(cat) -> List[dict]:
     entries (``Catalog.listed_benchmarks``, whichever runner runs it) as ``b``, with its ``datasets``, its ``tasks``
     and their ``unit`` (``Catalog.tasks_of``), what some of its options need of a machine (``host``, by label, None for nothing),
     what it is run with: ``family`` agent or capability (a benchmark only Harbor runs runs agents) and, for a
-    capability, its ``kind``; and ``versions``, another version's tasks and unit by version."""
+    capability, its ``kind``; ``versions``, another version's tasks and unit by version; and ``origins``, its versions'
+    origins, each once, the default version's first."""
     defs = {d["key"]: d for d in definitions.load("benchmark")[0]}
     out = []
     for b in cat.listed_benchmarks:
@@ -133,9 +134,16 @@ def benchmarks(cat) -> List[dict]:
         out.append({"b": b, "datasets": cat.datasets_of(b), "tasks": tasks, "unit": unit,
                     "host": [hostreq.label(d, n) for n in sorted(d["host"])] if d.get("host") else None,
                     "family": d.get("family") or "agent", "kind": _capability_kind(d),
+                    "origins": origins(d) if d else [b.origin],
                     # another version's tasks, when its datasets count differently (``Catalog.in_version``)
                     "versions": {v: cat.tasks_of(b, cat.in_version(b, v)[1]) for v in b.versions}})
     return out
+
+
+def origins(d: dict) -> List[str]:
+    """The origins of a definition's versions, each once, its default version's first."""
+    every = d.get("_origins") or {}
+    return list(dict.fromkeys([every.get(d["_default"]) or definitions.origin_of(d), *every.values()]))
 
 
 def _bench_page(b: dict) -> dict:
@@ -153,7 +161,7 @@ def _bench_page(b: dict) -> dict:
             "version": b["_version"] if versioned else "",
             # its versions, each by the ref a recipe names it with (the bare key: the default)
             "versions": [{"ref": b["key"] if v == b.get("_default") else f"{b['key']}@{v}", "version": v, "default": v == b.get("_default"),
-                          "label": (b.get("_labels") or {}).get(v) or v}
+                          "label": (b.get("_labels") or {}).get(v) or v, "origin": (b.get("_origins") or {}).get(v) or "official"}
                          for v in b.get("_versions") or []] if versioned else [],
             "environments": {n: {"summary": e.get("summary", ""), "local_ok": bool(e.get("local_ok")), "network": e.get("network"),
                                  "needs_secrets": [{"name": s["name"], "to": s["to"], "kind": s.get("kind") or "value",

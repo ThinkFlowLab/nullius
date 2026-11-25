@@ -268,8 +268,7 @@ def values_of(entry: dict) -> dict:
     t = entry.get("timeouts") or {}
     values = {"key": entry.get("key", ""), "title": entry.get("title", ""), "category": entry.get("category", ""),
               "domain": entry.get("domain", ""), "scoring": entry.get("scoring", ""),
-              "origin": "official" if entry.get("experiment") or entry.get("origin") == "experiment"
-              else entry.get("origin", "official"), "upstream_limitations": "\n".join(entry.get("upstream_limitations") or []),
+              "origin": catalog.origin_of(entry), "upstream_limitations": "\n".join(entry.get("upstream_limitations") or []),
               "limitations": "\n".join(entry.get("limitations") or []),
               "citation": entry.get("citation", ""),
               "citation_source": entry.get("citation_source", ""),
