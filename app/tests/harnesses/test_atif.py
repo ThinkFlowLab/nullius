@@ -8,6 +8,7 @@ with a redacted message, the source is never written, and the Harbor jobs
 the same trajectories came from are not claimed.
 """
 
+import hashlib
 import json
 import os
 import shutil
@@ -146,6 +147,33 @@ class Conversion(unittest.TestCase):
                 held = {t.trial_name: json.loads(Path(t.dir, "result.json").read_text())["source_document"]["session_id"]
                         for t in job.trials}
                 self.assertEqual(held["a__b"], "s-first")
+
+    def test_a_gone_document_keeps_its_name_from_a_job_without_reservations_and_from_a_longer_name(self):
+        src = tempfile.mkdtemp()
+        write_doc(src, "a/b.json", minimal(session_id="s-gone"))
+        write_doc(src, "c.json", minimal())
+        job_dir, _ = self.convert(src)
+        config = json.loads(Path(job_dir, "config.json").read_text())
+        del config["trial_documents"]                        # as a conversion before them wrote it
+        Path(job_dir, "config.json").write_text(json.dumps(config))
+        os.remove(os.path.join(src, "a", "b.json"))
+        self.convert(src)                                    # its folder is pruned, its name kept
+        write_doc(src, "a__b.json", minimal(session_id="s-new"))
+        _, job = self.convert(src)
+        self.assertNotIn("a__b", {t.trial_name for t in job.trials})
+
+        src = tempfile.mkdtemp()                             # a gone file named like another's longer name
+        longer = "a__b__" + hashlib.sha256(b"a/b.json").hexdigest()[:8]
+        write_doc(src, longer + ".json", minimal(session_id="s-gone"))
+        write_doc(src, "c.json", minimal())
+        job_dir, _ = self.convert(src, job_name="longer")
+        os.remove(os.path.join(src, longer + ".json"))
+        self.convert(src, job_name="longer")
+        write_doc(src, "a/b.json", minimal(session_id="s-nested"))
+        write_doc(src, "a__b.json", minimal(session_id="s-flat"))
+        with self.assertRaisesRegex(SystemExit, "share the trial"):
+            self.convert(src, job_name="longer")
+        self.assertEqual(sorted(n for n in os.listdir(job_dir) if os.path.isdir(os.path.join(job_dir, n))), ["c"])
 
     def test_a_refresh_replaces_the_config_whole(self):
         src = tempfile.mkdtemp()

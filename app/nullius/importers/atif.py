@@ -336,10 +336,11 @@ def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str
     # Flattening can give two paths one name (a/b.json, a__b.json): those take
     # a digest of their path, so each document keeps a trial of its own.
     job_dir = os.path.join(out_root, job_name)
+    existing = importers.existing_trials(job_dir, _source_in)
     names = importers.unique_names([
         (os.path.realpath(path), _trial_name(path, root), _trial_name(path, root) + "__"
          + hashlib.sha256(_shown(path, root).encode()).hexdigest()[:8])
-        for path, _doc in docs], *importers.existing_trials(job_dir, _source_in))
+        for path, _doc in docs], *existing)
     os.makedirs(job_dir, exist_ok=True)
 
     summaries = [convert_document(path, doc, name, job_dir)
@@ -378,7 +379,7 @@ def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str
                     "model_name": agent["model_info"]["name"]}],
         "tasks": [{"name": f"{NAME}/{s['trial_dir']}"} for s in summaries],
         "trial_documents": importers.reservations(
-            job_dir, ((name, os.path.realpath(path)) for (path, _doc), name in zip(docs, names))),
+            job_dir, ((name, os.path.realpath(path)) for (path, _doc), name in zip(docs, names)), *existing),
     })
     return job_dir
 

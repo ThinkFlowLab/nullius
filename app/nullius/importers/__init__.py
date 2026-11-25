@@ -155,10 +155,13 @@ def _reserved(job_dir: str) -> dict:
         return {}
 
 
-def reservations(job_dir: str, written) -> dict:
+def reservations(job_dir: str, written, existing: dict = None, merged: set = frozenset()) -> dict:
     """The ``trial_documents`` to keep in *job_dir*'s ``config.json``: what
-    it kept, with *written* ((name, document) pairs) on top."""
+    it kept, and the folders *existing* held before pruning (but a *merged* one or one whose document
+    could not be told), with *written* ((name, document) pairs) on top."""
     reserved = _reserved(job_dir)
+    reserved.update((name, identity) for name, identity in (existing or {}).items()
+                    if identity and name not in merged and name not in reserved)
     reserved.update((name, identity) for name, identity in written if identity)
     return dict(sorted(reserved.items()))
 
@@ -211,7 +214,8 @@ def unique_names(documents: list[tuple], existing: dict | None = None,
     document that would take it. Any other document takes its name unless
     another holds it, else the longer one. A *merged* folder (two documents
     written into one by an older conversion) is split: each of its documents
-    takes the longer name. Two documents still left with one name are refused.
+    takes the longer name. Two documents still left with one name, or a
+    document left with a gone document's, are refused.
     """
     existing = existing or {}
     identities = {identity for identity, _, _ in documents}
@@ -228,7 +232,7 @@ def unique_names(documents: list[tuple], existing: dict | None = None,
             free = name not in taken and name not in split
             out[i] = name if free and (shorts[name] == 1 or name in unknown) else longer
             taken.add(out[i])
-    shared = sorted(name for name, n in Counter(out).items() if n > 1)
+    shared = sorted({name for name, n in Counter(out).items() if n > 1} | (set(out) & gone))
     if shared:
         raise SystemExit(redact(f"two documents would share the trial {shared[0]!r}"))
     return out
