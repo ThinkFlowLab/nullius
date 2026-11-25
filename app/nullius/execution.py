@@ -1881,7 +1881,7 @@ def _copies(home: str, paths: list, uids: set) -> set:
         roots += ws.job_roots or ws.roots
     roots += [j for parent in {os.path.dirname(p) for p in paths} for e in os.scandir(parent)
               if e.is_dir(follow_symlinks=False) and e.path not in paths and os.path.isdir(j := os.path.join(e.path, "jobs"))]
-    return {job_uid.strict(d) for d in parse.find_job_dirs(roots) if outside(d)} & uids
+    return {job_uid.strict(d) for d in parse.find_job_dirs(roots, strict=lambda name: True) if outside(d)} & uids
 
 
 def deletion(names: List[str], home: str, root: Optional[str] = None, holding: Optional[Callable] = None,

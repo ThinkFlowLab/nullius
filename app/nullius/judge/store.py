@@ -485,12 +485,7 @@ def owners(ws, into: Optional[str] = None, names=None) -> Optional[dict]:
     if not all(os.path.isdir(r) for r in roots):
         return None
     try:
-        dirs = [d for d in parse.find_job_dirs(roots) if mine(os.path.basename(d))]
-        for r in roots:
-            with os.scandir(r) as entries:
-                for e in entries:
-                    if e.is_dir() and mine(e.name):
-                        os.scandir(e.path).close()
+        dirs = [d for d in parse.find_job_dirs(roots, strict=mine) if mine(os.path.basename(d))]
     except OSError:
         return None
     out: dict = {}

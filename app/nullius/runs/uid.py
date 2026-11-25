@@ -103,14 +103,27 @@ def strict(job_dir: str) -> str:
     never another uid. The trials are listed strictly too."""
     cfg, res = _strict_json(os.path.join(job_dir, "config.json")), _strict_json(os.path.join(job_dir, "result.json"))
     if not _declared(cfg) and not res.get("started_at") and not isinstance(cfg.get("harness"), str):
-        with os.scandir(job_dir) as entries:             # the trials `_has_trial` looks for, each one strictly
-            for e in entries:
-                if e.is_dir():
-                    try:
-                        os.stat(os.path.join(e.path, "result.json"))
-                    except (FileNotFoundError, NotADirectoryError):
-                        pass
+        searched(job_dir)                                # the trials `_has_trial` looks for, each one strictly
     return of(job_dir, cfg, res)[0]
+
+
+def searched(folder: str) -> None:
+    """OSError when the folder *folder* cannot be searched for a job's or its trials'
+    ``result.json``, or listed: whether it is a job, and whose, is then unknown. A file is no job."""
+    try:
+        os.stat(os.path.join(folder, "result.json"))
+    except NotADirectoryError:
+        return
+    except FileNotFoundError:
+        if not os.path.isdir(folder):
+            return
+    with os.scandir(folder) as entries:
+        for e in entries:
+            if e.is_dir():
+                try:
+                    os.stat(os.path.join(e.path, "result.json"))
+                except (FileNotFoundError, NotADirectoryError):
+                    pass
 
 
 def of(job_dir: str, cfg: dict, res: dict) -> tuple:

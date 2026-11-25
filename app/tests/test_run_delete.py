@@ -108,6 +108,22 @@ class RunDelete(unittest.TestCase):
         execution.delete(["r1"], self.home, self.root)
         self.assertTrue(store.job_dirs(self.data, [uid]))
 
+    def test_a_copy_whose_folder_cannot_be_searched_keeps_the_judgements(self):
+        uid = self.judged(self.jobs, "job-a")
+        twin = os.path.join(self.tmp, "twin"); shutil.copytree(os.path.join(self.jobs, "job-a"), os.path.join(twin, "job-a"))
+        workspace.create(self.home, [twin], label="d")
+        inside = os.path.join(twin, "job-a", "")
+
+        def denied(real):                               # its root listed, the folder without search permission
+            def call(path, *a, **k):
+                if isinstance(path, (str, os.PathLike)) and os.fspath(path).startswith(inside):
+                    raise PermissionError(13, "Permission denied", path)
+                return real(path, *a, **k)
+            return call
+        with patch.object(os, "stat", denied(os.stat)), patch("builtins.open", denied(open)):
+            execution.delete(["r1"], self.home, self.root)
+        self.assertTrue(store.job_dirs(self.data, [uid]))
+
     def test_another_job_of_the_same_name_does_not_keep_them(self):
         uid = self.judged(self.jobs, "job-a")
         other = os.path.join(self.tmp, "other"); _job_dir(other, "job-a")
