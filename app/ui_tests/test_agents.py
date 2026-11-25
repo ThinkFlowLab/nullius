@@ -201,9 +201,9 @@ class Tabs(unittest.TestCase):
 
     def test_the_add_dialog_builds_a_prompt_and_keeps_the_steps_by_hand_for_each_kind(self):
         for url, a, skill, words in (
-                ("/agents", "an agent", ".claude/skills/import-agent/SKILL.md",
+                ("/agents", "an agent", ".agents/skills/import-agent/SKILL.md",
                  ("nullius standard new agent my-agent", "--unsandboxed", "&#34;start&#34;: {")),
-                ("/capabilities", "a capability", ".claude/skills/import-capability/SKILL.md",
+                ("/capabilities", "a capability", ".agents/skills/import-capability/SKILL.md",
                  ("nullius standard new capability my-memory", "&#34;project&#34;", "from my_memory import Store"))):
             html = self.get(url).get_data(as_text=True)
             self.assertIn(f'<button type="button" class="btn sm" id="std-how-open" aria-haspopup="dialog">+ Add {a}</button>', html)

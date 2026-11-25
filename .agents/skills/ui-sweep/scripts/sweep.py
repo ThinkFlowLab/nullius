@@ -1,6 +1,6 @@
 """Click through the run builder and the catalogue, and keep a screenshot of each.
 
-    uv run --with playwright python .claude/skills/ui-sweep/scripts/sweep.py \
+    uv run --with playwright python .agents/skills/ui-sweep/scripts/sweep.py \
         --url http://127.0.0.1:5000 --out <dir> [--browser <chromium>] [--only <benchmark key>]
 
 Every benchmark the builder offers, on both runners, on every step that has a

@@ -203,7 +203,7 @@ def prompt(kind: str) -> str:
         "capability": "Verify its callable operations and proven ports.\n",
     }[kind]
     return (f'Add the {kind} "{{name}}" to Nullius.\nSource: {{source}}\nRemark: {{remark}}\n\n'
-            f"Follow /import-{kind}, or .claude/skills/import-{kind}/SKILL.md in the source checkout, "
+            f"Follow /import-{kind}, or .agents/skills/import-{kind}/SKILL.md in the source checkout, "
             "with docs/standard.md and AGENTS.md. If unavailable, ask for the checkout.\n"
             f"Write to {target}, even when the skill names package paths. "
             "For an existing bundled entry, copy its whole folder there first; never edit installed files. "

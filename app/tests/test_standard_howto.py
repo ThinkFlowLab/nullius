@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import shlex
 import subprocess
 import sys
@@ -16,6 +17,8 @@ from unittest.mock import patch
 from nullius.standard import cli
 from nullius.standard.contract import definitions
 from nullius.standard.pages import howto
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 class Steps(unittest.TestCase):
@@ -82,7 +85,9 @@ class Prompt(unittest.TestCase):
         for kind, command in (("agent", "/import-agent"), ("capability", "/import-capability"), ("benchmark", "/import-benchmark")):
             text = howto.prompt(kind)
             self.assertIn(command, text)
-            self.assertIn(f".claude/skills/{command[1:]}/SKILL.md", text)
+            self.assertIn(f".agents/skills/{command[1:]}/SKILL.md", text)
+            for folder in (".agents", ".claude"):      # .claude/skills is a link: a merge can leave a folder in its place
+                self.assertTrue((ROOT / folder / "skills" / command[1:] / "SKILL.md").is_file(), (folder, command))
             self.assertIn("docs/standard.md", text)
             for slot in ("{name}", "{source}", "{remark}"):
                 self.assertEqual(text.count(slot), 1, (kind, slot))
