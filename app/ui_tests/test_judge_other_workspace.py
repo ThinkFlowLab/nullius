@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import unittest
 from contextlib import ExitStack
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -62,6 +63,19 @@ class JudgementsOfAnotherWorkspace(unittest.TestCase):
         with web.app.test_request_context(f"/compare?pick={self.a.name}:job-x&pick={self.b.name}:job-y"):
             view = web.compare._comparison_requested()
             self.assertEqual([web.judge.ws_dir(s.workspace) for s in view.selected], [self.a.dir, self.b.dir])
+
+    def test_a_folded_run_s_side_reads_and_keeps_its_own_shard_s_record(self):
+        jx, jy = workspace.load_jobs(self.a, self.a.roots)[0], workspace.load_jobs(self.b, self.b.roots)[0]
+        fold = replace(jx, trials=jx.trials + jy.trials)                                # as launches.fold makes it: the first shard's
+        t = replace(next(t for t in jy.trials if t.trial_name == TRIAL), has_trajectory=True)
+        rec = {"questions": Q.VERSION, "answers": {web.judge.SIDE_QUESTION: {"score": 1}}, "judge": {"model": "m"}}
+        store.save(self.b.dir, "job-y", TRIAL, dict(rec), started=web.judge.started_of(t))
+        self.assertIsNotNone(web.judge.side_of(fold, t, self.b.dir), "the trial page's record is not read")
+        with patch.object(web.judge.trajectory, "load", return_value=unittest.mock.Mock(error=None)), \
+             patch.object(web.judge, "_states_for", return_value={}), patch.object(web.judge.batch, "ask_states", return_value=dict(rec)), \
+             patch.object(web.judge, "side_ids", return_value=["more"]):                # one question still to ask
+            web.judge.judge_side(fold, t, self.b.dir, None)
+        self.assertIsNone(store.load(self.b.dir, "job-x", TRIAL), "saved under the first shard's job")
 
     def test_a_job_of_the_open_workspace_keeps_its_store(self):
         with web.app.test_request_context(f"/trial/job-x/{TRIAL}"):
