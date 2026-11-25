@@ -22,8 +22,6 @@ The trial must have saved its [exchange record](run.md#the-exchange-record).
 | `--dry-run` | What would be sent, its estimate and its booking; sends and writes nothing. |
 | Refused | A call cut or saved as text, no price, no output limit, a stored conversation. |
 
-The prompt booking uses the dearest input rate, including cache reads and writes.
-
 ## Changes
 
 Applied in this order. A `TEXT`, `OLD` or `NEW` that starts with `@` is that file's text.
@@ -52,17 +50,11 @@ print(json.loads(answer["text"])["action"])
 
 A reply that ends on an error or holds no choice is a failure: not counted, and sent again by a study.
 
-A streamed chat reply needs a choice in at least one event; its final usage-only event is allowed.
-
-On restart, older saved replies follow the same failure rule as new replies.
-
 The replay's folder (`--out DIR`, else under `replays/`) holds `replay.json` with the counts, the request sent and each answer.
 
 ## A study over many calls
 
 Several recorded calls, each sent K times as recorded and under named arms of changes, under one cap, compared call by call.
-
-Identical requests share the largest booking among their recorded calls.
 
 ```bash title="Study"
 nullius standard study <dir> --times K --max-usd USD \
@@ -79,5 +71,4 @@ nullius standard recount <dir> [--read CMD] [--yes REGEX] [--compare A B] [--jso
 | Yes or no | An answer reads yes when its label is the recorded one's, or matches `--yes`. |
 | The result | Each arm's yes by target, and an exact sign test between two arms. |
 | Goes on | Run again, it sends only the unanswered, under its cap or one above the spend. |
-| Reading rule | Earlier studies using the built-in reader can resume; user-supplied rules must still match. |
 | `recount` | A kept study or replay read again by another rule, with no send. |
