@@ -461,20 +461,31 @@ def owners(ws, into: Optional[str] = None, names=None) -> Optional[dict]:
     """Who each older file of the workspace `ws`'s store may belong to: {the file: {the file of the
     user's store it belongs in: the job's folder}}, over every job its roots hold, read afresh. A
     job with no identity yet claims the files it would own under ``("pending", its folder)``, so
-    they have no single owner until it has one. `names`: the job folders of these names only, all
-    that can claim a job's own files. None while one of its roots cannot be read: its jobs, and so
-    the owners, are unknown."""
+    they have no single owner until it has one. `names`: the job folders whose names share a
+    spelling (`_names`) with one of these only, all that can claim a job's own files. None while one
+    of its roots, or a folder in one that may be a job, cannot be read: its jobs, and so the owners,
+    are unknown."""
     from nullius.runs import parse
     into = into or home()
     roots = ws.job_roots or ws.roots
+    spelt = None if names is None else {s for n in names for s in _names(n)}
+    mine = lambda name: spelt is None or not spelt.isdisjoint(_names(name))
     if not all(os.path.isdir(r) for r in roots):
         return None
+    try:
+        dirs = [d for d in parse.find_job_dirs(roots) if mine(os.path.basename(d))]
+        for r in roots:
+            with os.scandir(r) as entries:
+                for e in entries:
+                    if e.is_dir() and mine(e.name):
+                        os.scandir(e.path).close()
+    except OSError:
+        return None
     out: dict = {}
-    for d in parse.find_job_dirs(roots):
-        if names is None or os.path.basename(d) in names:
-            for job in parse.split_agents([parse.parse_job(d)]):
-                for src, dest in _places(ws.dir, job, into):
-                    out.setdefault(src, {}).setdefault(dest or ("pending", d), d)
+    for d in dirs:
+        for job in parse.split_agents([parse.parse_job(d)]):
+            for src, dest in _places(ws.dir, job, into):
+                out.setdefault(src, {}).setdefault(dest or ("pending", d), d)
     return out
 
 
@@ -504,14 +515,14 @@ def overlay(ws_dir: Optional[str], job, into: Optional[str] = None, only=None) -
     """What the workspace's store from before (`ws_dir`) holds for `job` (`_places`), as {the file
     of the user's store (`into`, `home()` by default) it belongs in: [its contents]}. Read only; a
     file that cannot be read is left out. Two jobs of one id in that workspace each get the same
-    records, as each showed them before. `only`: those older files alone (a save's, `single`).
-    {} once the workspace is `moved`."""
+    records, as each showed them before. `only`: {older file: the file it belongs in} (a save's,
+    `single`), those alone and only where they belong in `job`'s. {} once the workspace is `moved`."""
     into = into or home()
     if not ws_dir or not job.uid or moved(ws_dir, into):
         return {}
     out: dict = {}
     for src, dest in _places(ws_dir, job, into):
-        data = _old(src) if dest and (only is None or src in only) else None
+        data = _old(src) if dest and (only is None or only.get(src) == dest) else None
         if data:
             out.setdefault(dest, []).append(data)
     return out

@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from nullius import workspace
 from nullius.judge import questions as Q
+from nullius.runs import parse
 
 from .test_routes import web
 
@@ -97,6 +98,30 @@ class JudgementFollowsTheJob(unittest.TestCase):
             saved = json.loads((self.tmp / "data" / "judgements" / j.uid / f"{TRIAL}.json").read_text())
             self.assertEqual({k: sorted(r["answers"]) if isinstance(r, dict) else r for k, r in saved.items()},
                              {Q.VERSION: ["failure_cause"]})
+
+    def test_a_record_a_job_spelt_alike_or_one_that_cannot_be_searched_may_own_is_not_copied_by_a_save(self):
+        kept = {Q.VERSION: {"questions": Q.VERSION, "answers": {"kept": {"choice": "x"}}, "asked_at": "2026-10-01T00:00:00Z"}}
+        for name, other, how in (("x:y", "x_y", "alike"), ("job-x", "job-x", "unsearchable")):
+            with self.subTest(how):
+                one, two = self.tmp / how / "one", self.tmp / how / "two"
+                copy_job(one / name, "2026-01-01T00:00:00Z"); copy_job(two / other, "2026-02-02T00:00:00Z")
+                ws = workspace.create(web.shared.WS_HOME, [str(one), str(two)], how)
+                web.shared.open_workspace(ws)
+                old = Path(ws.dir) / "judgements" / other; old.mkdir(parents=True)     # x:y's older spelling is x_y's
+                (old / f"{TRIAL}.json").write_text(json.dumps(kept))
+                j = next(j for j in workspace.load_jobs(ws, ws.roots) if j.dir == str(one / name))
+                t = next(t for t in j.trials if t.trial_name == TRIAL)
+                twin, scandir, looks = str(two / other), web.judge.store.os.scandir, parse.looks_like_job_dir
+                hidden = how == "unsearchable"                                            # as a folder without search permission looks
+                def scan(p):
+                    if hidden and str(p) == twin:
+                        raise PermissionError(13, "Permission denied", p)
+                    return scandir(p)
+                with web.app.test_request_context(f"/trial/{name}/{TRIAL}"), patch.object(web.judge.store.os, "scandir", scan), \
+                        patch("nullius.runs.parse.looks_like_job_dir", lambda p: not (hidden and str(p) == twin) and looks(p)):
+                    web.judge.judge_trial(j, t, None)
+                saved = json.loads((self.tmp / "data" / "judgements" / web.judge.store.key(j.uid) / f"{TRIAL}.json").read_text())
+                self.assertNotIn("kept", saved[Q.VERSION]["answers"])
 
 
 def tree(root: Path) -> dict:

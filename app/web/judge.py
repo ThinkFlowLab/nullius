@@ -85,14 +85,14 @@ def old_of(job, name=None) -> dict:
 
 def own_of(job, name=None) -> dict:
     """What a save copies of `old_of`: the records one job alone owns (`store.single`), its
-    owners read afresh; a record another job of its name may own stays unresolved, shown, never
-    copied. Once per request."""
+    owners read afresh, and that job this one; a record another job of a name spelt alike may own
+    stays unresolved, shown, never copied. Once per request."""
     ws = shared._record_workspace(name)
     memo = shared.request_memo("judgements_own")
     k = (ws.dir if ws else None, job.dir, job.job_id)
     if k not in memo:
         one = store.single(store.owners(ws, names={os.path.basename(job.dir)})) if ws and job.uid else {}
-        memo[k] = store.overlay(ws.dir, job, only=set(one)) if one else {}
+        memo[k] = store.overlay(ws.dir, job, only={src: dest for src, (dest, _) in one.items()}) if one else {}
     return memo[k]
 
 
