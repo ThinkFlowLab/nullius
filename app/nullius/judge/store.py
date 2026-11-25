@@ -313,8 +313,9 @@ def task_dataset(job) -> str:
     """Where a dataset's task-instruction judgements are kept (lane `TASKS`),
     so an instruction is judged once for every run of that dataset: its
     recorded path, or its registry name, so two datasets of one folder name
-    keep apart; a job that names none, its own identity."""
-    return job.dataset_path or job.dataset or "job:" + job.uid
+    keep apart; a job that names none, its own identity, and "" while it has none (pending), so it
+    has no key and is judged by no one's."""
+    return job.dataset_path or job.dataset or ("job:" + job.uid if job.uid else "")
 
 
 def _digest(rec) -> str:
@@ -455,7 +456,7 @@ def _places(ws_dir: str, job, into: str):
             names.update((n, key(name)) for n in _names(name))
     places = [(lane, j, job.uid, names) for lane in ROOTS for j in _names(job.job_id)]
     # before, a dataset's task records were a job of their own, named `task:<dataset>`, and a job naming none its id
-    places += [(TASKS, j, task_dataset(job) if job.uid or job.dataset_path or job.dataset else "", {})
+    places += [(TASKS, j, task_dataset(job), {})
                for j in _names("task:" + (job.dataset_path or job.dataset or "job:" + job.job_id))]
     for lane, old, new, rename in places:
         src = os.path.join(_root(ws_dir, "decision" if lane == TASKS else lane), old)

@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from nullius import redact, workspace
 from nullius.judge import batch, client, questions, state, store
@@ -290,6 +291,9 @@ class Batch(unittest.TestCase):
         n = len(calls)
         with self.assertRaisesRegex(client.JudgeError, "no identity"):                                       # a pending job: nothing asked, nothing paid
             batch.ask_and_store(str(self.tmp), "", "t", states, KEY, post=post)
+        pending = SimpleNamespace(uid="", dataset="", dataset_path="")                                       # nor its task lane: no key it would share
+        with self.assertRaisesRegex(client.JudgeError, "no identity"):
+            batch.ask_and_store(str(self.tmp), store.task_dataset(pending), "fix@abc", states, KEY, post=post, lane=store.TASKS)
         self.assertEqual(len(calls), n)
 
     def test_the_llm_judge_keeps_its_records_apart_from_decision_judge(self):
