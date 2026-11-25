@@ -33,9 +33,9 @@ path. Its first conversion gives it an id of its own (:func:`place`), derived
 from the format and that path so every workspace importing it agrees, written
 in the job's ``config.json`` as ``nullius.source`` and read back on every
 reconversion, so the folder and the identity stay its own: a second source of
-one basename gets a folder of its own, and a job name that names another
-source's folder is refused. A folder converted before the id is kept as it
-is, without one.
+one basename gets a folder of its own, and a job name that names a folder not
+shown to be this source's is refused. A folder converted before the id is
+kept as it is, without one, when its format and recorded source are this one's.
 
 **Refusing a tree** is `convert` raising ``SystemExit`` with a message
 that names the file and what is wrong with it — never a job with no trials or a traceback. The message is what a person sees, on the picker or from
@@ -284,16 +284,16 @@ def source_id(fmt: str, root: str) -> str:
     return str(uuid.uuid5(NS_SOURCE, json.dumps(facts, sort_keys=True, separators=(",", ":"))))
 
 
-def place(out_root: str, root: str, default: str, job_name: str = "", recorded=None, fmt: str = "") -> tuple:
+def place(out_root: str, root: str, default: str, job_name: str = "", fmt: str = "") -> tuple:
     """``(job_name, source id)``: the folder under *out_root* the tree at *root*
     is converted into, and its id, None for a folder converted before ids.
 
     The folder that already records this source's id is its own. Otherwise *default*,
-    then ``<default>-2``, ``-3``…, skipping a folder that belongs to another
-    source: one recording another id, or an older one whose
-    ``recorded(config)`` names another absolute path. A named *job_name* is used
-    as it is, and refused when it belongs to another source. Call it under
-    :func:`locked`, through the write, so two conversions never pick one folder.
+    then ``<default>-2``, ``-3``…, skipping a folder that holds anything not
+    shown to be this source's: another id, or an older conversion :func:`_verified`
+    does not tie to it. A named *job_name* is used as it is, and refused when
+    it is not shown to be this source's. Call it under :func:`locked`, through
+    the write, so two conversions never pick one folder.
     """
     src, new = os.path.realpath(root), source_id(fmt, root)
     names = sorted(os.listdir(out_root)) if not job_name and os.path.isdir(out_root) else []
@@ -304,20 +304,32 @@ def place(out_root: str, root: str, default: str, job_name: str = "", recorded=N
     while True:
         name = job_name or (default if n == 1 else f"{default}-{n}")
         job_dir = os.path.join(out_root, name)
-        if not os.path.isdir(job_dir):
+        if not os.path.isdir(job_dir) or not os.listdir(job_dir):
             return name, new
         cfg = _config(job_dir)
-        if not cfg:                      # no conversion finished there
-            return name, new
         sid = _source(cfg)[0]
-        old = recorded(cfg) if recorded and not sid else None
-        # a relative path was the cwd's of a conversion long gone: it names nothing
-        mine = sid == new if sid else not old or not os.path.isabs(old) or os.path.realpath(old) == src
-        if mine:
+        if sid == new:
             return name, sid
+        if not sid and _verified(job_dir, cfg, fmt, src):
+            return name, None
         if job_name:
-            raise SystemExit(redact(f"{job_dir} holds the import of another source; choose another job name"))
+            raise SystemExit(redact(f"{job_dir} holds an import not shown to be this source's; "
+                                    "choose another job name"))
         n += 1
+
+
+def _verified(job_dir: str, cfg: dict, fmt: str, src: str) -> bool:
+    """A folder converted before ids is the source at real path *src* only when it
+    stored the format *fmt* and names *src*: by the absolute path it recorded,
+    else by where each of its trials says its document was read."""
+    if not cfg or cfg.get("harness") != fmt:
+        return False
+    old = recorded(cfg)
+    if isinstance(old, str) and os.path.isabs(old):
+        return os.path.realpath(old) == src
+    module = get(fmt)
+    read = module._trial_sources(job_dir) if hasattr(module, "_trial_sources") else []
+    return bool(read) and all(p == src or p.startswith(os.path.join(src, "")) for p in read)
 
 
 @contextlib.contextmanager

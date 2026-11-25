@@ -396,7 +396,7 @@ def convert(root: str, out_root: str, job_name: str = "",
     root = os.path.realpath(root)                    # one spelling of the source, whatever the caller's cwd or links
     docs = _read_all(root)
     with importers.locked(out_root):
-        job_name, sid = importers.place(out_root, root, f"{NAME}__{base}", job_name, _recorded, NAME)
+        job_name, sid = importers.place(out_root, root, f"{NAME}__{base}", job_name, NAME)
         return [_write_job(docs, root, out_root, job_name, command, sid)]
 
 
@@ -407,3 +407,19 @@ def _recorded(cfg: dict):
         return words[words.index("nullius.importers.cli") + 1]
     except (ValueError, IndexError):
         return None
+
+
+def _trial_sources(job_dir: str) -> list:
+    """The real path each trial of *job_dir* records its document was read from;
+    empty when one cannot tell."""
+    found = []
+    for name in sorted(os.listdir(job_dir)):
+        trial = os.path.join(job_dir, name)
+        if not os.path.isdir(trial):
+            continue
+        try:
+            with open(os.path.join(trial, "result.json"), encoding="utf-8") as fh:
+                found.append(os.path.realpath(str(json.load(fh)["source_document"]["path"])))
+        except (OSError, ValueError, KeyError, TypeError):
+            return []
+    return found

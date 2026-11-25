@@ -290,7 +290,7 @@ def convert(root: str, out_root: str, job_name: str = "",
     if not documents:
         raise SystemExit(redact(f"the OTLP/JSON exports in {root} carry no spans"))
     with importers.locked(out_root):
-        name, sid = importers.place(out_root, root, default, job_name, _recorded, NAME)
+        name, sid = importers.place(out_root, root, default, job_name, NAME)
         return [_write_job(documents, out_root, name, command, root, skipped, sid)]
 
 

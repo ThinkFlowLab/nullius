@@ -166,6 +166,32 @@ class OneFolderPerSource(unittest.TestCase):
                 self.assertEqual(atif.convert(a, out, job_name="mine"), [ja])    # its own source still may
                 shutil.rmtree(self.tmp / "atif")
 
+    def test_a_folder_from_before_ids_not_shown_to_be_the_source_is_never_reused(self):
+        def unreadable(job_dir):
+            with open(os.path.join(job_dir, "config.json"), "w") as fh:
+                fh.write("{")
+        cases = {"another format": (atif, forget_id),
+                 "no recorded path": (otel, lambda j: forget_id(j, datasets=[])),
+                 "a relative path": (otel, lambda j: forget_id(j, datasets=[{"name": "otel", "path": "a/run"}])),
+                 "an unreadable config": (otel, unreadable)}
+        for case, (module, change) in cases.items():
+            with self.subTest(case):
+                shutil.rmtree(self.tmp / "otel", True)
+                a, b, out = self.sources("otel")
+                if module is atif:
+                    b = str(self.tmp / "atif-src")
+                    write_doc(b, "one.json", minimal())
+                name = f"{module.NAME}__{os.path.basename(b)}"           # the name b would take
+                [jo] = otel.convert(a, out, job_name=name)
+                change(jo)
+                before = mtimes(jo)
+                with self.assertRaises(SystemExit):
+                    module.convert(b, out, job_name=name)
+                self.assertEqual(mtimes(jo), before)                     # its trials untouched
+                [jb] = module.convert(b, out)                            # an automatic name: a folder of its own
+                self.assertNotEqual(jb, jo)
+                self.assertEqual(mtimes(jo), before)
+
     def test_two_first_conversions_at_once_take_two_folders(self):
         a, b, out = self.sources("otel")
         real = importers.place
