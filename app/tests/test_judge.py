@@ -287,6 +287,10 @@ class Batch(unittest.TestCase):
         self.assertEqual(again["answers"].keys(), {"user_facing_answer"})
         self.assertIsNone(batch.ask_and_store(str(self.tmp), "job", "empty", {"trial": ([], "", False)}, KEY, post=post))
         self.assertIsNone(store.load(str(self.tmp), "job", "empty"))
+        n = len(calls)
+        with self.assertRaisesRegex(client.JudgeError, "no identity"):                                       # a pending job: nothing asked, nothing paid
+            batch.ask_and_store(str(self.tmp), "", "t", states, KEY, post=post)
+        self.assertEqual(len(calls), n)
 
     def test_the_llm_judge_keeps_its_records_apart_from_decision_judge(self):
         import json as _json
