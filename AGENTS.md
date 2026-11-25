@@ -259,6 +259,19 @@ prints health verdicts, computes the metrics and
 renders the page from the template beside it; the findings and the prose are
 the assistant's, by the procedure in the SKILL.md.
 
+**Run to fix** is the `/run-to-fix` skill (`.claude/skills/run-to-fix/SKILL.md`):
+from a finished run to checked fix candidates and a compared rerun, in rounds of
+five stages with two stops for a person. Its script,
+`.claude/skills/run-to-fix/scripts/loop.py` (standard library only, no import
+from `app/`, calls `runs.py` of `/run-analysis` for health, metrics and the
+page, reads the job trees and the agent's adapter file, and writes only into a
+loop folder that lies outside every repository or that git ignores, with
+worktrees of the agent's checkout that it removes after each check), classifies
+the trials, checks fix candidates, prices and records trial runs, and compares
+runs with exact tests; the causes, tests and fixes are the assistant's, by the
+procedure in the SKILL.md. Everything that belongs to one agent lives in its
+adapter file, and nothing in the skill names an agent or a benchmark.
+
 ## Conventions
 
 Use `nullius.thinkflowlab@proton.me` for Nullius-owned contact email addresses,
