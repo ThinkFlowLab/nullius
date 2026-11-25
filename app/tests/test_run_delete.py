@@ -96,6 +96,18 @@ class RunDelete(unittest.TestCase):
         execution.delete(["r3"], self.home, self.root)
         self.assertEqual(store.job_dirs(self.data, [uid]), [])
 
+    def test_a_copy_whose_config_cannot_be_read_keeps_the_judgements(self):
+        cfg = os.path.join(self.jobs, "job-a", "config.json")
+        _write_json(cfg, dict(json.load(open(cfg)), standard={"uuid": "11111111-2222-3333-4444-555555555555"}))
+        uid = self.judged(self.jobs, "job-a")
+        twin = os.path.join(self.tmp, "twin"); shutil.copytree(os.path.join(self.jobs, "job-a"), os.path.join(twin, "job-a"))
+        workspace.create(self.home, [twin], label="d")
+        with open(os.path.join(twin, "job-a", "config.json"), "w") as fh:
+            fh.write('{"job_name": "job-a", "standard": {"uu')                          # cut short: whose it is, unknown
+        self.assertNotEqual(self.uid("job-a", twin), uid)                              # the display parse derives another
+        execution.delete(["r1"], self.home, self.root)
+        self.assertTrue(store.job_dirs(self.data, [uid]))
+
     def test_another_job_of_the_same_name_does_not_keep_them(self):
         uid = self.judged(self.jobs, "job-a")
         other = os.path.join(self.tmp, "other"); _job_dir(other, "job-a")

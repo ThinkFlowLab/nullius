@@ -120,7 +120,7 @@ from typing import Callable, Dict, List, Optional
 
 from nullius import hosts, ondisk, paths, prices as price_list, progress, providers, redact, secrets, settings, workspace
 from nullius.judge import store as judgements
-from nullius.runs import parse
+from nullius.runs import parse, uid as job_uid
 from nullius.harbor import source as harbor_source
 from nullius.standard.backends import container
 from nullius.standard.runner import payload as standard_payload
@@ -1881,7 +1881,7 @@ def _copies(home: str, paths: list, uids: set) -> set:
         roots += ws.job_roots or ws.roots
     roots += [j for parent in {os.path.dirname(p) for p in paths} for e in os.scandir(parent)
               if e.is_dir(follow_symlinks=False) and e.path not in paths and os.path.isdir(j := os.path.join(e.path, "jobs"))]
-    return {parse.parse_job(d, trials=False).uid for d in parse.find_job_dirs(roots) if outside(d)} & uids
+    return {job_uid.strict(d) for d in parse.find_job_dirs(roots) if outside(d)} & uids
 
 
 def deletion(names: List[str], home: str, root: Optional[str] = None, holding: Optional[Callable] = None,
