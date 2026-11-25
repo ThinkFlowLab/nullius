@@ -2,6 +2,7 @@
   "schema": "nullius.agent/v1",
   "key": "digitalmate",
   "label": "DigitalMate",
+  "company": "ThinkFlowLab",
   "summary": "DigitalMate's Personal Agent service, run as Hive Home with its owned WorkSwarm runtimes.",
   "model": {
     "apis": [

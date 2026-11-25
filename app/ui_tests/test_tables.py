@@ -388,6 +388,25 @@ process.stdout.write(JSON.stringify(out));
 
 
 class Menus(unittest.TestCase):
+    def test_leaderboard_sort_keeps_rank_groups_and_refreshes_changed_values(self):
+        got = node(r'''
+const rows = [
+  {search:'partial', 'sort-group':1, 'sort-tie':'partial', cells:['partial',100]},
+  {search:'B', 'sort-group':0, 'sort-tie':'B', cells:['B',60]},
+  {search:'A', 'sort-group':0, 'sort-tie':'A', cells:['A',60]},
+  {search:'absent', 'sort-group':2, 'sort-tie':'absent', cells:['absent','']}
+];
+const t=build({id:'leaderboard', cols:[['agent','text'],['overall','num']],rows,filter:null});
+t.tools.querySelector('[data-sort-col][value="overall"]').click();
+const before=t.shown();
+const b=t.table.tBodies[0].rows.find(r=>r.cells[0].textContent==='B');b.cells[1].textContent='80';
+t.table.dispatch('table:update');const updated=t.shown();
+t.type('partial');const filtered=t.shown();
+t.type('');process.stdout.write(JSON.stringify({before,updated,filtered,restored:t.shown()}));
+''')
+        self.assertEqual(got, {"before": ["A", "B", "partial", "absent"], "updated": ["B", "A", "partial", "absent"],
+                               "filtered": ["partial"], "restored": ["B", "A", "partial", "absent"]})
+
     def test_a_label_click_toggles_and_keeps_its_menu_open(self):
         got = node(LAUNCHES + r'''
 const cols = el('div', {'data-tools': 'columns', hidden: true}, el('label', {}, el('input', {type: 'checkbox', 'data-col': 'launch', checked: true}), ' Launch'));

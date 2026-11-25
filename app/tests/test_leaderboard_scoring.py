@@ -63,9 +63,9 @@ class Contributions(unittest.TestCase):
         self.assertIsNone(self.contribution(runs, dataset="missing").score)
 
     def test_c2_explicit_merge_sources_count_once(self):
-        source = run("source", ["resolved"])
-        merged = replace(source, job_id="merged", merged_from=["source"])
-        self.assertEqual(self.contribution([source, merged]).run_ids, ("merged",))
+        source = run("aaa-source", ["resolved"])
+        merged = replace(source, job_id="zzz-merged", merged_from=["aaa-source"])
+        self.assertEqual(self.contribution([source, merged]).run_ids, ("zzz-merged",))
 
     def test_c3_pass_fail_infrastructure_and_missing(self):
         got = self.contribution([run("a", ["resolved", "agent_error", "rate_limited"])])

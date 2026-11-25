@@ -1,6 +1,7 @@
 """The composite view uses verified coverage and stable participant identities."""
 from dataclasses import replace
 import unittest
+from unittest.mock import patch
 
 from tests.test_leaderboard_scoring import run
 from nullius.leaderboard import board, configuration
@@ -60,7 +61,9 @@ class BoardExamples(unittest.TestCase):
     def test_c17_efficiency_deduplicates_mappings_and_never_loads_trajectories(self):
         base = self.make_run("A", ["resolved"])
         self.config["axes"]["Money"]["entries"] = self.config["axes"]["Retrieval"]["entries"]
-        row = next(r for r in self.build([base])["rows"] if r["has_runs"])
+        with patch("nullius.traces.trajectory.load") as load:
+            row = next(r for r in self.build([base])["rows"] if r["has_runs"])
+            load.assert_not_called()
         self.assertEqual(row["metrics"]["time"], {"value": 40, "count": 1})
         self.assertEqual(row["metrics"]["cost"], {"value": 1, "count": 1})
         self.assertIsNone(row["metrics"]["steps"]["value"])
@@ -90,6 +93,26 @@ class BoardExamples(unittest.TestCase):
         row = self.build([], True)["rows"][0]
         self.assertEqual((row["overall"], row["rank"], row["has_runs"]), (.72, 1, False))
         self.assertEqual(row["metrics"]["cost"], {"value": None, "count": 0})
+
+    def test_c6_attempted_unavailable_entry_still_requires_verified_evidence(self):
+        jobs = [self.make_run("A", ["resolved"] * 100)]
+        self.benchmarks.append({"key": "tau3-bench", "label": "Tau", "_version": "v1", "score": {"kind": "pass"},
+                                "datasets": [{"id": "first", "tasks": {"0": "0"}}]})
+        self.config["axes"]["Retrieval"]["entries"].append({"benchmark": "tau3-bench", "version": "v1", "dataset": "", "metric": "pass^3", "weight": 1})
+        short = self.make_run("B", ["resolved"], benchmark="tau3-bench")
+        rows = self.build(jobs + [short])["rows"]
+        a = next(r for r in rows if r["name"] == "A")
+        self.assertIsNone(a["rank"])
+        self.assertIn("Tau not run", a["reasons"])
+
+    def test_c13_missing_version_evidence_never_renormalizes_a_difference(self):
+        jobs = [self.make_run("A", ["resolved"])]
+        original = self.build(jobs)
+        projected = board.project(jobs, self.agents, self.benchmarks, self.config, "gaia", "unrun")
+        row = next(r for r in projected["rows"] if r["has_runs"])
+        self.assertIsNone(row["axes"]["Retrieval"]["score"])
+        self.assertIsNone(row["overall"])
+        self.assertEqual(self.build(jobs), original)
 
 
 if __name__ == "__main__":

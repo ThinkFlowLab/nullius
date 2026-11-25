@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% from '_page.html' import page_head %}
+{% block title %}Scoring settings · Nullius{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='settings/settings.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='leaderboard/leaderboard.css') }}">{% endblock %}
+{% block body %}
+{% set actions %}<a class="btn ghost lb-head-link" href="{{ url_for('leaderboard') }}">Leaderboard</a>{% endset %}
+{{ page_head('Scoring settings', actions=actions) }}
+{% if warning %}<p role="alert">{{ warning }}</p>{% endif %}
+<form id="scoring-form" data-writable="{{ 'true' if writable else 'false' }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<fieldset{{ ' disabled' if not writable }}><section><h2>Custom benchmarks</h2><div id="scoring-custom"></div><button class="btn ghost sm" type="button" id="custom-add">Add custom benchmark</button></section>
+{% for title, names in [('Capabilities',capabilities),('Domains',domains)] %}<section><h2>{{ title }}</h2>{% for name in names %}<section data-scoring-axis="{{ name }}"><h3>{{ name }}</h3><div data-entries></div><button class="btn ghost sm" type="button" data-add-entry>Add benchmark</button><label>Weight in Overall <input type="number" min="0" step="any" data-overall="{{ name }}" value="{{ settings.axes[name].weight }}" required> <output data-overall-share="{{ name }}"></output></label></section>{% endfor %}</section>{% endfor %}
+<section><button class="btn ghost danger" type="button" id="reset-ask">Reset to defaults</button><div id="reset-confirm" hidden><p>Reset mappings and weights to defaults and remove all custom benchmarks and scores?</p><button type="button" class="btn danger" id="reset-yes">Reset</button><button type="button" class="btn ghost" id="reset-no">Cancel</button></div></section></fieldset>
+<div class="st-savebar" hidden role="status"><span data-changes></span><button type="button" class="btn ghost sm" data-settings-retry>Retry</button></div></form>
+<script type="application/json" id="scoring-data">{{ dict(settings=settings, options=options, rows=rows, revision=revision)|tojson }}</script>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='leaderboard/scoring.js') }}"></script>{% endblock %}

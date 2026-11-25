@@ -2,6 +2,7 @@
   "schema": "nullius.agent/v1",
   "key": "goose",
   "label": "Goose",
+  "company": "Agentic AI Foundation",
   "summary": "The AAIF's open-source agent, formerly Block's.",
   "upstream": {
     "package": "@aaif/goose-acp",

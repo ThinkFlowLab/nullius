@@ -2,6 +2,7 @@
   "schema": "nullius.agent/v1",
   "key": "swe-agent",
   "label": "SWE-agent",
+  "company": "Princeton and Stanford",
   "summary": "Princeton\u2019s software engineering agent with its upstream tool bundles.",
   "upstream": {
     "repository": "https://github.com/SWE-agent/SWE-agent",

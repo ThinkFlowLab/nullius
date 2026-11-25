@@ -287,3 +287,59 @@ Thirteen classes. The five marked **yes** under Infrastructure leave the adjuste
 - [Compare and judge runs](judgement.md)
 
 </div>
+
+## Leaderboard
+
+Leaderboard scores describe one workspace's completed runs of catalogue agents.
+Controls, example agents, preparing/running jobs and standalone capability
+results do not contribute. Agent versions and execution setups are separate
+rows; sampling limits affect coverage rather than identity.
+
+For each dataset and benchmark version, select the compatible run with the most
+distinct non-infrastructure tasks, then the latest finish, then its stable run
+ID. A better score never wins selection. Repeated attempts stay with their task;
+repeated runs are not pooled. Explicit merged runs replace their source shards.
+A whole-benchmark entry unions selected datasets by canonical task identity;
+an overlap uses the same run precedence and retains that task's attempts.
+Unknown identities make aggregation or full coverage unavailable rather than
+guessing aliases. A dataset entry reads only that dataset.
+
+Score is adjusted solve rate for pass/fail tasks. Graded scores preserve recorded
+part weighting within a task, including agent crashes as zero with their part
+count (one when absent). Distinct task scores are then averaged. Infrastructure
+outcomes are excluded; missing measurements stay absent. Scores outside the
+supported 0–1 scale are unavailable. Raw job metrics are unchanged. pass^3 uses
+recorded attempts in one selected run and the existing eligible-unit semantics;
+independent one-attempt runs cannot supply it.
+
+Each axis normalizes positive entry weights over available scores. Overall
+normalizes positive axis weights over measured axes. Missing values are never
+zero. Evidence gives effective shares, configured weights, benchmark versions,
+task coverage and links to each selected run. An all-zero entry column is
+unavailable. All-zero Overall weights are invalid.
+
+Rank requires Overall and complete known coverage of the required verified
+entries across counted axes, including positive-weight domains. Unknown full
+coverage prevents ranking. Removed entries and zero weights do not gate rank.
+Manual sources cannot replace required verified evidence, and their absence
+does not disqualify another row. Exact Overall ties share competition rank;
+scored unranked rows follow ranked rows and retain their score bars.
+
+Verified only excludes custom scores everywhere. All scores includes them with
+the configured weights; affected values identify unverified influence and name
+the sources. Custom scores supply no tasks, runs or efficiency measurements.
+They bind to stable agent/version/setup keys and never transfer to a new setup.
+
+Average uses available row scores and reports the count. A row comparison uses
+shared measured capabilities for best and weakest differences in percentage
+points. Benchmark-version comparisons are temporary: settings and ranks do not
+change. Missing evidence for a replacement version leaves affected axes and
+Overall differences absent, rather than renormalizing a partial comparison.
+Radar segments connect only adjacent measured axes, including wraparound.
+
+Efficiency averages distinct selected real trials, deduplicated across mappings,
+with infrastructure excluded. Time uses observed agent durations; cost uses
+observed costs, each with its own count. Steps and Tool calls load later from
+trajectories on the page; the command completes that read synchronously. Missing
+or malformed traces are unavailable, not zero. Changed trace content invalidates
+its cached metrics without reparsing unchanged traces.

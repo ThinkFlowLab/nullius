@@ -68,3 +68,28 @@ nullius standard traces ./jobs
 ```
 
 A trial that ended early kept no ACP events: its trace has the model calls, and its tool calls at their start, with no duration.
+
+## Leaderboard
+
+```bash
+nullius leaderboard --help
+nullius leaderboard --json
+nullius leaderboard ./jobs --json
+nullius leaderboard ./jobs --all-scores
+```
+
+Supply the result roots of one workspace. This reads completed jobs; it never
+launches work. Without roots, it returns unscored catalogue rows. Exit 0 means
+the document was read; an invalid root exits 3, invalid arguments 2.
+
+Verified only is the default. `--all-scores` includes saved manual scores.
+The page and command use the same profile's [Scoring settings](../settings/README.md#scoring-settings).
+JSON includes agent/company/version and execution identity, benchmark entry
+versions, all capability and domain weights, effective shares, ranks and
+not-ranked reasons, task evidence and selected run IDs. Scores are fractions;
+text percentages use one decimal when needed.
+
+Time and cost include observed counts. The command also reads selected
+trajectories for Steps and Tool calls; a missing or malformed trace leaves those
+metrics unavailable. Invalid scoring settings use defaults with the same warning
+as the page, without replacing the file. See the [scoring contract](../field-guide.md#leaderboard).

@@ -1552,6 +1552,8 @@ def problems(d: dict, kind: str) -> List[str]:
             bad.append(f"{f}: say it")
     if "example" in d and (kind == "benchmark" or not isinstance(d["example"], bool)):
         bad.append("example: true or false, an agent's or a capability's")
+    if "company" in d and (kind != "agent" or not isinstance(d["company"], str) or not d["company"].strip()):
+        bad.append("company: nonempty text on an agent definition")
     bad += _upstream(d.get("upstream"))
     if kind == "benchmark":
         if d.get("family") not in FAMILIES:

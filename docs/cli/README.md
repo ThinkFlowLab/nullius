@@ -10,7 +10,7 @@ From a source checkout, replace `nullius` with
 | Page | Command |
 | --- | --- |
 | [Launch](../getting-started.md) | `nullius serve [roots...]` |
-| [Read jobs](read-jobs.md) | `nullius runs`, `nullius compare`, `nullius workspace`, `nullius standard traces` |
+| [Read jobs](read-jobs.md) | `nullius runs`, `nullius compare`, `nullius leaderboard`, `nullius workspace`, `nullius standard traces` |
 | [Import a run](import.md) | `nullius import` |
 | [Task flags](flags.md) | `nullius flags list`, `set`, `accept`, `remove`, `copy`, `import`, `feasibility` |
 | [Definitions](definitions.md) | `nullius standard list`, `check`, `fit`, `pins`, `new` |

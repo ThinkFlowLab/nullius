@@ -118,6 +118,11 @@ class Problems(unittest.TestCase):
         self.bad(BENCH, "benchmark", lambda d: d.update(example=True), "example: true or false")
         self.assertIs(definitions.get("agent", "reference", definitions.CATALOGUE).get("example"), True)
 
+    def test_agent_company_is_optional_nonempty_text(self):
+        self.assertEqual(definitions.problems(dict(AGENT, company="Maker"), "agent"), [])
+        for value in (None, "", "   ", 7):
+            self.bad(AGENT, "agent", lambda d: d.update(company=value), "company:")
+
     def test_unknown_port_is_named_and_one_of_the_other_family_refused(self):
         self.bad(BENCH, "benchmark", lambda d: d["needs"].append("agent.telepathy/v1"), "'agent.telepathy/v1' is not a port")
         self.bad(BENCH, "benchmark", lambda d: d["needs"].append("cap.memory/v1"), "not the agent")

@@ -94,6 +94,15 @@ class Dots(unittest.TestCase):
 
 
 class Scatter(unittest.TestCase):
+    def test_logo_tiles_keep_exact_tooltips_and_distinct_centres(self):
+        values = (c.Value("A", 40, "40", tag="A", key="a"), c.Value("B", 40, "40", tag="B", key="b"))
+        panel = c.scatter(c.Metric("Time", values, bounds=(0, None)), c.Metric("Overall", values), tiles=True)
+        tiles = [m for m in panel.marks if m.shape == "tile"]
+        self.assertEqual({m.key for m in tiles}, {"a", "b"})
+        self.assertEqual(len({(m.x, m.y) for m in tiles}), 2)
+        self.assertTrue(all("Time 40" in m.title for m in tiles))
+        self.assertFalse(any(t.cls == "label" for t in panel.texts))
+
     def test_every_run_keeps_its_own_dot_and_tag_and_ties_sit_around_one_place(self):
         x, y = metric(40, 40, 40, 40, label="Trials"), metric(0, 0, 0, 3, label="Broke")
         p = c.scatter(x, y)
@@ -104,6 +113,20 @@ class Scatter(unittest.TestCase):
         self.assertEqual([t.lines[0] for t in p.texts if t.cls.startswith("label")], ["1. run 0", "2. run 1", "3. run 2", "4. run 3"])
         self.assertEqual(p.table[0], ("Name", "Trials", "Broke"))
         self.assertTrue(dots[0].title.startswith("1 run 0: Trials 40, Broke 0"))
+
+    def test_logo_tiles_and_two_line_labels_do_not_overlap(self):
+        x = c.Metric("Time", tuple(c.Value(name, value, str(value), tag=name, note="2.2.2", key=str(i))
+                                   for i, (name, value) in enumerate((("Codex", 40), ("Goose", 40), ("Terminus", 40.1)))))
+        p = c.scatter(x, c.Metric("Overall", tuple(c.Value(v.name, .75, "75%") for v in x.values)), tiles=True)
+        tiles = [(m.x-11, m.y-11, m.x+11, m.y+11) for m in p.marks if m.shape == "tile"]
+        labels = []
+        for t in (t for t in p.texts if t.key):
+            width = c._TAG_W * max(map(len, t.lines))
+            left = {"start": t.x, "middle": t.x-width/2, "end": t.x-width}[t.anchor]
+            labels.append((left, t.y-c._TAG_H+3, left+width, t.y+3+15*(len(t.lines)-1)))
+        self.assertEqual(len(labels), 3)
+        for i, box in enumerate(tiles + labels):
+            self.assertFalse(any(c._overlaps(box, other) for other in (tiles+labels)[i+1:]))
 
     def test_tags_stay_inside_the_plot_and_clear_of_each_other(self):
         values = [(0.40 + k * 0.002, 1 + k * 0.01) for k in range(7)]           # a tight cluster

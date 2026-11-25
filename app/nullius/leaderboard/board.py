@@ -3,9 +3,35 @@ from __future__ import annotations
 
 import hashlib
 import json
+import copy
+from dataclasses import replace
 from math import isfinite
+from nullius.standard.contract import definitions
 
 from . import configuration, scoring, weights
+
+
+def project(jobs, agents, benchmarks, settings, benchmark, version, *, all_scores=False):
+    """A comparison projection: missing changed evidence invalidates its affected axis."""
+    draft = copy.deepcopy(settings)
+    affected = set()
+    for name, axis in draft["axes"].items():
+        for entry in axis["entries"]:
+            if entry.get("benchmark") == benchmark:
+                entry["version"] = version
+                if entry["weight"] > 0:
+                    affected.add(name)
+    result = build(jobs, agents, benchmarks, draft, all_scores=all_scores)
+    for row in result["rows"]:
+        for name in affected:
+            axis = row["axes"][name]
+            if any(e.get("benchmark") == benchmark and e["weight"] > 0 and e["score"] is None for e in axis["entries"]):
+                axis["score"] = None
+                axis["share"] = 0
+                if axis["weight"] > 0:
+                    row["overall"] = None
+        row["rank"] = None
+    return result
 
 
 def row_identity(job):
@@ -30,7 +56,7 @@ def _entry_key(entry):
     return tuple(entry.get(k, "") for k in ("benchmark", "dataset", "version", "metric"))
 
 
-def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_open=True):
+def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_open=True, metric_sources=None):
     """Pure board projection. Inputs belong to a single workspace and profile."""
     config = configuration.validate(settings, benchmarks)
     agents = [a for a in agents if not a.get("example") and a["key"] not in ("nop", "oracle")]
@@ -47,6 +73,8 @@ def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_ope
         identities[key] = identity
     measured_agents = {identity["agent"] for identity in identities.values()}
     for agent in agents:
+        if agent.get("_version", "") != agent.get("_default", agent.get("_version", "")):
+            continue
         if agent["key"] in measured_agents:
             continue
         identity = {"agent": agent["key"], "version": agent.get("_version", ""), "catalogue_only": True}
@@ -59,6 +87,8 @@ def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_ope
         row = {"key": key, "agent": identity["agent"], "name": agent["label"], "company": agent.get("company", ""),
                "version": identity["version"], "identity": identity, "has_runs": bool(runs), "axes": {},
                "metrics": _empty_metrics(), "reasons": [], "custom_names": []}
+        matching = next((a for a in agents if a["key"] == identity["agent"] and a.get("_version", "") == identity["version"]), None)
+        row["version_label"] = definitions.version_label(matching) if matching else identity["version"]
         trials = {}
         for name in configuration.AXES:
             axis = config["axes"][name]
@@ -79,7 +109,10 @@ def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_ope
                         evidence["reason"] = "Benchmark version unavailable"
                     else:
                         manifests = {d["id"]: d.get("tasks") if isinstance(d.get("tasks"), dict) else None for d in bench.get("datasets", [])}
-                        got = scoring.contribution(runs, benchmark=entry["benchmark"], version=entry["version"], datasets=manifests,
+                        # The standard writes benchmark/dataset; only remove this exact declared prefix.
+                        recorded = {f"{bench['key']}/{d}": d for d in manifests}
+                        normalized = [replace(j, dataset=recorded.get(j.dataset, j.dataset)) for j in runs]
+                        got = scoring.contribution(normalized, benchmark=entry["benchmark"], version=entry["version"], datasets=manifests,
                                                    dataset=entry["dataset"], metric=entry["metric"], graded=bench.get("score", {}).get("kind") == "score")
                         evidence.update(score=got.score, tasks=got.total, covered=got.covered, excluded=got.excluded,
                                         runs=list(got.run_ids), reason=got.reason, note=got.note)
@@ -104,8 +137,10 @@ def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_ope
             values = [getattr(t, field) for t in trials.values() if getattr(t, field) is not None and isfinite(getattr(t, field)) and getattr(t, field) >= 0]
             row["metrics"][metric] = {"value": sum(values) / len(values) if values else None, "count": len(values)}
         rows.append(row)
+        if metric_sources is not None:
+            metric_sources[key] = tuple(dict.fromkeys(t.trajectory_path for t in trials.values()))
     required = {name: {_entry_key(e) for row in rows for e in row["axes"][name]["entries"]
-                       if "custom" not in e and e["available"] and e["weight"] > 0 and e["score"] is not None}
+                       if "custom" not in e and e["available"] and e["weight"] > 0 and e["runs"]}
                 for name in configuration.AXES if config["axes"][name]["weight"] > 0}
     for row in rows:
         for name, entries in required.items():

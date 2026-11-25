@@ -1,0 +1,118 @@
+"""Leaderboard pages, CLI parity, scoring writes and deferred response isolation."""
+from contextlib import ExitStack, redirect_stdout
+import io
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from .test_routes import web
+from tests.test_comparison import job, trial
+from nullius import cli
+from nullius.runs import parse
+from nullius.leaderboard import configuration
+
+
+class LeaderboardRoutes(unittest.TestCase):
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        self.folder = self.stack.enter_context(tempfile.TemporaryDirectory())
+        self.stack.enter_context(patch.dict(os.environ, NULLIUS_HOME=self.folder))
+        self.stack.enter_context(patch.dict(web.shared.STATE, workspace=None, roots=[], job_roots=[], label=""))
+        self.stack.enter_context(patch.dict(web.app.config, TESTING=True))
+        self.jobs = []
+        self.stack.enter_context(patch.object(web.shared, "_load_jobs", side_effect=lambda: self.jobs))
+        self.client = web.app.test_client()
+
+    def test_empty_pages_keep_catalogue_axes_and_four_blocks(self):
+        response = self.client.get("/leaderboard")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("No workspace open", html)
+        for name in configuration.AXES:
+            self.assertIn(name, html)
+        positions = [html.index(f'id="{key}"') for key in ("leaderboard-table", "leaderboard-efficiency", "leaderboard-strips", "leaderboard-radars")]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("OpenAI", html)
+        self.assertIn("2.2.2", html)
+        for route in ("/scoring", "/settings/scoring"):
+            response = self.client.get(route, follow_redirects=True)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("Scoring settings", response.get_data(as_text=True))
+
+    def test_api_and_cli_use_same_profile_scores_without_eager_trace_loads(self):
+        run = job([trial("a"), trial("b", "agent_error")], dataset="gaia/gaia-validation", agent="codex")
+        run.identity = parse.identity_of({"standard": {"benchmark": "gaia", "plugged": "codex"}, "agents": [{"name": "codex", "model_name": "model"}]}, {}, "2.2.2")
+        self.jobs.append(run)
+        with patch("nullius.traces.trajectory.load") as load:
+            response = self.client.get("/api/leaderboard")
+            self.assertEqual(response.status_code, 200)
+            document = response.get_json()
+            load.assert_not_called()
+        row = next(r for r in document["rows"] if r["has_runs"])
+        self.assertEqual(row["axes"]["Retrieval"]["score"], .5)
+        output = io.StringIO()
+        with patch.object(parse, "load_all", return_value=self.jobs), redirect_stdout(output):
+            self.assertEqual(cli.main(["leaderboard", self.folder, "--json"]), 0)
+        command = json.loads(output.getvalue())
+        self.assertEqual(command["rows"], document["rows"])
+        response = self.client.get("/api/leaderboard/metrics", query_string={"context": "old-workspace"})
+        self.assertEqual(response.status_code, 409)
+
+    def test_scoring_validates_atomic_documents_and_protects_writes(self):
+        self.client.get("/scoring")
+        with self.client.session_transaction() as session:
+            token = session["csrf"]
+        document = self.client.get("/api/scoring").get_json()["settings"]
+        headers = {"X-CSRF-Token": token, "Origin": "http://localhost"}
+        document["axes"]["Retrieval"]["entries"][0]["weight"] = 3
+        response = self.client.post("/api/scoring", json=document, headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["message"], "Scoring saved")
+        before = configuration.location().read_bytes()
+        document["axes"]["Retrieval"]["weight"] = -1
+        self.assertEqual(self.client.post("/api/scoring", json=document, headers=headers).status_code, 400)
+        self.assertEqual(configuration.location().read_bytes(), before)
+        self.assertEqual(self.client.post("/api/scoring", json=document).status_code, 403)
+        self.assertEqual(self.client.post("/api/scoring", json=document, headers=headers, environ_base={"REMOTE_ADDR": "192.0.2.2"}).status_code, 403)
+        configuration.location().write_text("{")
+        for path in ("/leaderboard", "/scoring"):
+            self.assertIn("defaults are active", self.client.get(path).get_data(as_text=True))
+        self.assertEqual(configuration.location().read_text(), "{")
+
+    def test_custom_mode_reset_and_conflicting_writes_keep_complete_documents(self):
+        self.client.get("/scoring")
+        with self.client.session_transaction() as session:
+            headers = {"X-CSRF-Token": session["csrf"], "Origin": "http://localhost"}
+        initial = self.client.get("/api/scoring").get_json()
+        import copy
+        doc = copy.deepcopy(initial["settings"])
+        rows = self.client.get("/api/leaderboard").get_json()["rows"]
+        doc["custom"] = [{"id": "calendar", "name": " <b>test</b> ", "scores": {rows[0]["key"]: 72, rows[1]["key"]: 0}}]
+        doc["axes"]["Personalization"]["entries"] = [{"custom": "calendar", "weight": 1}]
+        result = self.client.post("/api/scoring", json=doc, headers=headers | {"If-Match": initial["revision"]})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.get_json()["settings"]["custom"][0]["name"], "<b>test</b>")
+        self.assertTrue(all(r["overall"] is None for r in self.client.get("/api/leaderboard").get_json()["rows"]))
+        all_scores = self.client.get("/api/leaderboard?all_scores=1").get_json()["rows"]
+        self.assertEqual([(r["overall"], r["rank"]) for r in all_scores[:2]], [(.72, 1), (0, 2)])
+        before = configuration.location().read_bytes()
+        conflict = self.client.post("/api/scoring", json={"reset": True}, headers=headers | {"If-Match": initial["revision"]})
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(configuration.location().read_bytes(), before)
+        with patch("nullius.ondisk.write_whole", side_effect=OSError("private path")):
+            failed = self.client.post("/api/scoring", json={"reset": True}, headers=headers)
+        self.assertEqual(failed.status_code, 503)
+        self.assertNotIn("private path", failed.get_data(as_text=True))
+        self.assertEqual(configuration.location().read_bytes(), before)
+        reset = self.client.post("/api/scoring", json={"reset": True}, headers=headers)
+        self.assertEqual(reset.status_code, 200)
+        self.assertEqual(reset.get_json()["settings"], initial["settings"])
+        self.assertFalse(any(r["unverified"] for r in self.client.get("/api/leaderboard?all_scores=1").get_json()["rows"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

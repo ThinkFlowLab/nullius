@@ -28,8 +28,10 @@ window.NulliusTable = {
       if (col === null) return;
       const type = heads[col].dataset.type || 'text';
       [...body.rows].sort((a, b) => {
+        const group = Number(a.dataset.sortGroup || 0) - Number(b.dataset.sortGroup || 0);
+        if (group) return group;
         const x = key(a, type), y = key(b, type);
-        return (x < y ? -1 : x > y ? 1 : 0) * dir;
+        return (x < y ? -1 : x > y ? 1 : 0) * dir || (a.dataset.sortTie || "").localeCompare(b.dataset.sortTie || "");
       }).forEach(r => body.appendChild(r));
       after();
     };
@@ -239,6 +241,7 @@ window.NulliusTable = {
     const ticks = table.querySelector('[data-check-all]') ? this.checks(table) : () => {};
     let first = () => {};
     const t = this.toolbar(table, tools, () => first());
+    table.addEventListener("table:update", () => { t.resort(); first(); });
     const pick = Boolean(table.querySelector('[data-pick]'));
     if (pick) this.picks(table, 'tr');
     first = this.pager(table, table.id + '.per', pick ? r => t.passes(r) || this.chosen(r) : t.passes, ticks);

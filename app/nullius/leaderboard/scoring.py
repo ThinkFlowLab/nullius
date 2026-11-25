@@ -81,7 +81,7 @@ join several datasets; they cannot infer overlap from short task names.
     total = len({canonical for manifest in manifests for canonical in manifest.values()}) if all(m is not None for m in manifests) else None
     pool = [j for j in jobs if eligible(j) and j.dataset in scope
             and j.identity.get("benchmark") == benchmark
-            and j.identity.get("benchmark_version") == version]
+            and j.identity.get("benchmark_version", "") == version]
     sources = {source for j in pool for source in j.merged_from}
     pool = [j for j in pool if j.job_id not in sources]
     selected = {}
