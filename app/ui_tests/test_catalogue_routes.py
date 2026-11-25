@@ -60,7 +60,7 @@ class PageCase(unittest.TestCase):
 
 class OriginTags(PageCase):
     """Every benchmark card and page says whether it is official - the
-    publisher's benchmark - or adapted by the community: a tag
+    publisher's benchmark - or an experiment: a tag
     beside the category."""
 
     def test_a_card_and_its_page_carry_the_origin(self):
@@ -131,12 +131,12 @@ class BenchmarksList(PageCase):
         keys = re.findall(r'<a class="card-link" href="/benchmarks/([^"]+)"', self.html)
         self.assertEqual(sorted(keys), sorted(b.key for b in cat.listed_benchmarks))
         self.assertEqual(len(keys), 11)
-        # two shelves, the official benchmarks then the community benchmarks; a shelf with nothing on it is not shown
+        # two shelves, the official benchmarks then the experiments; a shelf with nothing on it is not shown
         official = self.html[self.html.index('data-shelf="official"'):].split('</section>', 1)[0]
         for b in cat.listed_benchmarks:
             with self.subTest(b.key):
                 self.assertEqual('/benchmarks/%s"' % b.key in official, b.origin == "official")
-        self.assertEqual('data-shelf="community"' in self.html, any(b.origin == "community" for b in cat.listed_benchmarks))
+        self.assertEqual('data-shelf="experiment"' in self.html, any(b.origin == "experiment" for b in cat.listed_benchmarks))
 
     def test_a_card_says_what_it_holds(self):
         swe = visible(self.card("swe-bench-verified"))
