@@ -187,6 +187,14 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertEqual(configuration.load(configuration.location(), service.catalogue()[1])[0]['axes']['Retrieval']['entries'][0]['weight'], 6)
         self.assertFalse(self.errors)
 
+    def test_a_phone_scrolls_the_table_not_the_page(self):
+        self.page.set_viewport_size({"width": 390, "height": 900})
+        self.open('/leaderboard')
+        wrap = self.page.locator('.table-wrap').first
+        self.assertGreater(wrap.evaluate("w=>w.scrollWidth-w.clientWidth"), 0)
+        self.assertEqual(self.page.evaluate("document.documentElement.scrollWidth-document.documentElement.clientWidth"), 0)
+        self.assertFalse(self.errors)
+
     def test_medals_for_the_first_four_ranks_then_plain_numbers(self):
         settings, _ = configuration.load(configuration.location(), service.catalogue()[1])
         rows = service.document(self.jobs)["rows"]

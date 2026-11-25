@@ -450,6 +450,8 @@ button.seg:hover { filter: brightness(1.25); }
 .table-wrap .grid .sticky-col {
   position: sticky; left: var(--sticky-left, 0); z-index: 2; background: var(--bg);
 }
+/* a header's screen-reader name is placed against its cell, inside the scroll box, so it never widens the page */
+.table-wrap .grid th:not(.sticky-col) { position: relative; }
 .table-wrap .grid .sticky-col.sticky-edge { box-shadow: 1px 0 0 var(--border-soft); }
 .table-wrap .grid thead th.sticky-col { z-index: 4; background: var(--bg); }
 /* opaque sticky cells would hide the row hover, so repaint them to match */
