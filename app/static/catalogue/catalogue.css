@@ -461,7 +461,7 @@ a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underli
 .tasks-pick { display: inline-flex; align-items: center; gap: 6px; }
 .tasks-pick input { flex: none; width: 4.5rem; height: 32px; padding: 0 .6rem; box-sizing: border-box; }
 .tasks-count { margin: 14px 0 6px; }
-.tasks-count:empty, .tasks-msg:empty { display: none; }
+.tasks-cats:empty, .tasks-count:empty, .tasks-msg:empty { display: none; }
 .tasks-scroll { overflow-x: auto; }
 .tasks-table th, .tasks-table td { padding: .6rem .7rem; }
 .tasks-table td:nth-child(2) { overflow-wrap: anywhere; }
