@@ -70,7 +70,7 @@ Follow the evidence: a recorded rate limit is a provider's failure whatever the 
 | What | Detail |
 | --- | --- |
 | Where | `judgements/<job identity>/<trial>.json` below the user data directory, never in the job tree; task-instruction scores in `judgements-tasks/<dataset>/`. One record per trial and per try of a retried trial, in every workspace that holds the job; a renamed Harbor or imported job folder is a new job |
-| Before | Records under `workspaces/<name>/judgements/` are still shown; of two for one trial, the newer. *Move judgements* (first page, or Settings › Judges) copies them into the user data directory; the old files stay. A workspace is left for later while a root or a file cannot be read, or a record belongs to no job found or to two jobs; such a record is still shown, never copied |
+| Before | Records under `workspaces/<name>/judgements/` are still shown; of two for one trial, the newer. *Move judgements* (first page, or Settings › Judges) copies them into the user data directory; the old files stay. A workspace is left for later while a root, a folder or a file cannot be read, or a record belongs to no job found, to two jobs or to one still starting; such a record is still shown, never copied, even by a save |
 | Deleted | With the launch they judge (*Delete launch* in Runs, [Run](builder.md#run)), unless a copy of the job is found or a root cannot be read. Deleting a workspace keeps them, its old records and its imports' failure analyses in `judgements-of-deleted-workspaces/`; one with old records not yet moved is refused while one of its roots cannot be read |
 | Version | `judgement.questions.v2`; v1 records marked *earlier* |
 | Cost | A batch button names its calls; each is checked against the token budget |

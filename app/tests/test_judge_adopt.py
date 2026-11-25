@@ -177,6 +177,28 @@ class Adopt(unittest.TestCase):
         self.assertFalse(store.moved(ws.dir))
         self.assertEqual([n for _, n in store.old_stores(home_dir)], [4])
 
+    def test_a_moved_workspace_is_read_again_once_a_file_changes_or_a_folder_cannot_be_listed(self):
+        root = os.path.join(self.tmp, "jobs"); _job_dir(root, "job-a")
+        home_dir = os.path.join(self.tmp, "ws")
+        ws = workspace.create(home_dir, [root], label="w")
+        [j] = workspace.load_jobs(ws, ws.roots)
+        t0 = j.trials[0].trial_name
+        store.save(ws.dir, "job-a", t0, rec("2026-01-01T00:00:00Z", "first"))
+        self.assertEqual(store.move(home_dir), [])
+        self.assertTrue(store.moved(ws.dir))
+        store.save(ws.dir, "job-a", t0, dict(rec("2026-01-02T00:00:00Z"), answers={"later": {"choice": "y"}}))   # an older Nullius, in place
+        self.assertFalse(store.moved(ws.dir))
+        self.assertIn("later", store.load(self.home, j.uid, t0, old=store.overlay(ws.dir, j))["answers"])
+        self.assertEqual(store.move(home_dir), [])
+        real = os.scandir
+        def unlisted(p="."):
+            if isinstance(p, str) and os.path.basename(p) == "job-a":
+                raise PermissionError(13, "Permission denied", p)
+            return real(p)
+        with patch("os.scandir", unlisted):
+            self.assertFalse(store.moved(ws.dir))
+            self.assertEqual(store.move(home_dir), ["w (a folder cannot be read)"])
+
     def test_a_record_two_jobs_of_one_id_share_is_moved_to_neither_and_still_shown_on_both(self):
         r1, r2 = (os.path.join(self.tmp, r) for r in ("r1", "r2"))
         _job_dir(r1, "job-x"); _job_dir(r2, "job-x")
@@ -192,6 +214,25 @@ class Adopt(unittest.TestCase):
         self.assertFalse(os.path.isdir(os.path.join(self.home, "judgements")) and
                          [d for d in os.listdir(os.path.join(self.home, "judgements")) if not d.startswith(".")])
         self.assertEqual([bool(store.load(self.home, j.uid, t0, old=store.overlay(ws.dir, j))) for j in jobs], [True, True])
+        workspace.delete(home_dir, ws.name)                                         # nor by a delete: kept whole beside
+        self.assertFalse(os.path.isdir(os.path.join(self.home, "judgements")))
+        [kept] = os.listdir(os.path.join(self.home, "judgements-of-deleted-workspaces"))
+        self.assertTrue(os.path.isfile(os.path.join(self.home, "judgements-of-deleted-workspaces", kept, "judgements", "job-x", t0 + ".json")))
+
+    def test_a_job_of_the_same_name_still_starting_may_own_them_too(self):
+        r1, r2 = (os.path.join(self.tmp, r) for r in ("r1", "r2"))
+        _job_dir(r1, "job-x")
+        home_dir = os.path.join(self.tmp, "ws")
+        ws = workspace.create(home_dir, [r1, r2], label="w")
+        [j] = workspace.load_jobs(ws, ws.roots)                                     # parsed before the other came
+        os.makedirs(os.path.join(r2, "job-x"))
+        with open(os.path.join(r2, "job-x", "config.json"), "w") as f:
+            json.dump({"job_name": "job-x", "agents": [{"name": "oracle"}]}, f)
+        t0 = j.trials[0].trial_name
+        store.save(ws.dir, "job-x", t0, rec("2026-01-01T00:00:00Z"))
+        self.assertEqual(store.move(home_dir), ["w (1 record of a job still starting)"])
+        self.assertFalse(os.path.isdir(os.path.join(self.home, "judgements", j.uid)))
+        self.assertEqual(store.single(store.owners(ws, names={"job-x"})), {})
 
     def test_deleting_a_workspace_keeps_the_failure_analyses_of_its_imports(self):
         from nullius.runs import failure_analysis as fa

@@ -158,7 +158,7 @@ class RunDelete(unittest.TestCase):
         twin = os.path.join(self.tmp, "twin"); _job_dir(twin, "job-a")
         self.a.roots.append(twin); workspace.save(self.a); workspace.load_jobs(self.a, self.a.roots)
         execution.delete(["r1"], self.home, self.root)
-        self.assertEqual(len(store.job_dirs(self.a.dir, ["job-a"])), 2)
+        self.assertEqual(len(store.job_dirs(self.data, [self.uid("job-a", twin)])), 2)   # a copy: its records follow it
         self.assertEqual(store.job_dirs(self.b.dir, ["job-a"]), [])
 
     def test_a_job_of_the_same_id_deleted_from_another_root_keeps_none(self):

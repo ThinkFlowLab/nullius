@@ -369,36 +369,56 @@ def _merge_into(path: str, old, job_dir: Optional[str] = None) -> None:
             ondisk.write_whole(path, json.dumps(got, indent=1), mode=0o600)
 
 
+def _raise(e: OSError):
+    raise e
+
+
 def _old_files(ws_dir: str) -> list:
-    """The files of a workspace's store from before, by their path in it."""
-    return sorted(os.path.relpath(os.path.join(d, f), ws_dir) for r in ROOTS.values()
-                  for d, _, fs in os.walk(os.path.join(ws_dir, r)) for f in fs if f.endswith(".json"))
+    """The files of a workspace's store from before, by their path in it. OSError when a folder
+    of it cannot be listed: what it holds is unknown."""
+    return sorted(os.path.relpath(os.path.join(d, f), ws_dir) for r in ROOTS.values() if os.path.isdir(os.path.join(ws_dir, r))
+                  for d, _, fs in os.walk(os.path.join(ws_dir, r), onerror=_raise) for f in fs if f.endswith(".json"))
 
 
 def _marker(ws_dir: str, into: str) -> str:
     return os.path.join(_root(into, "decision"), MOVED, os.path.basename(ws_dir))
 
 
-def _signature(files) -> str:
-    # shortcut: names only, so a file rewritten in place under the same name is not seen; stat each if that matters
-    return hashlib.sha256("\n".join(files).encode("utf-8")).hexdigest()
+def _bytes(path: str) -> Optional[bytes]:
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+def _signature(ws_dir: str, files, raw: Optional[dict] = None) -> str:
+    """The digest of the files `files` of a workspace's store from before, by path and contents:
+    those in `raw` ({path: bytes}) as they were read, the others as they are now."""
+    h = hashlib.sha256()
+    for f in files:
+        data = (raw or {}).get(f)
+        data = _bytes(os.path.join(ws_dir, f)) if data is None else data
+        h.update(f"{f}\0{hashlib.sha256(data).hexdigest() if data is not None else '-'}\n".encode("utf-8"))
+    return h.hexdigest()
 
 
 def moved(ws_dir: Optional[str], into: Optional[str] = None) -> bool:
     """Whether `move` copied every record of the workspace's store from before into the user's
-    store, and it holds no file since: one added, by a restore or an older Nullius, is read again."""
+    store, and its files are as `move` read them: one added or rewritten since, by a restore or an
+    older Nullius, is read again, and so is a store whose folders cannot all be listed."""
     if not ws_dir:
         return False
     try:
         with open(_marker(ws_dir, into or home()), encoding="utf-8") as fh:
-            return fh.read() == _signature(_old_files(ws_dir))
+            return fh.read() == _signature(ws_dir, _old_files(ws_dir))
     except OSError:
         return False
 
 
-def _mark(ws_dir: str, into: str, files) -> None:
+def _mark(ws_dir: str, into: str, files, raw: Optional[dict] = None) -> None:
     os.makedirs(os.path.dirname(_marker(ws_dir, into)), exist_ok=True)
-    ondisk.write_whole(_marker(ws_dir, into), _signature(files))
+    ondisk.write_whole(_marker(ws_dir, into), _signature(ws_dir, files, raw))
 
 
 def forget(ws_dir: str, folders) -> None:
@@ -407,20 +427,25 @@ def forget(ws_dir: str, folders) -> None:
     for d in folders:
         shutil.rmtree(d, ignore_errors=True)
     if was:
-        _mark(ws_dir, home(), _old_files(ws_dir))
+        try:
+            _mark(ws_dir, home(), _old_files(ws_dir))
+        except OSError:
+            pass
 
 
 def _places(ws_dir: str, job, into: str):
     """(an older file, the file of the user's store it belongs in) for each the workspace's store
     from before holds for `job`: under its job id its trials' and tries' (each by its own name), and
-    its dataset's task records."""
+    its dataset's task records. The file is None where it is named by the job's identity and the job
+    has none yet (pending)."""
     names = {}
     for t in job.trials:
         for name in (t.trial_name, *(f"{t.trial_name}.try-{i}" for i in range(1, min(getattr(t, "n_retries", 0) or 0, 99) + 1))):
             names.update((n, key(name)) for n in _names(name))
     places = [(lane, j, job.uid, names) for lane in ROOTS for j in _names(job.job_id)]
     # before, a dataset's task records were a job of their own, named `task:<dataset>`, and a job naming none its id
-    places += [(TASKS, j, task_dataset(job), {}) for j in _names("task:" + (job.dataset_path or job.dataset or "job:" + job.job_id))]
+    places += [(TASKS, j, task_dataset(job) if job.uid or job.dataset_path or job.dataset else "", {})
+               for j in _names("task:" + (job.dataset_path or job.dataset or "job:" + job.job_id))]
     for lane, old, new, rename in places:
         src = os.path.join(_root(ws_dir, "decision" if lane == TASKS else lane), old)
         try:
@@ -428,40 +453,95 @@ def _places(ws_dir: str, job, into: str):
         except OSError:
             continue
         for f in files:
-            yield os.path.join(src, f), os.path.join(_root(into, lane), key(new), rename.get(f[:-5], f[:-5]) + ".json")
+            yield os.path.join(src, f), (os.path.join(_root(into, lane), key(new), rename.get(f[:-5], f[:-5]) + ".json")
+                                         if new else None)
 
 
-def _old(path: str) -> Optional[dict]:
-    """An older file's records; None when it cannot be read or holds no JSON object."""
+def owners(ws, into: Optional[str] = None, names=None) -> Optional[dict]:
+    """Who each older file of the workspace `ws`'s store may belong to: {the file: {the file of the
+    user's store it belongs in: the job's folder}}, over every job its roots hold, read afresh. A
+    job with no identity yet claims the files it would own under ``("pending", its folder)``, so
+    they have no single owner until it has one. `names`: the job folders of these names only, all
+    that can claim a job's own files. None while one of its roots cannot be read: its jobs, and so
+    the owners, are unknown."""
+    from nullius.runs import parse
+    into = into or home()
+    roots = ws.job_roots or ws.roots
+    if not all(os.path.isdir(r) for r in roots):
+        return None
+    out: dict = {}
+    for d in parse.find_job_dirs(roots):
+        if names is None or os.path.basename(d) in names:
+            for job in parse.split_agents([parse.parse_job(d)]):
+                for src, dest in _places(ws.dir, job, into):
+                    out.setdefault(src, {}).setdefault(dest or ("pending", d), d)
+    return out
+
+
+def single(owned: Optional[dict]) -> dict:
+    """{older file: (the file of the user's store it belongs in, its job's folder)} for each file
+    of `owners` that one job with an identity owns: the only ones ever copied."""
+    out = {}
+    for src, dests in (owned or {}).items():
+        [(dest, job_dir)] = dests.items() if len(dests) == 1 else [(None, None)]
+        if isinstance(dest, str):
+            out[src] = (dest, job_dir)
+    return out
+
+
+def _old(path: str, raw: Optional[bytes] = None) -> Optional[dict]:
+    """An older file's records (from `raw`, its bytes, when given); None when it cannot be read or
+    holds no JSON object."""
+    raw = _bytes(path) if raw is None else raw
     try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError):
+        data = json.loads(raw) if raw is not None else False
+    except ValueError:
         return None
     return {} if data is None else data if isinstance(data, dict) else None
 
 
-def overlay(ws_dir: Optional[str], job, into: Optional[str] = None) -> dict:
+def overlay(ws_dir: Optional[str], job, into: Optional[str] = None, only=None) -> dict:
     """What the workspace's store from before (`ws_dir`) holds for `job` (`_places`), as {the file
     of the user's store (`into`, `home()` by default) it belongs in: [its contents]}. Read only; a
     file that cannot be read is left out. Two jobs of one id in that workspace each get the same
-    records, as each showed them before. {} once the workspace is `moved`."""
+    records, as each showed them before. `only`: those older files alone (a save's, `single`).
+    {} once the workspace is `moved`."""
     into = into or home()
     if not ws_dir or not job.uid or moved(ws_dir, into):
         return {}
     out: dict = {}
     for src, dest in _places(ws_dir, job, into):
-        data = _old(src)
+        data = _old(src) if dest and (only is None or src in only) else None
         if data:
             out.setdefault(dest, []).append(data)
     return out
 
 
-def adopt(ws_dir: str, job, into: Optional[str] = None) -> None:
-    """Copy `overlay` into the user's store, file by file under each file's lock. The workspace's files are
-    left as they are."""
-    for path, old in overlay(ws_dir, job, into).items():
+def adopt(ws_dir: str, job, into: Optional[str] = None, only=None) -> None:
+    """Copy `overlay` (`only` those older files) into the user's store, file by file under each
+    file's lock. The workspace's files are left as they are."""
+    for path, old in overlay(ws_dir, job, into, only).items():
         _merge_into(path, old, getattr(job, "dir", None))
+
+
+def adopt_owned(ws, into: Optional[str] = None, dirs=None) -> Optional[set]:
+    """Copy into the user's store each older file of the workspace `ws` that one job owns
+    (`single`), of the job folders `dirs` only when given: the files copied (read, if empty), or
+    None, nothing copied, while a root cannot be read. A file several jobs may own stays where it is."""
+    owned = owners(ws, into)
+    if owned is None:
+        return None
+    by_dest, done = {}, set()
+    for src, (dest, job_dir) in single(owned).items():
+        if dirs is None or job_dir in dirs:
+            data = _old(src)
+            if data is not None:
+                done.add(src)
+            if data:
+                by_dest.setdefault(dest, (job_dir, []))[1].append(data)
+    for dest, (job_dir, old) in by_dest.items():
+        _merge_into(dest, old, job_dir)
+    return done
 
 
 def records_of(base: str, uids, olds=()) -> int:
@@ -474,13 +554,16 @@ def records_of(base: str, uids, olds=()) -> int:
 
 def old_stores(home_dir: str, into: Optional[str] = None) -> list:
     """[(workspace, its count of older records)] for each workspace whose store from before holds
-    any, until it is `moved`."""
+    any, until it is `moved`; one whose folders cannot all be listed counts those it can."""
     from nullius import workspace
     out = []
     for ws in workspace.list_all(home_dir):
-        n = len(_old_files(ws.dir))
+        try:
+            n = len(_old_files(ws.dir))
+        except OSError:
+            n = -1
         if n and not moved(ws.dir, into):
-            out.append((ws, n))
+            out.append((ws, max(n, 0)))
     return out
 
 
@@ -492,41 +575,46 @@ def move(home_dir: str, into: Optional[str] = None) -> list:
     """Copy every workspace's older records into the user's store, the older files left as they
     are, and mark each workspace whose every file went (`moved`), so reads stop consulting it.
     A workspace is left for a later move, as one line in the list returned, while one of its roots
-    cannot be read, or one of its files cannot be read, belongs to no job its roots hold, or belongs
-    to several (a job id two jobs share): such a file is copied nowhere, and still read as before.
-    Safe to run again."""
-    from nullius import workspace
+    or folders cannot be read, or one of its files cannot be read, belongs to no job its roots
+    hold, or may belong to several (`owners`: a job id two jobs share, or one still starting):
+    such a file is copied nowhere, and still read as before. Safe to run again."""
     into = into or home()
     left = []
     for ws, _ in old_stores(home_dir, into):
-        files = _old_files(ws.dir)                       # first: one added during the move leaves the workspace unmarked
-        roots = ws.job_roots or ws.roots
-        if not all(os.path.isdir(r) for r in roots):
+        try:
+            files = _old_files(ws.dir)                   # first: one added during the move leaves the workspace unmarked
+        except OSError:
+            left.append(f"{ws.label} (a folder cannot be read)")
+            continue
+        owned = owners(ws, into)
+        if owned is None:
             left.append(f"{ws.label} (a root cannot be read)")
             continue
-        owners: dict = {}
-        for job in workspace.load_jobs(ws, roots):
-            if job.uid:
-                for src, dest in _places(ws.dir, job, into):
-                    owners.setdefault(src, {}).setdefault(dest, job.dir)
-        unread, shared, by_dest = 0, 0, {}
-        for src, dests in owners.items():
-            data = _old(src)
+        raw = {f: _bytes(os.path.join(ws.dir, f)) for f in files}
+        one = single(owned)
+        unread, shared, pending, by_dest = 0, 0, 0, {}
+        for src, dests in owned.items():
+            rel = os.path.relpath(src, ws.dir)
+            data = _old(src, raw.get(rel))
             if data is None:
                 unread += 1
-            elif len(dests) > 1:                         # unresolved: whose it is cannot be told
-                shared += 1
+            elif src not in one:                         # unresolved: whose it is cannot be told
+                if all(isinstance(d, str) for d in dests):
+                    shared += 1
+                else:
+                    pending += 1
             elif data:
-                [(dest, job_dir)] = dests.items()
+                dest, job_dir = one[src]
                 by_dest.setdefault(dest, (job_dir, []))[1].append(data)
         for dest, (job_dir, old) in by_dest.items():
             _merge_into(dest, old, job_dir)
-        orphans = len({os.path.join(ws.dir, f) for f in files} - set(owners))
+        orphans = len({os.path.join(ws.dir, f) for f in files} - set(owned))
         why = [_plural(n, *w) for n, w in ((unread, ("file cannot be read", "files cannot be read")),
                                            (orphans, ("record of no job found", "records of no job found")),
-                                           (shared, ("record two jobs share", "records several jobs share"))) if n]
+                                           (shared, ("record two jobs share", "records several jobs share")),
+                                           (pending, ("record of a job still starting", "records of jobs still starting"))) if n]
         if why:
             left.append(f"{ws.label} ({', '.join(why)})")
         else:
-            _mark(ws.dir, into, files)
+            _mark(ws.dir, into, files, raw)
     return left

@@ -81,6 +81,23 @@ class JudgementFollowsTheJob(unittest.TestCase):
             seen = {k: bool(web.judge.judgement_of(j, trial(j))) for k, j in jobs.items()}
         self.assertEqual(seen, {"one": True, "two": False})
 
+    def test_a_record_kept_before_that_two_jobs_of_one_name_may_own_is_copied_by_neither_save(self):
+        copy_job(self.tmp / "one" / "job-x", "2026-01-01T00:00:00Z")
+        copy_job(self.tmp / "two" / "job-x", "2026-02-02T00:00:00Z")
+        both = workspace.create(web.shared.WS_HOME, [str(self.tmp / "one"), str(self.tmp / "two")], "Both")
+        web.shared.open_workspace(both)
+        old = Path(both.dir) / "judgements" / "job-x"; old.mkdir(parents=True)
+        (old / f"{TRIAL}.json").write_text(json.dumps({Q.VERSION: {"questions": Q.VERSION, "answers": {"kept": {"choice": "x"}},
+                                                                   "asked_at": "2026-10-01T00:00:00Z"}}))
+        for j in workspace.load_jobs(both, both.roots):
+            t = next(t for t in j.trials if t.trial_name == TRIAL)
+            with web.app.test_request_context(f"/trial/job-x/{TRIAL}"):
+                web.judge.judge_trial(j, t, None)
+                self.assertTrue(web.judge.old_of(j))                                    # still read on both
+            saved = json.loads((self.tmp / "data" / "judgements" / j.uid / f"{TRIAL}.json").read_text())
+            self.assertEqual({k: sorted(r["answers"]) if isinstance(r, dict) else r for k, r in saved.items()},
+                             {Q.VERSION: ["failure_cause"]})
+
 
 def tree(root: Path) -> dict:
     """Every file under *root* and its bytes, and every folder."""

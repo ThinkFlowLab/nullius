@@ -83,6 +83,19 @@ def old_of(job, name=None) -> dict:
     return memo[(d, job.dir, job.job_id)]
 
 
+def own_of(job, name=None) -> dict:
+    """What a save copies of `old_of`: the records one job alone owns (`store.single`), its
+    owners read afresh; a record another job of its name may own stays unresolved, shown, never
+    copied. Once per request."""
+    ws = shared._record_workspace(name)
+    memo = shared.request_memo("judgements_own")
+    k = (ws.dir if ws else None, job.dir, job.job_id)
+    if k not in memo:
+        one = store.single(store.owners(ws, names={os.path.basename(job.dir)})) if ws and job.uid else {}
+        memo[k] = store.overlay(ws.dir, job, only=set(one)) if one else {}
+    return memo[k]
+
+
 def batch_calibration() -> dict:
     """The calibration over the open workspace's jobs, read once for a batch and passed to each
     call; {} when there is no sample, so no call reads the store again."""
@@ -300,7 +313,7 @@ def judge_trial(job, trial, api_key: str, post=None, calibration=None) -> dict:
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
     return batch.ask_and_store(store.home(), job_key(job), slot(trial), _trial_ids_and_states(trial, traj), api_key, post=post,
-                               calibration=calibration, started=started_of(trial), old=old_of(job), job_dir=job.dir,
+                               calibration=calibration, started=started_of(trial), old=own_of(job), job_dir=job.dir,
                                strict=strict(trial))
 
 
@@ -497,7 +510,7 @@ def judge_side(job, trial, column, api_key: str, post=None, calibration=None) ->
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
     return batch.ask_and_store(store.home(), job_key(job, column), trial.trial_name, _states_for(trial, traj, ids), api_key, post=post,
-                               calibration=calibration, started=started_of(trial), old=old_of(job, column), job_dir=job.dir,
+                               calibration=calibration, started=started_of(trial), old=own_of(job, column), job_dir=job.dir,
                                strict=strict(trial))
 
 
@@ -584,7 +597,7 @@ def judge_control(side, jobs, api_key: str, post=None, calibration=None) -> dict
     if trial is None:
         raise client.JudgeError(0, f"{side.control} trial {side.trial_name} is not in this workspace")
     return batch.ask_and_store(store.home(), job_key(job), trial.trial_name, control_states(side, trial), api_key, post=post,
-                               calibration=calibration, started=started_of(trial), old=old_of(job), job_dir=job.dir,
+                               calibration=calibration, started=started_of(trial), old=own_of(job), job_dir=job.dir,
                                strict=strict(trial))
 
 
@@ -695,7 +708,7 @@ def judge_task(job, trial, api_key: str, post=None, calibration=None) -> dict | 
         raise client.JudgeError(0, f"no instruction can be read for {trial.task_base}")
     states = batch.states_for(Q.group_ids("task"), lambda kind: judge_state.build(kind, None, instruction=instruction))
     return batch.ask_and_store(store.home(), task_key(job), task_slot(trial), states, api_key, post=post, calibration=calibration,
-                               lane=store.TASKS, old=old_of(job))
+                               lane=store.TASKS, old=own_of(job))
 
 
 # -- the move of the judgements workspaces kept before into the user's store ---------------

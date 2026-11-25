@@ -252,7 +252,7 @@ def _check_roots(ws: Workspace) -> None:
 def _keep_judgements(ws: Workspace) -> None:
     """The judgements a workspace kept before they were kept by job
     (``<workspace>/judgements{,-llm}/``): copied into the user's store under
-    each job its roots hold, then its files moved there whole, so none is
+    the one job its roots hold that owns each (`store.adopt_owned`), then its files moved there whole, so none is
     lost with it - a job its roots no longer reach included - and the User
     judge's failure analyses of its converted imports beside them, under
     ``imported/`` by their job folder's path. Refused while a root cannot be
@@ -265,8 +265,7 @@ def _keep_judgements(ws: Workspace) -> None:
         return
     _check_roots(ws)
     if old and not store.moved(ws.dir):
-        for job in load_jobs(ws, ws.job_roots or ws.roots):
-            store.adopt(ws.dir, job)
+        store.adopt_owned(ws)                # a record several jobs may own is not copied: it is kept below, whole
     keep = os.path.join(store.home(), "judgements-of-deleted-workspaces", f"{ws.name}~{datetime.now(timezone.utc):%Y%m%dT%H%M%S%fZ}")
     os.makedirs(keep)
     for d in old:

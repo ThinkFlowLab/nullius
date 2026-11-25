@@ -1833,7 +1833,8 @@ def deletable(names: List[str], root: Optional[str] = None) -> None:
 def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, ends: dict, final: bool = False) -> dict:
     """What deleting the run *name* removes. Its judgements are counted, the
     older records its workspaces kept included, nothing written; *final* (the
-    delete itself) copies those older records in first.
+    delete itself) copies in first those older records one of its jobs alone
+    owns (`judgements.adopt_owned`), and names their folders (``judged``) to remove with it.
     ``uids``: its jobs' identities and where each came from (``Job.uid_source``),
     whose judgements ``delete`` keeps when a copy is found elsewhere."""
     path, rec = _deletable(name, root)
@@ -1844,15 +1845,13 @@ def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, 
     for ws, roots in holding(path):
         dirs = parse.find_job_dirs(roots)
         jobs = workspace.load_jobs(ws, roots, ends)
-        for j in jobs:                       # the workspace's records from before: copied in when it goes, else counted as they are
-            if final:
-                judgements.adopt(ws.dir, j)
-            else:
-                olds.append(judgements.overlay(ws.dir, j))
-        ids = [j.job_id for j in jobs]
-        # a job of the same id from another root shares these judgements: they stay
-        others = {e.get("job_id") for d, e in workspace.job_index(ws).items() if d not in dirs}
-        judged = judgements.job_dirs(ws.dir, [i for i in ids if i.split("~")[0] not in others])
+        judged = []
+        if final:                            # the workspace's records from before: those of its jobs alone copied in
+            done = judgements.adopt_owned(ws, dirs=set(dirs)) or set()
+            judged = [d for d in judgements.job_dirs(ws.dir, [j.job_id for j in jobs])
+                      if all(os.path.join(d, n) in done for n in os.listdir(d) if n.endswith(".json"))]
+        else:                                # else counted as they are
+            olds += [judgements.overlay(ws.dir, j) for j in jobs]
         held.append({"ws": ws, "roots": roots, "jobs": dirs, "judged": judged})
     uids = {j.uid: j.uid_source for j in (parse.parse_job(d, trials=False) for d in parse.find_job_dirs([os.path.join(path, "jobs")]))
             if j.uid}
