@@ -33,8 +33,8 @@
     const whole = t.text || t.title || t.id;
     return `<tr data-id="${esc(t.id)}" title="${esc(whole)}"><td class="tasks-tick"><input type="checkbox" aria-label="Choose ${esc(t.id)}"${chosen.has(t.id) ? ' checked' : ''}${writable ? '' : ' disabled'}></td>`
       + `<td class="tasks-text"><span class="tasks-row"${writable ? '' : ' tabindex="0"'}><span class="tasks-title">${esc(t.title || t.id)}</span>`
-      + `<span class="tasks-whole">${esc(whole)}</span>${t.title ? `<small class="tasks-id mono faint">${esc(t.id)}</small>` : ''}</span>`
-      + `${t.unknown ? '<small class="warn">not in the listing</small>' : ''}`
+      + `<span class="tasks-whole">${esc(whole)}</span>${t.title ? `<small class="tasks-id mono faint small">${esc(t.id)}</small>` : ''}</span>`
+      + `${t.unknown ? '<small class="warn small">not in the listing</small>' : ''}`
       + (tags ? `<span class="tasks-tags">${tags}</span>` : '') + `</td><td class="tasks-catcol">${tags}</td></tr>`;
   }
   function draw(tasks) {
@@ -47,7 +47,7 @@
   }
   function facets(cats) {
     $('tasks-cats').innerHTML = Object.entries(cats || {}).map(([field, values]) =>
-      `<div class="filter-pills" role="group" aria-label="${esc(label(field))}"><span class="tasks-catname">${esc(label(field))}</span>`
+      `<div class="filter-pills" role="group" aria-label="${esc(label(field))}"><span class="tasks-catname muted small">${esc(label(field))}</span>`
       + values.map(v => `<button type="button" class="filter-pill" data-field="${esc(field)}" data-value="${esc(v.value)}" aria-pressed="${(st.cats[field] || []).includes(v.value)}">${esc(v.value)} <span class="tasks-n">${v.count}</span></button>`).join('')
       + '</div>').join('');
   }

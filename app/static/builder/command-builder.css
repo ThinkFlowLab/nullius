@@ -253,7 +253,6 @@
 
 /* A chosen dataset's tasks: all of them, or one of its task sets. */
 #nullius-builder .nb-pick-grid + .std-sethead, #nullius-builder .nb-field + .std-sethead { margin-top: 26px; }
-#nullius-builder .std-sethead a.nb-inlinebutton { font-size: 13px; white-space: nowrap; }
 /* Where: machine kind, its machines, then isolation. Fixed values are not controls. */
 #nullius-builder .std-machines { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--nb-line); border-radius: 999px; }
 #nullius-builder .std-machines button { padding: 6px 16px; border: 0; border-radius: 999px; background: transparent; color: var(--nb-text); font: 14px/1.4 var(--sans); }

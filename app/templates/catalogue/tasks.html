@@ -23,7 +23,7 @@
         <summary class="btn ghost sm">Rename</summary>
         <form method="post" action="{{ url_for('benchmark_tasks_rename', key=bench.key, dataset=ds.id) }}" class="bench-delete-ask">
           <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="set" value="{{ entry.name }}">
-          <label class="tasks-field">New name<input name="name" value="{{ label }}" maxlength="80" required autocomplete="off"></label>
+          <label class="tasks-field muted small">New name<input type="text" name="name" value="{{ label }}" maxlength="80" required autocomplete="off"></label>
           <button type="submit" class="btn">Rename</button>
           <button type="button" class="btn ghost" onclick="this.closest('details').open = false">Cancel</button>
         </form>
@@ -66,19 +66,19 @@
       <button type="button" class="btn ghost sm" id="tasks-match" hidden>Select the matches</button>
       <button type="button" class="btn ghost sm" id="tasks-show" aria-pressed="false">Show selected</button>
       <details class="tasks-paste"><summary class="btn ghost sm">Paste ids</summary>
-        <div class="tasks-paste-box"><textarea id="tasks-paste" rows="4" placeholder="One id a line, or separated by spaces or commas" spellcheck="false"></textarea>
+        <div class="tasks-paste-box"><textarea class="mono small" id="tasks-paste" rows="4" placeholder="One id a line, or separated by spaces or commas" spellcheck="false"></textarea>
           <button type="button" class="btn sm" id="tasks-paste-add">Add</button></div>
       </details>
       <button type="button" class="btn ghost sm" id="tasks-clear">Clear</button>
     </div>
-    <p class="tasks-count" id="tasks-count" aria-live="polite"></p>
+    <p class="tasks-count muted small" id="tasks-count" aria-live="polite"></p>
     <div class="tasks-scroll">
       <table class="grid tasks-table" id="tasks-table" hidden>
         <thead><tr><th scope="col" class="tasks-tick"><span class="sr">Chosen</span></th><th scope="col">Task</th><th scope="col" id="tasks-cat-head">Category</th></tr></thead>
         <tbody id="tasks-rows"></tbody>
       </table>
     </div>
-    <nav class="tasks-pages" id="tasks-pages" aria-label="Pages" hidden>
+    <nav class="tasks-pages muted small" id="tasks-pages" aria-label="Pages" hidden>
       <button type="button" class="btn ghost sm" data-page="prev">Previous</button><span id="tasks-page-of"></span><button type="button" class="btn ghost sm" data-page="next">Next</button>
     </nav>
     {% if writable %}
@@ -93,8 +93,8 @@
   <section class="bench-section tasks-save" aria-labelledby="tasks-save-title">
     <h2 id="tasks-save-title">{{ 'Save as a new set' if entry else 'Save as task set' }}</h2>
     <form class="tasks-form" id="tasks-create">
-      <label class="tasks-field">Name<input name="name" maxlength="80" autocomplete="off"></label>
-      <label class="tasks-field tasks-wide">Description<input name="description" maxlength="300" autocomplete="off"></label>
+      <label class="tasks-field muted small">Name<input type="text" name="name" maxlength="80" autocomplete="off"></label>
+      <label class="tasks-field tasks-wide muted small">Description<input type="text" name="description" maxlength="300" autocomplete="off"></label>
       <button class="btn" type="submit">{{ 'Save as a new set' if entry else 'Save as task set' }}</button>
     </form>
     <p class="tasks-msg" id="tasks-msg" role="alert"></p>

@@ -72,8 +72,8 @@
       <form class="run-saveset-form" method="post" action="{{ url_for('job_task_set', job_id=job.job_id) }}"
         onsubmit="this.elements.namedItem('outcome').value = new URLSearchParams(location.search).get('outcome') || ''">
         <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="outcome" value="">
-        <label>Name<input name="name" maxlength="80" required autocomplete="off"></label>
-        <label>Description<input name="description" maxlength="300" autocomplete="off"></label>
+        <label class="muted small">Name<input type="text" name="name" maxlength="80" required autocomplete="off"></label>
+        <label class="muted small">Description<input type="text" name="description" maxlength="300" autocomplete="off"></label>
         <button class="btn sm" type="submit">Save the tasks shown</button>
       </form>
     </details>{% endif %}{% endset %}

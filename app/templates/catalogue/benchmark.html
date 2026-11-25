@@ -215,7 +215,7 @@
           {#- a new set is made on the page of the tasks it is cut from: one dataset's at once, else a choice of them #}
           {% if local %}{% if wholes|length == 1 %}<a class="btn sm" href="{{ url_for('benchmark_tasks', key=b.key, dataset=wholes[0].id) }}">New task set</a>
           {% else %}<details class="bench-newset pop"><summary class="btn sm" aria-haspopup="true">New task set</summary>
-            <div class="bench-newset-menu" role="group" aria-label="The dataset it is cut from">{% for d in wholes %}<a href="{{ url_for('benchmark_tasks', key=b.key, dataset=d.id) }}">{{ d.label }}{% if d.units %}<small>{{ d.units }} {{ std.units.nouns }}</small>{% endif %}</a>{% endfor %}</div>
+            <div class="menu tools-menu bench-newset-menu" role="group" aria-label="The dataset it is cut from">{% for d in wholes %}<a href="{{ url_for('benchmark_tasks', key=b.key, dataset=d.id) }}">{{ d.label }}{% if d.units %}<span class="muted">{{ d.units }} {{ std.units.nouns }}</span>{% endif %}</a>{% endfor %}</div>
           </details>{% endif %}{% endif %}
         </div>
         {% if cuts %}
@@ -228,7 +228,7 @@
           {% set made = task_sets|selectattr('version_label')|list %}
           <thead><tr><th scope="col">Name</th><th scope="col">Dataset</th><th scope="col" class="num">{{ std.units.nouns|capitalize }}</th>{% if made %}<th scope="col">Made at</th>{% endif %}<th scope="col">Date</th></tr></thead>
           <tbody>{% for s in task_sets %}
-            <tr><td><a href="{{ url_for('benchmark_tasks', key=b.key, dataset=s.dataset, set=s.name) }}">{{ s.label }}</a>{% if s.description %}<small>{{ s.description }}</small>{% endif %}</td>
+            <tr><td><a href="{{ url_for('benchmark_tasks', key=b.key, dataset=s.dataset, set=s.name) }}">{{ s.label }}</a>{% if s.description %}<small class="muted small">{{ s.description }}</small>{% endif %}</td>
               <td>{{ (std.datasets|selectattr('id', 'equalto', s.dataset)|map(attribute='label')|first) or s.dataset }}</td>
               <td class="num">{{ s.units }}</td>{% if made %}<td>{{ s.version_label }}</td>{% endif %}<td>{{ s.date[:10] }}</td></tr>
           {% endfor %}</tbody>
