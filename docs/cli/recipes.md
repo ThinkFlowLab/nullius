@@ -20,7 +20,7 @@ nullius recipes launch recipe.json --wait --json
 | `--server URL` | The Nullius server on this machine (default `http://127.0.0.1:` and `APP_PORT`, else 5057) |
 | `--yes` | Answers the question Run asks before a run of every unit |
 | `--wait` | Returns when the launch has ended, or paused on the question its page asks; exits 4 unless it ended done |
-| `--dry-run` | Prints what the Review step shows and stops; exits 0 when Run would start it |
+| `--dry-run` | Prints Review and checks Run's provider key requirement, including its keyless exemption; exits 0 when Run would start it |
 | `--json` | The server's answer as one document |
 
 | Rule | Detail |

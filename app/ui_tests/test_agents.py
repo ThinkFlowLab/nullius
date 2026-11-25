@@ -501,6 +501,27 @@ class BuilderStandard(unittest.TestCase):
             self.assertEqual(recipes.main(["launch", "nowhere", "--server", "http://localhost"]), 3)
         self.assertIn("--yes answers yes", err.getvalue())
         self.assertEqual(self.started, [])
+        saved = store.save(self.recipe(name="missing-key", title="missing key", provider="openrouter"))
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(recipes.main(["launch", "missing key", "--dry-run", "--json", "--server", "http://localhost"]), 4)
+        refused = self.post("/run", {"recipe": saved["recipe"]})
+        self.assertEqual(refused.status_code, 400)
+        self.assertEqual(json.loads(out.getvalue())["refused"], refused.get_json()["error"])
+        self.assertIn("OPENROUTER_API_KEY", json.loads(out.getvalue())["refused"])
+        self.assertEqual(self.started, [])
+
+    def test_review_and_run_allow_a_keyless_recipe_without_a_provider_key(self):
+        compiler = web.execute.standard_recipe
+        catalogue = compiler._all()
+        catalogue["benchmark"][0]["controls"] = {"nop": {"source": "nullius", "from": "Nothing runs."}}
+        recipe = self.recipe(other="nop", provider="openrouter", model="")
+        with patch.object(compiler, "_all", return_value=catalogue):
+            self.assertTrue(compiler.compile(recipe)["keyless"])
+            review = self.post("/new-run/runner", {"recipe": recipe}).get_json()
+            self.assertEqual((review["errors"], review["provider_error"]), ([], ""))
+            run = self.post("/run", {"recipe": recipe})
+            self.assertTrue(run.get_json()["ok"], run.get_json())
+        self.assertTrue(self.started[0].keyless)
 
 
 class StandardPieces(unittest.TestCase):

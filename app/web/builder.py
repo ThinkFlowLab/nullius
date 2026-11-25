@@ -230,7 +230,8 @@ def _standard_compile(recipe: dict) -> dict:
     out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, boat_unusable=boat.unusable,
                                   boat_size_problem=execute.boat_size_problem, unpriced=execute.unpriced)
     # served_models: each model field's model as the run sends it, which Served by lists the providers of
-    return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models")}
+    return {**{k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models")},
+            "provider_error": execute.standard_provider_problem(recipe, out) if not out["errors"] else ""}
 
 
 @app.route("/new-run/prerequisites", methods=["POST"])

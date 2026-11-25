@@ -3,10 +3,11 @@ question ends the wait as an end does."""
 from __future__ import annotations
 
 import io
+import json
 import os
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
 from nullius.recipes import cli, store
@@ -40,6 +41,22 @@ class Selection(unittest.TestCase):
                 for item in items:
                     self.assertIn(f"{item['name']!r} ({item['id']})", err.getvalue())
                 server.assert_not_called()
+
+
+class Review(unittest.TestCase):
+    def test_dry_run_uses_the_servers_provider_refusal(self):
+        for refusal, code in (("Set the provider key in Settings.", 4), ("", 0)):
+            answers = [(200, '<script id="nb-schema" type="application/json">{"local": true}</script>'),
+                       (200, json.dumps({"errors": [], "provider_error": refusal})),
+                       (200, '{"machines": [], "ready": true}')]
+            with self.subTest(refusal=refusal), patch.object(cli, "find", return_value={"harness": "standard"}), \
+                 patch.object(cli.Server, "send", side_effect=answers) as send, \
+                 redirect_stdout(io.StringIO()) as out, redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(cli.main(["launch", "saved", "--dry-run", "--json"]), code)
+                self.assertEqual(json.loads(out.getvalue())["refused"], refusal)
+                self.assertEqual(err.getvalue().strip(), refusal)
+                self.assertEqual([(c.args[0], c.args[1]) for c in send.call_args_list],
+                                 [("GET", "/new-run"), ("POST", "/new-run/runner"), ("POST", "/new-run/prerequisites")])
 
 
 class Scripted(cli.Server):

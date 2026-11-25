@@ -129,6 +129,7 @@ def review(server: Server, recipe: dict, where=None, into: str = "", yes: bool =
              for m in pre.get("machines") or [] for r in m.get("rows") or [] if r.get("state") == "missing"]
     why = ("A workspace's name is lowercase letters, digits and dashes." if into and workspace.slug(into) != into
            else " ".join(e.get("message", "") for e in out["errors"]) if out.get("errors")
+           else out["provider_error"] if out.get("provider_error")
            else f"Run asks first: {out['confirm']} --yes answers yes" if out.get("confirm") and not yes
            else "" if pre.get("ready")
            else "a machine lacks what the run needs: " + ("; ".join(lacks + list(pre.get("errors") or [])) or "see Review"))

@@ -136,8 +136,7 @@ def _start_standard(recipe: dict, into: str = ""):
                                   boat_size_problem=boat_size_problem, unpriced=unpriced)
     if out["errors"]:
         return jsonify(ok=False, error=" ".join(e["message"] for e in out["errors"])), 400
-    # a run of controls calls no model: it is handed no key, so none need be set
-    missing = "" if out.get("keyless") else provider_problem(recipe.get("provider"), recipe.get("endpoint"))
+    missing = standard_provider_problem(recipe, out)
     if missing:
         return jsonify(ok=False, error=missing), 400
     plans, problem = standard_plans(recipe, out, {h.entry for h in _hosts()})
@@ -150,6 +149,11 @@ def _start_standard(recipe: dict, into: str = ""):
         return jsonify(ok=False, error=problem), status
     return jsonify(ok=True, open=url_for("index", view="launch"), runs=[ex.summary() for ex in started],
                    **started[0].summary())
+
+
+def standard_provider_problem(recipe: dict, out: dict) -> str:
+    """The provider refusal shared by Review and Run; a keyless run needs no provider key."""
+    return "" if out.get("keyless") else provider_problem(recipe.get("provider"), recipe.get("endpoint"))
 
 
 _PRICED = {"at": float("-inf"), "rows": {}}
