@@ -372,7 +372,8 @@ def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str
     _dump(os.path.join(job_dir, "config.json"), {
         "job_name": job_name,
         "harness": NAME,   # provenance; the walker ignores unknown keys
-        "command": command or (
+        # a folder converted before ids keeps the command its identity was derived from
+        "command": importers._config(job_dir).get("command") if sid is None else command or (
             f"PYTHONPATH=app python3 -m nullius.importers.cli {shlex.quote(root)} "
             f"-o {shlex.quote(out_root)} --job-name {shlex.quote(job_name)}"),
         "agents": [{"name": agent["name"],

@@ -130,7 +130,10 @@ class OneFolderPerSource(unittest.TestCase):
                 a, b, out = self.sources(fmt)
                 [ja] = open_again(a, out)
                 cfg_path = os.path.join(ja, "config.json")
-                forget_id(ja)
+                link = str(self.tmp / fmt / "link")                      # recorded as typed, through a link
+                os.symlink(a, link)
+                forget_id(ja, **{"atif": {"command": f"python3 -m nullius.importers.cli {link}"},
+                                 "otel": {"datasets": [{"name": "otel", "path": link, "n_tasks": 1}]}}[fmt])
                 old = parse.parse_job(ja)
                 self.assertEqual(old.uid_source, "derived")
                 self.assertEqual(open_again(a, out), [ja])               # reconverted where it was, no id gained
@@ -231,8 +234,10 @@ class OneFolderPerSource(unittest.TestCase):
         with open(os.path.join(ja, "config.json")) as fh:
             self.assertIn(os.path.realpath(a), json.load(fh)["command"])
         forget_id(ja, command="python3 -m nullius.importers.cli a/run")   # an older one, recorded as typed
+        uid = parse.parse_job(ja).uid
         os.chdir(self.tmp)
         self.assertEqual(atif.convert(a, out), [ja])
+        self.assertEqual(parse.parse_job(ja).uid, uid)                   # its identity's inputs kept
 
 
 if __name__ == "__main__":
