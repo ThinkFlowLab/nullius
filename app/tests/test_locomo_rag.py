@@ -70,15 +70,25 @@ def get_gpt_answers(in_data, out_data, prediction_key, args):
     for qa in in_data["qa"]:
         if qa['category'] == 2:
             q = qa['question'] + ' Use DATE of CONVERSATION to answer with an approximate date.'
-def run_chatgpt(*a, **k):
-    return ""
+        elif qa['category'] == 5:
+            adv_answer = qa.get('adversarial_answer', qa.get('answer'))
+            question = qa['question'] + " Pick: (a) {} (b) {}. "
+            if random.random() < 0.5:
+                question = question.format('Not mentioned', adv_answer)
+            else:
+                question = question.format(adv_answer, 'Not mentioned')
+QA_PROMPT_CAT_5 = "five: {}"
+def get_cat_5_answer(said, key):
+    return key[said]
+def run_chatgpt(query, **k):
+    return "a" if "(a) Not mentioned (b) x." in query and query.startswith("M\\n\\nfive: Adversarial Pick:") else "b" if "(a) x (b) Not mentioned." in query else ""
 '''
 
 
 class Driver:
     """The driver over the stand-in, one request at a time."""
 
-    def __init__(self, root, options):
+    def __init__(self, root, options, version=""):
         self.root = root
         up = os.path.join(root, "up")
         os.makedirs(os.path.join(up, "task_eval"))
@@ -92,7 +102,7 @@ class Driver:
         data = os.path.join(root, "locomo10.json")
         with open(data, "w") as f:
             json.dump([CONV], f)
-        env = dict(os.environ, NULLIUS_UPSTREAM=up, NULLIUS_DATASET=data, PYTHONPATH=up,
+        env = dict(os.environ, NULLIUS_UPSTREAM=up, NULLIUS_DATASET=data, PYTHONPATH=up, NULLIUS_VERSION=version,
                    **{"NULLIUS_OPTION_" + k.upper(): v for k, v in options.items()})
         self.p = subprocess.Popen([sys.executable, DRIVER], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
 
@@ -135,6 +145,22 @@ class Retrieval(unittest.TestCase):
         self.assertEqual(json.loads(got["answer"]), {"0": "hi"})          # category 5 is not fed
         self.assertEqual(score["reward"], 1.0)
         self.assertNotIn("retrieval", score["detail"])
+
+    def test_the_adversarial_version_asks_category_5_as_a_choice_and_feeds_it_to_the_setups(self):
+        with tempfile.TemporaryDirectory() as root:
+            d = Driver(root, {}, "full")
+            try:
+                self.assertEqual(d.ask(op="units", dataset="locomo10")["units"], ["conv-1:0", "conv-1:1"])
+                said = d.ask(op="produce", unit="conv-1:1", dir=root, recalled=[{"memory": "M"}], model="gpt-4", base_url="", key="")
+                self.assertEqual((said, d.ask(op="oracle", unit="conv-1:1", dir=root)), ({"answer": "Not mentioned"},) * 2)
+                unit = os.path.join(root, "unit")
+                os.makedirs(unit)
+                got = d.ask(op="answer", unit="conv-1", dir=unit, setup="original", model="gpt-4-turbo", base_url="", key="")
+                self.assertEqual(json.loads(got["answer"]), {"0": "hi", "1": "hi"})
+                per = d.ask(op="score", unit="conv-1", dir=unit, transcript=[{"asked": "gpt-4-turbo"}], answer="", setup="original")
+                self.assertEqual([q["reference"] for q in per["detail"]["per_question"]], ["hi", "Not mentioned"])
+            finally:
+                d.close()
 
     def test_dialog_retrieval_runs_evaluate_qa_with_the_rag_flags_one_question_a_call(self):
         got, score, calls = self.run_unit(retrieval="dialog", retriever="dpr", top_k="25")

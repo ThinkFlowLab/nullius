@@ -32,7 +32,10 @@ Very long-term conversational memory over conversations of 19 to 32 sessions.
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `locomo` | Original · Original memory · Any of your choice | `rag_mode`, `retrieval`, `retriever`, `top_k` |
+| `locomo@3eb6f2c` (default) | Original · Original memory · Any of your choice | `rag_mode`, `retrieval`, `retriever`, `top_k` |
+| `locomo@full` | Original · Original memory · Any of your choice | `rag_mode`, `retrieval`, `retriever`, `top_k` |
+
+- `key@version`: a revision of the definition and driver; a recipe pins one, the builder offers the default.
 
 ## Options
 
@@ -49,6 +52,10 @@ Very long-term conversational memory over conversations of 19 to 32 sessions.
 | `retrieval` | `observation` | host: NVIDIA GPU |
 | `retrieval` | `summary` | host: NVIDIA GPU |
 
+## Changes from official
+
+- `locomo@full`: The 446 adversarial questions are asked and scored too, 1,986 in all, with LoCoMo's [open pull request #41](https://github.com/snap-research/locomo/pull/41).
+
 ## Good to know
 
 - Each conversation is one task, with its questions inside. The smallest run is one conversation.
@@ -57,7 +64,7 @@ Very long-term conversational memory over conversations of 19 to 32 sessions.
 
 ## Upstream limitations
 
-- The 446 adversarial questions are left out, because the published file has no answer for them. 1,540 of the 1,986 questions remain.
+- The 446 adversarial questions are left out, because the published code cannot ask or score them. 1,540 of the 1,986 questions remain. The experiment version, full, includes them.
 - The reader's model name must contain gpt-4 or gpt-3.5, as LoCoMo's own code requires. Any other model fails every question.
 - OpenAI has retired gpt-4-turbo and gpt-3.5-turbo, so Original cannot run Like the paper. Choose Any of your choice; its scores do not compare with the paper's.
 - The reader gets 32 tokens per answer. A reasoning model can spend them all reasoning, and that question fails.

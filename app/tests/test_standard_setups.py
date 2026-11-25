@@ -302,7 +302,7 @@ class Recipe(unittest.TestCase):
 
     def test_a_setup_and_a_judge_need_a_provider_that_serves_chat(self):
         said = [e["message"] for e in self.compiled(others=["original"], provider="anthropic", model="claude-x")["errors"]]
-        self.assertIn("Anthropic does not serve what LoCoMo original speaks: choose another provider.", said)
+        self.assertIn("Anthropic does not serve what LoCoMo 3eb6f2c original speaks: choose another provider.", said)
         said = [e["message"] for e in self.compiled(others=["nop"], benchmark="longmemeval", datasets=["longmemeval_s"], provider="anthropic")["errors"]]
         self.assertIn("Anthropic does not serve what LongMemEval's judge speaks: choose another provider.", said)
 

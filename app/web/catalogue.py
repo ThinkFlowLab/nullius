@@ -102,7 +102,8 @@ def benchmark_page(key):
         vb, vds = cat.in_version(b, x["version"]) if x["version"] and not x["default"] else (b, cat.datasets_of(b))
         # where each dataset's data comes from, one row per way it runs - each fetched by its harness, never by hand
         std_def = standard_definitions.find(every, x["ref"]) if std else None
-        views.append(dict(x, std=page, b=vb, origin=standard_definitions.origin_of(std_def) if std_def else b.origin, ds=vds, tasks=cat.tasks_of(vb, vds),
+        views.append(dict(x, std=page, b=vb, origin=standard_definitions.origin_of(std_def) if std_def else b.origin, ds=vds,
+                          changes=[standard_definitions.fix_parts(f) for f in (std_def or {}).get("upstream", {}).get("fixes") or []], tasks=cat.tasks_of(vb, vds),
                           data={d.key: sources.of(d, b.harness, std_def, only=len(vds) == 1) for d in vds},
                           current=(x["version"] == v) if v else x["default"], **(_proven(page) if page else {})))
     shown = next(x for x in views if x["current"])
