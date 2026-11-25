@@ -156,11 +156,14 @@ class OneFolderPerSource(unittest.TestCase):
         self.assertEqual((trials(jo), parse.parse_job(jo).uid), (kept, uo))
 
     def test_a_named_folder_of_another_source_is_refused(self):
-        for legacy in (False, True):
-            with self.subTest(legacy=legacy):
+        for legacy, parent in ((False, False), (True, False), (True, True)):
+            with self.subTest(legacy=legacy, parent=parent):
                 a, b, out = self.sources("atif")
                 [ja] = atif.convert(a, out, job_name="mine")
-                if legacy:
+                if parent:                                               # every old trial is under it too
+                    b = os.path.dirname(a)
+                    forget_id(ja, command="python3 -m nullius.importers.cli a/run")
+                elif legacy:
                     forget_id(ja)
                 before = mtimes(ja)
                 with self.assertRaises(SystemExit):

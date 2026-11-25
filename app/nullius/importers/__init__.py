@@ -321,15 +321,18 @@ def place(out_root: str, root: str, default: str, job_name: str = "", fmt: str =
 def _verified(job_dir: str, cfg: dict, fmt: str, src: str) -> bool:
     """A folder converted before ids is the source at real path *src* only when it
     stored the format *fmt* and names *src*: by the absolute path it recorded,
-    else by where each of its trials says its document was read."""
+    else as the one tree its trials are named from (where each says its document
+    was read) that ends with the relative path it recorded."""
     if not cfg or cfg.get("harness") != fmt:
         return False
     old = recorded(cfg)
     if isinstance(old, str) and os.path.isabs(old):
         return os.path.realpath(old) == src
     module = get(fmt)
-    read = module._trial_sources(job_dir) if hasattr(module, "_trial_sources") else []
-    return bool(read) and all(p == src or p.startswith(os.path.join(src, "")) for p in read)
+    roots = module._trial_roots(job_dir) if hasattr(module, "_trial_roots") else []
+    if isinstance(old, str):
+        roots = [r for r in roots if os.path.normpath(old) == "." or r.endswith(os.sep + os.path.normpath(old))]
+    return roots == [src]
 
 
 @contextlib.contextmanager

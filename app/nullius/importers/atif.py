@@ -411,8 +411,9 @@ def _recorded(cfg: dict):
         return None
 
 
-def _trial_sources(job_dir: str) -> list:
-    """The real path each trial of *job_dir* records its document was read from;
+def _trial_roots(job_dir: str) -> list:
+    """Every tree whose documents, named from there, give *job_dir*'s trials the
+    names they have, by where each trial records its document was read;
     empty when one cannot tell."""
     found = []
     for name in sorted(os.listdir(job_dir)):
@@ -421,7 +422,15 @@ def _trial_sources(job_dir: str) -> list:
             continue
         try:
             with open(os.path.join(trial, "result.json"), encoding="utf-8") as fh:
-                found.append(os.path.realpath(str(json.load(fh)["source_document"]["path"])))
+                found.append((name, os.path.realpath(str(json.load(fh)["source_document"]["path"]))))
         except (OSError, ValueError, KeyError, TypeError):
             return []
-    return found
+    if not found:
+        return []
+    roots, root = [], os.path.commonpath([path for _, path in found])
+    while True:
+        if all(_trial_name(path, root) == name for name, path in found):
+            roots.append(root)
+        if os.path.dirname(root) == root:
+            return roots
+        root = os.path.dirname(root)
