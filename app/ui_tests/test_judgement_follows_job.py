@@ -4,6 +4,7 @@ workspace, and stays apart from another job of the same name."""
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 import shutil
 import tempfile
 import unittest
@@ -81,6 +82,31 @@ class JudgementFollowsTheJob(unittest.TestCase):
             web.judge.judge_trial(jobs["one"], trial(jobs["one"]), None)
             seen = {k: bool(web.judge.judgement_of(j, trial(j))) for k, j in jobs.items()}
         self.assertEqual(seen, {"one": True, "two": False})
+
+    def test_a_batch_copies_the_older_records_of_the_workspace_asked_and_a_folded_run_s_side_its_own_shard_s(self):
+        copy_job(self.tmp / "ra" / "job-x", "2026-01-01T00:00:00Z"); copy_job(self.tmp / "rb" / "job-x", "2026-02-02T00:00:00Z")
+        a = workspace.create(web.shared.WS_HOME, [str(self.tmp / "ra")], "A")
+        b = workspace.create(web.shared.WS_HOME, [str(self.tmp / "rb")], "B")
+        old = Path(b.dir) / "judgements" / "job-x"; old.mkdir(parents=True)
+        (old / f"{TRIAL}.json").write_text(json.dumps({"retired": {"questions": "retired", "answers": {"kept_in_b": {"choice": "x"}}}}))
+        web.shared.open_workspace(a)                                                    # a version no longer read: the trial is still to judge
+        jb = workspace.load_jobs(b, b.roots)[0]
+        with patch.object(web.shared, "_local_client", return_value=True), patch.object(web.shared, "_require_csrf"):
+            web.app.test_client().post(f"/judge/job/job-x?workspace={b.name}", data={"lane": "decision"})
+        saved = json.loads((self.tmp / "data" / "judgements" / jb.uid / f"{TRIAL}.json").read_text())
+        self.assertIn("retired", saved)                                                 # B's, though its threads have no request
+        with self.subTest("a folded run"):
+            copy_job(self.tmp / "ra" / "job-y", "2026-03-03T00:00:00Z")
+            jx, jy = sorted(workspace.load_jobs(a, a.roots), key=lambda j: j.job_id)
+            fold = replace(jx, trials=jx.trials + jy.trials)                            # as launches.fold makes it: the first shard's
+            t = next(t for t in jy.trials if t.trial_name == TRIAL)
+            view = SimpleNamespace(jobs=[fold, jb], selected=[SimpleNamespace(workspace=""), SimpleNamespace(workspace=b.name)],
+                                   tasks=[SimpleNamespace(task="hello", trials=[t, next(t for t in jb.trials if t.trial_name == TRIAL)])])
+            with web.app.test_request_context("/compare"), patch.object(web.judge, "_states_for", return_value={}):
+                for _, job, trial, column in web.judge._sides_todo(view)[:1]:
+                    web.judge.judge_side(job, trial, column, None)
+            self.assertTrue((self.tmp / "data" / "judgements" / jy.uid / f"{TRIAL}.json").is_file())
+            self.assertFalse((self.tmp / "data" / "judgements" / jx.uid).exists())
 
     def test_a_record_kept_before_that_two_jobs_of_one_name_may_own_is_copied_by_neither_save(self):
         copy_job(self.tmp / "one" / "job-x", "2026-01-01T00:00:00Z")

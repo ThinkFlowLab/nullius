@@ -303,18 +303,26 @@ def _trial_ids_and_states(trial, traj) -> dict:
     return _states_for(trial, traj, ids)
 
 
-def judge_trial(job, trial, api_key: str, post=None, calibration=None) -> dict:
+def judge_trial(job, trial, api_key: str, post=None, calibration=None, column=None) -> dict:
     """Ask every question the trial page shows, one call per state, and keep
     the merged record. Returns the record as stored. `calibration`: a
-    batch's, read once (`store.calibration`); the workspace's when none."""
+    batch's, read once (`store.calibration`); the workspace's when none.
+    `column`: the name of the workspace that holds the job (`batch_workspace`), for a batch's threads."""
     if not trial.has_trajectory:
         raise client.JudgeError(0, "this trial has no trajectory to judge")
     traj = trajectory.load(trial.trajectory_path)
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
     return batch.ask_and_store(store.home(), job_key(job), slot(trial), _trial_ids_and_states(trial, traj), api_key, post=post,
-                               calibration=calibration, started=started_of(trial), old=own_of(job), job_dir=job.dir,
+                               calibration=calibration, started=started_of(trial), old=own_of(job, column), job_dir=job.dir,
                                strict=strict(trial))
+
+
+def batch_workspace():
+    """The name of the workspace that holds the job on screen, read in the request: a batch's
+    threads have none, and would read the open one."""
+    ws = shared._record_workspace()
+    return ws.name if ws else None
 
 
 def _guard():
@@ -356,8 +364,8 @@ def judge_job_route(job_id):
     lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "decision"
     judged = store.for_job(store.home(), job_key(job), started_by_name(job), lane=lane, old=old_of(job), strict=retried(job))
     todo = [t for t in job.trials if t.has_trajectory and t.trial_name not in judged]
-    k, cal = key(lane), batch_calibration()
-    done, failed = run_batch(todo, lambda t: judge_trial(job, t, k, calibration=cal), lambda t: t.trial_name)
+    k, cal, col = key(lane), batch_calibration(), batch_workspace()
+    done, failed = run_batch(todo, lambda t: judge_trial(job, t, k, calibration=cal, column=col), lambda t: t.trial_name)
     from flask import flash
     flash(f"{'LLM judge' if lane == 'llm' else 'Decision model'}: judged {done} of {len(todo)} trial(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
     return redirect(url_for("job", job_id=job_id) + "#judgement")
@@ -436,10 +444,20 @@ def side_ids(trial) -> list:
     return own + [q for q in Q.for_trial(trial.outcome == "resolved", trial.outcome) if q not in own]
 
 
+def shard_of(job, trial, column=None):
+    """The job a trial's folder is in: a run folded from its shards (`launches.fold`) is its first
+    shard's job, and a trial of another shard keeps its judgement under that shard's identity."""
+    inside = lambda j: os.path.commonpath([os.path.realpath(trial.dir), os.path.realpath(j.dir)]) == os.path.realpath(j.dir)
+    if inside(job):
+        return job
+    return next((j for j in shared._jobs_for_workspace(column) if inside(j)), job)
+
+
 def side_of(job, trial, column) -> dict | None:
     """One side's score as the compare page shows it, from the trial's own
     current record, the job opened from its column's workspace `column`: the expectation, the level it rounds to, the judge's
     confidence, the provenance. None until scored under the current vocabulary."""
+    job = shard_of(job, trial, column)
     rec = store.load(store.home(), job_key(job, column), trial.trial_name, started=started_of(trial), old=old_of(job, column),
                      strict=strict(trial))
     if not rec or not store.is_current(rec):
@@ -521,7 +539,7 @@ def _sides_todo(view) -> list:
     for task, a, b in pairs_of(view):
         for job, t, d in ((view.jobs[0], a, da), (view.jobs[1], b, db)):
             if side_of(job, t, d) is None:
-                out.append((task, job, t, d))
+                out.append((task, shard_of(job, t, d), t, d))
     return out
 
 
@@ -700,7 +718,7 @@ def task_summary(job) -> dict:
     return {"tasks": len(tasks), "judged": judged, "unjudged": len(tasks_todo(job)), "keyed": bool(key())}
 
 
-def judge_task(job, trial, api_key: str, post=None, calibration=None) -> dict | None:
+def judge_task(job, trial, api_key: str, post=None, calibration=None, column=None) -> dict | None:
     """Score one task's instruction over the `task` state alone, stored under
     the dataset's task slot and the instruction's digest - never under the trial."""
     instruction = _task_instruction(trial)
@@ -708,7 +726,7 @@ def judge_task(job, trial, api_key: str, post=None, calibration=None) -> dict | 
         raise client.JudgeError(0, f"no instruction can be read for {trial.task_base}")
     states = batch.states_for(Q.group_ids("task"), lambda kind: judge_state.build(kind, None, instruction=instruction))
     return batch.ask_and_store(store.home(), task_key(job), task_slot(trial), states, api_key, post=post, calibration=calibration,
-                               lane=store.TASKS, old=own_of(job))
+                               lane=store.TASKS, old=own_of(job, column))
 
 
 # -- the move of the judgements workspaces kept before into the user's store ---------------
