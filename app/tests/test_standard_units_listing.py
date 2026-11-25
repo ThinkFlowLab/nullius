@@ -342,9 +342,9 @@ class Licences(Scratch):
         with self.assertRaisesRegex(units.Refused, "needs a Hugging Face token"):
             units.listing(self.b, "all")
         # held, from the provider's variable as a headless run takes it, or from the store: the driver gets it
-        with mock.patch.dict(os.environ, dict(env, HF_TOKEN="from-the-environment"), clear=True):
+        with mock.patch.dict(os.environ, dict(env, HF_TOKEN="from-env"), clear=True):
             code, out, err = self.cli("units", "described", "--dataset", "all", "--search", "t042")
-        self.assertEqual((code, out.splitlines()[0], self.given()), (0, "1 of 250 tasks of all", "from-the-environment"))
+        self.assertEqual((code, out.splitlines()[0], self.given()), (0, "1 of 250 tasks of all", "from-env"))
         units.listing(dict(self.b, options={}), "all", licences={"HF_TOKEN": {"kind": "value", "value": "from-the-store"}})
         self.assertEqual(self.given(), "from-the-store")
 
