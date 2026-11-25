@@ -68,5 +68,5 @@ nullius standard recount <dir> [--read CMD] [--yes REGEX] [--compare A B] [--jso
 | Arms | `recorded` first, then each `--arm NAME=CHANGES`, a JSON list such as `[["drop_last", 1]]`. |
 | Yes or no | An answer reads yes when its label is the recorded one's, or matches `--yes`. |
 | The result | Each arm's yes by target, and an exact sign test between two arms. |
-| Goes on | The same command again sends only what was not answered, under the same cap. |
+| Goes on | The same command again sends only what was not answered, under its cap or a new one above the spend. |
 | `recount` | A kept study or replay read again by another rule, with no send. |

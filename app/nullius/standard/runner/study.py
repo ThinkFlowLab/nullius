@@ -9,7 +9,8 @@ one spending cap, read by one rule written down before the first send, and compa
   yes or no reading, the two arms compared) to ``study.json`` before the first send, then sends what is not
   answered yet through relays of its own, booked in one ledger for the whole study, each send at the most it can
   cost. Started again on the same folder it goes on: only what was not answered is sent, under the same cap counted
-  from the ledger; a plan that differs from the kept one is refused. ``dry_run`` sends nothing and writes nothing.
+  from the ledger or a new one above what was spent; a plan that differs from the kept one is refused.
+  ``dry_run`` sends nothing and writes nothing.
 - The result: for each target and arm the count of each answer; the table of targets by arms (the answers
   read yes of those answered); between two arms the targets whose share of yes went up, went down or tied,
   and an exact two-sided sign test (:func:`sign_test`).
@@ -330,9 +331,9 @@ def study(out: str, targets: Sequence[Target], arms: Sequence[Arm] = (), times: 
     default). ``stop_after``: at most this many sends in this start. ``dry_run``: what would be sent and its
     estimate, nothing sent or written. Each send is booked at the most it can cost (``replay.most``): when the next
     one does not fit what is left, or one has no bound, nothing is sent. On a folder that holds the study already,
-    it goes on: only what was not answered is sent; another plan or cap is refused. Returns the document written to
-    ``study.json``, with ``out``; the dry run, its own. ``same_rule`` confirms an uncheckable function is unchanged
-    on a restart."""
+    it goes on: only what was not answered is sent; another plan is refused, and another cap replaces the kept one
+    when it is above what was spent. Returns the document written to ``study.json``, with ``out``; the dry run, its
+    own. ``same_rule`` confirms an uncheckable function is unchanged on a restart."""
     from nullius.standard.runner import run as runs                # its key and endpoint checks, as a run makes them
     env = os.environ if env is None else env
     targets, arms = list(targets), [Arm(RECORDED, [])] + list(arms)
@@ -382,8 +383,6 @@ def study(out: str, targets: Sequence[Target], arms: Sequence[Arm] = (), times: 
         what = _differs(kept["plan"], plan)
         if what:
             raise Refused(f"the study in {out} began with other {what}: it goes on only as it began (a new folder starts another)")
-        if kept.get("max_usd") != cap:
-            raise Refused(f"the study in {out} has a cap of {ledgers.usd(kept.get('max_usd') or 0.0)} USD: it goes on under it")
     led = ledgers.Ledger(os.path.join(out, "ledger", "ledger.json"))
     spent = None
     if kept is not None:
@@ -391,6 +390,11 @@ def study(out: str, targets: Sequence[Target], arms: Sequence[Arm] = (), times: 
             spent = led.state()
         except ledgers.Unavailable as e:
             raise Refused(f"the study's ledger cannot be read, so its spend is unknown: {e}")
+        used = spent["spent_usd"] + spent["unsettled_usd"]
+        if kept.get("max_usd") != cap and cap <= used:
+            raise Refused(f"the study in {out} has spent {ledgers.usd(spent['spent_usd'])} USD"
+                          + (f" and holds {ledgers.usd(spent['unsettled_usd'])} never settled" if spent["unsettled_usd"] else "")
+                          + f" under its cap of {ledgers.usd(kept.get('max_usd') or 0.0)} USD: a new cap goes on above {ledgers.usd(used)}")
     answered = _answered(out) if kept is not None else {}
     todo = [(i, j, k) for k in range(1, times + 1) for i in range(1, len(targets) + 1) for j in range(len(arms))
             if (i, names[j], k) not in answered]
@@ -434,6 +438,12 @@ def study(out: str, targets: Sequence[Target], arms: Sequence[Arm] = (), times: 
         kept = {"schema": SCHEMA, "plan": plan, "max_usd": cap, "state": "sending", "created": _now(), "starts": []}
         _write(out, kept)                        # the plan and its rule, kept before the first send
         led = ledgers.Ledger.create(led.path, cap)
+    elif todo:
+        try:
+            led.reopen(cap)                      # a new start: under the same cap or the new one, recorded in the ledger
+        except ledgers.Unavailable as e:
+            raise Refused(f"the study's ledger cannot be written, so nothing is sent: {e}")
+        kept["max_usd"] = cap
     doc = kept
     recorded = [rp._read_rule(rule, rp.answer_of(row[0].source.path, row[0].source.reply), keys.values()) for row in preps]
     for a in answered.values():
@@ -464,7 +474,7 @@ def _send(out, doc, preps, names, todo, keys, led, times, rule, concurrency, sto
     """One start of a study: the slots ``todo`` sent through relays of its own, each answer appended to
     ``answers.jsonl`` as it comes; the start's line in ``doc``."""
     start = len(doc["starts"]) + 1
-    doc["starts"].append({"start": start, "started": _now(), "to_send": len(todo), "stop_after": stop_after})
+    doc["starts"].append({"start": start, "started": _now(), "to_send": len(todo), "stop_after": stop_after, "max_usd": doc["max_usd"]})
     doc["state"] = "sending"
     _write(out, doc)
     groups: Dict[tuple, relay.Relay] = {}

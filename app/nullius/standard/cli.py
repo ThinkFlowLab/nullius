@@ -941,7 +941,7 @@ arms: the call as recorded, then each --arm NAME=CHANGES; CHANGES is a JSON list
   ["drop_last", K], ["set_field", FIELD, VALUE], ["model", M], ["served_by", [SLUG...]], ["provider", P],
   ["through", CMD]
 the same command again goes on with a study that stopped: only what was not answered is sent, under the
-same cap; a study whose targets, arms, rule or model changed is refused
+same cap or a new --max-usd above what was spent; a study whose targets, arms, rule or model changed is refused
 
 examples:
   nullius standard study studies/s1 --job jobs_standard/JOB --trial TRIAL --every 4 --times 4 --max-usd 0.6 \\
@@ -953,7 +953,7 @@ exit codes:
   0  done: every send answered, or stopped as --stop-after asked, or the dry run printed
   1  unexpected error (a traceback: report it)
   2  usage, or refused: a change that does not apply, a plan unlike the study's, no price, no key, a folder in use,
-     a send whose most cost has no bound or does not fit what is left
+     a send whose most cost has no bound or does not fit what is left, a cap not above what was spent
   3  input not found: no such job, trial, exchange record, call, targets file or study
   4  the operation could not be completed: a request not whole in the record, or the study stopped before its end
 With --json, stdout is exactly one JSON document; everything else goes to stderr.
@@ -1301,7 +1301,7 @@ def main(argv=None):
                     help="an arm after the call as recorded: its changes as a JSON list of [NAME, ARG...], or @FILE (repeatable)")
     st.add_argument("--times", type=int, metavar="K", help="sends of each target under each arm")
     st.add_argument("--max-usd", type=float, metavar="USD",
-                    help="the study's spending cap, over all its starts, each send booked at the most it can cost")
+                    help="the study's spending cap, over all its starts, each send booked at the most it can cost; a new one above the spend replaces it")
     st.add_argument("--price", action="append", metavar="MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]",
                     help="a price in USD per million tokens, over the job's and your price list (repeatable)")
     st.add_argument("--read", metavar="CMD",

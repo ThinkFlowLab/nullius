@@ -226,6 +226,16 @@ class Ledger:
             if doc["held"].pop(booking, None) is not None:
                 self._write(doc)
 
+    def reopen(self, max_usd: float) -> None:
+        """A new start of what the ledger caps (a study that goes on), under
+        ``max_usd``: open again, what was spent kept; a cap it replaces is
+        kept in ``caps``, with what had been spent under it."""
+        with self._locked() as doc:
+            if doc["max_usd"] != float(max_usd):
+                doc.setdefault("caps", []).append({"max_usd": doc["max_usd"], "spent_usd": doc["spent_usd"]})
+            doc["max_usd"], doc["closed"] = float(max_usd), False
+            self._write(doc)
+
     def unit_left(self, unit: str) -> Optional[float]:
         """What ``unit`` may still spend under its own cap, every try of it
         counted (``forget`` drops the count once no try follows); None
