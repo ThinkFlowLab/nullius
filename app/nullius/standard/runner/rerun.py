@@ -63,10 +63,10 @@ import json
 import os
 import re
 import shutil
-import tempfile
 import time
 from typing import Callable, Dict, List, Optional
 
+from nullius import ondisk
 from nullius.harbor import feed as live_feed
 from nullius.standard.backends import boat
 from nullius.standard.calls import ledger as ledgers
@@ -531,15 +531,8 @@ def _again(r: "run.Run", job_dir: str, old: dict, cfg: dict, trials: Dict[str, d
             res = _begin(r, name, iur, fresh[name], work_unit)
         else:
             if name in killed:               # kept as the try it was, marked: it holds no result
-                fd, marker = tempfile.mkstemp(dir=os.path.join(job_dir, name))
-                os.fchmod(fd, 0o644)         # readable as the trial's other files are
-                try:
-                    with os.fdopen(fd, "w") as f:
-                        json.dump({"found_at": mark["at"], "result": None}, f)
-                    os.replace(marker, os.path.join(job_dir, name, NO_RESULT))
-                finally:
-                    if os.path.exists(marker):
-                        os.unlink(marker)
+                ondisk.write_whole(os.path.join(job_dir, name, NO_RESULT), json.dumps({"found_at": mark["at"], "result": None}),
+                                   mode=0o644)   # readable as the trial's other files are
             res = r.try_again(name, iur, first_try[name], work_unit)
         if res is not None:                  # the try asked for: its record says so, before a retry may move it
             how = {"begun": True} if name in fresh else {"replaced": said(trials.get(name) or {})}
