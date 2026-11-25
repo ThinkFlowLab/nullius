@@ -45,9 +45,9 @@ Very long-term conversational memory over conversations of 19 to 32 sessions.
 
 | Option | Value | Refused without (`host`: the driver's machine; `embeddings`: a model the provider serves) |
 |---|---|---|
-| `retrieval` | `dialog` | host: cuda_gpu |
-| `retrieval` | `observation` | host: cuda_gpu |
-| `retrieval` | `summary` | host: cuda_gpu |
+| `retrieval` | `dialog` | host: NVIDIA GPU |
+| `retrieval` | `observation` | host: NVIDIA GPU |
+| `retrieval` | `summary` | host: NVIDIA GPU |
 
 ## Good to know
 

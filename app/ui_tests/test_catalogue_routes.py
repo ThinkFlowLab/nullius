@@ -264,6 +264,15 @@ class BenchmarkPage(PageCase):
         self.assertNotIn("Setup: scoring_programs", osworld2)
         self.assertIn("Setup: Docker for the tasks' VMs", self.page("osworld1"))
 
+    def test_a_card_names_what_its_options_need_by_label(self):
+        for key, said in (("locomo", "NVIDIA GPU"), ("longmemeval", "NVIDIA GPU, NVIDIA GPU with 12000 MiB"),
+                          ("osworld2", "Docker, Scoring tools"), ("tau3-bench", "Sandbox runtime")):
+            with self.subTest(key):
+                card = self.card(key)
+                self.assertIn(f'title="Some of its options need {said} installed on the machine it runs on: see its page"', card)
+                self.assertIn(f"</svg>needs {said}</div>", card)
+        self.assertNotIn("_gpu", self.html)
+
 
 class DatasetsOnTheirPage(PageCase):
     """A benchmark's page carries its datasets: the task count, the official

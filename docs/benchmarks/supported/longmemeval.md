@@ -58,10 +58,10 @@ Long-term chat memory: questions over timestamped chat histories.
 | `expansion_join` | `split-separate` | files: punkt_tab; when: {'session_expansion': ['session-summ'], 'retriever': ['flat-bm25-session', 'flat-contriever-session', 'flat-stella-session']} |
 | `expansion_join` | `split-merge` | files: punkt_tab; when: {'session_expansion': ['session-summ'], 'retriever': ['flat-bm25-session', 'flat-contriever-session', 'flat-stella-session']} |
 | `expansion_join` | `split-replace` | files: punkt_tab; when: {'session_expansion': ['session-summ'], 'retriever': ['flat-bm25-session', 'flat-contriever-session', 'flat-stella-session']} |
-| `retriever` | `flat-contriever-session` | host: cuda_gpu |
-| `retriever` | `flat-contriever-turn` | host: cuda_gpu |
-| `retriever` | `flat-stella-session` | host: stella_gpu |
-| `retriever` | `flat-stella-turn` | host: stella_gpu |
+| `retriever` | `flat-contriever-session` | host: NVIDIA GPU |
+| `retriever` | `flat-contriever-turn` | host: NVIDIA GPU |
+| `retriever` | `flat-stella-session` | host: NVIDIA GPU with 12000 MiB |
+| `retriever` | `flat-stella-turn` | host: NVIDIA GPU with 12000 MiB |
 | `session_expansion` | `session-summ` | files: index_expansions |
 | `session_expansion` | `session-keyphrase` | files: index_expansions |
 | `session_expansion` | `session-userfact` | files: index_expansions |

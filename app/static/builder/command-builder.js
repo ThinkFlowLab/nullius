@@ -497,7 +497,7 @@
     const dockerWhy = list.includes('local') && here.docker ? 'Not on this machine: ' + here.docker : '';
     // Review's rule (nullius/standard/pages/recipe.py): a setup's image installs what has an install; nothing else reaches its container
     const cannot = selected.some(o => o.setup) ? optionNeeds(rec).host.filter(n => (b.host || {})[n] && !b.host[n].install.length) : [];
-    const containerWhy = dockerWhy || (cannot.length ? cannot.join(', ') + ' cannot be provided in a container: choose local processes.' : '');
+    const containerWhy = dockerWhy || (cannot.length ? cannot.map(n => b.host[n].label).join(', ') + ' cannot be provided in a container: choose local processes.' : '');
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
     const kind = (v, label, why = '') => `<button type="button" data-std-machines="${v}" aria-pressed="${(v === 'boat') === sandboxes}"${why ? ` disabled aria-disabled="true" title="${esc(why)}"` : ''}>${label}</button>`;
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));

@@ -637,6 +637,8 @@ def _host(d: dict) -> List[str]:
         if not _OPTION.match(str(name)) or not isinstance(r, dict):
             bad.append(f"{w}: a plain name -> an object")
             continue
+        if "label" in r and (not isinstance(r["label"], str) or not r["label"].strip()):
+            bad.append(f"{w}.label: its name on a page")
         if not isinstance(r.get("summary"), str) or not r["summary"].strip():
             bad.append(f"{w}.summary: what it is for")
         if not isinstance(r.get("check"), list) or not r["check"] or any(not _PROGRAM.match(str(x)) for x in r["check"]):
