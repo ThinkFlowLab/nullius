@@ -4,7 +4,7 @@ The mechanical half of the /docs-drift skill, run by hand. It checks the things 
 silently when files move — links that no longer resolve, paths named in prose
 that no longer exist — and nothing that needs judgement.
 
-    python3 .claude/skills/docs-drift/scripts/check_docs.py
+    python3 .agents/skills/docs-drift/scripts/check_docs.py
 
 Prints every finding and exits 1 if there are any.
 """
@@ -131,43 +131,27 @@ def check_md_links() -> list[str]:
     return bad
 
 
-def _map_bullet(text: str, root: str) -> str:
-    """The AGENTS.md repository-map bullet that starts with `root` - up to the next bullet."""
-    m = re.search(r"^- `" + re.escape(root) + r"`.*?(?=^- `|^#|\Z)", text, re.M | re.S)
-    return m.group(0) if m else ""
-
-
 def check_map() -> list[str]:
-    """AGENTS.md's repository map names every module of app/web and
-    app/nullius and names no module that does not exist."""
+    """AGENTS.md's "Where code lives" names every folder of modules directly under
+    app/nullius and its standard/, and none that does not exist. A module is
+    described by its docstring."""
     agents = REPO / "AGENTS.md"
     if not agents.exists():
         return []
-    text = agents.read_text(encoding="utf-8")
-    bad = []
-    for root in ("app/web/", "app/nullius/"):
-        bullet = _map_bullet(text, root)
-        if not bullet:
-            bad.append(f"AGENTS.md: no map bullet for `{root}`")
-            continue
-        named = set(re.findall(r"`([\w/]+?)/?`", bullet))
-        modules = sorted(p for p in (REPO / root).rglob("*.py") if p.name != "__init__.py" and "__pycache__" not in p.parts)
-        for mod in modules:
-            rel = mod.relative_to(REPO / root)
-            bare, dotted = rel.stem, str(rel.with_suffix("")).replace("\\", "/")
-            if not ({bare, dotted, rel.parent.name + "/" + bare} & named):
-                bad.append(f"AGENTS.md: the `{root}` map does not name `{dotted}`")
-        for name in sorted(named):
-            if name.rstrip("/") == root.rstrip("/"):
-                continue
-            if "/" in name and not (REPO / root / name).exists() and not (REPO / root / (name + ".py")).exists():
-                bad.append(f"AGENTS.md: the `{root}` map names `{name}`, which does not exist under {root}")
-    return bad
+    part = re.search(r"^## Where code lives$.*?(?=^## |\Z)", agents.read_text(encoding="utf-8"), re.M | re.S)
+    if not part:
+        return ["AGENTS.md: no \"Where code lives\""]
+    root = REPO / "app/nullius"
+    folders = {p.name for top in (root, root / "standard") for p in top.iterdir() if p.is_dir() and any(p.rglob("*.py"))}
+    entries = {p.name for p in (root / "catalogue").iterdir() if p.is_dir()}
+    named = set(re.findall(r"`(?:app/nullius/)?([\w-]+)/`", part.group(0)))
+    return ([f"AGENTS.md: \"Where code lives\" does not name `{name}/`" for name in sorted(folders - named)]
+            + [f"AGENTS.md: \"Where code lives\" names `{name}/`, which is not under app/nullius/"
+               for name in sorted(named - folders - entries) if not (REPO / name).is_dir()])
 
 
 def check_importers() -> list[str]:
-    """The importers the README's ways-in table and the AGENTS.md map name are
-    the registry's, no more and no fewer."""
+    """The README's ways-in table names every importer of the registry."""
     # The registry is read in a subprocess so this process's import path stays
     # what it was: the test suite runs these checks over copies of the tree.
     proc = subprocess.run([sys.executable, "-c", "import json, sys; from nullius import importers as r; "
@@ -186,15 +170,6 @@ def check_importers() -> list[str]:
         for label in sorted(labels):
             if label not in rows:
                 bad.append(f"README.md: the ways-in table does not name the {label} importer")
-    agents = (REPO / "AGENTS.md").read_text(encoding="utf-8") if (REPO / "AGENTS.md").exists() else ""
-    bullet = _map_bullet(agents, "app/nullius/")
-    listed = re.search(r"`importers/` \(([^)]*)\)", bullet)
-    if not listed:
-        bad.append("AGENTS.md: the map does not list `importers/` with its readers")
-    else:
-        for label in sorted(labels):
-            if label not in listed.group(1):
-                bad.append(f"AGENTS.md: `importers/` does not name {label}")
     return bad
 
 

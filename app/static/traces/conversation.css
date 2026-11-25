@@ -87,3 +87,6 @@ table.grid.trial-evidence{width:auto;max-width:100%}
 #trial-evidence .test-list li{overflow-wrap:anywhere}
 .trial-evidence td{vertical-align:top;white-space:normal;overflow-wrap:anywhere}.trial-evidence td.muted{overflow-wrap:normal}
 .trial-evidence pre{margin:0}
+
+.th-strip .ended-by { margin-left: 8px; font-size: .68rem; line-height: 1.2; vertical-align: middle; }
+.th-strip .stop .ended-by { margin-left: 0; }

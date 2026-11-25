@@ -102,6 +102,18 @@ GAVE_UP_DRIVER = '''from nullius.standard.protocols.jsonl import serve
 serve({"units": lambda dataset: {"units": ["s"]}, "setup": lambda unit, dir: {"prompt": "swallow hi"},
        "score": lambda unit, dir, transcript, answer: {"reward": 0.0, "passed": False, "detail": {}}})
 '''
+# a unit whose setup keeps a progress file in the trial and names it, and whose agent calls its model once
+PROGRESS_DRIVER = '''import json, os
+from nullius.standard.protocols.jsonl import serve
+def setup(unit, dir):
+    work = os.path.join(os.path.dirname(dir), ".work", "count")
+    os.makedirs(work, exist_ok=True)
+    with open(os.path.join(work, "progress.json"), "w") as f:
+        json.dump({"steps": 2, "steps_limit": 9, "ended": "", "open": 0}, f)
+    return {"prompt": "model hi", "progress": os.path.join(".work", "count", "progress.json")}
+serve({"units": lambda dataset: {"units": ["p"]}, "setup": setup,
+       "score": lambda unit, dir, transcript, answer: {"reward": 1.0, "passed": True, "detail": {}}})
+'''
 
 
 class Echo(BaseHTTPRequestHandler):
@@ -1163,6 +1175,31 @@ class RunTest(unittest.TestCase):
             run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
                     env=self.env, say=lambda s: None, unsandboxed=True, proving=True, max_calls=0)
 
+    def test_a_running_units_steps_and_calls_reach_the_live_feed_before_its_end(self):
+        """The progress file setup names and the relay's record of the agent's calls: on the feed as
+        ``trial.progress`` before the unit's end, with the run's cap on calls, and folded onto the board."""
+        here = os.path.join(self.tmp, "counted")
+        os.makedirs(here)
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write(PROGRESS_DRIVER)
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), _here=here, driver={"command": ["python3", "{here}/driver.py"]})
+        job_dir = run.run(b, definitions.get("agent", "fake", ROOT), model="m-1", provider="custom", jobs_root=self.tmp,
+                          concurrency=1, env=self.env, say=lambda s: None, unsandboxed=True, proving=True, max_calls=5)
+        with open(os.path.join(job_dir, "events.jsonl")) as f:
+            events = [json.loads(l) for l in f]
+        kinds = [e["event"] for e in events]
+        counts = [e for e in events if e["event"] == "trial.progress"]
+        self.assertTrue(counts)
+        last = counts[-1]
+        self.assertEqual({k: last.get(k) for k in ("task", "step", "step_limit", "calls", "calls_limit", "n_input_tokens",
+                                                   "n_cache_tokens", "n_output_tokens", "cost_usd")},
+                         {"task": "p", "step": 2, "step_limit": 9, "calls": 1, "calls_limit": 5, "n_input_tokens": 11,
+                          "n_cache_tokens": 0, "n_output_tokens": 3, "cost_usd": None})
+        self.assertLess(events.index(last), kinds.index("trial.end"))
+        self.assertEqual(kinds[-1], "job.end")
+        t = live.load(os.path.join(job_dir, "events.jsonl")).snapshot()["trials"][0]
+        self.assertEqual((t["step"], t["step_limit"], t["calls"], t["calls_limit"], t["outcome"]), (2, 9, 1, 5, "resolved"))
+
     def test_a_simulated_user_opens_the_conversation_and_speaks_through_its_route(self):
         """A benchmark whose user a model plays (``simulator``): its first
         turn, asked with nothing said, follows setup's prompt; every turn is
@@ -1347,6 +1384,283 @@ class RunTest(unittest.TestCase):
         a = definitions.get("agent", "fake", ROOT)
         with self.assertRaisesRegex(run.Refused, "OPENAI_API_KEY is not set"):
             run.Run(b, a, model="m", provider="openai", env={}, unsandboxed=True)
+
+
+class Feed:
+    """The live feed's writer, as the ticker sees it: what it was told, in order."""
+
+    def __init__(self, hold: float = 0):
+        self.lines, self.hold = [], hold
+
+    def emit(self, event, trial=None, **data):
+        time.sleep(self.hold)
+        self.lines.append((event, trial, {k: v for k, v in data.items() if v is not None}))
+
+
+class TickerTest(unittest.TestCase):
+    """The job's ticker against a fake unit: a trial folder with a progress file and a relay's record."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.trial = os.path.join(self.tmp, "trial")
+        self.relay = os.path.join(self.trial, ".work", "relay")
+        os.makedirs(self.relay)
+        self.record = os.path.join(self.relay, "u0000.jsonl")
+        self.progress = os.path.join(self.trial, ".work", "progress.json")
+        self.feed = Feed()
+        self.ticker = run.Ticker(self.feed, every=3600)          # ticked by hand
+
+    def write(self, text, path=None):
+        with open(path or self.progress, "w") as f:
+            f.write(text if isinstance(text, str) else json.dumps(text))
+
+    def call(self, status=200, usage=None, cost=None, path="/chat/completions", end="\n"):
+        rec = {"t0": 1.0, "t1": 2.0, "path": path, "model": "m", "status": status}
+        if status == 200:
+            rec["reply"] = {"usage": usage or {"input": 10, "output": 2, "cached": 4}}
+        if cost is not None:
+            rec["cost_usd"] = cost
+        with open(self.record, "a") as f:
+            f.write(json.dumps(rec) + end)
+
+    def told(self):
+        return [d for e, _, d in self.feed.lines if e == "trial.progress"]
+
+    def test_a_count_is_sent_when_it_changes_and_never_when_it_does_not(self):
+        self.ticker.watch("x", task="u", agent="a", trial=self.trial, record=self.record, progress=".work/progress.json")
+        self.ticker.tick()
+        self.assertEqual(self.told(), [])                         # nothing to read yet: nothing said, no zero made up
+        self.write({"steps": 0, "steps_limit": 100, "ended": "", "open": 1})
+        self.ticker.tick()
+        self.ticker.tick()
+        self.assertEqual(self.told(), [{"task": "u", "agent": "a", "step": 0, "step_limit": 100}])
+        self.call(cost=0.002)
+        self.ticker.tick()
+        self.call(status=429)                                     # refused by the provider: no call answered, nothing new
+        self.write({"steps": 0, "steps_limit": 100, "ended": "", "open": 0})   # what the board does not show changed
+        self.ticker.tick()
+        self.write({"steps": 1, "steps_limit": 100, "ended": "", "open": 0})
+        self.ticker.tick()
+        said = self.told()
+        self.assertEqual(len(said), 3)
+        self.assertEqual(said[1], {"task": "u", "agent": "a", "step": 0, "step_limit": 100, "calls": 1, "n_input_tokens": 10,
+                                   "n_cache_tokens": 4, "n_output_tokens": 2, "cost_usd": 0.002})
+        self.assertEqual((said[2]["step"], said[2]["calls"]), (1, 1))
+
+    def test_a_missing_half_written_or_unreadable_progress_file_gives_no_event_and_no_error(self):
+        self.ticker.watch("x", task="u", agent="a", trial=self.trial, progress=".work/progress.json")
+        outside = os.path.join(self.tmp, "outside.json")
+        self.write({"steps": 3, "steps_limit": 5}, outside)
+        for case, make in (("missing", lambda: None),
+                           ("half written", lambda: self.write('{"steps": 3, "steps_li')),
+                           ("not an object", lambda: self.write("[3, 5]")),
+                           ("steps not a number", lambda: self.write({"steps": "3", "steps_limit": 5})),
+                           ("steps a boolean", lambda: self.write({"steps": True, "steps_limit": 5})),
+                           ("too long", lambda: self.write({"steps": 3, "steps_limit": 5, "pad": "x" * run.PROGRESS_BYTES})),
+                           ("a folder", lambda: os.mkdir(self.progress)),
+                           ("a pipe", lambda: os.mkfifo(self.progress)),
+                           ("a link out of the trial", lambda: os.symlink(outside, self.progress)),
+                           ("a link inside it", lambda: (self.write({"steps": 3, "steps_limit": 5}, self.progress + ".real"),
+                                                         os.symlink(self.progress + ".real", self.progress)))):
+            with self.subTest(case):
+                if os.path.isdir(self.progress) and not os.path.islink(self.progress):
+                    os.rmdir(self.progress)
+                elif os.path.lexists(self.progress):
+                    os.remove(self.progress)
+                make()
+                self.ticker.tick()                                # returns at once, and raises nothing
+                self.assertEqual(self.told(), [])
+        os.remove(self.progress)
+        self.write({"steps": 3, "steps_limit": 5})
+        if os.geteuid() != 0:                                     # root reads a file whatever its mode
+            os.chmod(self.progress, 0)
+            self.ticker.tick()
+            self.assertEqual(self.told(), [])
+            os.chmod(self.progress, 0o600)
+        self.ticker.tick()
+        self.assertEqual(self.told(), [{"task": "u", "agent": "a", "step": 3, "step_limit": 5}])
+        self.write('{"steps": 4')                                 # half written again: the last value stands, nothing sent
+        self.ticker.tick()
+        self.assertEqual(len(self.told()), 1)
+        for given in (self.progress, "../outside.json", "..", 3, ""):   # only a path inside the trial is read
+            with self.subTest(given=given):
+                self.ticker.watch("y", task="v", agent="a", trial=self.trial, progress=given)
+                self.ticker.tick()
+                self.assertEqual([d for e, t, d in self.feed.lines if t == "y"], [])
+
+    def test_progress_parent_links_are_refused(self):
+        outside = os.path.join(self.tmp, "outside")
+        os.mkdir(outside)
+        self.write({"steps": 93, "steps_limit": 100}, os.path.join(outside, "progress.json"))
+        self.write({"steps": 1, "steps_limit": 5})
+        parent = os.path.join(self.trial, "linked")
+        for target in (os.path.dirname(self.progress), outside):
+            with self.subTest(target=os.path.basename(target)):
+                self.feed.lines.clear()
+                os.symlink(target, parent)
+                try:
+                    self.ticker.watch("x", task="u", agent="a", trial=self.trial, progress="linked/progress.json")
+                    self.ticker.tick()
+                    self.assertEqual(self.told(), [])
+                finally:
+                    os.unlink(parent)
+
+    def test_progress_parent_replaced_after_first_read_cannot_escape(self):
+        self.ticker.watch("x", task="u", agent="a", trial=self.trial, progress=".work/progress.json")
+        self.write({"steps": 1, "steps_limit": 5})
+        self.ticker.tick()
+        self.assertEqual(self.told()[0]["step"], 1)
+        self.write({"steps": 2, "steps_limit": 5})
+        outside = os.path.join(self.tmp, "outside")
+        os.mkdir(outside)
+        self.write({"steps": 93, "steps_limit": 100}, os.path.join(outside, "progress.json"))
+        opened = os.open
+        swapped = []
+
+        def replace_parent(path, flags, *args, **kwargs):
+            if os.path.basename(path) == "progress.json" and not swapped:
+                parent = os.path.dirname(self.progress)
+                os.rename(parent, parent + ".saved")
+                os.symlink(outside, parent)
+                swapped.append(True)
+            return opened(path, flags, *args, **kwargs)
+
+        with mock.patch.object(run.os, "open", side_effect=replace_parent):
+            self.ticker.tick()
+        self.assertEqual(swapped, [True])
+        self.assertTrue(all(d["step"] in (1, 2) and d["step_limit"] == 5 for d in self.told()))
+        said = list(self.told())
+        self.ticker.tick()
+        self.assertEqual(self.told(), said)
+
+    def test_a_unit_with_no_progress_file_sends_its_calls_alone(self):
+        self.ticker.watch("x", task="u", agent="a", trial=self.trial, record=self.record, calls_limit=50)
+        self.call(cost=0.001)
+        self.call(path="/messages/count_tokens", usage={"input": 7})   # a token count: no call of the cap's
+        with open(self.record, "a") as f:
+            f.write('{"status": 200, "model": "m", "path": "/chat/completions"')   # the relay still writing it
+        self.ticker.tick()
+        self.assertEqual(self.told(), [{"task": "u", "agent": "a", "calls": 1, "calls_limit": 50, "n_input_tokens": 17,
+                                        "n_cache_tokens": 4, "n_output_tokens": 2, "cost_usd": 0.001}])
+        with open(self.record, "a") as f:
+            f.write("}\n")
+        self.ticker.tick()
+        self.assertEqual(self.told()[-1]["calls"], 2)             # read once its line ended, and only once
+        self.ticker.tick()
+        self.assertEqual(len(self.told()), 2)
+
+    def test_the_thread_ends_with_the_job_and_the_end_waits_one_tick_at_most(self):
+        ticker = run.Ticker(self.feed, every=0.2).start()
+        ticker.watch("x", task="u", agent="a", trial=self.trial, progress=".work/progress.json")
+        self.write({"steps": 1, "steps_limit": 4})
+        deadline = time.time() + 10
+        while not self.told() and time.time() < deadline:
+            time.sleep(0.05)
+        self.assertEqual(self.told(), [{"task": "u", "agent": "a", "step": 1, "step_limit": 4}])   # ticked by itself
+        t0 = time.time()
+        ticker.close()
+        self.assertLess(time.time() - t0, 0.2 + 0.5)
+        self.assertFalse(ticker.thread.is_alive())
+        self.write({"steps": 2, "steps_limit": 4})
+        time.sleep(0.5)
+        self.assertEqual(len(self.told()), 1)                     # ended: nothing more is read
+        stuck = run.Ticker(Feed(hold=3), every=0.2).start()       # a tick that does not return: the end waits one tick
+        stuck.watch("x", task="u", agent="a", trial=self.trial, progress=".work/progress.json")
+        time.sleep(0.5)
+        t0 = time.time()
+        stuck.close()
+        self.assertLess(time.time() - t0, 0.2 + 0.5)
+
+    def test_a_unit_that_ends_between_two_ticks_has_its_last_count_sent(self):
+        self.ticker.start()
+        self.addCleanup(self.ticker.close)
+        self.ticker.watch("x", task="u", agent="a", trial=self.trial, record=self.record, progress=".work/progress.json")
+        self.write({"steps": 7, "steps_limit": 7, "ended": "steps", "open": 0})
+        self.call()
+        self.ticker.drop("x")
+        self.assertEqual(self.told(), [{"task": "u", "agent": "a", "step": 7, "step_limit": 7, "calls": 1, "n_input_tokens": 10,
+                                        "n_cache_tokens": 4, "n_output_tokens": 2}])
+        self.call()
+        self.ticker.tick()
+        self.ticker.drop("x")                                     # dropped: read no more, and no error
+        self.assertEqual(len(self.told()), 1)
+
+    def test_run_ends_while_a_ticker_read_is_held(self):
+        entered, release, scored, ended = (threading.Event() for _ in range(4))
+        errors = []
+        steps = run.Ticker._steps
+
+        def held_steps(unit):
+            entered.set()
+            if not release.wait(5):
+                raise AssertionError("the read was not released")
+            steps(unit)
+
+        def request(op, **kwargs):
+            if op == "units":
+                return {"units": ["one"]}
+            if op == "setup":
+                self.write({"steps": 1, "steps_limit": 5},
+                           os.path.join(os.path.dirname(kwargs["dir"]), "progress.json"))
+                return {"prompt": "hello", "progress": "progress.json"}
+            if op == "score":
+                if not entered.wait(3):
+                    raise AssertionError("the ticker did not read")
+                scored.set()
+                return {"reward": 1.0, "passed": True, "detail": {}}
+            raise AssertionError(op)
+
+        bench = dict(definitions.get("benchmark", "fakebench", ROOT),
+                     controls={"nop": {"source": "fixture", "from": "nothing"}})
+        owner = run.Run(bench, definitions.control(bench, "nop"), model="", provider="custom",
+                        jobs_root=self.tmp, env={}, say=lambda s: None, concurrency=1)
+
+        def start():
+            try:
+                owner.start()
+            except BaseException as error:
+                errors.append(error)
+            finally:
+                ended.set()
+
+        with mock.patch.object(owner, "driver", return_value=mock.Mock(request=request)), \
+                mock.patch.object(run, "TICK_SECONDS", 0.05), \
+                mock.patch.object(run.Ticker, "_steps", staticmethod(held_steps)):
+            worker = threading.Thread(target=start)
+            worker.start()
+            try:
+                self.assertTrue(scored.wait(3), errors)
+                self.assertTrue(ended.wait(0.3), "the job waited on the ticker read")
+                self.assertFalse(release.is_set())
+                self.assertEqual(errors, [])
+                with open(os.path.join(owner.job_dir, "result.json")) as f:
+                    self.assertEqual(json.load(f)["stats"]["n_completed_trials"], 1)
+            finally:
+                release.set()
+                worker.join(5)
+                if getattr(owner, "ticker", None) is not None:
+                    owner.ticker.close()
+                    owner.ticker.thread.join(5)
+                    self.assertFalse(owner.ticker.thread.is_alive())
+                self.assertFalse(worker.is_alive())
+
+    def test_the_container_and_boat_backends_give_the_same_record_and_nothing_raises(self):
+        """A container's relay writes its record into the trial as this machine's user; a boat VM's relay runs
+        here. Either is read as the local backend's; a record that cannot be read gives nothing."""
+        from types import SimpleNamespace
+        owner = SimpleNamespace(ticker=self.ticker, other={"key": "a"}, max_calls=None)
+        sidecar = container.Unit("job", "u0000", self.relay, image="img", app="/app", base="http://127.0.0.1:9/v1", key="k")
+        here = relay.Relay("http://127.0.0.1:9/v1", "k", os.path.join(self.tmp, "boat-relay"))
+        self.call()
+        with open(os.path.join(here.dir, "u0001.jsonl"), "w") as f:
+            f.write(json.dumps({"status": 200, "model": "m", "path": "/chat/completions", "reply": {"usage": {"input": 1}}}) + "\n")
+        os.mkdir(os.path.join(here.dir, "u0002.jsonl"))          # not a file: unreadable
+        for name, rl, tag in (("container", sidecar, "u0000"), ("boat", here, "u0001"), ("unreadable", here, "u0002"),
+                              ("no relay", None, "u0003")):
+            run.Run.watch(owner, name, "u", self.trial, {}, rl, tag)
+        self.ticker.tick()
+        self.assertEqual({t: d["calls"] for e, t, d in self.feed.lines}, {"container": 1, "boat": 1})
 
 
 if __name__ == "__main__":

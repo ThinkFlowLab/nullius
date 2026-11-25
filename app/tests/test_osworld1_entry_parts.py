@@ -102,13 +102,37 @@ class Score(unittest.TestCase):
         self.result()
         with open(os.path.join(self.where, "computer-calls.jsonl"), "w") as f:
             f.write('{"tool": "click"}\n{"tool": "done"}\n')
+        with open(os.path.join(self.where, "progress.json"), "w") as f:
+            json.dump({"steps": 2, "steps_limit": 100, "ended": "done", "open": 0}, f)
         self.owned(child("pass"))
         got = self.d.score("os__t1", self.ws, answer="done")
         self.assertEqual(got, {"reward": 1.0, "detail": {"result": 1.0, "tool_calls": 2,
-                                                         "by": "runner.py, run_single_example, DesktopEnv.evaluate"}})
+                                                         "by": "runner.py, run_single_example, DesktopEnv.evaluate",
+                                                         "steps": 2, "steps_limit": 100, "ended": "done"}})
         self.assertNotIn(self.where, self.d.RUNNERS)
         out = os.path.join(self.tmp, "trial", "verifier", "osworld")
         self.assertEqual(sorted(os.listdir(out)), ["computer-calls.jsonl", "result.txt"])
+
+    def test_a_progress_file_missing_unreadable_or_linked_leaves_the_score_and_says_no_count(self):
+        elsewhere = os.path.join(self.tmp, "elsewhere.json")
+        with open(elsewhere, "w") as f:
+            json.dump({"steps": 1, "steps_limit": 9, "ended": "done", "open": 0}, f)
+        progress = os.path.join(self.where, "progress.json")
+        for case in ("missing", "not json", "a list", "linked"):
+            with self.subTest(case=case):
+                self.result()
+                if os.path.lexists(progress):
+                    os.unlink(progress)
+                if case == "linked":
+                    os.symlink(elsewhere, progress)
+                elif case != "missing":
+                    with open(progress, "w") as f:
+                        f.write("{\"steps\": " if case == "not json" else "[1, 2]")
+                self.owned(child("pass"))
+                got = self.d.score("os__t1", self.ws, answer="done")
+                self.assertEqual(got["reward"], 1.0)
+                self.assertEqual({k: got["detail"][k] for k in ("steps", "steps_limit", "ended")},
+                                 {"steps": None, "steps_limit": None, "ended": None})
 
     def test_score_tells_the_runner_the_turn_has_ended(self):
         self.result()
@@ -656,7 +680,8 @@ class Runner(unittest.TestCase):
         return types.SimpleNamespace(example=example, result_dir=os.path.join(self.tmp, "results"),
                                      socket=os.path.join(folder, "s"), ready=os.path.join(folder, "ready.json"),
                                      vm="vm", calls=os.path.join(self.tmp, "calls.jsonl"), held=None, lifeline=-1,
-                                     steps=3, pause=0.0, prepared=None, given=None)
+                                     steps=3, pause=0.0, progress=os.path.join(self.tmp, "progress.json"), prepared=None,
+                                     given=None)
 
     def run_with(self, env, loop):
         a = self.args()
@@ -686,6 +711,8 @@ class Runner(unittest.TestCase):
             code, said = self.run_with(env, loop)
         self.assertEqual((code, json.loads(said)), (0, {"ok": True, "password": "password"}))
         self.assertEqual(env.seen[-1], ("close",))
+        with open(os.path.join(self.tmp, "progress.json")) as f:
+            self.assertEqual(json.load(f), {"steps": 0, "steps_limit": 3, "ended": "turn", "open": 0})
 
     def test_a_loop_that_fails_before_the_first_step_says_not_ready_and_closes_the_desktop(self):
         env = FakeEnv()

@@ -9,7 +9,6 @@
         "--with-requirements",
         "app/requirements.txt",
         "app/app.py",
-        "jobs",
         "--no-debug"
       ],
       "port": 5057

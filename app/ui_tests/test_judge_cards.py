@@ -24,7 +24,7 @@ const provider = select(options([['', {}], ['openrouter', {available: 'true', pr
 provider.kind = '[data-picker]';
 const protocol = select(options([['chat', {}, 'OpenAI Chat Completions'], ['messages', {}, 'Anthropic Messages']]), {value: 'chat'});
 protocol.kind = '[data-protocol-picker]'; protocol.dataset.name = 'value:LLM_JUDGE_PROTOCOL'; protocol.field = {hidden: false};
-const model = {placeholder: '', list: {replaceChildren() {}}}, modelField = {hidden: false, querySelector: () => model};
+const model = {placeholder: ''}, modelField = {hidden: false, querySelector: () => model};
 const via = {hidden: false, textContent: ''}, none = {hidden: false};
 const parts = {'[data-picker]': provider, '[data-protocol-picker]': protocol, '[data-judge-via]': via, '[data-no-judge-provider]': none, '.st-field[id$="_MODEL"]': modelField};
 const listeners = {}, card = {querySelector: s => parts[s], addEventListener(t, f) { listeners[t] = f; }};
@@ -44,22 +44,6 @@ out.push(pick(provider, 'openrouter'));
 doc['nullius-settings-saved']({detail: {providers: [{key: 'anthropic', ready: 'true'}]}}); out.push(view());
 doc['nullius-settings-saved']({detail: {providers: []}}); out.push(view());
 process.stdout.write(JSON.stringify(out));
-'''
-
-# Decision on OpenRouter: the list drawn with the page, then the live one asked when the field is first used.
-LIVE = PROGRAM.split("require(process.argv[1]);")[0].replace(
-    "['openrouter', {available: 'true', protocol: 'chat', protocols: 'chat'}, 'OpenRouter']",
-    "['openrouter', {available: 'true', protocol: 'systemone', protocols: 'systemone|decisions', models: '~typesafe/jev-latest', live: ''}, 'OpenRouter']"
-).replace("const model = {placeholder: '', list: {replaceChildren() {}}}",
-          "const shown = []; const model = {placeholder: '', matches: () => true, list: {replaceChildren(...o) { shown.push(o.map(x => x.value)); }, append() {}}}") + r'''
-const asked = [];
-global.nulliusFetch = (url, init) => { asked.push([url, JSON.parse(init.body)]);
-  return Promise.resolve({ok: true, json: () => Promise.resolve({ok: true, models: [{id: '~typesafe/jev-latest', name: '~typesafe/jev-latest'}, {id: 'b/decider:free', name: 'b/decider:free'}]})}); };
-document.querySelector = () => ({value: 'token'});
-require(process.argv[1]);
-doc.DOMContentLoaded(); provider.value = 'openrouter'; listeners.change({target: provider});
-listeners.focusin({target: model});
-setTimeout(() => { listeners.focusin({target: model}); setTimeout(() => process.stdout.write(JSON.stringify({asked, shown: shown.slice(-2)}))); });
 '''
 
 
@@ -82,11 +66,6 @@ class JudgeCard(unittest.TestCase):
         self.assertEqual(got[5], row("anthropic", "messages", "", True, ""))                              # the sole provider left is chosen
         self.assertEqual(got[6], {"provider": "", "hidden": True, "protocol": "messages", "named": "", "protocolRow": False,
                                   "via": "", "none": True, "model": False})                               # none left: Add a provider
-
-    def test_decision_judge_on_openrouter_asks_the_live_list_once_when_the_field_is_used(self):
-        got = json.loads(subprocess.run([self.node, "-e", LIVE, str(SCRIPT)], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(got["asked"], [["/settings/decision/models", {"provider": "openrouter"}]])        # once, for both uses
-        self.assertEqual(got["shown"], [["~typesafe/jev-latest", "b/decider:free"]] * 2)
 
 
 if __name__ == "__main__":

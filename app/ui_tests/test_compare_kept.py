@@ -17,7 +17,7 @@ WHOLE = ["Workspace", "Run", "Agent", "Model", "Benchmark", "Dataset", "Runner",
 # matched tasks: no run wall time and no mean over the trials planned, which no subset of a run has
 MATCHED = [label for label in WHOLE if label not in ("Run wall time", "Mean over planned")]
 # a task's detail row
-DETAIL = ["Outcome", "Score", "Fail → Pass", "Pass → Pass", "Agent time", "Env / Verify", "Steps", "Tool calls", "Failed calls", "Tool mix", "First edit",
+DETAIL = ["Outcome", "Score", "Fail → Pass", "Pass → Pass", "Agent time", "Env / Verify", "Trace steps", "Tool calls", "Failed calls", "Tool mix", "First edit",
           "Edit → test cycles", "Redundant reads", "Retried failed calls", "Exploration per edit", "Prompt size",
           "Fresh prompt", "Cached", "Cached ratio", "Output tokens", "Cost (estimated)", "Files edited", "Broke"]
 

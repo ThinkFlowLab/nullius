@@ -34,7 +34,7 @@ metric is defined.
 
 ## Workflow
 
-`S` below is the resolved path to `scripts/runs.py` beside this skill (`.claude/skills/run-analysis/scripts/runs.py`
+`S` below is the resolved path to `scripts/runs.py` beside this skill (`.agents/skills/run-analysis/scripts/runs.py`
 from a checkout root). Standard library only (Python 3.8+); it writes only what `--out` names.
 
 ### 1. Locate the runs and agree on names

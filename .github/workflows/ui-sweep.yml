@@ -55,7 +55,7 @@ jobs:
           if [ -n "$SWEEP_BENCHMARK" ]; then
             sweep_args+=(--only "$SWEEP_BENCHMARK")
           fi
-          "$RUNNER_TEMP/ui-sweep-browser/bin/python" .claude/skills/ui-sweep/scripts/sweep.py \
+          "$RUNNER_TEMP/ui-sweep-browser/bin/python" .agents/skills/ui-sweep/scripts/sweep.py \
             --url http://127.0.0.1:8791 --out "$RUNNER_TEMP/ui-sweep" "${sweep_args[@]}"
       # Nothing is kept: artifacts count against the account's storage. The
       # report goes to the log; screenshots are the local sweep's.

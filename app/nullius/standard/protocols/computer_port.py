@@ -20,7 +20,8 @@ back, neither a step; an acting call is refused until the task is given.
   step), and serves the reading calls that come before it, in the thread of the loop: one desktop operation at a time,
   in the order the calls arrived. An acting call is held until the loop has run its actions and their pause, then
   answered; a ``step`` with an ``end`` then hands the loop its DONE or FAIL, in the same step. Once the steps are used
-  up, every call but ``info`` is refused.
+  up, every call but ``info`` is refused. Given a path, it keeps the progress file there: the steps taken, the budget,
+  what ended the loop and the calls waiting at the desktop.
 - ``Server``: the MCP server over a Unix socket: JSON-RPC 2.0, one message a line; every connection of the unit's
   session accepted, the task's state kept in the bridge, outside them; one line per tool
   call in the call log (the tool, its start and end, whether it failed; no argument and no result).
@@ -306,6 +307,7 @@ class Call:
         self.end = None
         self.files = None                            # a step's or a prepare's files, [(as named, the desktop's path)]
         self.answered = False
+        self.on_answer = None                        # called once the call is answered (the bridge's count of it)
         self._lock = threading.Lock()
 
     def answer(self, value=None, image=None, error=None):
@@ -313,7 +315,11 @@ class Call:
             if self.answered:
                 return
             self.answered = True
-        self._reply(self, value, image, error)
+        try:
+            self._reply(self, value, image, error)
+        finally:
+            if self.on_answer is not None:
+                self.on_answer()
 
 
 def checked(call, screen, folder) -> None:
@@ -406,12 +412,16 @@ class Bridge:
     ``steps`` is the loop's budget, ``pause`` the seconds it waits after each action, ``screen`` the screen's size in
     pixels, ``folder`` the agent's own folder in the desktop (an absolute path), made empty at the loop's first
     ``predict``. ``on_first`` is called at the loop's first ``predict``, before any call is served (a runner writes
-    its ready file there). ``held`` is a Held, or None. The window before the task is open when ``window`` is true
-    (the benchmark's side is told when the task is given, and calls ``close_window``); with no window, upload and
-    prepare are refused from the start. ``prepared``, a file, gets one JSON line per prepare call: its actions and the
-    files it names, before they run."""
+    its ready file there). ``held`` is a Held, or None. ``progress``, when given, is the path of the progress file:
+    ``{steps, steps_limit, ended, open}``, the steps taken, the budget, what ended the loop (empty while it runs,
+    ``done``, ``fail``, ``steps`` or ``turn``) and the calls taken in and not yet answered, which wait at the desktop.
+    It is rewritten whole at each change, so that a reader sees one state or the next, never part of one. The window
+    before the task is open when ``window`` is true (the benchmark's side is told when the task is given, and calls
+    ``close_window``); with no window, upload and prepare are refused from the start. ``prepared``, a file, gets one
+    JSON line per prepare call: its actions and the files it names, before they run."""
 
-    def __init__(self, desktop, steps, pause, screen, folder, on_first=None, held=None, window=False, prepared=None):
+    def __init__(self, desktop, steps, pause, screen, folder, on_first=None, held=None, progress=None, window=False,
+                 prepared=None):
         self.desktop, self.steps, self.pause = desktop, int(steps), pause
         self.screen = (int(screen[0]), int(screen[1]))
         self.on_first, self.held = on_first, held
@@ -428,10 +438,15 @@ class Bridge:
         self.calls = collections.deque()             # calls waiting for the loop, in the order they came
         self.running = None                          # the acting call the loop is running
         self.ended = None                            # why no call is taken any more
+        self.ended_by = ""                           # what ended the loop: done, fail, steps or turn
+        self.open = 0                                # calls taken in and not yet answered
         self.turn_ended = False
         self.first = True
         self.partial = {}                            # this unit's uploads being kept: path -> [sha256, hash, bytes]
         self.change = threading.Condition()
+        self.progress, self.written, self.unwritten = progress, None, False
+        self.counted = threading.Lock()              # the count of calls waiting and the progress file; taken last
+        self._progress()
 
     # -- the loop's agent -------------------------------------------------------------------------------------------
     def reset(self, *_, **__):
@@ -564,10 +579,12 @@ class Bridge:
             call = self.calls.popleft()
             if call.tool in FINAL:
                 self.used += 1
+                self.ended_by = call.tool
                 refused = self._end(f"the task has ended ({call.tool})")
             elif call.tool in ACTING:
                 self.used += 1
                 self.running = call
+            self._progress()
         for c in refused:
             c.answer(error=self.ended)
         return call
@@ -594,9 +611,14 @@ class Bridge:
         with self.change:
             self.running = None
             if ran and call.end:                     # the task has ended, as after done or fail
+                self.ended_by = call.end
                 refused = self._end(f"the task has ended ({call.end})")
+            elif self.used >= self.steps:
+                self.ended_by = self.ended_by or "steps"
+                refused = self._end("the steps are used up")
             else:
-                refused = self._end("the steps are used up") if self.used >= self.steps else []
+                refused = []
+            self._progress()
             value = {"steps_left": self.steps - self.used, "done": self.ended is not None}
             turn_ended = self.turn_ended
         if not ran:
@@ -711,9 +733,16 @@ class Bridge:
                     self.booked += 1
             if refusal is None:
                 self.calls.append(call)
+                call.on_answer = self._answered
+                self._progress(opened=1)
                 self.change.notify_all()
         if refusal is not None:
             call.answer(error=refusal)
+
+    def _answered(self):
+        """A call taken in has been answered. Not under the condition: an answer may be given while another thread
+        holds it."""
+        self._progress(opened=-1)
 
     def info(self):
         with self.change:
@@ -745,6 +774,9 @@ class Bridge:
         with self.change:
             self.turn_ended = True
             refused = self._end("the agent's turn has ended", keep_final=True)
+            if not self.ended_by and not self.calls:  # no done or fail kept for the loop
+                self.ended_by = "turn"
+            self._progress()
         for c in refused:
             c.answer(error=self.ended)
 
@@ -770,6 +802,36 @@ class Bridge:
             self.calls.append(final)
         self.change.notify_all()
         return refused
+
+    def _progress(self, opened=0):
+        """``opened`` added to the calls waiting, then the progress file rewritten whole when its state changed,
+        through a part file replaced at once. Each change of the state is followed by a call here, so the last
+        write holds the last state. A write that fails leaves the task as it is, and is said once."""
+        with self.counted:
+            self.open += opened
+            if self.progress is None:
+                return
+            state = {"steps": self.used, "steps_limit": self.steps, "ended": self.ended_by, "open": self.open}
+            if state == self.written:
+                return
+            fd = part = None
+            try:
+                fd, part = tempfile.mkstemp(prefix=".progress-", dir=os.path.dirname(self.progress))
+                f, fd = os.fdopen(fd, "w", encoding="utf-8"), None
+                with f:
+                    json.dump(state, f)
+                os.replace(part, self.progress)
+                self.written = state
+            except OSError as e:
+                if not self.unwritten:
+                    self.unwritten = True
+                    sys.stderr.write(f"computer: the progress file was not written: {type(e).__name__}: {e}\n")
+            finally:
+                if fd is not None:
+                    os.close(fd)
+                if part is not None:
+                    with contextlib.suppress(OSError):
+                        os.unlink(part)
 
 
 def frame(message) -> bytes:

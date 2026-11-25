@@ -2,7 +2,7 @@
 they are, with the computer port's bridge as the loop's agent (nullius.standard.protocols.computer_port, agent.computer/v1).
 
     runner.py --example TASK_JSON --result-dir DIR --socket PATH --ready FILE --lifeline FD --steps N --pause SECONDS
-              --vm VM_IMAGE --calls FILE [--held FOLDER] [--prepared FILE] [--given FILE]
+              --vm VM_IMAGE --calls FILE [--held FOLDER] [--progress PROGRESS] [--prepared FILE] [--given FILE]
 
 The driver starts it in the unit's runner folder with the upstream and Nullius on its import path. It builds the upstream's DesktopEnv as the null control
 does (nop.py), serves the MCP server computer at PATH (a Unix socket in a folder of the user's alone, which the driver
@@ -18,6 +18,7 @@ added. The agent's folder in the VM is FOLDER.
   the runner then writes --given's file, {"ok": true}; its close stops the runner as SIGTERM does.
 - FILE, the call log: one line per tool call, {tool, start, end, isError}; --prepared's, one line per prepare call.
 - FOLDER, the run's folder of files sent once, when the driver gives one (computer_port.Held).
+- PROGRESS, the progress file the bridge keeps, when the driver gives one: {steps, steps_limit, ended, open}.
 
 A stop is taken once. The clean-up (the bridge's end and the server's close, then the desktop's close within
 CLOSE_SECONDS) takes at most STOP_SECONDS; past it the runner exits 1 all the same. At every exit READY and the socket's folder are removed. The
@@ -129,7 +130,7 @@ def main(argv=None):
     p = argparse.ArgumentParser()
     for name in ("--example", "--result-dir", "--socket", "--ready", "--vm", "--calls"):
         p.add_argument(name, required=True)
-    for name in ("--held", "--prepared", "--given"):
+    for name in ("--held", "--progress", "--prepared", "--given"):
         p.add_argument(name)
     p.add_argument("--lifeline", type=int, required=True)
     p.add_argument("--steps", type=int, required=True)
@@ -175,7 +176,8 @@ def run(a, port, stop, turn):
         os.makedirs(where, exist_ok=True)
         desktop = Desktop(env, os.path.dirname(os.path.abspath(a.calls)))
         bridge = port.Bridge(desktop, a.steps, a.pause, SCREEN, FOLDER, on_first=first,
-                             held=port.Held(a.held) if a.held else None, window=bool(a.given), prepared=a.prepared)
+                             held=port.Held(a.held) if a.held else None, progress=a.progress, window=bool(a.given),
+                             prepared=a.prepared)
         server = port.Server(bridge, a.socket, a.calls)
         turn.bridge = bridge
         lib_run_single.run_single_example(bridge, Watched(env, desktop), example, a.steps, example["instruction"],

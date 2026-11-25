@@ -99,8 +99,8 @@ class Pages(unittest.TestCase):
 
     def test_the_board_of_a_recorded_run_renders_from_its_own_clock(self):
         board = self.page("job-oracle-board")
-        self.assertIn("hello-alpine Resolved 0 22.91s 4.90s 0.20s 6.72s", board)
-        self.assertIn("reward-kit-example Resolved 0 24.29s 2.93s 1.95s 7.91s", board)
+        self.assertIn("hello-alpine 1/1 Resolved 0 22.91s 4.90s 0.20s 6.72s", board)
+        self.assertIn("reward-kit-example 1/1 Resolved 0 24.29s 2.93s 1.95s 7.91s", board)
 
 
 if __name__ == "__main__":

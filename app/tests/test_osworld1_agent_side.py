@@ -193,6 +193,10 @@ class AgentSide(unittest.TestCase):
         with open(os.path.join(self.task_dir(), "traj.jsonl")) as f:
             return [json.loads(line) for line in f]
 
+    def count(self, setup: dict) -> dict:
+        with open(os.path.join(self.trial, setup["progress"])) as f:
+            return json.load(f)
+
     def runner(self) -> int:
         with open(os.path.join(self.trial, ".work", "osworld", "runner.json")) as f:
             return json.load(f)["pid"]
@@ -204,6 +208,8 @@ class AgentSide(unittest.TestCase):
                                                                 "the computer is 'password'.")
         self.assertEqual([(m["name"], m["server"]) for m in setup["mcp"]], [("computer", "computer")])
         self.assertTrue(setup["mcp"][0]["args"][0].endswith(os.path.join("nullius", "standard", "protocols", "computer_pipe.py")))
+        self.assertEqual(setup["progress"], os.path.join(".work", "osworld", "progress.json"))
+        self.assertEqual(self.count(setup), {"steps": 0, "steps_limit": 5, "ended": "", "open": 0})
         s = self.session(setup)
         self.assertEqual(base64.b64decode(s.call("screenshot")["content"][0]["data"])[:4], b"\x89PNG")
         self.assertEqual(value(s.call("click", x=10, y=20))["steps_left"], 4)
@@ -212,7 +218,9 @@ class AgentSide(unittest.TestCase):
         s.close()
         score = d.request("score", unit=UNIT, dir=self.ws, transcript=[], answer="done")
         self.assertEqual(score, {"reward": 1.0, "detail": {"result": 1.0, "tool_calls": 4,
-                                                           "by": "runner.py, run_single_example, DesktopEnv.evaluate"}})
+                                                           "by": "runner.py, run_single_example, DesktopEnv.evaluate",
+                                                           "steps": 3, "steps_limit": 5, "ended": "done"}})
+        self.assertEqual(self.count(setup), {"steps": 3, "steps_limit": 5, "ended": "done", "open": 0})
         self.assertEqual([(t["step_num"], t["action"], t["response"]) for t in self.traj()],
                          [(1, CLICK, ""), (2, "pyautogui.press('enter')", "enter"), (3, "DONE", "")])
         self.assertEqual([(e["action"], e["pause"]) for e in self.events("step")],
@@ -231,6 +239,8 @@ class AgentSide(unittest.TestCase):
         s.close()
         score = d.request("score", unit=UNIT, dir=self.ws, transcript=[], answer="")
         self.assertEqual(score["reward"], 0.0)                 # the fake gives 1 only to a task ended by DONE
+        self.assertEqual({k: score["detail"][k] for k in ("steps", "steps_limit", "ended")},
+                         {"steps": 1, "steps_limit": 4, "ended": "turn"})
         self.assertEqual([t["action"] for t in self.traj()], [CLICK])
         self.assertEqual([e["last"] for e in self.events("evaluate")], [CLICK])
 
@@ -253,6 +263,8 @@ class AgentSide(unittest.TestCase):
         s.close()
         score = d.request("score", unit=UNIT, dir=self.ws, transcript=[], answer="")
         self.assertEqual(score["reward"], 1.0)                 # the evaluator reads FAIL as the last action
+        self.assertEqual({k: score["detail"][k] for k in ("steps", "steps_limit", "ended")},
+                         {"steps": 1, "steps_limit": 3, "ended": "fail"})
         self.assertEqual([(t["step_num"], t["action"], t["response"]) for t in self.traj()],
                          [(1, CLICK, "no such menu"), (1, "FAIL", "no such menu")])
 
@@ -263,8 +275,10 @@ class AgentSide(unittest.TestCase):
         self.assertEqual(value(s.call("click", x=2, y=2)), {"steps_left": 0, "done": True})
         self.assertEqual(s.call("click", x=3, y=3)["content"][0]["text"], "the steps are used up")
         s.close()
-        d.request("score", unit=UNIT, dir=self.ws, transcript=[], answer="")
+        score = d.request("score", unit=UNIT, dir=self.ws, transcript=[], answer="")
         self.assertEqual(len(self.traj()), 2)
+        self.assertEqual({k: score["detail"][k] for k in ("steps", "steps_limit", "ended")},
+                         {"steps": 2, "steps_limit": 2, "ended": "steps"})
 
     def test_a_result_txt_planted_in_the_workspace_is_not_read(self):
         self.task["evaluator"] = {"func": "infeasible"}                             # DONE scores 0

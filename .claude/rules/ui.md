@@ -1,3 +1,34 @@
+## One look, and its command
+
+- What a page gains, its command gains, or the pull request says why not:
+  `docs/cli/pages.md` pairs them.
+- The same thing looks the same on every page. Use these, as other pages do, in the
+  builder too: its `nb-` classes are old copies. None fits: say so and ask the owner.
+
+  | For | Use |
+  | --- | --- |
+  | A page's title and buttons | `page_head` |
+  | A section's title; a group's | `h2`; `h3`, unstyled |
+  | A list | `table` or `cards`, with their controls |
+  | A button | `.btn`, never `nb-button`; beside the main one `ghost`; in a row of controls `sm`; one that deletes `danger` |
+  | An icon alone; an action in a sentence | `.icon-btn`; `.linkish` |
+  | One of a few views; a filter | `.seg-toggle`; the controls' pills and menus |
+  | One of a list; a model | a `select`, which `controls.js` draws; `model-picker.js` |
+  | A dialog; a message | `dialog.std-how`, never `nb-dialog`; `nulliusNotify`, never `nb-toast` |
+  | More on demand | `details` |
+  | Quieter text; smaller; ids, code, commands | `.muted`; `.small`; `.mono` |
+  | Larger text, a figure | none yet: ask the owner |
+
+  `danger` and `std-how` are in `app/static/catalogue/catalogue.css`.
+
+- New CSS only places them (grid, gap, margin, width). It sets no font, draws no
+  button, takes colors from the tokens, and has no rule on a shared class, `button`
+  or `h2` under a page's id. Before reporting, this prints nothing:
+
+  ```bash
+  git diff -U0 --merge-base origin/main -- app/static app/templates | grep -E '^\+.*font(-[a-z]+)?:'
+  ```
+
 ## The interface, as its owner wants it
 
 For routine interface changes, run the relevant unit and route tests and make

@@ -512,7 +512,7 @@
   const RESERVED = ['agent','a','model','m','dataset','d','path','p','n-tasks','l','n-concurrent','n','max-retries','r','env','e','job-name','jobs-dir','o','agent-timeout-multiplier','include-task-name','i','ak','agent-kwarg','ek','environment-kwarg','verifier-kwarg','agent-env','ae'];
   function validate(r) {
     const errors = [], notes = [];
-    const add = (step, message, group) => errors.push({step, message, ...(group ? {group} : {})});
+    const add = (step, message, group, unset) => errors.push({step, message, ...(group ? {group} : {}), ...(unset ? {unset} : {})});
     if (isStandard(r)) return {errors, notes};   // compiled and checked by the server, from its definition files
     if (r.harness !== 'harbor') { add(STEP.runner, RUNNER_GONE); return {errors, notes}; }
     const blocker = routeBlocker(r.benchmark);
@@ -536,9 +536,9 @@
     const named = r.model.trim() || (benchmarkCallsModel(r) && r.agents.every(id => agentById(id, r)?.control) ? (r.userModel || '').trim() : '');
     if (callsModel && r.model_choice === 'paper') {
       const allowed = Object.values(paperModels(r).sent?.[r.provider] || {});
-      if (!allowed.includes(r.model)) add(STEP.model, 'Choose one of the paper models on this provider.');
+      if (!allowed.includes(r.model)) add(STEP.model, 'Choose one of the paper models on this provider.', '', !r.model);
     }
-    if (callsModel && !named) add(STEP.model, benchmarkCallsModel(r) ? 'Enter a model for the agent and/or simulated user and evaluator.' : 'Enter a model.');
+    if (callsModel && !named) add(STEP.model, benchmarkCallsModel(r) ? 'Enter a model for the agent and/or simulated user and evaluator.' : 'Enter a model.', '', true);
     if (callsModel && !PROVIDERS.includes(r.provider)) add(STEP.model, 'Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider.');
     for (const [key,label] of [['keyEnv','API key source variable'],['urlEnv','Endpoint source variable']]) {
       if (callsModel && (key !== 'urlEnv' || r[key]) && !/^[A-Z_][A-Z0-9_]*$/.test(r[key])) add(STEP.model, label + ' must be an environment variable name.');

@@ -70,7 +70,7 @@ import traceback
 import tempfile
 from collections import Counter
 from concurrent.futures import FIRST_EXCEPTION, CancelledError, ThreadPoolExecutor, wait
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from typing import Callable, Dict, List, Optional, Tuple
 
 from nullius import constraints as limits, paths, prices as price_list, progress, providers, settings
@@ -438,6 +438,261 @@ class Licences:
         data = secrets.value(store, kept)
         text = data.decode(errors="replace").strip() if data else ""
         return {"kind": kind, "value": text} if text else None
+
+
+TICK_SECONDS = 5.0                    # how often the live feed is told the counts of each running unit (Ticker)
+PROGRESS_BYTES = 4096                 # the most of a progress file read: it holds a few small numbers
+# how long an agent's turn may go on once its benchmark's own loop has ended (the progress file's ``ended``), for a
+# benchmark that scores that cut (``limits.scored_cuts``); and how often a running turn's cuts are looked for
+END_GRACE_SECONDS = 60.0
+CUT_LOOK_SECONDS = 1.0
+
+
+def progress_path(progress) -> Optional[str]:
+    """The progress file a setup named (``progress``), as a path relative to its trial; None for any other value:
+    not a string, absolute, or leading out of the trial."""
+    if isinstance(progress, str) and progress and not os.path.isabs(progress):
+        norm = os.path.normpath(progress)
+        if norm != os.pardir and not norm.startswith(os.pardir + os.sep):
+            return norm
+    return None
+
+
+def read_progress(trial: str, path: Optional[str]) -> Optional[dict]:
+    """A unit's progress file (``path``, from :func:`progress_path`) as it reads now: each folder from ``trial`` on
+    opened without following a link, the file read only when it is a plain one of at most PROGRESS_BYTES. None when
+    it is missing, half written, or anything else."""
+    if path is None:
+        return None
+    try:
+        with ExitStack() as opened:
+            flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+            parent = os.open(trial, flags)
+            opened.callback(os.close, parent)
+            parts = path.split(os.sep)
+            # Keep each folder open. A replacement cannot redirect the next open.
+            for part in parts[:-1]:
+                parent = os.open(part, flags, dir_fd=parent)
+                opened.callback(os.close, parent)
+            fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+            opened.callback(os.close, fd)
+            raw = os.read(fd, PROGRESS_BYTES + 1) if stat.S_ISREG(os.fstat(fd).st_mode) else b""
+        got = json.loads(raw) if 0 < len(raw) <= PROGRESS_BYTES else None
+    except (OSError, ValueError):
+        return None
+    return got if isinstance(got, dict) else None
+
+
+class Ticker:
+    """The job's one thread that tells the live feed the counts of each running unit (``trial.progress``).
+
+    Every ``every`` seconds, for each unit it watches, it reads the unit's progress file when its setup named one
+    (``progress``, a path inside the trial: ``{steps, steps_limit, ...}``) and the lines the unit's relay added to
+    the record of its agent's calls since the last read. It sends an event only when a value changed: ``step`` and
+    ``step_limit``; ``calls``, the calls answered, counted as a cap on them counts them, and ``calls_limit`` when the
+    run has that cap; the tokens and the cost, as the unit's end gives them. A progress file that is missing, half
+    written, not a plain file inside the trial or not readable gives nothing and is no error, and the last value
+    read stays; a record line not yet ended is read once it is. A unit's last counts are queued as it stops
+    being watched (:meth:`drop`). Its end waits at most one tick for them."""
+
+    def __init__(self, feed, every: Optional[float] = None):
+        self.feed, self.every = feed, TICK_SECONDS if every is None else every
+        self.units: Dict[str, dict] = {}          # by trial name: what is read of it, and what was last sent
+        self.pending: List[tuple] = []
+        self.lock = threading.Lock()
+        self.wake = threading.Event()
+        self.ended = threading.Event()
+        self.thread: Optional[threading.Thread] = None
+
+    def start(self) -> "Ticker":
+        self.thread = threading.Thread(target=self._run, name="feed-ticker", daemon=True)
+        self.thread.start()
+        return self
+
+    def _run(self) -> None:
+        while not self.ended.is_set():
+            self.wake.wait(self.every)
+            self.wake.clear()
+            if not self.ended.is_set():
+                self.tick()
+
+    def close(self) -> None:
+        """The job's end: the thread stops, waited for one tick at most."""
+        self.ended.set()
+        self.wake.set()
+        if self.thread is not None:
+            self.thread.join(self.every)
+
+    def watch(self, name: str, *, task: str, agent: str, trial: str, record: Optional[str] = None,
+              progress=None, calls_limit: Optional[int] = None) -> None:
+        """A unit to read from now on: ``record``, its relay's record of its agent's calls; ``progress``, the
+        path its setup named, relative to ``trial`` (any other value is not read)."""
+        path = progress_path(progress)
+        with self.lock:
+            self.units[name] = {"task": task, "agent": agent, "trial": trial, "record": record, "progress": path,
+                                "calls_limit": calls_limit, "at": 0, "counts": None, "steps": None, "sent": None}
+
+    def drop(self, name: str) -> None:
+        """Queue a unit's last counts. Wait at most one tick for the read."""
+        with self.lock:
+            u = self.units.pop(name, None)
+            if u is None:
+                return
+            done = threading.Event()
+            self.pending.append((name, u, done))
+        self.wake.set()
+        done.wait(self.every)
+
+    def tick(self) -> None:
+        with self.lock:
+            units = list(self.units.items())
+            pending, self.pending = self.pending, []
+        for name, u, done in pending:
+            try:
+                self._read(name, u)
+            finally:
+                done.set()
+        for name, u in units:
+            self._read(name, u)
+
+    def _read(self, name: str, u: dict) -> None:
+        self._steps(u)
+        self._calls(u)
+        n, steps = u["counts"], u["steps"] or (None, None)
+        values = {"step": steps[0], "step_limit": steps[1],
+                  **({"calls": n["calls"], "calls_limit": u["calls_limit"], "n_input_tokens": n["input"],
+                      "n_cache_tokens": n["cached"], "n_output_tokens": n["output"], "cost_usd": n["cost"]} if n else {})}
+        if all(v is None for v in values.values()) or values == u["sent"]:
+            return
+        try:
+            self.feed.emit("trial.progress", name, task=u["task"], agent=u["agent"], **values)
+        except Exception:                        # noqa: BLE001 - a count the board misses is no unit's error
+            return
+        u["sent"] = values
+
+    @staticmethod
+    def _steps(u: dict) -> None:
+        """The progress file's steps and limit, when it reads as one; the values before it otherwise."""
+        got = read_progress(u["trial"], u["progress"])
+        whole = lambda v, least: isinstance(v, int) and not isinstance(v, bool) and v >= least
+        if isinstance(got, dict) and whole(got.get("steps"), 0):
+            u["steps"] = (got["steps"], got["steps_limit"] if whole(got.get("steps_limit"), 1) else None)
+
+    @staticmethod
+    def _calls(u: dict) -> None:
+        """The record's lines ended since the last read, added to the unit's counts."""
+        if u["record"] is None:
+            return
+        try:
+            with open(u["record"], "rb") as f:
+                f.seek(u["at"])
+                got = f.read()
+        except OSError:
+            return
+        end = got.rfind(b"\n") + 1               # a line the relay is still writing is read at the next look
+        u["at"] += end
+        n = u["counts"] = u["counts"] or {"calls": 0, "input": 0, "cached": 0, "output": 0, "cost": None}
+        number = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+        for line in got[:end].splitlines():
+            try:
+                c = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(c, dict) or c.get("status") != 200:
+                continue
+            reply = c.get("reply") if isinstance(c.get("reply"), dict) else {}
+            usage = reply.get("usage") if isinstance(reply.get("usage"), dict) else {}
+            for k in ("input", "cached", "output"):
+                n[k] += usage[k] if number(usage.get(k)) else 0
+            if number(c.get("cost_usd")):
+                n["cost"] = (n["cost"] or 0) + c["cost_usd"]
+            if c.get("model") and not relay._free(str(c.get("path") or "")):
+                n["calls"] += 1
+
+
+class CutWatch:
+    """What may end an agent's turn on a unit before the agent ends it, for a benchmark that scores the cut
+    (``limits.scored_cuts``, ``kinds``), looked for by a thread of its own every CUT_LOOK_SECONDS while the turn runs:
+    ``calls``, the run's cap on the agent's model calls refused one (a line of its relay's ``record`` says
+    ``refused: calls``); ``end``, the benchmark's own loop ended (its ``progress`` file, inside ``trial``, says
+    ``ended``) END_GRACE_SECONDS before. ``event`` is set at the first of them, and ``by`` says which."""
+
+    def __init__(self, kinds, trial: str, record: Optional[str], progress=None):
+        self.kinds, self.trial, self.record, self.progress = frozenset(kinds), trial, record, progress_path(progress)
+        self.event, self.done, self.lock = threading.Event(), threading.Event(), threading.Lock()
+        self.by: Optional[str] = None
+        self.at, self.refusal, self.ended_at = 0, False, None
+        self.thread: Optional[threading.Thread] = None
+
+    def start(self) -> "CutWatch":
+        if self.kinds & {"calls", "end"}:
+            self.thread = threading.Thread(target=self._run, name="cut-watch", daemon=True)
+            self.thread.start()
+        return self
+
+    def stop(self) -> None:
+        self.done.set()
+        if self.thread is not None:
+            self.thread.join(2 * CUT_LOOK_SECONDS)
+
+    def _run(self) -> None:
+        while not self.done.wait(CUT_LOOK_SECONDS):
+            by = self.look()
+            if by:
+                self.by = by
+                self.event.set()
+                return
+
+    def look(self) -> Optional[str]:
+        """``calls`` or ``end`` when that cut has come, as the files read now; None otherwise."""
+        if "calls" in self.kinds and self.refused():
+            return self.capped()
+        if "end" in self.kinds and self.loop_ended() and time.monotonic() - self.ended_at >= END_GRACE_SECONDS:
+            return "end"
+        return None
+
+    def capped(self) -> str:
+        """What a refusal at the run's cap cut: ``end`` when the benchmark's own loop had ended, else ``calls``."""
+        return "end" if "end" in self.kinds and self.loop_ended() else "calls"
+
+    def refused(self) -> bool:
+        """Whether the run's cap on model calls has refused one of the agent's calls: the record's lines ended since
+        the last look are read."""
+        with self.lock:
+            if self.refusal or self.record is None:
+                return self.refusal
+            try:
+                with open(self.record, "rb") as f:
+                    f.seek(self.at)
+                    got = f.read()
+            except OSError:
+                return False
+            end = got.rfind(b"\n") + 1           # a line the relay is still writing is read at the next look
+            self.at += end
+            for line in got[:end].splitlines():
+                try:
+                    c = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(c, dict) and c.get("refused") == "calls":
+                    self.refusal = True
+                    break
+            return self.refusal
+
+    def loop_ended(self) -> bool:
+        """Whether the benchmark's own loop has ended, as its progress file says; ``ended_at`` keeps when that was
+        first seen."""
+        with self.lock:
+            if self.ended_at is None:
+                got = read_progress(self.trial, self.progress) or {}
+                if isinstance(got.get("ended"), str) and got["ended"].strip():
+                    self.ended_at = time.monotonic()
+            return self.ended_at is not None
+
+    def steps(self) -> int:
+        """The steps the benchmark counted, as its progress file says now; 0 without one."""
+        got = (read_progress(self.trial, self.progress) or {}).get("steps")
+        return got if isinstance(got, int) and not isinstance(got, bool) and got > 0 else 0
 
 
 def resolve_bench_options(bench: dict, dataset: str, given: Optional[dict] = None, setup: str = "yours",
@@ -965,6 +1220,7 @@ class Run:
         self.loopback = None
         self.pace = pacing.Pace(self._stopped, self._halt)
         self._running = 0
+        self.ticker = Ticker(self.feed)          # each running unit's steps and calls, told to the live board
         again: Dict[str, dict] = {}              # an attempt's last try, by its trial's name, when it was retried
 
         def work_unit(iur):
@@ -988,6 +1244,7 @@ class Run:
         pool = ThreadPoolExecutor(self.concurrency)
         futures = []
         try:
+            self.ticker.start()
             # a model server on this machine's loopback, which the relays' containers cannot reach as written
             if (self.backend == "container" or self.relay_container) and self.base and container.on_loopback(self.base):
                 self.loopback = container.Loopback(self.base, image=self.image, job=self.name).start()
@@ -1011,6 +1268,7 @@ class Run:
         finally:
             # a Stop or Ctrl-C: the units not begun are not begun, those running end with their agents
             pool.shutdown(wait=True, cancel_futures=True)
+            self.ticker.close()
             self.let_go()
             begun = [not f.cancelled() and f.exception() is None and f.result() is not None for f in futures]
             results = [again.get(f.result()["trial_name"], f.result()) for f, ran in zip(futures, begun) if ran]
@@ -1345,6 +1603,17 @@ class Run:
         if self.feed is not None:
             self.feed.emit("trial.phase", name, task=unit, agent=self.other["key"], phase=phase, timeout_sec=timeout)
 
+    def watch(self, name: str, unit: str, trial: str, setup: dict, rl, tag: str) -> None:
+        """A unit whose counts the live feed is told while it runs (:class:`Ticker`): the progress file its setup
+        named, and its relay's record of its agent's calls. A relay in a container writes that record into the
+        trial, as this machine's user, so the same file is read on every backend."""
+        if getattr(self, "ticker", None) is None:
+            return
+        record = getattr(rl, "dir", None) if rl is not None else None
+        self.ticker.watch(name, task=unit, agent=self.other["key"], trial=trial, progress=setup.get("progress"),
+                          record=os.path.join(record, tag + ".jsonl") if record else None,
+                          calls_limit=getattr(self, "max_calls", None))
+
     def over_acp(self) -> bool:
         """Whether the unit's other is an agent driven over ACP: the one kind with a setup of its own,
         its start and its session. A command agent starts and runs in one call, an upstream setup and a
@@ -1437,6 +1706,7 @@ class Run:
                 raise _Ended("EnvironmentSetupError", f"the unit's relay: {e}")
             if rl is not None:
                 rl.unit_secrets = self.agent_licences(env_def, rl)
+            self.watch(name, unit, trial, setup, rl, tag)
             if own:
                 self.phase(name, unit, "env_setup", self.phase_limit("image", IMAGE_SECONDS))     # its image, pulled or built when not here yet
                 box = self.own_box(tag, setup, rl, home)
@@ -1471,7 +1741,9 @@ class Run:
                     if box is not None:          # what the agent (or the control) left in the container, before the check
                         changes = self.box_changes(box)
             cut = self.cap_reached(rl, tag)
-            if cut:                              # cut off at a spending cap: nothing of it is checked, and its judge is asked nothing
+            if cut and not (cut[0] == relay.CALLS_ERROR and clock.get("cut")):
+                # cut off at a spending cap: nothing of it is checked, and its judge is asked nothing; at the cap on
+                # model calls too, unless its benchmark scores that cut
                 raise _Ended(cut[0], cut[1], traj)
             step = setup.get("verify") if box is not None else None
             checking = (time.time(), None)
@@ -1508,9 +1780,17 @@ class Run:
                 rl.stop()
                 for ln in getattr(rl, "mcp_listeners", None) or []:
                     ln.stop()
+            if getattr(self, "ticker", None) is not None:
+                self.ticker.drop(name)           # Its last counts are given one tick before its end.
         calls = rl.calls(tag) if rl is not None else []
         words = not self.bench.get("gated")
         failed = relay.failure(calls, words, agent=True)
+        if failed and clock.get("cut") and failed[0] not in (ledgers.ERROR, ledgers.UNIT_ERROR):
+            # its agent's work was cut and the unit went on to its score (``cut_of``): the cap's refusal, or one
+            # after the benchmark's own end, is not how it ended. At its time, a call begun before the cut whose
+            # refusal came after it is the provider's, as one that came before it
+            failed = relay.failure([c for c in calls if c.get("t0", 0) <= clock.get("cut_at", 0)], words, agent=True) \
+                if clock["cut"] == "time" else None
         if failed and failed[0] not in (ledgers.ERROR, ledgers.UNIT_ERROR, relay.CALLS_ERROR) and exc is None \
                 and self.bench["score"]["kind"] == "pass" and score.get("reward") == 1.0:
             # a passed unit's failed last call came after its answer (jiuwenswarm's image probe, which some
@@ -1532,7 +1812,7 @@ class Run:
             exc = failed                     # what the endpoint said outranks how the agent took it
             score, retry_ok = None, True     # a time run out under refused calls is the provider's: tried again
         cut = self.cap_reached(rl, tag)          # at scoring too: its judge's call, or a refusal its agent made something else of
-        if cut:
+        if cut and not (cut[0] == relay.CALLS_ERROR and clock.get("cut")):
             exc, score = cut, None
         if exc and exc[0] in ("EnvironmentSetupError", "VerifierError") and getattr(self, "ledger", None) is not None \
                 and getattr(self, "bench_relay", None) is not None:
@@ -1556,6 +1836,7 @@ class Run:
                               checking=checking,
                               trajectory=traj, extra_logs=dict(logs or {}, **({"container-changes.txt": changes} if changes else {})),
                               environment=environment or "", retries=retry, retryable=retry_ok, serving=getattr(self, "serving", None),
+                              cut=clock.get("cut"),
                               # who served the unit: its agent's calls and its judge's and simulated user's routes
                               served_calls=calls + ([c for side in ("judge", "simulator") for c in rl.calls(f"{tag}-{side}")]
                                                     if rl is not None else []),
@@ -2295,6 +2576,33 @@ class Run:
             return float(own)
         return self.turn_seconds
 
+    def scored_cuts(self) -> frozenset:
+        """The cuts after which a unit an agent ran is still scored, as its benchmark declares them
+        (``limits.scored_cuts``): none for any other participant, nor for a benchmark that declares none. Only an
+        agent over a session is cut (:meth:`drive_agent`); one started as a command keeps the errors."""
+        if self.other.get("_kind") != "agent":
+            return frozenset()
+        return frozenset((self.bench.get("limits") or {}).get("scored_cuts") or ())
+
+    def cut_of(self, watch: Optional[CutWatch], rl, tag: str) -> Optional[str]:
+        """What cut an agent's turn that its ``watch`` ended, or that ran past the agent's time: ``calls``, ``end`` or
+        ``time``, when its benchmark scores that cut. None for a unit that stays an error, as it is without the
+        declaration: a cut the benchmark does not score; a time that ran out while the provider refused the agent's
+        last call (the unit is tried again); a unit where nothing moved, no model call answered and no step counted."""
+        if watch is None:
+            return None
+        by = watch.by or (watch.capped() if "calls" in watch.kinds and watch.refused() else None)
+        if by is None and "end" in watch.kinds and watch.loop_ended():
+            by = "end"                           # its time ran out within the grace: the benchmark's end came first
+        if by is not None or "time" not in watch.kinds:
+            return by
+        calls = rl.calls(tag)
+        if relay.failure(calls, agent=True) is not None:
+            return None
+        if not any(c.get("status") == 200 and not c.get("side") for c in calls) and not watch.steps():
+            return None
+        return "time"
+
     def drive_agent(self, unit, ws, home, tag, setup, transcript, rl, box=None, name="", clock=None):
         """The agent over ACP, its session's ``cwd`` the unit's workspace - in
         an own image (``box``), the container's working directory, which this
@@ -2304,7 +2612,9 @@ class Run:
         between the check and the open and reach any file of the user's.
         ``clock`` gets when its setup ended: ``ready``, its session open, or
         ``failed``, its start over with none (it never answered, it exited, the
-        run was stopped)."""
+        run was stopped); and ``cut``, what cut its work short (:meth:`cut_of`)
+        when its benchmark scores that cut: its turn then ends as at a timeout,
+        and the unit goes on to its score."""
         a = self.other
         env = agent_env(a, self.inst, home, rl.unit_url, self.model, self.options)
         log = os.path.join(os.path.dirname(ws), "agent", "agent.log")
@@ -2317,6 +2627,10 @@ class Run:
         cmd, env = self.place(rl, cmd, env, ws, home, box=box)
         c = acp.Client(cmd, env, log, cwd=ws, grant=True, fs=box is None and self.backend == "local", stopped=self._stopped)
         events: List[dict] = []
+        kinds, cut = self.scored_cuts(), None
+        record = getattr(rl, "dir", None)
+        watch = CutWatch(kinds, os.path.dirname(ws), os.path.join(record, tag + ".jsonl") if record else None,
+                         setup.get("progress")) if kinds else None
         try:
             try:
                 try:
@@ -2350,14 +2664,19 @@ class Run:
                         prompt = prompt + "\n\n" + first["message"]
                 if opened:
                     self.task_given(unit, ws)    # before the first prompt: the window from the session's start closes
+                if watch is not None:
+                    watch.start()
                 for _ in range(self.max_turns if opened else 0):
                     transcript.append({"role": "user", "text": prompt})
                     try:
-                        turn = c.prompt(sid, prompt, timeout=left())
+                        turn = c.prompt(sid, prompt, timeout=left(), **({"cut": watch.event} if watch is not None else {}))
                     except acp.Timeout as e:     # said as the whole work's limit, not the seconds this turn had left
                         raise acp.Timeout(f"the agent did not end its work in {int(limit)} s", e.events) from e
                     answer = turn.text
                     transcript.append({"role": "agent", "text": turn.text, "stop": turn.stop})
+                    if watch is not None and "calls" in kinds and watch.refused():
+                        cut = watch.capped()     # it ended its turn once the cap refused its next call
+                        break
                     if "agent.conversation/v1" not in self.bench["needs"]:
                         break
                     nxt = self.driver().request("turn", unit=unit, dir=ws, transcript=transcript, timeout=600, **sim, **self.attempt_kw())
@@ -2373,10 +2692,16 @@ class Run:
                 events = c.events
             except acp.Timeout as e:
                 events = c.events
-                raise _Ended("AgentTimeoutError", str(e), job.trajectory_from_events(events, rl.calls(tag), a, self.model, f"{self.name}/{unit}"))
+                if clock is not None:
+                    clock["cut_at"] = time.time()
+                cut = self.cut_of(watch, rl, tag)
+                if cut is None:
+                    raise _Ended("AgentTimeoutError", str(e), job.trajectory_from_events(events, rl.calls(tag), a, self.model, f"{self.name}/{unit}"))
             except acp.AgentFailed as e:
                 events = c.events
-                raise _Ended("NonZeroAgentExitCodeError", str(e), job.trajectory_from_events(events, rl.calls(tag), a, self.model, f"{self.name}/{unit}"))
+                cut = watch.capped() if watch is not None and "calls" in kinds and watch.refused() else None
+                if cut is None:                  # an agent that ends once the cap refused its next call is cut by the cap
+                    raise _Ended("NonZeroAgentExitCodeError", str(e), job.trajectory_from_events(events, rl.calls(tag), a, self.model, f"{self.name}/{unit}"))
             except TimeoutError as e:
                 events = c.events               # a later request the agent never answered (a new session)
                 raise _Ended("AgentTimeoutError", f"the agent did not answer {e} in time",
@@ -2384,9 +2709,13 @@ class Run:
             except jsonl.Failed as e:
                 raise _Ended("VerifierError", "the benchmark's next turn: " + str(e), retryable=not isinstance(e, jsonl.NoReply))
         finally:
+            if watch is not None:
+                watch.stop()
             if clock is not None and "ready" not in clock:
                 clock["failed"] = time.time()            # its start ended with no session: all of it was its setup
             c.close()
+        if cut is not None and clock is not None:
+            clock["cut"] = cut
         raw = "".join(json.dumps(e) + "\n" for e in events)
         return answer, job.trajectory_from_events(events, rl.calls(tag), a, self.model, f"{self.name}/{unit}"), {"acp.jsonl": raw}
 

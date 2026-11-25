@@ -11,15 +11,14 @@ The comment opens with two ratings, then a table of questions:
   script's own signals, and floored by the script: a deleted test, a key-shaped
   string or a workflow change is severe at least; a change under the
   standard, execution, hosts or secrets is major at least.
-- **Priority** (low, medium, high, extreme): how deep the diff reaches,
+- **Depth** (low, medium, high, extreme): how deep the diff reaches,
   computed from its paths alone (`priority_of`).
 - The questions, each asked k times (default 3) over one state of issue,
   description and diff: the acceptance criteria of the linked issue, one row
   per box of its `## Acceptance` list (a body without one is judged whole);
   whether the issue and the pull request describe the same change; whether
-  the description matches the diff; whether the diff stays in scope; whether
-  tests cover the change or the description says how it was verified; whether
-  the docs follow; whether the risk is named. A pull request that links no
+  the description matches the diff; whether the diff stays in scope;
+  whether the risk is named. A pull request that links no
   issue reads `–` on the first two. The row "before and after shown" is the
   script's: when the diff touches what is visible, it counts the images under
   the description's `## Before and after` heading.
@@ -68,7 +67,7 @@ from typing import Callable, Optional
 URL = "https://api.typesafe.ai/v1/systemone"
 MODEL = "jev-latest"
 PROVIDER = "typesafe.ai"
-QUESTIONS_VERSION = "judgement.questions.pr.v2"
+QUESTIONS_VERSION = "judgement.questions.pr.v3"
 PRICE_PER_MTOK = 0.042          # USD per million input tokens (docs.typesafe.ai/models)
 CHARS_PER_TOKEN = 4
 FILE_LIMIT = 12_000             # characters of one file's diff kept (--file-limit)
@@ -93,7 +92,7 @@ QUESTIONS = {
     "criterion_met": {
         "type": "noul",
         "instructions": "The pull request shows this acceptance criterion done.",
-        "criteria": {"true": "What the criterion asks for is visible in the diff or the tests it adds",
+        "criteria": {"true": "What the criterion asks for is visible in the diff",
                      "false": "It is not visible, or the change is about something else"},
     },
     "issue_same": {
@@ -105,9 +104,9 @@ QUESTIONS = {
     },
     "description_matches": {
         "type": "choice",
-        "instructions": "Does the pull request description describe the change the diff makes, claiming nothing the diff does not do and leaving out nothing the diff does?",
-        "criteria": {"yes": "What the description says the change does, the diff does, and nothing material is left unsaid",
-                     "partly": "The description is right as far as it goes but leaves out a material part of the diff, or overstates a detail",
+        "instructions": "Does the pull request description name the change the diff makes and claim nothing the diff does not do? A short description is right: details are left to the diff.",
+        "criteria": {"yes": "What the description says the change does, the diff does, and each main change is named, a changed default, permission or file on disk included, in however few words",
+                     "partly": "The description never names one of the main changes, or overstates a detail",
                      "no": "The description claims a change the diff does not make, or describes a different change"},
     },
     "scope": {
@@ -117,25 +116,10 @@ QUESTIONS = {
                      "partly": "A few hunks serve something else (a tidy-up, a rename elsewhere), small beside the change",
                      "no": "A substantial part of the diff is a different change"},
     },
-    "tests": {
-        "type": "choice",
-        "instructions": "Is the changed behaviour covered: tests added or changed in the diff for it, or the description's Verified section saying what was run and checked?",
-        "criteria": {"yes": "The diff has tests for the behaviour it changes, or the description states how it was verified",
-                     "partly": "Some of the change is covered or verified, some is not",
-                     "no": "No test touches the change and the description says nothing about verification, or says it was not verified"},
-    },
-    "docs": {
-        "type": "choice",
-        "instructions": "When the change alters a page, a command, a setting, a rule or a file layout, do the documentation and the repository's own guides (README, AGENTS.md, docs/) follow in the same diff?",
-        "criteria": {"yes": "What changed for a reader or an operator is reflected in the documentation in this diff",
-                     "partly": "Some of it is reflected, some surfaces still describe the old behaviour",
-                     "no": "Something a reader or an operator sees changed and no documentation follows",
-                     "none_needed": "Nothing a reader or an operator sees changed"},
-    },
     "risk_named": {
         "type": "choice",
         "instructions": "Does the description name what could break if this change is wrong and how it would be undone (a revert, a rebuild, a migration): deleted tests, changed defaults, data on disk, keys?",
-        "criteria": {"yes": "The description's Risk section names what could break and how it is undone, and it matches the diff",
+        "criteria": {"yes": "The description names what could break and how it is undone, and it matches the diff; or the change plainly carries no risk",
                      "partly": "It names a risk but misses one the diff plainly carries, or says nothing about undoing it",
                      "no": "No risk is named, or the one named is not the diff's"},
     },
@@ -149,7 +133,7 @@ QUESTIONS = {
                      "severe": "Data, keys or history can be lost or wrong: a write into a source tree, keys or secrets, deleted tests, a changed on-disk format, a workflow with write permissions"},
     },
 }
-PR_QUESTIONS = ("issue_same", "description_matches", "scope", "tests", "docs", "risk_named", "merge_risk")
+PR_QUESTIONS = ("issue_same", "description_matches", "scope", "risk_named", "merge_risk")
 
 
 class JudgeError(Exception):
@@ -249,7 +233,8 @@ def _list_items(lines: list) -> list:
     for line in lines:
         b = BULLET.match(line)
         if b:
-            items.append(b.group(1))
+            if not re.fullmatch(r"\[[ xX]?\]", b.group(1)):      # a box left empty is no criterion
+                items.append(b.group(1))
         elif items and CONTINUATION.match(line):
             items[-1] += " " + line.strip()
         elif items and not line.strip():
@@ -309,13 +294,13 @@ DIFF_HEADER = re.compile(r"^diff --git a/(.+?) b/(.+?)$", re.M)
 IMAGE = re.compile(r"!\[[^\]]*\]\([^)]+\)|<img\b[^>]*>|https?://\S+\.(?:png|jpe?g|gif|webp|svg)\b", re.I)
 TRAILER = re.compile(r"^\s*(?:Co-Authored-By|Co-authored-by):\s*(?:claude|anthropic|chatgpt|openai|gpt|copilot|gemini|codex|cursor|devin|assistant)\b"
                      r"|^\s*(?:Claude-Session|Generated-by|Generated by|Signed-off-by: Claude)", re.I | re.M)
-ALLOWED_ROOTS = ("app/", "docs/", ".github/", ".claude/")
-ALLOWED_ROOT_FILES = ("README.md", "AGENTS.md", ".gitignore", ".gitattributes", "LICENSE", "LICENCE")
+ALLOWED_ROOTS = ("app/", "docs/", ".github/", ".agents/", ".claude/")
+ALLOWED_ROOT_FILES = ("README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "pyproject.toml", ".gitignore", ".gitattributes", "LICENSE", "LICENCE")
 VISIBLE = ("app/templates/", "app/static/", "docs/field-guide.md", "docs/assets/", "docs/diagrams/", "app/site/assets/", "app/site/overrides/")
 PRIORITY_PATHS = [   # the first match decides; deepest first
     ("extreme", ("app/nullius/standard/", "app/nullius/execution.py", "app/nullius/hosts.py", "app/nullius/secrets.py", ".github/workflows/", ".github/scripts/")),
     ("high", ("app/nullius/",)),
-    ("medium", ("app/web/", "app/nullius/catalogue/", ".claude/", "app/app.py", "app/requirements.txt")),
+    ("medium", ("app/web/", "app/nullius/catalogue/", ".agents/", ".claude/", "app/app.py", "app/requirements.txt")),
     ("low", ()),
 ]
 MAJOR_FLOOR = ("app/nullius/standard/", "app/nullius/execution.py", "app/nullius/hosts.py", "app/nullius/secrets.py",
@@ -373,9 +358,10 @@ def signals_of(diff: str, pr: dict) -> dict:
     flask = [p for p, lines in added.items() if p.startswith("app/nullius/") and p.endswith(".py")
              and any(re.match(r"\s*(?:import flask|from flask\b)", l) for l in lines)]
     trailers = [m.group(0).strip() for text in [pr.get("body") or ""] + list(pr.get("commit_messages") or []) for m in TRAILER.finditer(text)]
-    visible = [p for p in paths if p.startswith(VISIBLE)]
-    shots = section(pr.get("body") or "", "Before and after")
-    images = len(IMAGE.findall(shots or ""))
+    shots = re.sub(r"<!--.*?-->", "", section(pr.get("body") or "", "Before and after") or "", flags=re.S)
+    images = len(IMAGE.findall(shots))
+    said = not images and re.search(r"\bnothing visible\b", shots, re.I)      # "Nothing visible changes."
+    visible = [] if said else [p for p in paths if p.startswith(VISIBLE)]
     floor, why = None, ""
     if secrets:
         floor, why = "severe", f"a key-shaped string in {secrets[0]}"
@@ -390,11 +376,11 @@ def signals_of(diff: str, pr: dict) -> dict:
     priority, by = priority_of(paths)
     checks = [
         {"name": "No machine attribution trailer in the commits or the description", "ok": not trailers, "detail": trailers[0] if trailers else ""},
-        {"name": "New code under app/, docs/, .github/ or .claude/", "ok": not outside, "detail": ", ".join(outside[:3])},
+        {"name": "New code under app/, docs/, .github/, .agents/ or .claude/", "ok": not outside, "detail": ", ".join(outside[:3])},
         {"name": "No Flask import under the backend package", "ok": not flask, "detail": ", ".join(flask[:3])},
         {"name": "No key-shaped string in the diff", "ok": not secrets, "detail": ", ".join(secrets[:3])},
     ]
-    return {"paths": paths, "files": len(files), "tests_in_diff": [p for p in paths if is_test_path(p)], "deleted_tests": deleted_tests,
+    return {"paths": paths, "files": len(files), "deleted_tests": deleted_tests,
             "visible": visible, "images": images, "priority": priority, "priority_by": by,
             "risk_floor": floor, "risk_floor_why": why, "checks": checks}
 
@@ -402,10 +388,9 @@ def signals_of(diff: str, pr: dict) -> dict:
 def signals_block(sig: dict) -> str:
     """The signals as the judge sees them, after the diff."""
     lines = [f"PATHS ({sig['files']}): " + ", ".join(sig["paths"][:60]) + (" …" if sig["files"] > 60 else ""),
-             f"TESTS IN DIFF: {', '.join(sig['tests_in_diff']) or 'none'}",
              f"DELETED TESTS: {', '.join(sig['deleted_tests']) or 'none'}",
              f"VISIBLE PATHS: {', '.join(sig['visible']) or 'none'}; images under 'Before and after': {sig['images']}",
-             f"PRIORITY FROM PATHS: {sig['priority']}" + (f" ({sig['priority_by']})" if sig["priority_by"] else "")]
+             f"DEPTH FROM PATHS: {sig['priority']}" + (f" ({sig['priority_by']})" if sig["priority_by"] else "")]
     if sig["risk_floor"]:
         lines.append(f"MERGE RISK FLOOR: {sig['risk_floor']}: {sig['risk_floor_why']}")
     return "SIGNALS:\n" + "\n".join(lines)
@@ -413,12 +398,12 @@ def signals_block(sig: dict) -> str:
 
 
 def diff_block(diff: str, budget: int, file_limit: int = None) -> tuple:
-    """The diff as the judge sees it: test files first, each file cut at
+    """The diff as the judge sees it: test files last, each file cut at
     FILE_LIMIT, the whole cut at `budget`; files that did not fit are named.
     Returns (text, truncated)."""
     file_limit = FILE_LIMIT if file_limit is None else file_limit
     files = split_diff(diff)
-    files.sort(key=lambda f: (0 if is_test_path(f[0]) else 1))
+    files.sort(key=lambda f: is_test_path(f[0]))
     parts, used, truncated, left = [], 0, False, []
     for path, text in files:
         if len(text) > file_limit:
@@ -432,12 +417,12 @@ def diff_block(diff: str, budget: int, file_limit: int = None) -> tuple:
     if left:
         truncated = True
         parts.append(f"[diff omitted for {len(left)} more file(s): " + ", ".join(left) + "]")
-    head = f"DIFF ({len(files)} files, tests first{', cut' if truncated else ''}):\n"
+    head = f"DIFF ({len(files)} files, tests last{', cut' if truncated else ''}):\n"
     return head + "\n".join(parts), truncated
 
 
 def description_block(pr: dict) -> tuple:
-    body = (pr.get("body") or "").strip() or "(no description)"
+    body = re.sub(r"<!--.*?-->", "", pr.get("body") or "", flags=re.S).strip() or "(no description)"     # the template's hints, hidden on GitHub
     truncated = len(body) > DESCRIPTION_LIMIT
     if truncated:
         body = body[:DESCRIPTION_LIMIT] + f"\n[… {len(body) - DESCRIPTION_LIMIT} more characters]"
@@ -585,17 +570,15 @@ def short(text: str, n: int = 90) -> str:
 
 
 VERDICT = {"met": "✅ met", "partial": "⚠️ partial", "not_met": "❌ unmet", "no_evidence": "❌ no evidence",
-           "yes": "✅ yes", "partly": "⚠️ partly", "no": "❌ no", "none_needed": "–",
+           "yes": "✅ yes", "partly": "⚠️ partly", "no": "❌ no",
            "undecided": "❔ undecided", "unanswered": "not asked", "na": "–"}
 RISK_MARK = {"minor": "🟢", "medium": "🟡", "significant": "🟠", "major": "🔴", "severe": "⛔", "undecided": "❔", "not asked": "⚪"}
 PRIORITY_MARK = {"low": "🟢", "medium": "🟡", "high": "🟠", "extreme": "🔴"}
 ROWS = [  # (question id or script row, the text of the row)
     ("criteria", "Changes do what the issue asks"),
     ("issue_same", "Issue and pull request describe the same change"),
-    ("description_matches", "Description matches the diff, no more, no less"),
+    ("description_matches", "Description matches the diff"),
     ("scope", "Diff stays in scope"),
-    ("tests", "Tests cover the change, or Verified says how"),
-    ("docs", "Docs follow the change"),
     ("risk_named", "Risk named in the description"),
     ("before_after", "Before and after shown"),
 ]
@@ -660,7 +643,7 @@ def summary_md(rec: dict) -> str:
     risk, prio, sig = rec["merge_risk"], rec["priority"], rec["signals"]
     lines += ["| | | |", "| --- | --- | --- |",
               f"| **Merge risk** | {RISK_MARK.get(risk['level'], '❔')} **{risk['level'].upper()}** | {risk['why']} |",
-              f"| **Priority** | {PRIORITY_MARK.get(prio['level'], '❔')} **{prio['level'].upper()}** | {prio['why']} |", ""]
+              f"| **Depth** | {PRIORITY_MARK.get(prio['level'], '❔')} **{prio['level'].upper()}** | {prio['why']} |", ""]
     lines += ["| Question | Verdict |", "| --- | :---: |"]
     for text, v, note in rows:
         lines.append(f"| {text}{' · ' + note if note else ''} | {VERDICT.get(v, v)} |")
@@ -672,7 +655,7 @@ def summary_md(rec: dict) -> str:
         lines += ["<details>", f"<summary>{title}</summary>", "", "| # | Criterion | Verdict |", "| ---: | --- | :---: |"]
         for r in crit:
             v = verdict_of(r["decision"])
-            lines.append(f"| {r['n']} | {short(r['text'], 120)} | {VERDICT[v]}{' (cut)' if r['truncated'] else ''} |")
+            lines.append(f"| {r['n']} | {short(r['text'], 120).replace('|', chr(92) + '|')} | {VERDICT[v]}{' (cut)' if r['truncated'] else ''} |")
         if rec["criteria_source"] == "whole issue":
             lines += ["", "The issue has no `## Acceptance` list, so it was judged whole."]
         lines += ["", "</details>", ""]

@@ -484,7 +484,7 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
                 image: str = "", setup_end: Optional[float] = None, agent_ready: Optional[float] = None,
                 agent_unready: Optional[float] = None, checking: tuple = (None, None),
                 serving: Optional[Dict[str, List[str]]] = None, served_calls: Optional[List[dict]] = None,
-                retries: int = 0, retryable: bool = True) -> dict:
+                retries: int = 0, retryable: bool = True, cut: Optional[str] = None) -> dict:
     """Write one unit's trial and return its result. ``serving``: the run's
     pin of serving providers by model; ``standard.served`` says who served
     ``served_calls`` (the unit's calls on every route of its relay: its
@@ -500,7 +500,10 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
     it has no run, as Harbor writes a failed agent setup; ``checking``: the check's
     start and end (its own step in the container, then the driver's score).
     ``retryable``: False for an exception a further try meets again
-    whatever its name (``retries``), which its record then says."""
+    whatever its name (``retries``), which its record then says. ``cut``:
+    what cut the agent's work short before the unit was scored, for a
+    benchmark that scores that cut (``time``, ``calls`` or ``end``), which
+    its record says as ``standard.cut``; a unit no limit cut has none."""
     os.makedirs(os.path.join(trial_dir, "agent"), exist_ok=True)
     os.makedirs(os.path.join(trial_dir, "verifier"), exist_ok=True)
     if produce and produce[0] and agent_ready:   # its run starts once it is set up: the trace's window too
@@ -525,7 +528,7 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
                         "plugged": other.get("_ref") or other["key"], "job": job, **_version(bench), **_control(other), **_setup(other),
                         **({"environment": environment} if environment else {}), **({"image": image} if image else {}),
                         **({"served": who} if (who := served(calls if served_calls is None else served_calls, serving)) else {}),
-                        **({"retries": retries} if retries else {})}}
+                        **({"retries": retries} if retries else {}), **({"cut": cut} if cut else {})}}
     if score is not None:
         value = float(score.get("reward") or 0.0)
         # a pass benchmark leaves a reward, as a verifier does; a score

@@ -380,6 +380,13 @@
     <button class="fclear plain" id="clear-filters" type="button" hidden>Show all {{ job.trials|length }}</button>
   </div>
   <p class="sr" id="trials-live" aria-live="polite"></p>
+  {% from 'runs/_ending.html' import ending %}
+  {# A square is filled by its score only where every score of the run is a share of 1. #}
+  {% set scores = job.trials|map(attribute='score')|reject('none')|list %}
+  {% set unit_scores = scores and scores|min >= 0 and scores|max <= 1 %}
+  {% macro square(t, said='') -%}
+  {% set scored = t.outcome == 'scored' and t.score is not none %}<i class="sw oc-{{ t.outcome }}{{ ' sw-fill' if scored and unit_scores }}"{% if scored and unit_scores %} style="--fill:{{ '%.0f'|format(100 * t.score) }}%"{% endif %} title="{{ said }}{{ '%.2f'|format(t.score) if scored else t.outcome_label }}"></i>
+  {%- endmacro %}
   {% set show_fa = marks.flags or marks.labels %}
   {% set show_cause = show_judge %}
   {% set show_flags = show_judge and judgement.judged %}
@@ -387,7 +394,7 @@
   <div class="tscroll" role="region" aria-label="Trials in this run" tabindex="0">
   <table class="tt"{% if filtered %} data-leave-out="{{ filtered.view.kinds|join(' ') }}"{% endif %}>
     <colgroup>
-      <col><col class="w-out">{% if show_fa %}<col class="w-fa">{% endif %}{% if job.retries %}<col class="w-rt">{% endif %}{% if show_cause %}<col class="w-cause">{% endif %}{% if show_flags %}<col class="w-flags">{% endif %}{% if show_ins %}<col class="w-ins">{% endif %}
+      <col><col class="w-out{% if job.trials|selectattr('ended_tag')|list %} w-stop{% endif %}">{% if show_fa %}<col class="w-fa">{% endif %}{% if job.retries %}<col class="w-rt">{% endif %}{% if show_cause %}<col class="w-cause">{% endif %}{% if show_flags %}<col class="w-flags">{% endif %}{% if show_ins %}<col class="w-ins">{% endif %}
       {% if vocab.gained %}<col class="w-chk">{% endif %}{% if vocab.held %}<col class="w-chk">{% endif %}
       <col class="w-tok"><col class="w-tm"><col class="w-env"><col class="w-ag"><col class="w-ver"><col class="w-go">
     </colgroup>
@@ -430,7 +437,7 @@
       <tr class="task-group" data-group="{{ gid }}"{% if marks.flags.get(t.task_base, {}).counts %} data-task-flag="{{ marks.flags[t.task_base].kind }}"{% endif %} data-tokens="{{ means.tokens.mean if means.tokens else 0 }}" data-total="{{ means.dur_total.mean if means.dur_total else 0 }}" data-i="{{ loop.index0 }}">
         <td><button class="group-toggle disclosure-chevron" type="button" aria-expanded="false" aria-label="{{ task_labels[t.trial_name] }}, {{ group.n }} attempts"><span class="task">{{ task_labels[t.trial_name] }}</span></button></td>
         <td><span class="group-pass"><span>{{ attempt_count(group, false) }}</span>
-          <span class="sqs" aria-hidden="true">{% for a in group.trials %}<i class="sw oc-{{ a.outcome }}" title="Attempt {{ loop.index }}: {{ a.outcome_label }}"></i>{% endfor %}</span></span></td>
+          <span class="sqs" aria-hidden="true">{% for a in group.trials %}{{ square(a, 'Attempt ' ~ loop.index ~ ': ') }}{% endfor %}</span>{% if group.n_infra %}<span class="faint">{{ group.n_infra }} infra</span>{% endif %}<span class="sr">{% for a in group.trials %}{{ 'Attempt ' ~ loop.index }}: {{ '%.2f'|format(a.score) if a.outcome == 'scored' and a.score is not none else a.outcome_label }}{{ ', ' if not loop.last }}{% endfor %}</span></span></td>
         {% if show_fa %}<td class="fa">{{ task_flag(t) }}</td>{% endif %}
         {% if job.retries %}<td></td>{% endif %}
         {% if show_cause %}<td></td>{% endif %}
@@ -459,8 +466,14 @@
         {%- else %}
         <td><a class="task" href="{{ url }}" title="{{ t.task_name }}">{{ task_labels[t.trial_name] }}</a></td>
         {%- endif %}
-        <td><span class="oc oc-{{ t.outcome }}"><i></i>{{ t.outcome_label }}</span>
-          {%- if t.score is not none %} <span class="badge trial-score" title="{% if t.n_parts %}The mean score of its {{ t.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it">{{ '%.2f'|format(t.score) }}</span>{% endif %}
+        <td class="outcome">{% set plain = t.outcome in ('resolved', 'scored') %}{# one form for every trial: its number, its square, and its outcome in words unless it passed or was scored #}
+          <span class="group-pass">
+            {%- if t.score is not none and (job.scored_only or t.outcome == 'scored') %}<b title="{% if t.n_parts %}The mean score of its {{ t.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it">{{ '%.2f'|format(t.score) }}</b>
+            {%- elif job.scored_only or t.is_infra or t.outcome in ('unknown', 'scored') %}<b class="faint">—</b>
+            {%- else %}<b>{{ 1 if t.outcome == 'resolved' else 0 }}/1</b>{% endif -%}
+            <span class="sqs" aria-hidden="true">{{ square(t) }}</span><span class="oc-word{{ ' sr' if plain else '' }}">{{ t.outcome_label }}</span></span>
+          {%- if t.score is not none and not (job.scored_only or t.outcome == 'scored') %} <span class="badge trial-score" title="{% if t.n_parts %}The mean score of its {{ t.n_parts }} parts{% else %}Its graded score{% endif %}, as the benchmark's own scorer gave it">{{ '%.2f'|format(t.score) }}</span>{% endif %}
+          {%- set stop = ending(t) %}{% if stop %} <span class="stop-reason">{{ stop }}</span>{% endif %}
           {%- if t.n_rate_limited_retries %} <span class="badge rate-limits" title="{{ t.n_rate_limited_retries }} rate-limited call{{ '' if t.n_rate_limited_retries == 1 else 's' }} retried by the agent's SDK (agent/gateway.log) — the run survived them, so the outcome does not show them">429 ×{{ t.n_rate_limited_retries }}</span>{% endif -%}
           {%- if t.exception_type %}
           {%- if t.exception_message %}<details class="exd"><summary><span class="tw"></span>{{ t.exception_type }}</summary><code>{{ t.exception_message }}</code></details>
