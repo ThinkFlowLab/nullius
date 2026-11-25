@@ -399,6 +399,13 @@ class Licences(Scratch):
         self.assertEqual((code, out), (2, ""))
         self.assertIn('(["[REDACTED]"] ["[REDACTED]"] [REDACTED] [REDACTED])\n', err)
 
+    def test_a_listing_with_a_secret_keeps_its_tasks_texts_whole(self):
+        self.b = gated(self.b)
+        said = "Ask the bearer Kristiansen for the password: quokka-folder"
+        Path(self.b["_here"], "driver.py").write_text(DRIVER.replace("Rename the folder called Quokka", said))
+        with mock.patch.object(units.run, "Licences", return_value={"HF_TOKEN": {"kind": "value", "value": "made-up"}}):
+            self.assertEqual(units.find(self.b, "all", search="t011")["tasks"][0]["text"], said)
+
     def given(self):
         path = Path(self.b["_here"], "given")
         return path.read_text() if path.exists() else None

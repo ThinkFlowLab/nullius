@@ -204,7 +204,6 @@ class _ListingProc(jsonl.Proc):
         if isinstance(value, str):
             for secret in self.secrets:
                 value = value.replace(secret, "[REDACTED]")
-            return redact(value)
         return value
 
     def start(self):
@@ -224,15 +223,18 @@ class _ListingProc(jsonl.Proc):
     def _log(self):
         with self.p.stderr, open(self.log, "a") as out:
             for line in self.p.stderr:
-                out.write(self._clean(line))
+                out.write(redact(self._clean(line)))
                 out.flush()
 
     def _read(self):
         for line in self.p.stdout:
             try:
-                line = json.dumps(self._clean(json.loads(line)))
+                reply = self._clean(json.loads(line))
+                if isinstance(reply, dict) and isinstance(reply.get("error"), str):
+                    reply["error"] = redact(reply["error"])         # an error is shown; tasks' texts are kept whole
+                line = json.dumps(reply)
             except ValueError:
-                line = self._clean(line)
+                line = redact(self._clean(line))
             self.lines.put(line)
         self.lines.put(None)
 
