@@ -260,6 +260,25 @@ class Studies(StudyCase):
         self.assertAlmostEqual(doc["spend"]["spent_usd"], 0.4)
         self.assertEqual(json.loads(Path(self.out, "ledger", "ledger.json").read_text())["caps"], [{"max_usd": 0.25, "spent_usd": 0.2}])
 
+    def test_an_answer_that_ends_on_an_error_is_sent_again(self):
+        """HTTP 200 with a partial text and ``finish_reason: "error"``, read by a command: no answer, the study not
+        done, and the next start sends it again; the same for an error beside a text, or no choice at all."""
+        Model.answers = {}
+        read = replay.command_rule("echo none")
+        for n, body in enumerate(({"choices": [{"index": 0, "message": {"role": "assistant", "content": "Natalia sold 48 clips in April and 24 in"},
+                                                "finish_reason": "error"}]},
+                                  {"choices": [{"index": 0, "message": {"content": "Natalia sold"}, "finish_reason": "stop",
+                                                "error": {"code": 502, "message": "cut"}}]},
+                                  {"choices": []})):
+            with self.subTest(body=body):
+                out = os.path.join(self.tmp, "studies", f"e{n}")
+                Upstream.body = body
+                doc = self.run_study(out=out, times=1, targets=self.targets[:1], rule=read, yes="^72$")
+                self.assertEqual((doc["starts"][0]["answered"], doc["starts"][0]["failed"], doc["left"], doc["state"]), (0, 2, 2, "stopped"))
+                Upstream.body = None
+                doc = self.run_study(out=out, times=1, targets=self.targets[:1], rule=read, yes="^72$")
+                self.assertEqual((doc["starts"][1]["answered"], doc["left"], doc["state"]), (2, 0, "done"))
+
     def test_a_stopped_study_goes_on_and_no_call_is_sent_twice(self):
         """Stopped after 5 sends, started again: the 7 not answered are sent, each slot once in all."""
         doc = self.run_study(stop_after=5)

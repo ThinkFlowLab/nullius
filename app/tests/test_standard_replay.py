@@ -56,12 +56,14 @@ def reply_of(x) -> dict:
 
 
 class Upstream(BaseHTTPRequestHandler):
-    """A model: each request kept as it arrived; the answers are ``plan``'s x in turn (None: no tool call)."""
+    """A model: each request kept as it arrived; the answers are ``plan``'s x in turn (None: no tool call), or
+    ``body`` as it is."""
     seen = []                                    # (path, headers, body)
     plan = [3]
     cost = 0.001                                 # the cost the reply reports; None, none: the relay prices its tokens
     output = 10
     status = 200
+    body = None
 
     def log_message(self, *a):
         pass
@@ -71,6 +73,8 @@ class Upstream(BaseHTTPRequestHandler):
         Upstream.seen.append((self.path, dict(self.headers), raw))
         if Upstream.status != 200:
             return self.reply(Upstream.status, b'{"error":{"message":"no"}}')
+        if Upstream.body is not None:
+            return self.reply(200, json.dumps(Upstream.body).encode())
         body = json.loads(raw)
         if self.path.endswith("/responses"):
             return self.reply(200, json.dumps({"object": "response", "status": "completed", "output": [],
@@ -107,7 +111,7 @@ class ReplayCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="nullius-replay-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        Upstream.seen, Upstream.plan, Upstream.cost, Upstream.output, Upstream.status = [], [3], 0.001, 10, 200
+        Upstream.seen, Upstream.plan, Upstream.cost, Upstream.output, Upstream.status, Upstream.body = [], [3], 0.001, 10, 200, None
         self.job = os.path.join(self.tmp, "jobs", "2026-11-18__05-58-04__bench__agent")
         self.env = {"OPENROUTER_API_KEY": KEY, "PATH": os.environ.get("PATH", "")}
         self.record_trial("task-a__u0001", calls=3)
@@ -481,6 +485,14 @@ class Sends(ReplayCase):
         Upstream.status = 500
         doc = self.send(self.prepared(), times=2)
         self.assertEqual([(r["label"], r["count"]) for r in doc["counts"]], [("error: HTTP 500", 2), ('click {"x":3}', 0)])
+        Upstream.status = 200                    # a 200 that ended on an error, or holds no choice, fails as well
+        for body, label in (({"choices": [{"index": 0, "message": {"content": "Natalia sold 48"}, "finish_reason": "error"}]},
+                             "error: the reply ended on an error"), ({"choices": []}, "error: the reply holds no choice")):
+            with self.subTest(label=label):
+                Upstream.body = body
+                doc = self.send(self.prepared(), times=1, rule=replay.command_rule("echo read"))
+                self.assertEqual((doc["sends"]["answered"], doc["sends"]["failed"]), (0, 1))
+                self.assertEqual([r["label"] for r in doc["counts"] if r["count"]], [label])
 
     def test_a_rule_given_as_a_command_reads_each_answer_without_the_key(self):
         script = os.path.join(self.tmp, "read.py")

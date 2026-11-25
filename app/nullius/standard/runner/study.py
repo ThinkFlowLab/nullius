@@ -311,7 +311,7 @@ def _answered(out: str) -> Dict[tuple, dict]:
     for a in rp._jsonl(os.path.join(out, "completed.jsonl")) + rp._jsonl(os.path.join(out, "answers.jsonl")):
         rp._inside(out, a.get("relay") or "", exchanges.FOLDER, (a.get("route") or "") + ".jsonl")
         slot = (a.get("target"), a.get("arm"), a.get("k"))
-        if a.get("status") == 200 and not a.get("refused") and slot not in got:
+        if rp.answered(a) and slot not in got:
             got[slot] = a
         elif slot in got and (a.get("relay"), a.get("route")) == (got[slot].get("relay"), got[slot].get("route")):
             got[slot].update(a)
@@ -515,7 +515,7 @@ def _send(out, doc, preps, names, todo, keys, led, times, rule, concurrency, sto
         elif a["status"] in rp.STOP_STATUS:
             stop.set()
             why.append(f"t{i} {names[j]} send {k}: the provider refused the key (HTTP {a['status']})")
-        elif a["status"] == 200:
+        elif rp.answered(a):
             try:
                 a["label"] = rp._read_rule(rule, a, keys.values())
             except Exception:
@@ -526,7 +526,8 @@ def _send(out, doc, preps, names, todo, keys, led, times, rule, concurrency, sto
                 f.write(json.dumps({x: v for x, v in a.items() if x != "body"}, ensure_ascii=False) + "\n")
         if say:
             say(f"t{i} {names[j]} {k}/{times}: " + (a.get("label") if "label" in a else f"HTTP {a['status']}"
-                                                     + (f", refused ({a['refused']})" if a["refused"] else "")))
+                                                     + (f", refused ({a['refused']})" if a["refused"] else "")
+                                                     + (f", {a['failed']}" if a.get("failed") else "")))
         return a
 
     got = []
@@ -549,8 +550,8 @@ def _send(out, doc, preps, names, todo, keys, led, times, rule, concurrency, sto
                 rl.stop()
     sent = [a for a in got if a is not None]
     doc["starts"][-1].update({"ended": _now(), "sent": sum(1 for a in sent if not a.get("refused")),
-                              "answered": sum(1 for a in sent if a.get("status") == 200 and not a.get("refused")),
-                              "failed": sum(1 for a in sent if a.get("status") != 200 and not a.get("refused")),
+                              "answered": sum(1 for a in sent if rp.answered(a)),
+                              "failed": sum(1 for a in sent if not rp.answered(a) and not a.get("refused")),
                               "refused": sum(1 for a in sent if a.get("refused")), "stopped": why[0] if why else None,
                               "sent_as_prepared": all(a.get("sent_sha256") == preps[a["target"] - 1][names.index(a["arm"])].sha256
                                                       for a in sent if not a.get("refused"))})
@@ -612,7 +613,7 @@ def recount(folder: str, rule: Optional[rp.Rule] = None, yes: Optional[str] = No
         recorded = rule(line) if line else None
         labels, missing = [], 0
         for a in rp._jsonl(os.path.join(folder, "answers.jsonl")):
-            if a.get("status") != 200 or a.get("refused"):
+            if not rp.answered(a):
                 continue
             reply = a if "body" in a else _reply(folder, "relay", a.get("route") or "")
             if reply is None:

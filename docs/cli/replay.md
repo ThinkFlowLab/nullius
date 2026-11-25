@@ -48,6 +48,8 @@ answer = json.load(sys.stdin)
 print(json.loads(answer["text"])["action"])
 ```
 
+A reply that ends on an error or holds no choice is a failure: not counted, and sent again by a study.
+
 The replay's folder (`--out DIR`, else under `replays/`) holds `replay.json` with the counts, the request sent and each answer.
 
 ## A study over many calls

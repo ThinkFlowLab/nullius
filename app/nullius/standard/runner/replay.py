@@ -494,9 +494,22 @@ def _read_rule(rule: Rule, a: dict, keys) -> str:
         raise Refused("reading rule failed: " + exchanges._cut_key(str(e), keys)) from None
 
 
+def _no_answer(a: dict, body: bytes, streamed: bool) -> Optional[str]:
+    """Why a reply of HTTP 200 is no answer: it ended on an error (an error object, a choice that ended
+    ``error``, a Responses status ``failed``) or holds no choice; None for an answer."""
+    end = a.get("end")
+    if a.get("error") or any(e in ("error", "failed") for e in (end.values() if isinstance(end, dict) else [end])):
+        return "the reply ended on an error"
+    try:
+        got = None if streamed else json.loads(body)
+    except ValueError:
+        return None
+    return "the reply holds no choice" if isinstance(got, dict) and "choices" in got and not got["choices"] else None
+
+
 def answer(path: str, status: int, body: bytes, streamed: bool) -> dict:
     """A reply read whole: text, reasoning, tool calls with their arguments, usage, who served it, how it ended,
-    an error; ``status`` as it came."""
+    an error; ``status`` as it came. ``failed``: why a reply of 200 is no answer (:func:`answered`)."""
     out = {"status": status, "streamed": streamed, "text": "", "reasoning": "", "tool_calls": [], "usage": None}
     if status == 200:
         try:
@@ -508,10 +521,19 @@ def answer(path: str, status: int, body: bytes, streamed: bool) -> dict:
                                    for c in got.get("tool_calls") or [] if isinstance(c, dict)],
                     "usage": got.get("usage")})
         out.update(relay.reply_facts(path, body, streamed))
+        why = _no_answer(out, body, streamed)
+        if why:
+            out["failed"] = why
     else:
         out["error"] = relay._said(status, body)
     out["body"] = body.decode("utf-8", "replace")
     return out
+
+
+def answered(a: dict) -> bool:
+    """Whether a send was answered: HTTP 200, not refused, and not a reply that ended on an error or holds no
+    choice. Any other is a failure: not counted, and sent again when a study goes on."""
+    return a.get("status") == 200 and not a.get("refused") and not a.get("failed")
 
 
 def _canonical(arguments) -> str:
@@ -531,6 +553,8 @@ def first_tool_call(a: dict) -> str:
     if a.get("error"):
         e = a["error"]
         return "error: " + str(e.get("code") or e.get("type") or e.get("message") if isinstance(e, dict) else e)[:80]
+    if a.get("failed"):
+        return "error: " + a["failed"]
     if not a.get("tool_calls"):
         return "no call"
     c = a["tool_calls"][0]
@@ -549,7 +573,7 @@ def command_rule(command: str, env=None) -> Rule:
     and prints its label (its first line counts). It runs without any provider key. A failed answer is its
     error, as the default rule says it."""
     def rule(a: dict) -> str:
-        if a.get("status") != 200:
+        if a.get("status") != 200 or a.get("failed"):
             return first_tool_call(a)
         given = json.dumps({k: a.get(k) for k in READ_FIELDS}, ensure_ascii=False).encode()
         try:
@@ -895,8 +919,8 @@ def send(prep: Prepared, times: int, max_usd: float, out: str, *, rule: Optional
         spend = {"max_usd": cap, "error": str(e)}
     doc.update({"state": "stopped" if why else "done", "stopped": why[0] if why else None, "ended": _now(),
                 "sends": {"sent": sum(1 for a in answers if not a.get("refused")),
-                          "answered": sum(1 for a in answers if a.get("status") == 200),
-                          "failed": sum(1 for a in answers if a.get("status") != 200 and not a.get("refused")),
+                          "answered": sum(1 for a in answers if answered(a)),
+                          "failed": sum(1 for a in answers if not answered(a) and not a.get("refused")),
                           "refused": sum(1 for a in answers if a.get("refused")), "not_sent": times - len(answers)},
                 # the relay's own record of each send that went out: its bytes are the prepared request's
                 "sent_as_prepared": all(a.get("sent_sha256") == prep.sha256 for a in answers if not a.get("refused")),
