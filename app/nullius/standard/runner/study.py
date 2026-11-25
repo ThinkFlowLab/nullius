@@ -539,7 +539,7 @@ def _write(out: str, doc: dict) -> None:
 
 # -- counted again -------------------------------------------------------------------------------------------
 def _reply(out: str, relay_dir: str, route: str) -> Optional[dict]:
-    """A send's reply as the study's or replay's relay kept it whole: status, streamed, body."""
+    """A send's reply as the study's or replay's relay saved it whole: status, streamed, body."""
     folder = rp._inside(out, relay_dir, exchanges.FOLDER)
     rp._inside(folder, route + ".jsonl")
     lines = exchanges.lines(folder, route)
@@ -549,7 +549,7 @@ def _reply(out: str, relay_dir: str, route: str) -> Optional[dict]:
 def recount(folder: str, rule: Optional[rp.Rule] = None, yes: Optional[str] = None,
             compare: Optional[Sequence[str]] = None) -> dict:
     """A kept study or replay read again by ``rule`` (``replay.first_tool_call`` by default), with no send and no
-    key: each answer as its relay kept it. A study's ``yes`` and ``compare`` default to its plan's. The counts
+    key: each answer as its relay saved it. A study's ``yes`` and ``compare`` default to its plan's. The counts
     are written to ``recounts/<time>.json`` in the folder, beside the earlier ones (``earlier``), which stay as
     they were. Returns that document, with ``file``."""
     folder = os.path.abspath(folder)
@@ -572,7 +572,7 @@ def recount(folder: str, rule: Optional[rp.Rule] = None, yes: Optional[str] = No
             t = tg[a["target"] - 1] if 0 < a.get("target", 0) <= len(tg) else {}
             rows.append({"target": a["target"], "arm": a["arm"], "label": rule(rp.answer_of(t.get("path") or "", reply))})
         yes = yes if yes is not None else (plan.get("yes") or {}).get("pattern")
-        doc = {"schema": RECOUNT, "of": "study", "rule": rule_record(rule), "read": len(rows), "not_kept": missing,
+        doc = {"schema": RECOUNT, "of": "study", "rule": rule_record(rule), "read": len(rows), "not_saved": missing,
                **tally(plan, recorded, rows, yes, compare, rule is rp.first_tool_call),
                "earlier": {"rule": plan["rule"], "yes": plan["yes"], "table": kept.get("table"), "test": kept.get("test")}}
     else:
@@ -596,7 +596,7 @@ def recount(folder: str, rule: Optional[rp.Rule] = None, yes: Optional[str] = No
                 missing += 1
                 continue
             labels.append(rule(rp.answer_of(s.get("path") or "", reply)))
-        doc = {"schema": RECOUNT, "of": "replay", "rule": rule_record(rule), "read": len(labels), "not_kept": missing,
+        doc = {"schema": RECOUNT, "of": "replay", "rule": rule_record(rule), "read": len(labels), "not_saved": missing,
                "recorded_answer": recorded, "counts": rp.count(labels, recorded, rule is rp.first_tool_call),
                "same_as_recorded": sum(1 for x in labels if x == recorded),
                "yes": yes_record(yes) if yes is not None else None,

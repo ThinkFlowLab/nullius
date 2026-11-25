@@ -20,7 +20,7 @@ The trial must have saved its [exchange record](run.md#the-exchange-record).
 | The key | The provider's key from the environment or the saved settings, never written. |
 | `--max-usd` | Required: the first send past the cap is refused, with nothing after it. |
 | `--dry-run` | What would be sent and its estimated cost; sends and writes nothing. |
-| Refused | A call cut or kept as text, a model with no price, a stored conversation. |
+| Refused | A call cut or saved as text, a model with no price, a stored conversation. |
 
 ## Changes
 

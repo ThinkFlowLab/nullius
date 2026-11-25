@@ -119,7 +119,7 @@ class ReplayCase(unittest.TestCase):
         Upstream.seen = []
 
     def record_trial(self, name: str, calls: int, mode: str = "whole", path: str = "/messages", req=None) -> str:
-        """A trial as a run leaves it: its unit's relay, keeping its exchanges, sent ``calls`` calls."""
+        """A trial as a run leaves it: its unit's relay, saving its exchanges, sent ``calls`` calls."""
         tdir = os.path.join(self.job, name)
         r = relay.Relay(self.base, KEY, os.path.join(tdir, ".work", "relay"), prices={"m": {"input": 1.0, "output": 2.0}},
                         model="m", serving={"m": ["prov-a"]}, exchanges=mode).start()
@@ -241,7 +241,7 @@ class Rebuilt(ReplayCase):
         with self.assertRaisesRegex(replay.NotWhole, "call 3 was not kept: the store reached its bound"):
             replay.source(self.job, "task-a__u0001", 3)
         os.makedirs(os.path.join(self.job, "task-c__u0003"))
-        with self.assertRaisesRegex(replay.NotFound, "kept no exchanges"):
+        with self.assertRaisesRegex(replay.NotFound, "saved no exchanges"):
             replay.source(self.job, "task-c__u0003", 1)
         with self.assertRaisesRegex(replay.NotFound, "no trial named"):
             replay.source(self.job, "task-z__u0009", 1)
@@ -418,7 +418,7 @@ class Sends(ReplayCase):
         self.assertEqual([json.loads(a["body"]) for a in rows], [body, body])
         self.assertIn("cut", exchanges.lines(str(Path(doc["out"], "relay", "exchanges")), "r002")[0])
         again = study.recount(doc["out"], rule=lambda a: json.loads(a["body"]).get("extra", "recorded"))
-        self.assertEqual((again["read"], again["not_kept"]), (2, 0))
+        self.assertEqual((again["read"], again["not_saved"]), (2, 0))
         self.assertEqual(len(Upstream.seen), 2)
 
     def test_echoed_credentials_are_removed_from_answers_and_labels(self):

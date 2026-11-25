@@ -1,6 +1,6 @@
 """One recorded model call sent again: K times, as it was or changed, under a spending cap, the answers counted.
 
-A run that keeps its exchange record (``exchanges``) holds each call of its agent whole. Replay reads one:
+A run that saves its exchange record (``exchanges``) holds each call of its agent whole. Replay reads one:
 
 - :func:`source` loads call N of a trial as the request that was sent, rebuilt from the store and checked
   against its recorded sha256, with the job's provider, its pin and its price;
@@ -57,7 +57,7 @@ class NotFound(Exception):
 
 class NotWhole(Exception):
     """The call's request is not in the record whole: cut at the store's bound, a part or a picture missing, a
-    store kept as text, or bytes that no longer rebuild to their recorded sha256."""
+    store saved as text, or bytes that no longer rebuild to their recorded sha256."""
 
 
 class Refused(Exception):
@@ -152,7 +152,7 @@ def _store(tdir: str) -> tuple:
     routes = exchanges.tags(folder)
     tag = by_call.route_tag(tdir, routes)
     if tag not in routes:
-        raise NotFound(f"{os.path.basename(tdir)} kept no exchanges (a run before them, or --exchanges off)" if not routes
+        raise NotFound(f"{os.path.basename(tdir)} saved no exchanges (a run before them, or --exchanges off)" if not routes
                        else f"{os.path.basename(tdir)} holds the exchanges of several routes: {', '.join(routes)}")
     return folder, tag
 
@@ -192,7 +192,7 @@ def source(job_dir: str, trial: str, call: int) -> Source:
     except ValueError:
         req = None
     if not isinstance(req, dict) or _dumps(req) != got["request"]:
-        raise NotWhole(f"call {call} of {trial} was sent as a body that is not a JSON object: it is kept, not replayed")
+        raise NotWhole(f"call {call} of {trial} was sent as a body that is not a JSON object: it is saved, not replayed")
     cfg = _config(job_dir)
     rows = ((cfg.get("prices") or {}).get("models") or {}) if isinstance(cfg.get("prices"), dict) else {}
     record = next((r for r in _record_rows(tdir, tag) if r.get("n") == call), {})
@@ -219,7 +219,7 @@ def recorded(job_dir: str, trial: str) -> Dict[int, dict]:
 
 
 def answer_of(path: str, reply) -> dict:
-    """A reply as a record keeps it (``status``, ``streamed``, ``body``), read as :func:`answer` reads one."""
+    """A reply as a record saves it (``status``, ``streamed``, ``body``), read as :func:`answer` reads one."""
     reply = reply if isinstance(reply, dict) else {}
     return answer(path, int(reply.get("status") or 0), str(reply.get("body") or "").encode("utf-8"), bool(reply.get("streamed")))
 

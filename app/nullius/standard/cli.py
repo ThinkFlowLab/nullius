@@ -1244,7 +1244,7 @@ def main(argv=None):
                                     "is kept in one folder outside the run's tree. The key comes from the environment, "
                                     "then the saved settings, by the provider's setting name.",
                         epilog=REPLAY_EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-    rp.add_argument("job_dir", metavar="JOB_DIR", help="a job's folder, whose trials kept their exchange record")
+    rp.add_argument("job_dir", metavar="JOB_DIR", help="a job's folder, whose trials saved their exchange record")
     rp.add_argument("trial", metavar="TRIAL", help="a trial's name (an earlier try: NAME.try-N)")
     rp.add_argument("--list", action="store_true",
                     help="list the trial's recorded calls instead: number, status, size, and whether the request is whole")
