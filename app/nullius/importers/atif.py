@@ -67,7 +67,7 @@ import shlex
 import shutil
 from datetime import timezone
 
-from nullius import importers, ondisk
+from nullius import importers
 from nullius.redact import redact
 from nullius.traces.trajectory import parse_ts
 
@@ -107,14 +107,15 @@ def _mentions_atif(path: str) -> bool:
         return False
 
 
-def _read(path: str, shown: str) -> dict:
-    """The document at *path*, or a SystemExit naming what is wrong with it.
+def _read(path: str, shown: str) -> tuple:
+    """``(document, bytes)`` at *path*, or a SystemExit naming what is wrong with it.
 
     The message is redacted here.
     """
     try:
-        with open(path, encoding="utf-8") as fh:
-            doc = json.load(fh)
+        with open(path, "rb") as fh:
+            data = fh.read()
+        doc = json.loads(data.decode("utf-8"))
     except OSError as e:
         raise SystemExit(redact(f"{shown}: cannot be read ({e.strerror})")) from None
     except ValueError as e:
@@ -130,7 +131,7 @@ def _read(path: str, shown: str) -> dict:
         raise SystemExit(redact(f"{shown}: no steps (a partial document)"))
     if not isinstance(doc["steps"], list):
         raise SystemExit(redact(f"{shown}: steps is not a list"))
-    return doc
+    return doc, data
 
 
 def _claims(path: str) -> bool:
@@ -190,13 +191,13 @@ def _shown(path: str, root: str) -> str:
     return os.path.relpath(path, root)
 
 
-def _read_all(root: str) -> list[tuple[str, dict]]:
+def _read_all(root: str) -> list[tuple[str, dict, bytes]]:
     paths = find_documents(root)
     if not paths:
         raise SystemExit(redact(
             f"no ATIF trajectories (schema_version {SUPPORTED_VERSIONS[0]} through "
             f"{SUPPORTED_VERSIONS[-1]}) found in {root}"))
-    return [(path, _read(path, _shown(path, root))) for path in paths]
+    return [(path, *_read(path, _shown(path, root))) for path in paths]
 
 
 
@@ -276,8 +277,8 @@ def _dump(path: str, data) -> bool:
 
 # ── one document = one trial ────────────────────────────────────────────────
 
-def convert_document(path: str, doc: dict, trial: str, job_dir: str) -> dict:
-    """Write one document as a Harbor-shaped trial directory. Returns a summary."""
+def convert_document(path: str, doc: dict, data: bytes, trial: str, job_dir: str) -> dict:
+    """Write one document, parsed from *data*, as a Harbor-shaped trial directory. Returns a summary."""
     trial_dir = os.path.join(job_dir, trial)
     agent_dir = os.path.join(trial_dir, "agent")
     os.makedirs(agent_dir, exist_ok=True)
@@ -304,17 +305,16 @@ def convert_document(path: str, doc: dict, trial: str, job_dir: str) -> dict:
         "agent_result": _usage(doc),
         "source_document": {
             "path": os.path.abspath(path),
-            "sha256": ondisk.sha256_of(path),
+            "sha256": hashlib.sha256(data).hexdigest(),
             "schema_version": doc["schema_version"],
             "session_id": doc.get("session_id"),
         },
     }
     changed = _dump(os.path.join(trial_dir, "result.json"), result)
 
-    # Byte for byte: the trial page reads what the producer wrote, and a
-    # digest of the copy is a digest of the source.
-    with open(path, "rb") as fh:
-        changed |= importers.write_if_changed(os.path.join(agent_dir, "trajectory.json"), fh.read())
+    # Byte for byte the bytes parsed: the trial page reads what the producer
+    # wrote, and a digest of the copy is a digest of the source.
+    changed |= importers.write_if_changed(os.path.join(agent_dir, "trajectory.json"), data)
 
     return {"trial_dir": trial, "started_at": started, "finished_at": finished,
             "agent_info": result["agent_info"], "changed": changed}
@@ -340,11 +340,11 @@ def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str
     names = importers.unique_names([
         (os.path.realpath(path), _trial_name(path, root), _trial_name(path, root) + "__"
          + hashlib.sha256(_shown(path, root).encode()).hexdigest()[:8])
-        for path, _doc in docs], *existing)
+        for path, _doc, _data in docs], *existing)
     os.makedirs(job_dir, exist_ok=True)
 
-    summaries = [convert_document(path, doc, name, job_dir)
-                 for (path, doc), name in zip(docs, names)]
+    summaries = [convert_document(path, doc, data, name, job_dir)
+                 for (path, doc, data), name in zip(docs, names)]
     # Derived output this importer wholly owns: a trial the tree no longer
     # holds is stale and would keep being counted.
     produced = {s["trial_dir"] for s in summaries}
@@ -380,7 +380,7 @@ def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str
                     "model_name": agent["model_info"]["name"]}],
         "tasks": [{"name": f"{NAME}/{s['trial_dir']}"} for s in summaries],
         "trial_documents": importers.reservations(
-            job_dir, ((name, os.path.realpath(path)) for (path, _doc), name in zip(docs, names)), *existing),
+            job_dir, ((name, os.path.realpath(path)) for (path, _doc, _data), name in zip(docs, names)), *existing),
         **importers.recorded_as(sid, root),
     })
     return job_dir
@@ -395,8 +395,9 @@ def convert(root: str, out_root: str, job_name: str = "",
     if os.path.isfile(root):
         base = _trial_name(root, root)
     root = os.path.realpath(root)                    # one spelling of the source, whatever the caller's cwd or links
-    docs = _read_all(root)
+    _read_all(root)                                  # a refused tree is refused before even the lock is written
     with importers.locked(out_root):
+        docs = _read_all(root)                       # read under the lock: a newer conversion is never undone
         job_name, sid = importers.place(out_root, root, f"{NAME}__{base}", job_name, NAME)
         return [_write_job(docs, root, out_root, job_name, command, sid)]
 

@@ -279,6 +279,15 @@ def convert(root: str, out_root: str, job_name: str = "",
     """
     default = f"{NAME}__{os.path.basename(os.path.abspath(root)) or 'export'}"
     root = os.path.realpath(root)                    # one spelling of the source, whatever the caller's cwd or links
+    _read(root)                                      # a refused tree is refused before even the lock is written
+    with importers.locked(out_root):
+        documents, skipped = _read(root)             # read under the lock: a newer conversion is never undone
+        name, sid = importers.place(out_root, root, default, job_name, NAME)
+        return [_write_job(documents, out_root, name, command, root, skipped, sid)]
+
+
+def _read(root: str) -> tuple:
+    """``(documents, refused files)`` of the exports under *root*, or a SystemExit."""
     paths = find_exports(root)
     skipped = refused(root)
     if not paths:
@@ -291,9 +300,7 @@ def convert(root: str, out_root: str, job_name: str = "",
         raise SystemExit(str(exc)) from None
     if not documents:
         raise SystemExit(redact(f"the OTLP/JSON exports in {root} carry no spans"))
-    with importers.locked(out_root):
-        name, sid = importers.place(out_root, root, default, job_name, NAME)
-        return [_write_job(documents, out_root, name, command, root, skipped, sid)]
+    return documents, skipped
 
 
 def _recorded(cfg: dict):

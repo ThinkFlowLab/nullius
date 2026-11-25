@@ -215,6 +215,37 @@ class OneFolderPerSource(unittest.TestCase):
         self.assertNotEqual(done[a], done[b])
         self.assertTrue(trials(done[a]) and trials(done[b]))
 
+    def test_a_conversion_never_publishes_a_source_older_than_one_published_meanwhile(self):
+        def another_trace():
+            doc = otlp_doc()
+            doc["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["traceId"] = "1" * 32
+            return doc
+        later = {"atif": minimal, "otel": another_trace}
+        for fmt, module, read in (("atif", atif, "_read_all"), ("otel", otel, "_read")):
+            with self.subTest(fmt):
+                a, _, out = self.sources(fmt)
+                real, paused, resume = getattr(module, read), threading.Event(), threading.Event()
+
+                def pausing(root):
+                    got = real(root)
+                    if threading.current_thread().name == "first" and not paused.is_set():
+                        paused.set()                                     # the first has read the source
+                        resume.wait(10)
+                    return got
+                setattr(module, read, pausing)
+                self.addCleanup(setattr, module, read, real)
+                first = threading.Thread(target=module.convert, args=(a, out), name="first")
+                first.start()
+                self.assertTrue(paused.wait(10))
+                write_doc(a, "later.json", later[fmt]())                 # the source grows, and is converted
+                [job] = module.convert(a, out)
+                published = trials(job)
+                resume.set()
+                first.join(10)
+                self.assertEqual(len(published), 2)
+                self.assertEqual(trials(job), published)                 # the first's older read is not published
+                setattr(module, read, real)
+
     def test_conversions_from_before_ids_of_two_sources_of_one_basename_differ(self):
         for fmt in self.SOURCES:
             with self.subTest(fmt):
