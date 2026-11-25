@@ -38,7 +38,7 @@ managed = false
 include-package-data = false
 packages = [
   "nullius", "nullius.catalogue", "nullius.compare", "nullius.harbor",
-  "nullius.importers", "nullius.judge", "nullius.recipes", "nullius.runs",
+  "nullius.importers", "nullius.judge", "nullius.leaderboard", "nullius.recipes", "nullius.runs",
   "nullius.standard", "nullius.standard.backends", "nullius.standard.calls",
   "nullius.standard.contract", "nullius.standard.pages", "nullius.standard.proofs",
   "nullius.standard.protocols", "nullius.standard.requirements", "nullius.standard.runner",
