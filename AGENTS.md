@@ -171,6 +171,7 @@ Short and plain: issues, pull requests, their comments, docs.
 | Settings and storage | `docs/settings/README.md`; `app/nullius/settings.py` |
 | Judgement; the PR judge | `docs/judgement.md`; docstring of `.github/scripts/judge_pr.py` |
 | A run that looks wrong, comparing runs | `/run-analysis` |
+| Tasks that may be flawed or ambiguous | `/flag-tasks` |
 | Stale docs | `/docs-drift` |
 | The website; a release | `app/site/README.md`; `app/packaging/README.md` |
 | This machine | `.claude/environment.local.md`, if present |

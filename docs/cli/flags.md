@@ -8,8 +8,8 @@ nullius flags set         <root> <job id> <task> --kind flawed|ambiguous --categ
 nullius flags accept      <root> <job id> (<task> | --all-pending)
 nullius flags remove      <root> <job id> <task>
 nullius flags copy        <root> <from job id> <to job id>
-nullius flags import      <root> <job id> --from FILE [--prefix P]
+nullius flags import      <root> <job id> --from FILE [--prefix P] [--by NAME]
 nullius flags feasibility <root> <job id>
 ```
 
-A flag from `set` counts at once. One from `set --pending`, `copy`, `import` or `feasibility` waits for `accept`, and never replaces an accepted flag. Exit codes: `0` done, `2` usage, `3` not found, `4` invalid input.
+A flag from `set` counts at once. One from `set --pending`, `copy`, `import` or `feasibility` waits for `accept`, and never replaces an accepted flag. `import --by` names who proposes the flags; without it, the person running the import. Exit codes: `0` done, `2` usage, `3` not found, `4` invalid input.

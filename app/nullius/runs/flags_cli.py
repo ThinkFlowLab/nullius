@@ -6,7 +6,7 @@ their import, copy and acceptance.
     nullius flags accept      <root> <job id> (<task> | --all-pending)
     nullius flags remove      <root> <job id> <task>
     nullius flags copy        <root> <from job id> <to job id>
-    nullius flags import      <root> <job id> --from FILE [--prefix P]
+    nullius flags import      <root> <job id> --from FILE [--prefix P] [--by NAME]
     nullius flags feasibility <root> <job id>
 
 ``<root>`` is anything ``nullius runs`` reads. A task is named as the job names it (its ``task_base``, the name
@@ -175,7 +175,7 @@ def run(args) -> int:
         versions = fa.task_versions(job, {args.prefix + str(r.get("task", "")) for r in records if isinstance(r, dict)})
         source = "import:" + os.path.basename(args.from_file)
         added, unknown, skipped = fa.update(job.dir, lambda a: fa.import_flags(
-            a, records, tasks, source=source, by=by, prefix=args.prefix, versions=versions))
+            a, records, tasks, source=source, by=args.by or by, prefix=args.prefix, versions=versions))
         _report("imported, pending:", added, unknown, skipped)
     elif args.action == "feasibility":
         report = feasibility.report(job, jobs)
@@ -225,6 +225,7 @@ def parser() -> argparse.ArgumentParser:
         if name == "import":
             s.add_argument("--from", dest="from_file", required=True)
             s.add_argument("--prefix", default="")
+            s.add_argument("--by", help="who proposes the flags, e.g. the skill's name")
     return p
 
 
