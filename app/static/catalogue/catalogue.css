@@ -459,6 +459,7 @@ a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underli
 .tasks-paste > summary::-webkit-details-marker { display: none; }
 .tasks-paste-box { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin-top: 8px; width: min(420px, calc(100vw - 64px)); }
 .tasks-paste-box textarea { width: 100%; box-sizing: border-box; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.tasks-list { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
 .tasks-count { margin: 14px 0 6px; }
 .tasks-scroll { overflow-x: auto; }
 .tasks-table th, .tasks-table td { padding: .6rem .7rem; }

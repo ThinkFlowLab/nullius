@@ -822,7 +822,8 @@ def cmd_set_create(a):
         # the ids the listing matches today, under the benchmark's default options; the note keeps the filter
         dataset = sets._dataset(b, a.dataset)
         chosen = unit_list.categories_of(a.category)
-        found = unit_list.find(b, dataset, search=a.search or "", categories=chosen, size=None)
+        found = unit_list.find(b, dataset, search=a.search or "", categories=chosen, size=None,
+                               licences=run.Licences(b, environ=os.environ))
         if not found["total"]:
             raise sets.Refused(f"no task of {dataset} matches {unit_list.filter_text(a.search or '', chosen)}")
         got = {"dataset": dataset, "units": [t["id"] for t in found["tasks"]],
@@ -923,12 +924,13 @@ examples:
 exit codes:
   0  listed, a match of no task included
   1  unexpected error (a traceback: report it)
-  2  usage, or refused: an option or a category not known, a program the listing needs not on this machine,
-     a driver that could not list the dataset
+  2  usage, or refused: an option or a category not known, a licence its driver needs not set, a program the
+     listing needs not on this machine, a driver that could not list the dataset
   3  not found: no such benchmark or dataset
 
 A first listing fetches what it needs first (the upstream, the dataset, the driver's environment unless the
-benchmark names a light listing command), said in one line on stderr; later listings read the cache.
+benchmark names a light listing command), said in one line on stderr; later listings read the cache. The driver
+gets the benchmark's saved licences marked to: driver, as a run's does (HF_TOKEN from the environment first).
 """
 
 
@@ -942,13 +944,14 @@ def cmd_units(a):
         except SystemExit as e:
             raise unit_list.Refused(str(e))
         chosen = unit_list.categories_of(a.category)
-        before = unit_list.state(b, a.dataset, given)
+        held = run.Licences(b, environ=os.environ)     # as a headless run holds them: a provider's variable first
+        before = unit_list.state(b, a.dataset, given, held)
         if before["state"] == "refused":
             raise unit_list.Refused(before["reason"])
         if before["fetch"]:
             print(f"first listing of {a.dataset}: fetching " + ", then ".join(f["text"] for f in before["fetch"]),
                   file=sys.stderr, flush=True)
-        found = unit_list.find(b, a.dataset, given, search=a.search or "", categories=chosen, size=None)
+        found = unit_list.find(b, a.dataset, given, search=a.search or "", categories=chosen, size=None, licences=held)
     except unit_list.Refused as e:
         return _refused(e)
     if a.json:

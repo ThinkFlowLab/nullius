@@ -6,9 +6,11 @@ the same preparation as a run's: the upstream at its tested commit, the dataset'
 sha256, the driver's own environment, each made once when it is not there. A definition whose
 ``driver.list_command`` names a lighter start (the standard library and the dataset's files alone) is
 listed by it instead, after the upstream and the dataset alone: its driver's environment is never made for
-a listing. A run checks its ids with the driver all the same. The driver is given no licence and no key,
-and it starts no unit. Its ``units`` gives the ids; when its definition says ``driver.describe``, its
-``describe`` gives each a title, a text and named categories, read from the dataset's files alone. A driver
+a listing. A run checks its ids with the driver all the same. The driver is given its saved ``to: driver``
+licences, as a run's is, and no other key; one its dataset's environment needs and none holds refuses the
+listing before anything is fetched. It starts no unit. Its ``units`` gives the ids; when its definition says
+``driver.describe``, its ``describe`` gives each a title, a text and named categories, read from the dataset's
+files alone. A driver
 without it gives ids, and a search reads the ids. ``state`` says, before a listing and with no side effect,
 whether it is in the cache, what a first listing fetches, or why it cannot be made.
 
@@ -119,7 +121,40 @@ def cache_path(bench: dict, ds: dict, values: dict) -> str:
     return _cache_contained(os.path.join(paths.cache_dir(), FOLDER, bench["key"], _digest(bench, ds, values) + ".json"))
 
 
-def _start(bench: dict, ds: dict, values: dict, work: str) -> jsonl.Proc:
+def _held(bench: dict, licences=None):
+    """What the listing holds of the benchmark's licences: those given, else its store (``run.Licences``)."""
+    return licences if licences is not None else run.Licences(bench)
+
+
+def missing_licences(bench: dict, ds: dict, licences=None) -> List[dict]:
+    """The licences bound for the driver (``to: driver``) that the dataset's environment needs and ``licences``
+    does not hold: [{name, provider}], ``provider`` empty for a benchmark's own."""
+    try:
+        _, env_def = definitions.environment_of(bench, None, ds)
+    except ValueError:
+        return []
+    held = _held(bench, licences)
+    return [{"name": s["name"], "provider": s.get("provider") or ""} for s in (env_def or {}).get("needs_secrets") or []
+            if s.get("to") == "driver" and not held.get(s["name"])]
+
+
+TOKENS = {"huggingface": "a Hugging Face token"}          # a data provider's token, as a line names it
+
+
+def needed(n: dict) -> str:
+    """One licence ``missing_licences`` found, as a line names it: a data provider's token, else its name."""
+    return TOKENS.get(n["provider"], n["name"]) if n["provider"] else n["name"]
+
+
+def missing_text(needs: List[dict]) -> str:
+    """``needs a Hugging Face token, HF_TOKEN (Settings → Data providers)``: what ``missing_licences`` found, in
+    a line."""
+    return "needs " + "; ".join(
+        f"{needed(n)}, {n['name']} (Settings → Data providers)" if n["provider"] else f"{n['name']} (Settings → Custom keys)"
+        for n in needs)
+
+
+def _start(bench: dict, ds: dict, values: dict, work: str, licences=None) -> jsonl.Proc:
     light = _light(bench)
     try:
         up = install.upstream(bench)
@@ -130,7 +165,8 @@ def _start(bench: dict, ds: dict, values: dict, work: str) -> jsonl.Proc:
     home, cwd = os.path.join(work, "driver-home"), os.path.join(work, "driver")
     os.makedirs(home)
     os.makedirs(cwd)
-    env = run.base_env(home, {**extra, "NULLIUS_UPSTREAM": up or "", "NULLIUS_DATASET": data or "",
+    env = run.base_env(home, {**extra, **run.driver_secrets(bench, _held(bench, licences)),
+                              "NULLIUS_UPSTREAM": up or "", "NULLIUS_DATASET": data or "",
                               "NULLIUS_DATASET_ID": ds["id"], "PYTHONPATH": run.driver_path(),
                               "PYTHONDONTWRITEBYTECODE": "1", "NULLIUS_VERSION": str(bench.get("_version") or ""),
                               **run.option_env(values)})
@@ -154,12 +190,15 @@ def _described(got: object, ids: List[str]) -> Dict[str, dict]:
     return out
 
 
-def _list(bench: dict, ds: dict, values: dict) -> dict:
+def _list(bench: dict, ds: dict, values: dict, licences=None) -> dict:
+    unset = missing_licences(bench, ds, licences)
+    if unset:
+        raise Refused(f"cannot list {bench['key']}'s dataset {ds['id']}: it {missing_text(unset)}")
     folder = _cache_contained(os.path.join(paths.cache_dir(), FOLDER))
     os.makedirs(folder, exist_ok=True)
     work = tempfile.mkdtemp(prefix=".listing-", dir=folder)
     try:
-        p = _start(bench, ds, values, work)
+        p = _start(bench, ds, values, work, licences)
         try:
             ids = [str(u) for u in p.request("units", dataset=ds["id"], timeout=SECONDS).get("units") or []]
             said = (_described(p.request("describe", dataset=ds["id"], timeout=SECONDS), ids)
@@ -174,9 +213,10 @@ def _list(bench: dict, ds: dict, values: dict) -> dict:
     return {"described": bool(said), "tasks": tasks}
 
 
-def listing(bench: dict, dataset: str, options: Optional[dict] = None) -> dict:
+def listing(bench: dict, dataset: str, options: Optional[dict] = None, licences=None) -> dict:
     """{described, tasks: [{id, title, text, categories}]}: every task of the dataset under the options, in
-    the driver's order, from the cache when it holds this listing."""
+    the driver's order, from the cache when it holds this listing. ``licences`` are what its driver is given
+    (``run.Licences``), the benchmark's store by default."""
     ds = dataset_of(bench, dataset)
     values = option_values(bench, ds["id"], options)
     path = cache_path(bench, ds, values)
@@ -187,7 +227,7 @@ def listing(bench: dict, dataset: str, options: Optional[dict] = None) -> dict:
             return got
     except (OSError, ValueError):
         pass
-    got = _list(bench, ds, values)
+    got = _list(bench, ds, values, licences)
     path = _cache_contained(path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=".units-", suffix=".json", dir=os.path.dirname(path))
@@ -212,24 +252,24 @@ def _program(word: str) -> Optional[str]:
     return None if there else word
 
 
-def state(bench: dict, dataset: str, options: Optional[dict] = None) -> dict:
+def state(bench: dict, dataset: str, options: Optional[dict] = None, licences=None) -> dict:
     """What a listing of ``dataset`` under ``options`` needs before it is made, said without making, fetching or
-    starting anything: {state, fetch: [{what, text}], reason}. ``state`` is one of
+    starting anything: {state, fetch: [{what, text}], reason, needs}. ``state`` is one of
 
     - ``cached``: the listing is in the cache; ``find`` reads it and starts nothing.
     - ``light``: the definition's ``driver.list_command`` makes it with the standard library and the dataset's
       files; ``fetch`` names what is fetched first (``upstream``, ``dataset``), empty when it is here.
     - ``full``: the driver makes it from its own environment on this machine; ``fetch`` also names that
       environment (``environment``) when it is not installed.
-    - ``refused``: it cannot be made; ``reason`` says why (an option, a program not on this machine, a
-      dataset's file not there).
+    - ``refused``: it cannot be made; ``reason`` says why (an option, a licence not set, a program not on
+      this machine, a dataset's file not there); ``needs`` names the licences not set (``missing_licences``).
 
     ``reason`` is empty but for ``refused``. Raises ``NotFound`` for a dataset the benchmark does not have."""
     ds = dataset_of(bench, dataset)
     key = bench["key"]
 
-    def refused(why: str) -> dict:
-        return {"state": "refused", "fetch": [], "reason": why}
+    def refused(why: str, needs=()) -> dict:
+        return {"state": "refused", "fetch": [], "reason": why, "needs": list(needs)}
 
     try:
         values = option_values(bench, ds["id"], options)
@@ -237,8 +277,11 @@ def state(bench: dict, dataset: str, options: Optional[dict] = None) -> dict:
     except Refused as e:
         return refused(str(e))
     if _cached(path):
-        return {"state": "cached", "fetch": [], "reason": ""}
+        return {"state": "cached", "fetch": [], "reason": "", "needs": []}
     prepare = f"cannot prepare {key}'s dataset {ds['id']} for its listing: "
+    unset = missing_licences(bench, ds, licences)
+    if unset:
+        return refused(f"cannot list {key}'s dataset {ds['id']}: it {missing_text(unset)}", unset)
     fetch, needs = [], []
     up = bench.get("upstream") or {}
     up_dir = install.upstream_dir(bench)
@@ -268,7 +311,7 @@ def state(bench: dict, dataset: str, options: Optional[dict] = None) -> dict:
     missing = next((w for w in needs if _program(w)), None)
     if missing:
         return refused(prepare + f"{missing} is not on this machine")
-    return {"state": "light" if light else "full", "fetch": fetch, "reason": ""}
+    return {"state": "light" if light else "full", "fetch": fetch, "reason": "", "needs": []}
 
 
 def _matches(task: dict, words: List[str]) -> bool:
@@ -277,7 +320,8 @@ def _matches(task: dict, words: List[str]) -> bool:
 
 
 def find(bench: dict, dataset: str, options: Optional[dict] = None, search: str = "",
-         categories: Optional[Dict[str, List[str]]] = None, page: int = 1, size: Optional[int] = PAGE) -> dict:
+         categories: Optional[Dict[str, List[str]]] = None, page: int = 1, size: Optional[int] = PAGE,
+         licences=None) -> dict:
     """The tasks of ``dataset`` under ``options`` that the search text and the category values match, a page
     of ``size`` (all of them when None), page 1 first:
     {total, page, pages, of, described, tasks: [{id, title, text, categories}],
@@ -286,7 +330,7 @@ def find(bench: dict, dataset: str, options: Optional[dict] = None, search: str 
     first. A field no task has is refused; a page past the last is empty."""
     if not isinstance(page, int) or page < 1:
         raise Refused(f"page {page}: 1, 2, ...")
-    got = listing(bench, dataset, options)
+    got = listing(bench, dataset, options, licences)
     tasks, chosen = got["tasks"], categories or {}
     fields = sorted({f for t in tasks for f in t["categories"]})
     unknown = [f for f in chosen if f not in fields]

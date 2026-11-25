@@ -356,21 +356,46 @@ class AFirstListing(Case):
         self.assertNotEqual(made[0], threading.current_thread().name)
         self.assertEqual(self.starts(), 0)
 
-    def test_a_listing_that_needs_the_full_environment_is_never_started_and_says_what_it_needs(self):
+    def test_a_listing_that_needs_the_full_environment_starts_on_a_click_and_says_what_it_installs(self):
         self.stack.enter_context(patch.object(units, "state", lambda b, d, o=None: {
-            "state": "full", "fetch": [{"what": "environment", "text": "the driver's environment, installed with uv"}], "reason": ""}))
+            "state": "full", "fetch": [{"what": "environment", "text": "the driver's environment, installed with uv"}],
+            "reason": "", "needs": []}))
         self.no_fetch_no_install()
-        called = []
-        self.stack.enter_context(patch.object(units, "listing", lambda *a, **k: called.append(a)))
+        html = self.get("/benchmarks/described/tasks/all").get_data(as_text=True)
+        self.assertIn('<button type="button" class="btn sm" id="tasks-list-go">List tasks</button>', html)
+        self.assertIn('<div class="tasks-bar" id="tasks-bar" hidden>', html)           # no search until there is a list
         got = self.listing()
         self.assertFalse(got["ready"])
-        self.assertEqual(got["say"], "The list of tasks needs the benchmark's own environment on this machine (the driver's environment, "
-                                     "installed with uv): run the dataset once, or list it with the units command, then reload. "
-                                     "Ids can still be pasted.")
-        self.assertFalse(self.post("/benchmarks/described/tasks/all/prepare", {})["preparing"])
+        self.assertEqual((got["say"], got["about"]), ("List the tasks to choose from, or paste their ids.",
+                                                      "Listing fetches the driver's environment, installed with uv."))
         rows = self.post("/benchmarks/described/tasks/all/rows", {"units": ["t001"]})
         self.assertEqual((rows["ready"], [t["id"] for t in rows["tasks"]]), (False, ["t001"]))        # pasted ids, kept as they are
-        self.assertEqual(called, [])
+        # the click: the listing made in a thread of its own, the request answered at once
+        release, made = threading.Event(), []
+        self.stack.enter_context(patch.object(units, "listing", lambda *a, **k: (release.wait(10), made.append(1))))
+        got = self.post("/benchmarks/described/tasks/all/prepare", {})
+        self.assertTrue(got["preparing"])
+        self.assertEqual(got["say"], "Preparing the list of tasks: fetching the driver's environment, installed with uv. "
+                                     "Ids can be pasted meanwhile.")
+        release.set()
+        for _ in range(100):
+            if made:
+                break
+            time.sleep(0.02)
+        self.assertEqual(made, [1])
+        r = self.client.get("/benchmarks/described/tasks/all", headers={"X-Forwarded-For": "192.0.2.4"}); self.addCleanup(r.close)
+        self.assertNotIn("tasks-list-go", r.get_data(as_text=True))       # started from a browser on the application host
+
+    def test_a_licence_not_set_is_said_with_where_to_set_it_and_nothing_starts(self):
+        self.stack.enter_context(patch.object(units, "state", lambda b, d, o=None: {
+            "state": "refused", "fetch": [], "reason": "cannot list described's dataset all: it needs a Hugging Face token",
+            "needs": [{"name": "HF_TOKEN", "provider": "huggingface"}]}))
+        self.no_fetch_no_install()
+        self.stack.enter_context(patch.object(units, "listing", side_effect=AssertionError("a listing started")))
+        got = self.listing()
+        self.assertEqual(got["say"], "The list of tasks needs a Hugging Face token. Ids can still be pasted.")
+        self.assertEqual(got["link"], {"href": "/settings#data-providers", "text": "Add it in Settings → Data providers"})
+        self.assertFalse(self.post("/benchmarks/described/tasks/all/prepare", {})["preparing"])
 
     def test_a_refused_listing_says_why(self):
         self.stack.enter_context(patch.object(units, "state", lambda b, d, o=None: {"state": "refused", "fetch": [], "reason": "git is not on this machine"}))

@@ -5,8 +5,9 @@ its ids; the listing cached by its options; ``set create --search`` and ``--cate
 listing gives and the filter in its note; OSWorld1's ``describe`` from its task files. A definition's
 ``driver.list_command`` listing with no driver environment, OSWorld1's giving the driver's ids in its order;
 ``state`` giving each of its answers and starting nothing; the command's one line before a first listing that
-fetches. No key, no network: each driver is a script of the test's own, the fake benchmark's or OSWorld1's on
-task files of the test's own."""
+fetches; a licence the driver needs, given to it as a run gives it, and refused first when none is held. No
+key, no network: each driver is a script of the test's own, the fake benchmark's or OSWorld1's on task files of
+the test's own."""
 from __future__ import annotations
 
 import contextlib
@@ -33,6 +34,9 @@ OSWORLD1 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 DRIVER = r'''import json, os, sys
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "started"), "a") as f:
     f.write("started\n")
+if os.environ.get("HF_TOKEN"):           # a licence bound for the driver, as the listing gave it
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "given"), "w") as f:
+        f.write(os.environ["HF_TOKEN"])
 KINDS = ("alpha", "beta", "gamma")
 N = 20 if os.environ.get("NULLIUS_OPTION_MODE") == "short" else 250
 IDS = [f"t{i:03d}" for i in range(N)]
@@ -283,6 +287,36 @@ class SetFromAFilter(Scratch):
         self.assertFalse(os.path.exists(os.path.join(self.cat, "sets")))
 
 
+def gated(bench: dict) -> dict:
+    """``bench`` with its dataset in an environment that needs a data provider's token, bound for the driver."""
+    return dict(bench, datasets=[dict(d, environment="data") for d in bench["datasets"]],
+                environments={"data": {"summary": "the data", "needs_secrets": [
+                    {"name": "HF_TOKEN", "to": "driver", "provider": "huggingface"}]}})
+
+
+class Licences(Scratch):
+    def given(self):
+        path = Path(self.b["_here"], "given")
+        return path.read_text() if path.exists() else None
+
+    def test_the_driver_gets_its_licence_and_none_held_is_refused_before_it_starts(self):
+        self.b = gated(self.b)
+        env = {k: v for k, v in os.environ.items() if k != "HF_TOKEN"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            code, out, err = self.cli("units", "described", "--dataset", "all")
+        self.assertEqual((code, out, self.starts()), (2, "", 0))
+        self.assertEqual(err, "refused: cannot list described's dataset all: it needs a Hugging Face token, HF_TOKEN "
+                              "(Settings → Data providers)\n")
+        with self.assertRaisesRegex(units.Refused, "needs a Hugging Face token"):
+            units.listing(self.b, "all")
+        # held, from the provider's variable as a headless run takes it, or from the store: the driver gets it
+        with mock.patch.dict(os.environ, dict(env, HF_TOKEN="from-the-environment"), clear=True):
+            code, out, err = self.cli("units", "described", "--dataset", "all", "--search", "t042")
+        self.assertEqual((code, out.splitlines()[0], self.given()), (0, "1 of 250 tasks of all", "from-the-environment"))
+        units.listing(dict(self.b, options={}), "all", licences={"HF_TOKEN": {"kind": "value", "value": "from-the-store"}})
+        self.assertEqual(self.given(), "from-the-store")
+
+
 ASKED = AssertionError("the listing asked for the driver's environment")
 HEAVY = {"command": ["{install}/.venv/bin/python", "{here}/driver.py"],
          "install": {"python": "3.12", "pip": ["nothing-installed==1.0"]}, "describe": True}
@@ -375,13 +409,13 @@ class State(Scratch):
 
     def test_cached(self):
         units.find(self.b, "all")
-        self.assertEqual(self.asked(self.b), {"state": "cached", "fetch": [], "reason": ""})
+        self.assertEqual(self.asked(self.b), {"state": "cached", "fetch": [], "reason": "", "needs": []})
         self.assertEqual(self.asked(self.b, options={"mode": "short"})["state"], "full")    # not listed under it
 
     def test_light_and_what_it_fetches(self):
         light = [sys.executable, "{here}/driver.py"]
         self.assertEqual(self.asked(dict(self.b, driver=dict(HEAVY, list_command=light))),
-                         {"state": "light", "fetch": [], "reason": ""})
+                         {"state": "light", "fetch": [], "reason": "", "needs": []})
         got = self.asked(self.fetching(list_command=light))
         self.assertEqual((got["state"], got["reason"]), ("light", ""))
         self.assertEqual(got["fetch"], [{"what": "upstream", "text": "the upstream https://example.org/upstream.git at aaaaaaaaaaaa"},
@@ -412,10 +446,10 @@ class State(Scratch):
             return sha256(path)
 
         with mock.patch.object(units.ondisk, "sha256_of", side_effect=digest):
-            self.assertEqual(self.asked(bench), {"state": "light", "fetch": [], "reason": ""})
+            self.assertEqual(self.asked(bench), {"state": "light", "fetch": [], "reason": "", "needs": []})
 
     def test_full_and_the_environment_it_installs(self):
-        self.assertEqual(self.asked(self.b), {"state": "full", "fetch": [], "reason": ""})
+        self.assertEqual(self.asked(self.b), {"state": "full", "fetch": [], "reason": "", "needs": []})
         got = self.asked(self.fetching())
         self.assertEqual((got["state"], [f["what"] for f in got["fetch"]]), ("full", ["upstream", "dataset", "environment"]))
         self.assertEqual(got["fetch"][2]["text"], "the driver's environment, installed with uv")
@@ -436,6 +470,15 @@ class State(Scratch):
                 self.assertIn(said, got["reason"])
         with self.assertRaisesRegex(units.NotFound, "no dataset 'nope'"):
             self.asked(self.b, "nope")
+
+    def test_a_licence_its_driver_needs_and_none_holds_is_refused_first(self):
+        bench = dict(gated(self.fetching()))
+        got = self.asked(bench, programs=())                  # before the programs and the fetches are looked at
+        self.assertEqual((got["state"], got["fetch"], got["needs"]), ("refused", [], [{"name": "HF_TOKEN", "provider": "huggingface"}]))
+        self.assertEqual(got["reason"], "cannot list described's dataset all: it needs a Hugging Face token, HF_TOKEN "
+                                        "(Settings → Data providers)")
+        with mock.patch.object(units.run, "Licences", return_value={"HF_TOKEN": {"kind": "value", "value": "v"}}):
+            self.assertEqual(self.asked(bench)["state"], "full")
 
 
 class FirstListing(Scratch):

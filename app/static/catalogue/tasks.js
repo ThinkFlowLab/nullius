@@ -1,7 +1,8 @@
 // A dataset's tasks (templates/catalogue/tasks.html): the server gives a page of 100 tasks for a search and category
 // values (web/catalogue.py, standard/runner/units.py); this page keeps the chosen ids alone. The listing is asked for once the
 // page has loaded: in the cache, it shows at once; one that can be made lightly is started out of the request and
-// the page asks again until it is ready; one that needs the benchmark's full environment is never started here.
+// the page asks again until it is ready; one that needs the benchmark's full environment is started on a click
+// (List questions), the same way. Until there is a list, the search is hidden.
 (() => {
   const page = document.getElementById('tasks-page');
   if (!page) return;
@@ -17,8 +18,14 @@
   const post = (url, body) => nulliusFetch(at(url), {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': d.csrf}, body: JSON.stringify(body)});
   const count = n => `${n.toLocaleString('en-US')} ${n === 1 ? nouns.replace(/s$/, '') : nouns}`;
 
-  function say(text, warn) {
-    const el = $('tasks-state'); el.hidden = !text; el.textContent = text || ''; el.classList.toggle('tasks-warn', !!warn);
+  // the notice: its line, and a link to where a licence is set or the button that starts a full listing
+  function say(text, warn, got) {
+    const el = $('tasks-state'), link = $('tasks-state-link'), list = $('tasks-list');
+    el.hidden = !text; $('tasks-state-text').textContent = text || ''; el.classList.toggle('tasks-warn', !!warn);
+    link.hidden = !(got && got.link);
+    if (got && got.link) { link.href = got.link.href; link.textContent = got.link.text; }
+    const startable = !!got && got.state === 'full' && !got.preparing && d.local === 'true';
+    if (list) { list.hidden = !startable; $('tasks-list-about').textContent = startable ? got.about || '' : ''; }
   }
   function chosenLine() {
     $('tasks-chosen').textContent = `${chosen.size.toLocaleString('en-US')} chosen`;
@@ -69,24 +76,30 @@
   let polling = null, asked = 0;
   // not in the cache: the server's line for its state; a light listing started once, out of any request, then asked
   // again every few seconds until it is ready
+  function prepare(got) {
+    return post(d.prepare, {}).then(r => r.json()).then(g => { say(g.say || got.say, false, g); polling = setTimeout(load, 2500); })
+      .catch(() => say('The list could not be started. Reload the page.', true));
+  }
   function notReady(got) {
     if ($('tasks-match')) $('tasks-match').hidden = true;
-    const light = got.state === 'light' && !got.error;
-    say(got.say, !light);
-    if (!light) return;
+    $('tasks-bar').hidden = true;
+    const light = got.state === 'light' && !got.error, full = got.state === 'full';
+    say(got.say, !light && !(full && !got.error), got);
     clearTimeout(polling);
-    if (!got.preparing && d.local !== 'true') return say('The list is prepared from a browser on the application host. Ids can still be pasted.', true);
-    if (!got.preparing && !asked++)
-      return post(d.prepare, {}).then(r => r.json()).then(g => { say(g.say || got.say); polling = setTimeout(load, 2500); })
-        .catch(() => say('The list could not be started. Reload the page.', true));
+    const elsewhere = () => say('The list is prepared from a browser on the application host. Ids can still be pasted.', true);
+    if (!light && !(full && got.preparing)) return full && !got.error && d.local !== 'true' ? elsewhere() : undefined;
+    if (!got.preparing && d.local !== 'true') return elsewhere();
+    if (!got.preparing && !asked++) return prepare(got);
     polling = setTimeout(load, 2500);
   }
+  $('tasks-list-go')?.addEventListener('click', () => { $('tasks-list').hidden = true; asked++; prepare({say: ''}); });
   async function load() {
     let got;
     try { got = await (await nulliusFetch(query({page: st.page}))).json(); } catch { return say('The list could not be read. Reload the page.', true); }
     if (!got.ok) return say(got.error || 'The list could not be read.', true);
     if (!got.ready) { $('tasks-count').textContent = ''; draw([...chosen].map(id => ({id}))); pager(); chosenLine(); return notReady(got); }
     say('');
+    $('tasks-bar').hidden = false;
     st.ready = true; st.total = got.total; st.pages = got.pages; st.page = got.page;
     facets(got.categories);
     const m = $('tasks-match');

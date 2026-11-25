@@ -25,6 +25,7 @@ nullius standard run humaneval reference --model gpt-5-mini --set first-ten --un
 | --- | --- |
 | `units` | Each task's id, title, text and categories; ids alone when the driver has no `describe`. |
 | A listing | Prepares the upstream, the dataset and, without `driver.list_command`, the driver's environment; starts no unit. |
+| Its licences | The driver gets its `to: driver` secrets, as a run's; one not set is refused first. |
 | `--search`, `--category` | Every word in the id, title or text; one field's values widen, two fields narrow. |
 | The entry | `sets/<benchmark>/NAME.json` in the user catalogue, a plain file to copy or keep. |
 | Frozen | No command changes a set's list; `rename` changes its label; jobs find it by id. |
