@@ -14,20 +14,19 @@ nullius recipes launch recipe.json --wait --json
 
 | Argument | Meaning |
 | --- | --- |
-| `<recipe>` | A recipe file, or an exact saved id, display name, then internal name; ambiguous matches are listed and refused |
+| `<recipe>` | A saved recipe by its id or name ([Saved recipes](../builder.md#saved-recipes-and-drafts)), or a recipe file as the builder exports it; a name several share is refused |
 | `--where MACHINE` | `local`, the server's machine, or a host's entry in Settings, in place of the recipe's *Where*; repeated, one shard each |
-| `--workspace NAME` | The launch destination, made unopened when missing; the open workspace still reopens after restart. Default: the open one, as Run |
+| `--workspace NAME` | The workspace the launch goes into, made when there is none; the open workspace stays open. Default: the open one, as Run |
 | `--server URL` | The Nullius server on this machine (default `http://127.0.0.1:` and `APP_PORT`, else 5057) |
 | `--yes` | Answers the question Run asks before a run of every unit |
 | `--wait` | Returns when the launch has ended, or paused on the question its page asks; exits 4 unless it ended done |
-| `--dry-run` | Prints Review and checks Run's provider key requirement, including its keyless exemption; exits 0 when Run would start it |
+| `--dry-run` | Prints what the Review step shows and stops; exits 0 when Run would start it |
 | `--json` | The server's answer as one document |
 
 | Rule | Detail |
 | --- | --- |
 | The server | `launch` needs `nullius serve` running here; `nullius standard run` runs without it ([Run a benchmark](run.md)) |
-| Refused | An error of the compile, a machine missing a prerequisite, the question without `--yes`, a Harbor recipe: nothing starts |
-| Workspace path | Launch refuses a symbolic link or a destination outside the workspaces folder before starting |
+| Refused | An error of the compile, a machine missing a prerequisite, the question without `--yes`, a Harbor recipe, a workspace folder that is a link: nothing starts |
 | The name | The recipe's name and the second, as each Run names a new job |
 | What it prints | `launch run:<id>`, the launch's key; per run its machine, its state, its jobs folder and its job pages |
 | The result | `nullius runs show <jobs folder> <job id>`: [Read jobs](read-jobs.md) |
