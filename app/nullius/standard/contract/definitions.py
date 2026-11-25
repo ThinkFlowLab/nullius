@@ -263,6 +263,14 @@ def origin_of(d: dict) -> str:
     return up.get("origin") or ("experiment" if up.get("fixes") else d.get("_origin") or "official")
 
 
+
+def fix_parts(fix: str) -> Tuple[str, str, str, str]:
+    """A version's fix as (before, words, url, after): ``WORDS (https://...)`` makes its last
+    few words a link to that address; a fix without one is all ``before``."""
+    m = re.search(r"(\S+(?: \S+){0,3}) \((https://[^\s)]+)\)", fix)
+    return (fix[:m.start()], m.group(1), m.group(2), fix[m.end():]) if m else (fix, "", "", "")
+
+
 def version_label(d: dict) -> str:
     """A version as a reader names it: its release tag, else its branch and short commit
     (``main (044bc33)``), else its key."""

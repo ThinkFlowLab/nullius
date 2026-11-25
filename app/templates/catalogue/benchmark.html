@@ -208,6 +208,12 @@
 
       {% for y in views %}{% set sfx = '' if y.default else '-' ~ y.version %}
       <div{{ vattr(y) }}>
+      {% if y.changes %}
+      <section class="bench-section" aria-labelledby="changes{{ sfx }}">
+        <h2 id="changes{{ sfx }}">Changes from official</h2>
+        <ul class="bench-list">{% for t, w, u, rest in y.changes %}<li>{{ t }}{% if u %}<a href="{{ u }}">{{ w }}</a>{% endif %}{{ rest }}</li>{% endfor %}</ul>
+      </section>
+      {% endif %}
       {% if y.b.good_to_know %}
       <section class="bench-section" aria-labelledby="good-to-know{{ sfx }}">
         <h2 id="good-to-know{{ sfx }}">Good to know</h2>

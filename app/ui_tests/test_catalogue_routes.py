@@ -245,7 +245,13 @@ class BenchmarkPage(PageCase):
             self.assertEqual(self.route_case(key), "non-harbor")                     # the standard's, not Harbor's
             self.assertIn(f'href="/new-run?standard={key}"', self.page_html(key))
             self.assertNotIn("No usable route", self.page(key))
-            self.assertIn('<span class="origin-tag official">Official</span>', self.page_html(key))
+            self.assertRegex(self.page_html(key), r'<span class="origin-tag official[^"]*"[^>]*>Official</span>')
+
+    def test_an_experiment_says_what_it_changes_and_the_official_version_does_not(self):
+        html = self.page_html("locomo")
+        self.assertIn('<h2 id="changes-full">Changes from official</h2>', html)
+        self.assertEqual(html.count("Changes from official"), 1)
+        self.assertIn('<a href="https://github.com/snap-research/locomo/pull/41">open pull request #41</a>.', html)
 
     def test_an_option_with_a_pattern_shows_its_example_not_the_pattern(self):
         for key in ("osworld2", "gsm8k", "humaneval", "gaia", "osworld1", "tau3-bench"):

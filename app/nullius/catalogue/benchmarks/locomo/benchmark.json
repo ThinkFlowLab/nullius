@@ -14,7 +14,7 @@
     "What goes into the memory is an option: the conversation itself by default, or the authors' released facts or session summaries."
   ],
   "upstream_limitations": [
-    "The 446 adversarial questions are left out, because the published file has no answer for them. 1,540 of the 1,986 questions remain.",
+    "The 446 adversarial questions are left out, because the published code cannot ask or score them. 1,540 of the 1,986 questions remain. The experiment version, full, includes them.",
     "The reader's model name must contain gpt-4 or gpt-3.5, as LoCoMo's own code requires. Any other model fails every question.",
     "OpenAI has retired gpt-4-turbo and gpt-3.5-turbo, so Original cannot run Like the paper. Choose Any of your choice; its scores do not compare with the paper's.",
     "The reader gets 32 tokens per answer. A reasoning model can spend them all reasoning, and that question fails.",
@@ -54,5 +54,35 @@
       "label": "Expected answer",
       "path": "reference"
     }
-  ]
+  ],
+  "versions": {
+    "full": {
+      "good_to_know": [
+        "Each conversation is one task, with its questions inside. The smallest run is one conversation.",
+        "The score is the mean over the 1,986 questions: token F1, or for the 446 adversarial ones, 1 when the answer says the conversation does not mention it. Compare it with runs of this version only.",
+        "What goes into the memory is an option: the conversation itself by default, or the authors' released facts or session summaries."
+      ],
+      "upstream_limitations": [
+        "An adversarial question is a choice between its false answer and \"Not mentioned in the conversation\". A refusal in other words counts as wrong.",
+        "At least one adversarial question is answered in the conversation (conv-26, Caroline's hand-painted bowl; LoCoMo's issue 43). The right answer counts as wrong.",
+        "Original draws the order of the two choices at random, so it can differ from run to run.",
+        "The reader's model name must contain gpt-4 or gpt-3.5, as LoCoMo's own code requires. Any other model fails every question.",
+        "OpenAI has retired gpt-4-turbo and gpt-3.5-turbo, so Original cannot run Like the paper. Choose Any of your choice; its scores do not compare with the paper's.",
+        "The reader gets 32 tokens per answer. A reasoning model can spend them all reasoning, and that question fails.",
+        "One unreadable reply stops the whole conversation, because LoCoMo's script writes its answers only at the end.",
+        "Original memory runs the paper's retrieval setup and needs a CUDA GPU. It writes facts and summaries anew each run, so they differ from the authors' released ones.",
+        "Contriever, LoCoMo's default retriever, and the OpenAI retriever fail as published, so they are not offered.",
+        "Claude 3 Sonnet and Gemini 1.0 Pro, also readers in the paper, are retired and not offered."
+      ],
+      "limitations": [
+        "With a memory, the order of an adversarial question's two choices is fixed by the question, so every memory is asked the same.",
+        "The paper's Llama 2 70B, Llama 3 70B and Mistral 7B v0.2 readers are not offered: LoCoMo runs them as local weights, which Nullius does not serve."
+      ],
+      "datasets": {
+        "locomo10": {
+          "verifier": "LoCoMo's own task_eval/evaluate_qa.py: the token F1 of each answer against the reference, or the right choice for an adversarial question; no judge model."
+        }
+      }
+    }
+  }
 }
