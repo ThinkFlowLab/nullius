@@ -30,7 +30,6 @@ nullius standard run humaneval reference --model gpt-5-mini --set first-ten --un
 | Driver output | Supplied secrets are redacted before a listing is stored or its logs and errors are kept or shown. |
 | `--search`, `--category` | Every word in the id, title or text; one field's values widen, two fields narrow. |
 | `--sample N` | N of the listed or matched tasks at random; `--seed S` repeats a draw, and the note keeps it. |
-| Draw inputs | Invalid counts and seeds receive a refusal on the page and command. |
 | The entry | `sets/<benchmark>/NAME.json` in the user catalogue, a plain file to copy or keep. |
 | Frozen | No command changes a set's list; `rename` changes its label; jobs find it by id. |
 | Its name | Up to 80 characters with a letter or a digit; commands take its slug. |
