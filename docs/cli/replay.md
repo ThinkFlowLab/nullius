@@ -11,7 +11,7 @@ nullius standard replay <job dir> <trial> --call N --times K --max-usd USD \
     [--read CMD] [-j N] [--dry-run] [--out DIR] [--json]
 ```
 
-The trial must have kept its [exchange record](run.md#the-exchange-record).
+The trial must have saved its [exchange record](run.md#the-exchange-record).
 
 | Item | Detail |
 | --- | --- |
