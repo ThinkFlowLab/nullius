@@ -253,16 +253,17 @@ def _trial_ids_and_states(trial, traj) -> dict:
     return _states_for(trial, traj, ids)
 
 
-def judge_trial(job, trial, api_key: str, post=None, calibration=None) -> dict:
+def judge_trial(job, trial, api_key: str, post=None, calibration=None, d=None) -> dict:
     """Ask every question the trial page shows, one call per state, and keep
     the merged record. Returns the record as stored. `calibration`: a
-    batch's, read once (`store.calibration`); the workspace's when none."""
+    batch's, read once (`store.calibration`); the workspace's when none.
+    `d`: a batch's store, resolved in the request; its threads have none."""
     if not trial.has_trajectory:
         raise client.JudgeError(0, "this trial has no trajectory to judge")
     traj = trajectory.load(trial.trajectory_path)
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
-    return batch.ask_and_store(ws_dir(), job.job_id, trial.trial_name, _trial_ids_and_states(trial, traj), api_key, post=post,
+    return batch.ask_and_store(ws_dir() if d is None else d, job.job_id, trial.trial_name, _trial_ids_and_states(trial, traj), api_key, post=post,
                                calibration=calibration, started=started_of(trial))
 
 
@@ -307,7 +308,7 @@ def judge_job_route(job_id):
     todo = [t for t in job.trials if t.has_trajectory and t.trial_name not in judged]
     _guard()
     k, cal = key(lane), batch_calibration()
-    done, failed = run_batch(todo, lambda t: judge_trial(job, t, k, calibration=cal), lambda t: t.trial_name)
+    done, failed = run_batch(todo, lambda t: judge_trial(job, t, k, calibration=cal, d=d), lambda t: t.trial_name)
     from flask import flash
     flash(f"{'LLM judge' if lane == 'llm' else 'Decision model'}: judged {done} of {len(todo)} trial(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
     return redirect(url_for("job", job_id=job_id) + "#judgement")
@@ -651,11 +652,12 @@ def task_summary(job) -> dict:
     return {"tasks": len(tasks), "judged": judged, "unjudged": len(tasks_todo(job)), "keyed": bool(key())}
 
 
-def judge_task(job, trial, api_key: str, post=None, calibration=None) -> dict | None:
+def judge_task(job, trial, api_key: str, post=None, calibration=None, d=None) -> dict | None:
     """Score one task's instruction over the `task` state alone, stored under
-    the dataset's task slot and the instruction's digest - never under the trial."""
+    the dataset's task slot and the instruction's digest - never under the trial.
+    `d` as for `judge_trial`."""
     instruction = _task_instruction(trial)
     if not instruction:
         raise client.JudgeError(0, f"no instruction can be read for {trial.task_base}")
     states = batch.states_for(Q.group_ids("task"), lambda kind: judge_state.build(kind, None, instruction=instruction))
-    return batch.ask_and_store(ws_dir(), task_key(job), task_slot(trial), states, api_key, post=post, calibration=calibration)
+    return batch.ask_and_store(ws_dir() if d is None else d, task_key(job), task_slot(trial), states, api_key, post=post, calibration=calibration)
