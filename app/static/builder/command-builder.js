@@ -738,7 +738,7 @@
     if (step === S.dataset)
       return `<div class="nb-sectionhead"><h2>Which datasets?</h2></div>`
         + `<div class="nb-pick-grid std-optgrid">${b.datasets.map(x => tile({attr: 'std-dataset', key: x.id, on: C.datasetsOf(rec).includes(x.id), title: x.label,
-          tip: x.summary || '', meta: x.units ? x.units + ' ' + u.nouns : '',
+          tip: x.summary || '', meta: x.units ? x.units + ' ' + (b.units || {nouns: 'units'}).nouns : '',   // a dataset's count is the benchmark's, whoever runs it
           foot: (x.controls || []).map(c => controlChip(c)).join('') + checkChip('stable', (x.proofs || {}).units, (x.failed || {}).units, 'the same ids twice, each unique')
             + ((b.controls || []).some(c => c.key === 'oracle') ? checkChip('no leak', (x.proofs || {}).leak, (x.failed || {}).leak, 'nothing of the reference shows before the run') : '')})).join('')}</div>`
         + benchOptions(rec, b, 'dataset') + credentialWarnings(b, b.datasets.filter(x => C.datasetsOf(rec).includes(x.id)));
