@@ -198,6 +198,20 @@ class OneFolderPerSource(unittest.TestCase):
                 self.assertNotEqual(jb, jo)
                 self.assertEqual(mtimes(jo), before)
 
+    def test_a_refresh_replaces_the_config_whole(self):
+        for fmt, module in (("atif", atif), ("otel", otel)):
+            with self.subTest(fmt):
+                a, _, out = self.sources(fmt)
+                [job] = module.convert(a, out)
+                path = os.path.join(job, "config.json")
+                Path(path).write_text(json.dumps(json.loads(Path(path).read_text())))   # to be written again
+                with open(path, encoding="utf-8") as held:                      # a reader mid-refresh
+                    before = held.read()
+                    module.convert(a, out)
+                    held.seek(0)
+                    self.assertEqual(held.read(), before)
+                self.assertNotEqual(Path(job, "config.json").read_text(), before)
+
     def test_two_first_conversions_at_once_take_two_folders(self):
         a, b, out = self.sources("otel")
         real = importers.place
