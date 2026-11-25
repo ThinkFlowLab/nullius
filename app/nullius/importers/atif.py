@@ -54,10 +54,12 @@ file.
 Re-converting is idempotent: trial names are
 deterministic (the document's path relative to the tree, a bare
 ``trajectory.json`` named after its directory), every file is rewritten in
-place, and a trial the tree no longer holds is removed.
+place, and a trial the tree no longer holds is removed; its name stays
+its document's, kept in the job's ``config.json`` under ``trial_documents``.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -319,13 +321,30 @@ def convert_document(path: str, doc: dict, trial: str, job_dir: str) -> dict:
 
 
 
+def _source_in(trial_dir: str):
+    """The source document a trial folder was made from, as recorded, by its real path: one tree
+    reached through a link is the same tree."""
+    try:
+        with open(os.path.join(trial_dir, "result.json"), encoding="utf-8") as fh:
+            return os.path.realpath(str(json.load(fh)["source_document"]["path"]))
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str) -> str:
     """The read documents, as one job directory of one trial each."""
+    # Flattening can give two paths one name (a/b.json, a__b.json): those take
+    # a digest of their path, so each document keeps a trial of its own.
     job_dir = os.path.join(out_root, job_name)
+    existing = importers.existing_trials(job_dir, _source_in)
+    names = importers.unique_names([
+        (os.path.realpath(path), _trial_name(path, root), _trial_name(path, root) + "__"
+         + hashlib.sha256(_shown(path, root).encode()).hexdigest()[:8])
+        for path, _doc in docs], *existing)
     os.makedirs(job_dir, exist_ok=True)
 
-    summaries = [convert_document(path, doc, _trial_name(path, root), job_dir)
-                 for path, doc in docs]
+    summaries = [convert_document(path, doc, name, job_dir)
+                 for (path, doc), name in zip(docs, names)]
     # Derived output this importer wholly owns: a trial the tree no longer
     # holds is stale and would keep being counted.
     produced = {s["trial_dir"] for s in summaries}
@@ -359,6 +378,8 @@ def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str
         "agents": [{"name": agent["name"],
                     "model_name": agent["model_info"]["name"]}],
         "tasks": [{"name": f"{NAME}/{s['trial_dir']}"} for s in summaries],
+        "trial_documents": importers.reservations(
+            job_dir, ((name, os.path.realpath(path)) for (path, _doc), name in zip(docs, names)), *existing),
     })
     return job_dir
 

@@ -40,12 +40,15 @@ discovery rather than a table here. Nothing outside a harness module mentions th
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import pkgutil
 import shutil
 import tempfile
+from collections import Counter
 from types import ModuleType
 
+from nullius import ondisk
 from nullius.redact import redact
 
 # A module must expose all three to count. A half-written one is skipped
@@ -127,7 +130,8 @@ def problem(path: str) -> str | None:
 
 def write_if_changed(path: str, data: bytes) -> bool:
     """Write *data* to *path* unless the file already holds it; True when
-    written. A conversion runs at each open of a workspace; an unchanged one
+    written, whole, renamed over the old file: a refresh cut short leaves the
+    old one. A conversion runs at each open of a workspace; an unchanged one
     keeps its mtimes, and with them the parse cache that keys on them."""
     try:
         with open(path, "rb") as fh:
@@ -135,9 +139,103 @@ def write_if_changed(path: str, data: bytes) -> bool:
                 return False
     except OSError:
         pass
-    with open(path, "wb") as fh:
-        fh.write(data)
+    ondisk.write_whole(path, data)
     return True
+
+
+def _reserved(job_dir: str) -> dict:
+    """Trial name -> the document it was given to, as the job's ``config.json``
+    keeps it across conversions: a name stays its document's after its folder
+    is pruned."""
+    try:
+        with open(os.path.join(job_dir, "config.json"), encoding="utf-8") as fh:
+            reserved = json.load(fh)["trial_documents"]
+        return {str(k): str(v) for k, v in reserved.items() if v}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
+
+
+def reservations(job_dir: str, written, existing: dict = None, merged: set = frozenset()) -> dict:
+    """The ``trial_documents`` to keep in *job_dir*'s ``config.json``: what
+    it kept, and the folders *existing* held before pruning (but a *merged* one or one whose document
+    could not be told), with *written* ((name, document) pairs) on top."""
+    reserved = _reserved(job_dir)
+    reserved.update((name, identity) for name, identity in (existing or {}).items()
+                    if identity and name not in merged and name not in reserved)
+    reserved.update((name, identity) for name, identity in written if identity)
+    return dict(sorted(reserved.items()))
+
+
+def existing_trials(job_dir: str, identity_of) -> tuple[dict, set]:
+    """The trials a previous conversion left in *job_dir*: name -> the
+    document each holds, by ``identity_of(trial_dir)`` (None when the files
+    cannot tell), with the names reserved for documents whose folders are
+    gone, and the names of folders two documents were once written
+    into: a name its ``config.json`` lists twice among its tasks, or, without
+    that list, any name when the job counted more trials than it has folders."""
+    trials, merged = _folders(job_dir, identity_of)
+    held = set(trials.values())
+    for name, identity in _reserved(job_dir).items():
+        if name not in trials and identity not in held:
+            trials[name] = identity
+    return trials, merged
+
+
+def _folders(job_dir: str, identity_of) -> tuple[dict, set]:
+    trials = {}
+    if os.path.isdir(job_dir):
+        for name in sorted(os.listdir(job_dir)):
+            if os.path.isdir(os.path.join(job_dir, name)):
+                trials[name] = identity_of(os.path.join(job_dir, name))
+    try:
+        with open(os.path.join(job_dir, "config.json"), encoding="utf-8") as fh:
+            tasks = json.load(fh)["tasks"]
+        listed = Counter(str(t["name"]).split("/", 1)[-1] for t in tasks)
+        return trials, {name for name, n in listed.items() if n > 1}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    try:
+        with open(os.path.join(job_dir, "result.json"), encoding="utf-8") as fh:
+            counted = json.load(fh)["n_total_trials"]
+    except (OSError, ValueError, KeyError, TypeError):
+        counted = len(trials)
+    # shortcut: a folder deleted by hand also counts, so any collision splits; only jobs without a tasks list
+    return trials, set(trials) if isinstance(counted, int) and counted > len(trials) else set()
+
+
+def unique_names(documents: list[tuple], existing: dict | None = None,
+                 merged: set = frozenset()) -> list[str]:
+    """One trial directory per document, decided before anything is written.
+
+    Each document is (identity, name, longer name). A document whose trial
+    already exists keeps that trial's name: judgements are keyed by it. A
+    folder whose document is known stays that document's, even when it is
+    gone. A folder whose document cannot be told keeps its name for the first
+    document that would take it. Any other document takes its name unless
+    another holds it, else the longer one. A *merged* folder (two documents
+    written into one by an older conversion) is split: each of its documents
+    takes the longer name. Two documents still left with one name, or a
+    document left with a gone document's, are refused.
+    """
+    existing = existing or {}
+    identities = {identity for identity, _, _ in documents}
+    held = {identity: name for name, identity in existing.items() if identity in identities}
+    unknown = {name for name, identity in existing.items() if identity is None}
+    gone = {name for name, identity in existing.items() if identity is not None and identity not in identities}
+    shorts = Counter(name for _, name, _ in documents)
+    split = {name for name, n in shorts.items() if n > 1 and name in existing and name in merged}
+    out = [held.get(identity) if held.get(identity) not in split else None
+           for identity, _, _ in documents]
+    taken = {name for name in out if name} | gone
+    for i, (_, name, longer) in enumerate(documents):
+        if out[i] is None:
+            free = name not in taken and name not in split
+            out[i] = name if free and (shorts[name] == 1 or name in unknown) else longer
+            taken.add(out[i])
+    shared = sorted({name for name, n in Counter(out).items() if n > 1} | (set(out) & gone))
+    if shared:
+        raise SystemExit(redact(f"two documents would share the trial {shared[0]!r}"))
+    return out
 
 
 def mark_changed(job_dir: str, summaries: list) -> None:
