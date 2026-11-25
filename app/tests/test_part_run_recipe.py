@@ -141,7 +141,7 @@ class TicksAgainstThePlan(Scratch):
         self.b["options"] = {"mode": {"summary": "Tasks", "values": ["long", "short"], "default": "long"}}
         rows = {"long": ["good", "wrong"], "short": ["good"]}
 
-        def made(bench, ds, values):
+        def made(bench, ds, values, licences=None):
             return {"tasks": [{"id": i, "title": "", "text": "", "categories": {}} for i in rows[values["mode"]]],
                     "described": False}
         with mock.patch.object(units, "_list", made):
