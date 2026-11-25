@@ -4,29 +4,38 @@ Nullius runs AI evaluations and opens every score into its evidence, to tell an
 agent's failure from a benchmark's.
 
 - Runs through the Nullius standard (`docs/standard.md`) or Harbor, only when
-  asked. Also reads Harbor, ATIF and OpenTelemetry results.
+  asked. Reads Harbor, ATIF and OpenTelemetry results.
 - `app/nullius/` is the backend: standard library only, except code that runs in
   an upstream's own environment. `app/web/` is Flask, the web framework and the
   only runtime dependency.
 
-The user's instructions come first, then this file, then `.claude/rules/`. Rules
-for every contributor and assistant: no file catalogue, no history.
+The user's instructions come first, then this file, then `.claude/rules/`. No file
+list, no history.
 
 ## How we work
 
 - **Small diffs.** No refactoring on the way. A defect found in passing becomes
-  an issue, not a wider change.
-- **Nearby code over assumptions.** Describe what is. Remove the code and comments
-  your change makes obsolete.
+  an issue.
+- **Nearby code over assumptions.** Remove the code and comments your change makes
+  obsolete.
 - **Facilitator, not re-implementer.** A benchmark, agent or capability runs its
-  upstream's own code at a pin, in its own environment. Ask before writing more
+  upstream's code at a pin, in its own environment. Ask before writing more
   than glue.
-- **Reuse before adding**, for example `ondisk`, `redact`, `paths`, `providers`; on
-  a page `_tables.html`, `_cards.html`, `model-picker.js`, `_icons.svg`.
+- **Reuse before adding**, for example `ondisk`, `redact`, `paths`, `providers`.
 - **No machine attribution** in a commit or a pull request: no assistant
-  `Co-Authored-By`, session link or generated-by line. Human co-authors stay.
-  Existing commits are not rewritten for it.
+  `Co-Authored-By`, session link or generated-by line. Human co-authors
+  and existing commits stay.
 - **Nothing merges without the owner's word.**
+
+## Pages and commands
+
+- **Page and command agree.** Never change one alone, whichever was asked for. Read
+  the other side first (`docs/cli/pages.md` pairs them): same options, words, order,
+  defaults and numbers, computed once, in `app/nullius/`. The pull request names a
+  side left alone, and why.
+- **One look.** A thing looks the same on every page: reuse its macro and class, from
+  the table in `.claude/rules/ui.md`. New CSS sets no font, size or weight and draws
+  no button. None fits: ask the owner.
 
 ## Three rules, each with a test
 
@@ -50,11 +59,11 @@ is: `grep -m1 '"""' app/nullius/*.py app/nullius/runs/*.py`.
 | --- | --- |
 | `app/nullius/` itself | What all share: settings, paths, providers, hosts, running a recipe |
 | `app/nullius/runs/`, `traces/`, `compare/` | Reading one job tree, a trial's trace, several runs |
-| `app/nullius/catalogue/` | A folder per entry under `benchmarks/`, `agents/`, `capabilities/`: its definition and its own code |
+| `app/nullius/catalogue/` | A folder per entry under `benchmarks/`, `agents/`, `capabilities/`: its definition and code |
 | `app/nullius/recipes/`, `harbor/` | What the builder offers and saves; the Harbor a recipe pins |
 | `app/nullius/importers/`, `judge/` | Foreign results in; questions to a judge model |
-| `app/nullius/standard/` | The standard: `contract/`, `requirements/`, `protocols/`, `calls/`, `backends/`, `runner/`, `proofs/`, `pages/`, whose imports never loop (`test_layering`), and the conformance `kits/` |
-| `app/web/` | One module per area; `core` is the application, `shared` what pages share. Write `shared.STATE`, never `from .shared import STATE`, so one patch reaches all |
+| `app/nullius/standard/` | The standard: `contract/`, `requirements/`, `protocols/`, `calls/`, `backends/`, `runner/`, `proofs/`, `pages/`, whose imports never loop, and the conformance `kits/` |
+| `app/web/` | One module per area; `core` is the application, `shared` what pages share. Write `shared.STATE`, so one patch reaches all |
 | `app/templates/`, `app/static/` | The interface, under the same names |
 | `app/tests/`, `app/ui_tests/` | Backend and route suites; fixtures are small and hand-made |
 | `app/site/`, `docs/` | The website; the documentation it publishes |
@@ -62,10 +71,8 @@ is: `grep -m1 '"""' app/nullius/*.py app/nullius/runs/*.py`.
 
 ## Commands
 
-From the repository root:
-
 ```bash
-# backend suite; --docker adds the tests that run containers
+# backend suite, needs git and uv; --docker adds the container tests
 python3 app/tests/parallel.py
 
 # route suite
@@ -80,15 +87,14 @@ NULLIUS_HOME=$(mktemp -d) uv run --no-project --with-requirements app/requiremen
   app/app.py --debug --port 8791
 PYTHONPATH=app NULLIUS_HOME=$(mktemp -d) python3 -m nullius --help
 
-# the documentation's links and paths
+# the docs' links and paths
 python3 .agents/skills/docs-drift/scripts/check_docs.py
 ```
 
-- Always a profile of your own (`NULLIUS_HOME`). The user's server follows their
-  runs: never start on their profile, never stop it.
-- The backend suite needs git and uv. Without Node, tests of page scripts skip.
-- A draft gets no CI: run the suites you touch. Ready, it gets the tests and the PR
-  judge, which never gates; `/judge` in a comment asks it on a draft.
+- Always a profile of your own (`NULLIUS_HOME`). Never stop the user's server: it
+  follows their runs.
+- A draft gets no CI: run the suites you touch. `/judge` in a comment asks the
+  judge, which never gates.
 
 | Changed | Refresh |
 | --- | --- |
@@ -107,10 +113,8 @@ Add neither by default.
 - **A test** when no existing one would catch this breaking: behavior, a contract,
   a failure mode. Not wording, structure or catalogue contents. Extend a nearby
   case first.
-- **Removing one:** name the assertions that still protect its behavior; keep its
-  edge cases.
-- **Docs** when what they say became wrong, or a reader needs them to choose or
-  act. The code already says how it works.
+- **Removing one:** name what still protects its behavior and edge cases.
+- **Docs** when what they say became wrong, or a reader needs them to choose or act.
 - **In `docs/`:** keep guarantees, requirements, refusals and their fix; drop
   mechanism, narration, history and what the builder already checks. One fact, one
   page. A table cell is a line. No validations, captures or rendered reports.
@@ -128,7 +132,7 @@ Add neither by default.
 
 ## Issues and pull requests
 
-The `file-issue` skill files both. The templates hold an example.
+The `file-issue` skill files both.
 
 - Search issues and pull requests first, here and where the cause lives.
 - A pull request opens as a draft, with `Closes #n` when it finishes its issue,
@@ -139,8 +143,7 @@ The `file-issue` skill files both. The templates hold an example.
   - Scopes: `standard` `catalogue` `runs` `traces` `compare` `judge` `builder`
     `web` `execution` `settings` `docs` `site` `ci` `release`
 - No key, email address, personal message or private link.
-- A security problem goes to Nullius's contact address,
-  `nullius.thinkflowlab@proton.me`, never to an issue (`SECURITY.md`).
+- A security problem goes to the address in `SECURITY.md`, never to an issue.
 
 ## Writing
 
@@ -160,11 +163,11 @@ Short and plain: issues, pull requests, their comments, docs.
 | Any page | `.claude/rules/ui.md`; `/ui-sweep` only when asked |
 | Vocabulary | `docs/concepts.md` |
 | The standard, its ports and kits | `docs/standard.md` |
-| Adding an entry | `/import-benchmark`, `/import-standard`, `/import-agent`, `/import-capability`; by hand, `add-manually.md` under `docs/benchmarks/`, `docs/agents/` or `docs/capabilities/` |
+| Adding an entry | `/import-benchmark`, `/import-standard`, `/import-agent`, `/import-capability`; by hand, `add-manually.md` under its `docs/` folder |
 | Removing an entry | `/remove-integration` |
 | The run builder | `docs/builder.md`; `app/nullius/recipes/launch.py`; `app/static/builder/command-builder-core.js` |
-| A module | Its docstring. Whole designs: `execution.py`, `catalogue/catalog.py`, `harbor/source.py`, `runs/live.py` |
-| A command; a metric | `docs/cli/README.md`; `docs/field-guide.md` |
+| A whole design | Docstrings of `execution.py`, `catalogue/catalog.py`, `harbor/source.py`, `runs/live.py` |
+| A command | `docs/cli/README.md` |
 | Settings and storage | `docs/settings/README.md`; `app/nullius/settings.py` |
 | Judgement; the PR judge | `docs/judgement.md`; docstring of `.github/scripts/judge_pr.py` |
 | A run that looks wrong, comparing runs | `/run-analysis` |
