@@ -619,12 +619,11 @@ class TheBenchmarksSection(Case):
         self.assertNotIn("<table", part)
 
     def test_new_task_set_in_the_sections_head_opens_the_tasks_of_a_dataset(self):
-        gaia = _GET("benchmark", "gaia")
-        head = re.search(r'<div class="bench-section-head">(.*?)</div>\s*</details>', self.section("gaia"), re.S).group(1)
-        self.assertIn('<summary class="btn sm" aria-haspopup="true">New task set</summary>', head)
-        self.assertIn('<details class="bench-newset pop">', head)          # a menu: not a disclosure, no chevron
-        for d in gaia["datasets"]:                    # several datasets: a choice of them, each its tasks' page
-            self.assertIn(f'<a href="/benchmarks/gaia/tasks/{d["id"]}">{d.get("label") or d["id"]}<span class="muted">', head)
+        telco = _GET("benchmark", "open-telco")
+        part = self.section("open-telco")
+        self.assertNotIn("New task set", part)         # several datasets: no menu, the button of each opens its tasks
+        for d in telco["datasets"]:
+            self.assertIn(f'<a class="btn ghost sm" href="/benchmarks/open-telco/tasks/{d["id"]}">', part)
         [only] = _GET("benchmark", "humaneval")["datasets"]
         one = self.section("humaneval")              # one dataset: the button is its link
         self.assertIn(f'<a class="btn sm" href="/benchmarks/humaneval/tasks/{only["id"]}">New task set</a>', one)

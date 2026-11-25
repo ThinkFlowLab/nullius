@@ -435,10 +435,6 @@ a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underli
 .bench-setlinks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .bench-sets-group { margin: 14px 0 0; }
 .bench-ownsets { margin-top: 8px; }
-.bench-newset { position: relative; }
-.bench-newset > summary { list-style: none; }
-.bench-newset > summary::-webkit-details-marker { display: none; }
-.bench-newset-menu { left: auto; right: 0; max-width: calc(100vw - 32px); }
 .tasks-page { display: flex; flex-direction: column; gap: 20px; }
 .tasks-page .bench-blocked { margin: 0; }
 .tasks-page .tasks-warn { border-color: color-mix(in srgb, var(--patch_failed_tests) 45%, var(--border)); }
