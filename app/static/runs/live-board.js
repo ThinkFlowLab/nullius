@@ -232,7 +232,7 @@
       return `<tr class="lb-row lb-queued${dim}" data-trial="${esc(t.trial)}" tabindex="0" aria-current="${opts.selected === t.trial}">
         <td><span class="task" title="${esc(t.task || t.trial)}">${esc(shortTask(named))}</span>${agents.length > 1 ? `<small>${esc(t.agent || '')}</small>` : ''}</td>
         <td><span class="lb-phase">Queued</span></td><td class="na">—</td>
-        ${has.steps ? none : ''}${has.calls ? none : ''}${has.tokens ? none : ''}${has.line ? '<td class="na">—</td>' : ''}<td class="lb-go"></td></tr>`;
+        ${has.steps ? '<td class="num lb-stepcell na">—</td>' : ''}${has.calls ? none : ''}${has.tokens ? none : ''}${has.line ? '<td class="na">—</td>' : ''}<td class="lb-go"></td></tr>`;
     }).join('') + doneRows.map(t => {
       // an ended trial: its outcome, its time in all, its tokens, and its page
       const tok = tokensOf(t), line = t.activity || t.last_line, href = trialHref(t, opts);
