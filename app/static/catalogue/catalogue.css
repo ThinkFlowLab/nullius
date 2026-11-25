@@ -450,6 +450,7 @@ a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underli
 .filter-pill[aria-pressed="true"] .tasks-n { color: inherit; opacity: .8; }
 .tasks-sel { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
 .tasks-sel b { margin-right: 6px; }
+.tasks-bar[hidden] + .tasks-sel { margin-top: 0; padding-top: 0; border-top: 0; }
 .tasks-paste > summary { list-style: none; }
 .tasks-paste > summary::-webkit-details-marker { display: none; }
 /* the box opens on its own line below the row of the chosen tasks' controls */
