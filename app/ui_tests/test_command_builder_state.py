@@ -83,9 +83,9 @@ class StandardBenchmarkSwitch(CompilerCase):
                                "standard", "harbor", "standard", "harbor"])
 
     def test_like_the_paper_is_offered_when_the_paper_fixes_a_model(self):
-        out = self.js('process.stdout.write(JSON.stringify(["locomo","tau3-bench","gsm8k"].map(k=>{const r=C.createStandard(k);'
+        out = self.js('process.stdout.write(JSON.stringify(["longmemeval","tau3-bench","gsm8k","locomo"].map(k=>{const r=C.createStandard(k);'
                       'return [C.paperOffered(r),C.paperListed(r)];})));')
-        self.assertEqual(out, [[True, True], [True, False], [False, False]])
+        self.assertEqual(out, [[True, True], [True, False], [False, False], [False, False]])
 
     def test_like_the_leaderboard_sets_its_options_and_attempts_and_leaving_it_gives_them_back(self):
         out = self.js('const r=C.createStandard("tau3-bench");r.repeat=2;r.simulator_model="x";'

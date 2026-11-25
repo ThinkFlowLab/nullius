@@ -176,7 +176,7 @@ def _bench_page(b: dict) -> dict:
             # One Original procedure, with separate reference-participant and paper-model metadata.
             "setups": [{"key": k, "label": definitions.setup_label(b, k), "summary": x["summary"],
                         "reference_agent": x.get("reference_agent", ""), "turn_seconds": x.get("turn_seconds"),
-                        "comparable": k == "original" and b["setups"]["original"].get("comparable", True) is not False, "units": (b["setups"]["original"].get("units") or b.get("units") or {}),
+                        "comparable": k == "original" and b["setups"]["original"].get("comparable", True) not in (False, []), "units": (b["setups"]["original"].get("units") or b.get("units") or {}),
                         **({"models": definitions.paper_models(x), "default": x["default"], "providers": list(x["providers"]),
                             "sent": {p: {m: pre + (x.get("served_as") or {}).get(m, m) for m in definitions.paper_models(x)}
                                      for p, pre in x["providers"].items()}}

@@ -192,6 +192,7 @@
         "gpt-3.5-turbo-4k"
       ],
       "default": "gpt-4-turbo",
+      "comparable": [],
       "served_as": {
         "gpt-3.5-turbo-16k": "gpt-3.5-turbo",
         "gpt-3.5-turbo-12k": "gpt-3.5-turbo",

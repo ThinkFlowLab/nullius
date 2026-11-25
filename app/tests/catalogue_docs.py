@@ -463,7 +463,7 @@ def _setups(v: dict) -> str:
     original = setups.get("original")
     if not original:
         return "none"
-    fixed = original.get("models") or v.get("simulator") or (v.get("score") or {}).get("judge")
+    fixed = definitions.paper_models(original) or v.get("simulator") or (v.get("score") or {}).get("judge")
     model_choice = ", ".join((["Like the paper"] if fixed else []) + (["Like the leaderboard"] if v.get("leaderboard") else []) + ["Any of your choice"])
     model_choice = " or ".join(model_choice.rsplit(", ", 1))
     participant = original.get("reference_agent") or ("its own agents" if definitions.own_agents(v)
