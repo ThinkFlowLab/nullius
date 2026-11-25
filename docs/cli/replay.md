@@ -56,6 +56,8 @@ The replay's folder (`--out DIR`, else under `replays/`) holds `replay.json` wit
 
 Several recorded calls, each sent K times as recorded and under named arms of changes, under one cap, compared call by call.
 
+Identical requests share the largest booking among their recorded calls.
+
 ```bash title="Study"
 nullius standard study <dir> --times K --max-usd USD \
     [--targets FILE] [--job <job dir> --trial TRIAL... [--every N] [--where REGEX]] \

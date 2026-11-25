@@ -100,6 +100,29 @@ class SignTest(unittest.TestCase):
 
 
 class Studies(StudyCase):
+    def test_identical_requests_keep_the_largest_prompt_booking(self):
+        Model.answers = {}
+        request = self.prepared(call=1).request
+        large = dict(reply_of(3), usage={"input_tokens": 10000, "output_tokens": 1000})
+        for trial, body in (("large__u0002", large), ("unknown__u0003", dict(large, usage={}))):
+            Upstream.body = body
+            self.record_trial(trial, 1, req=request)
+        targets = [study.Target(self.job, trial, 1) for trial in ("large__u0002", "unknown__u0003")]
+        preps = [self.prepared(trial=t.trial, call=1) for t in targets]
+        self.assertEqual(preps[0].sha256, preps[1].sha256)
+        self.assertGreater(preps[0].most_usd, preps[1].most_usd)
+        Upstream.body = large
+        for n, order in enumerate((targets, targets[::-1])):
+            with self.subTest(order=n):
+                Upstream.seen = []
+                out = os.path.join(self.tmp, f"duplicates-{n}")
+                doc = study.study(out, order, times=2, max_usd=0.018, endpoint=self.base, env=self.env)
+                self.assertLessEqual(doc["spend"]["spent_usd"], 0.018)
+                self.assertEqual(len(Upstream.seen), 1)
+                bookings = [r["booked_usd"] for p in Path(out, "relay").glob("*/*.jsonl")
+                            for r in map(json.loads, p.read_text().splitlines()) if "booked_usd" in r]
+                self.assertEqual(bookings, [preps[0].most_usd])
+
     def test_changed_function_code_and_captured_configuration_are_refused(self):
         old = lambda a: "old"
         new = lambda a: "new"

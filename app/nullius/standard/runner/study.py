@@ -488,7 +488,7 @@ def _send(out, doc, preps, names, todo, keys, led, times, rule, concurrency, sto
             groups[g] = relay.Relay(p.endpoint, keys[p.provider], os.path.join(out, "relay", name), prices={p.model: p.price},
                                     model=p.model, key_header=p.key_header, ledger=led.path, serving=p.serving or None,
                                     exchanges="whole", booking=lambda raw, own=most[g]: own.get(rp._sha(raw)))
-        most[g][p.sha256] = p.most_usd
+        most[g][p.sha256] = max(most[g].get(p.sha256, 0.0), p.most_usd)
         group_of[(i, j)] = groups[g]
     wi, wk = len(str(len(preps))), len(str(times))
     stop, why, lock, begun = threading.Event(), [], threading.Lock(), [0]
