@@ -2,10 +2,44 @@
 question ends the wait as an end does."""
 from __future__ import annotations
 
+import io
+import os
+import tempfile
 import unittest
+from contextlib import redirect_stderr
 from unittest.mock import patch
 
-from nullius.recipes import cli
+from nullius.recipes import cli, store
+
+
+class Selection(unittest.TestCase):
+    def test_exact_id_then_display_name_then_internal_name(self):
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"NULLIUS_HOME": home}), \
+             patch.object(store.time, "strftime", side_effect=["2000-01-01", "2000-01-02", "2000-01-03"]):
+            first = store.save({"version": 1, "harness": "standard", "name": "quick-check", "title": "quick-check", "limit": 1})
+            second = store.save({"version": 1, "harness": "standard", "name": "quick-check", "title": "Quick check", "limit": 2})
+            third = store.save({"version": 1, "harness": "standard", "name": "other", "title": first["id"]})
+            self.assertEqual(cli.find("quick-check"), first["recipe"])
+            self.assertEqual(cli.find("Quick check"), second["recipe"])
+            self.assertEqual(cli.find(first["id"]), first["recipe"])
+            self.assertEqual(cli.find("other"), third["recipe"])
+
+    def test_ambiguity_at_any_step_lists_the_matches_and_launches_nothing(self):
+        for key in ("id", "name", "internal"):
+            items = [{"id": "a", "name": "First", "recipe": {"name": "first"}},
+                     {"id": "b", "name": "Second", "recipe": {"name": "second"}}]
+            for item in items:
+                if key == "internal":
+                    item["recipe"]["name"] = "match"
+                else:
+                    item[key] = "match"
+            with self.subTest(key=key), patch.object(store, "listing", return_value=items), \
+                 patch.object(cli, "Server") as server, redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(cli.main(["launch", "match"]), 4)
+                self.assertIn("ambiguous recipe", err.getvalue())
+                for item in items:
+                    self.assertIn(f"{item['name']!r} ({item['id']})", err.getvalue())
+                server.assert_not_called()
 
 
 class Scripted(cli.Server):

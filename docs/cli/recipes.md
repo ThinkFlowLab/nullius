@@ -14,7 +14,7 @@ nullius recipes launch recipe.json --wait --json
 
 | Argument | Meaning |
 | --- | --- |
-| `<recipe>` | A saved recipe by its name or id ([Saved recipes](../builder.md#saved-recipes-and-drafts)), or a recipe file as the builder exports it |
+| `<recipe>` | A recipe file, or an exact saved id, display name, then internal name; ambiguous matches are listed and refused |
 | `--where MACHINE` | `local`, the server's machine, or a host's entry in Settings, in place of the recipe's *Where*; repeated, one shard each |
 | `--workspace NAME` | The workspace the launch goes into, made when there is none; the open workspace stays open. Default: the open one, as Run |
 | `--server URL` | The Nullius server on this machine (default `http://127.0.0.1:` and `APP_PORT`, else 5057) |

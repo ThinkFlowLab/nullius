@@ -84,7 +84,7 @@ def default_server() -> str:
 
 def find(ref: str) -> dict:
     """The recipe ``ref`` names: a recipe file (one recipe, or a saved recipe's file), else a saved recipe by its
-    name, its id or its recipe's name. ``LookupError`` when there is none."""
+    id, display name or internal name, in that order. ``LookupError`` when there is none."""
     if os.path.isfile(ref):
         with open(ref, encoding="utf-8") as f:
             got = json.load(f)
@@ -94,9 +94,13 @@ def find(ref: str) -> dict:
         if not isinstance(got, dict):
             raise Refused(f"{ref} holds no single recipe")
         return got
-    for item in store.listing():
-        if ref in (item.get("id"), item.get("name"), item["recipe"].get("name")):
-            return item["recipe"]
+    items = store.listing()
+    for key in ("id", "name", "internal"):
+        matches = [item for item in items if ref == (item["recipe"].get("name") if key == "internal" else item.get(key))]
+        if len(matches) > 1:
+            raise Refused(f"ambiguous recipe {ref!r}: " + "; ".join(f"{x.get('name')!r} ({x.get('id')})" for x in matches))
+        if matches:
+            return matches[0]["recipe"]
     raise LookupError(f"no saved recipe or recipe file {ref}")
 
 
