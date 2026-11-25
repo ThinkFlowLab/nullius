@@ -26,6 +26,7 @@ import json
 import shutil
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -572,6 +573,34 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
     return res
 
 
+def job_uuid(job_dir: str, *, benchmark: str, plugged: str, model: str, dataset: str) -> Optional[str]:
+    """The identity a job already in ``job_dir`` keeps when the run is the same job: its
+    ``config.json`` names the same benchmark, plugged agent or capability, model and dataset.
+    The uid it is read under (``nullius.runs.uid``): its declared ``standard.uuid`` when that
+    is a UUID, else the derived one, so what was recorded against it still finds it. None
+    otherwise: another job under the same name is a job of its own."""
+    from nullius.runs import uid as job_uid
+    try:
+        with open(os.path.join(job_dir, "config.json"), encoding="utf-8") as f:
+            old = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(old, dict):
+        return None
+    std = old.get("standard") if isinstance(old.get("standard"), dict) else {}
+    agents = [a for a in old.get("agents") or [] if isinstance(a, dict)]
+    datasets = [d for d in old.get("datasets") or [] if isinstance(d, dict)]
+    if (std.get("benchmark"), std.get("plugged"), (agents[0] if agents else {}).get("model_name"),
+            (datasets[0] if datasets else {}).get("name")) != (benchmark, plugged, model, dataset):
+        return None
+    try:
+        with open(os.path.join(job_dir, "result.json"), encoding="utf-8") as f:
+            res = json.load(f)
+    except (OSError, ValueError):
+        res = {}
+    return job_uid.of(job_dir, old, res if isinstance(res, dict) else {})[0] or None
+
+
 def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str, provider: str, dataset: str, units: List[str],
                  concurrency: int, granted: bool, judge: str = "", backend: str = "local", image: str = "", boat_size: str = "",
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
@@ -603,9 +632,13 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     (``--served-by``), said only for a run that pinned them.
     ``exchanges`` and ``exchanges_max_mb``: what each unit's relay kept of
     its agent's calls (``run --exchanges``) and its bound in MB, said for
-    every run that gives them."""
+    every run that gives them.
+    ``uuid``: the job's identity, made once; a run resumed into the same
+    folder keeps the one already written when it is the same job (``job_uuid``)."""
+    uid = job_uuid(job_dir, benchmark=bench["key"], plugged=other.get("_ref") or other["key"], model=model,
+                   dataset=f"{bench['key']}/{dataset}") or str(uuid.uuid4())
     ondisk.write_whole(os.path.join(job_dir, "config.json"), json.dumps({"job_name": job, "runner": "standard", "runner_label": "Nullius",
-                   "standard": {"benchmark": bench["key"], **_version(bench), "plugged": other.get("_ref") or other["key"], "kind": other["_kind"], "provider": provider,
+                   "standard": {"uuid": uid, "benchmark": bench["key"], **_version(bench), "plugged": other.get("_ref") or other["key"], "kind": other["_kind"], "provider": provider,
                                 "needs": bench["needs"], "permissions_granted": granted,
                                 "unsandboxed": granted and backend == "local", "backend": backend,
                                 **({"image": image} if image else {}), **({"boat_size": boat_size} if boat_size else {}),
