@@ -310,7 +310,7 @@ class AFirstListing(Case):
         from web import catalogue
         self.b = gated(self.b)
         Path(self.b["_here"], "driver.py").write_text(REJECTING_DRIVER)
-        token = "made-up-page-credential"
+        token = "page-credential"
         self.stack.enter_context(patch.object(units.run, "Licences", return_value={
             "HF_TOKEN": {"kind": "value", "value": token}}))
         self.stack.enter_context(patch.dict(catalogue._PREPARING, {}, clear=True))
