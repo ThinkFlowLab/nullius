@@ -36,13 +36,12 @@ import hashlib
 import json
 import os
 import re
-import tempfile
 import unicodedata
 import uuid
 from datetime import datetime, timezone
 from typing import Iterable, List, Optional, Tuple
 
-from nullius import paths
+from nullius import ondisk, paths
 from nullius.runs import classify
 from nullius.standard.contract import definitions
 
@@ -363,16 +362,7 @@ def write(entry: dict, root: Optional[str] = None) -> str:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     ordered = {"schema": SCHEMA, **{k: entry[k] for k in HEADER if k in entry},
                "revisions": sorted(entry["revisions"], key=lambda r: r["revision"])}
-    fd, tmp = tempfile.mkstemp(prefix=".set-", suffix=".json", dir=os.path.dirname(path))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(ordered, f, indent=2, ensure_ascii=False)
-            f.write("\n")
-        os.replace(tmp, path)
-    except BaseException:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-        raise
+    ondisk.write_whole(path, json.dumps(ordered, indent=2, ensure_ascii=False) + "\n", mode=0o600)
     return path
 
 

@@ -325,10 +325,7 @@ def listing(bench: dict, dataset: str, options: Optional[dict] = None, licences=
     got = _list(bench, ds, values, licences)
     path = _cache_contained(path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".units-", suffix=".json", dir=os.path.dirname(path))
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(got, f, ensure_ascii=False)
-    os.replace(tmp, path)
+    ondisk.write_whole(path, json.dumps(got, ensure_ascii=False), mode=0o600)
     return got
 
 
