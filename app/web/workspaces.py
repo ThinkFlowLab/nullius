@@ -173,7 +173,12 @@ def workspace_delete(name):
         return redirect(url_for("workspaces_page"))
     if ws is not None and ws.name == name:
         shared.close_workspace()
-    if workspace.delete(shared.WS_HOME, name):
+    try:
+        removed = workspace.delete(shared.WS_HOME, name)
+    except ValueError as e:                # a folder of it could not be read meanwhile: nothing removed
+        flash(str(e), "error")
+        return redirect(url_for("workspaces_page"))
+    if removed:
         flash(Markup(f'Removed workspace <span class="mono">{escape(name)}</span>; its job roots are untouched.'), "")
     else:
         flash(Markup(f'No workspace called <span class="mono">{escape(name)}</span>.'), "error")

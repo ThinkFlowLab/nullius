@@ -255,12 +255,16 @@ def _keep_judgements(ws: Workspace) -> None:
     the one job its roots hold that owns each (`store.adopt_owned`), then its files moved there whole, so none is
     lost with it - a job its roots no longer reach included - and the User
     judge's failure analyses of its converted imports beside them, under
-    ``imported/`` by their job folder's path. Refused while a root cannot be
-    read, since its jobs' records could not be copied."""
+    ``imported/`` by their job folder's path. Refused while a root, or a folder
+    of its imports, cannot be read, since its jobs' records could not be kept."""
     from nullius.judge import store
     from nullius.runs import failure_analysis
     old = [d for r in store.ROOTS.values() if os.path.isdir(d := os.path.join(ws.dir, r))]
-    made = [os.path.join(d, n) for d, _, names in os.walk(ws.imports_dir) for n in names if n.startswith(failure_analysis.FILE)]
+    try:
+        made = [os.path.join(d, n) for d, _, names in os.walk(ws.imports_dir, onerror=store._raise)
+                for n in names if n.startswith(failure_analysis.FILE)] if os.path.isdir(ws.imports_dir) else []
+    except OSError as e:
+        raise ValueError(f"{ws.label} stays: {e.filename or ws.imports_dir} cannot be read, so its failure analyses cannot be kept. Try again.")
     if not old and not made:
         return
     _check_roots(ws)

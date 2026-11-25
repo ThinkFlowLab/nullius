@@ -244,6 +244,21 @@ class Adopt(unittest.TestCase):
         [kept] = os.listdir(os.path.join(self.home, "judgements-of-deleted-workspaces"))
         self.assertTrue(os.path.isfile(os.path.join(self.home, "judgements-of-deleted-workspaces", kept, "imported", "atif__x", fa.FILE)))
 
+    def test_a_workspace_whose_imports_cannot_all_be_listed_is_not_deleted(self):
+        from nullius.runs import failure_analysis as fa
+        home_dir = os.path.join(self.tmp, "ws")
+        ws = workspace.create(home_dir, [], label="w")
+        j = _job_dir(ws.imports_dir, "atif__x")
+        fa.update(j, lambda a: a.set_label("t0", "agent", by="me"))
+        real = os.scandir
+        def unlisted(p="."):
+            if isinstance(p, str) and os.path.realpath(p) == os.path.realpath(j):
+                raise PermissionError(13, "Permission denied", p)
+            return real(p)
+        with patch("os.scandir", unlisted), self.assertRaisesRegex(ValueError, "cannot be read"):
+            workspace.delete(home_dir, ws.name)
+        self.assertTrue(os.path.isfile(os.path.join(j, fa.FILE)))
+
     def test_a_save_or_a_copy_for_a_job_deleted_meanwhile_writes_nothing(self):
         gone = os.path.join(self.tmp, "deleted-job")
         store.save(self.a, "job-x", "t0", rec("2026-01-01T00:00:00Z"))
