@@ -25,7 +25,8 @@ def threshold_requested() -> float:
 
 
 def view_of(job, threshold: float) -> dict:
-    records = store.for_job(store.home(), judge.job_key(job), judge.started_by_name(job), old=judge.old_of(job))
+    records = store.for_job(store.home(), judge.job_key(job), judge.started_by_name(job), old=judge.old_of(job),
+                            strict=judge.retried(job))
     return reconcile.reconcile(job, records, threshold)
 
 

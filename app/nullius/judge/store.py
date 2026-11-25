@@ -145,12 +145,15 @@ def _versions(version: Optional[str]) -> tuple:
     return (version,) if version else (Q.VERSION, *Q.EARLIER)
 
 
-def _of(rec: Optional[dict], started: Optional[str]) -> bool:
+def _of(rec: Optional[dict], started: Optional[str], strict: bool = False) -> bool:
     """Whether a record judged the try that started at ``started``: a retry
     runs an attempt again under its trial's name, and what was asked of the
     try before is not this one's. A record from before tries were told
-    apart, or a check that names no start, takes it as it is."""
-    return not started or not rec or rec.get("trial_started_at") in (None, started)
+    apart, or a check that names no start, takes it as it is, unless
+    `strict` (an attempt with several tries): which try it judged is unknown."""
+    if not started or not rec:
+        return True
+    return rec.get("trial_started_at") == started or (not strict and rec.get("trial_started_at") is None)
 
 
 def _try(version: str, started: str) -> str:
@@ -158,24 +161,25 @@ def _try(version: str, started: str) -> str:
     return f"{version}@{started}"
 
 
-def _pick(data: dict, version: Optional[str], started: Optional[str] = None) -> Optional[dict]:
+def _pick(data: dict, version: Optional[str], started: Optional[str] = None, strict: bool = False) -> Optional[dict]:
     for v in _versions(version):
         for rec in (data.get(v), started and data.get(_try(v, started))):
-            if rec and _of(rec, started):
+            if rec and _of(rec, started, strict):
                 return rec
     return None
 
 
 def load(base: str, job_id: str, trial_name: str, version: Optional[str] = None, lane: str = "decision",
-         started: Optional[str] = None, old: Optional[dict] = None) -> Optional[dict]:
+         started: Optional[str] = None, old: Optional[dict] = None, strict: bool = False) -> Optional[dict]:
     """The record under `version`; with none named, the current version or
     the newest earlier one that has a record. `started`: the trial's own
-    start, so a record of an earlier try under its name is none of its.
+    start, so a record of an earlier try under its name is none of its
+    (`strict`: an attempt with several tries, `_of`).
     `old`: the job's older records (`overlay`), read with it."""
     if not job_id:                   # a job with no identity yet (Job.uid_source "pending") has no judgement
         return None
     found = _paths(base, job_id, trial_name, lane)
-    return _pick(_with(_read(found), _olds(old, found)), version, started)
+    return _pick(_with(_read(found), _olds(old, found)), version, started, strict)
 
 
 def _olds(old: Optional[dict], found) -> list:
@@ -189,7 +193,8 @@ def is_current(record: Optional[dict]) -> bool:
 
 
 def save(base: str, job_id: str, trial_name: str, record: dict, lane: str = "decision",
-         started: Optional[str] = None, old: Optional[dict] = None, job_dir: Optional[str] = None) -> dict:
+         started: Optional[str] = None, old: Optional[dict] = None, job_dir: Optional[str] = None,
+         strict: bool = False) -> dict:
     """The record under its question version, returned as stored; other versions kept. A
     record's answers and hygiene readings merge over the version's earlier
     ones, so judging one question later does not drop the others. Saves to
@@ -207,8 +212,9 @@ def save(base: str, job_id: str, trial_name: str, record: dict, lane: str = "dec
         data = _with(_read(found, strict=True), _olds(old, found))
         version = record.get("questions", Q.VERSION)
         earlier = data.get(version) or {}
-        if not _of(earlier, started):        # another try's: kept beside, and none of its answers are this one's
-            data[_try(version, earlier["trial_started_at"])] = earlier
+        if not _of(earlier, started, strict):        # another try's: kept beside, and none of its answers are this one's
+            at = earlier.get("trial_started_at")
+            data[_try(version, at) if at else f"{version}~{_digest(earlier)}"] = earlier     # unstamped: whose is unknown
             earlier = data.pop(_try(version, started), None) or {}
         merged = dict(record, **({"trial_started_at": started} if started else {}))
         merged["answers"] = {**(earlier.get("answers") or {}), **(record.get("answers") or {})}
@@ -220,13 +226,13 @@ def save(base: str, job_id: str, trial_name: str, record: dict, lane: str = "dec
 
 
 def for_job(base: str, job_id: str, started: dict, version: Optional[str] = None, lane: str = "decision",
-            old: Optional[dict] = None) -> dict:
+            old: Optional[dict] = None, strict=()) -> dict:
     """The judged trials of a job: {trial_name: record} for each trial of
     `started` - {trial_name: its start}, every trial of the job - that has
-    one, as `load` picks it."""
+    one, as `load` picks it; `strict`: the names of those with several tries."""
     out = {}
     for name, start in started.items():
-        rec = load(base, job_id, name, version, lane, start, old)
+        rec = load(base, job_id, name, version, lane, start, old, strict=name in strict)
         if rec:
             out[name] = rec
     return out

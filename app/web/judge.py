@@ -100,8 +100,28 @@ def started_by_name(job) -> dict:
     return {t.trial_name: started_of(t) for t in job.trials}
 
 
+def strict(trial) -> bool:
+    """Whether the trial is one try of an attempt with several: a record that names no start is then no try's."""
+    return bool(trial.n_retries) or trial.key != trial.trial_name
+
+
+def retried(job) -> set:
+    """The names of a job's trials with several tries (`strict`), for `store.for_job`."""
+    return {t.trial_name for t in job.trials if strict(t)}
+
+
+def slot(trial) -> str:
+    """The name a try's record is kept under: its attempt's (``Trial.key``), told apart by its
+    start, so it is found before and after the try is moved aside; a try with no start, its own."""
+    return trial.key if started_of(trial) else trial.trial_name
+
+
 def judgement_of(job, trial, lane: str = "decision") -> dict | None:
-    return store.load(store.home(), job_key(job), trial.trial_name, lane=lane, started=started_of(trial), old=old_of(job))
+    """A try's record (`slot`); else one kept under the try's own name, as before."""
+    uid, start, old = job_key(job), started_of(trial), old_of(job)
+    return (store.load(store.home(), uid, slot(trial), lane=lane, started=start, old=old, strict=strict(trial))
+            or (store.load(store.home(), uid, trial.trial_name, lane=lane, started=start, old=old)
+                if slot(trial) != trial.trial_name else None))
 
 
 def panel(job, trial, lane: str = "decision") -> dict:
@@ -279,8 +299,9 @@ def judge_trial(job, trial, api_key: str, post=None, calibration=None) -> dict:
     traj = trajectory.load(trial.trajectory_path)
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
-    return batch.ask_and_store(store.home(), job_key(job), trial.trial_name, _trial_ids_and_states(trial, traj), api_key, post=post,
-                               calibration=calibration, started=started_of(trial), old=old_of(job), job_dir=job.dir)
+    return batch.ask_and_store(store.home(), job_key(job), slot(trial), _trial_ids_and_states(trial, traj), api_key, post=post,
+                               calibration=calibration, started=started_of(trial), old=old_of(job), job_dir=job.dir,
+                               strict=strict(trial))
 
 
 def _guard():
@@ -320,7 +341,7 @@ def judge_job_route(job_id):
     if job is None:
         abort(404)
     lane = request.form.get("lane") if request.form.get("lane") in client.LANES else "decision"
-    judged = store.for_job(store.home(), job_key(job), started_by_name(job), lane=lane, old=old_of(job))
+    judged = store.for_job(store.home(), job_key(job), started_by_name(job), lane=lane, old=old_of(job), strict=retried(job))
     todo = [t for t in job.trials if t.has_trajectory and t.trial_name not in judged]
     k, cal = key(lane), batch_calibration()
     done, failed = run_batch(todo, lambda t: judge_trial(job, t, k, calibration=cal), lambda t: t.trial_name)
@@ -339,7 +360,7 @@ def job_summary(job) -> dict:
     the board's record -> judge lanes (`nullius.judge.lanes`), whose status
     for each trial is also in `by_trial`."""
     d, uid, old = store.home(), job_key(job), old_of(job)
-    judged = store.for_job(d, uid, started_by_name(job), old=old)
+    judged = store.for_job(d, uid, started_by_name(job), old=old, strict=retried(job))
     flag_ids = [q for q in Q.group_ids("trial") if Q.QUESTIONS[q].get("flag")]
     board = lanes.board(job, judged)
     by_trial = {}
@@ -372,7 +393,7 @@ def job_summary(job) -> dict:
 def _llm_count(d, job) -> dict:
     """The LLM judge's own count for the job's button: it judges apart from
     Decision, so a trial judged by one is still unjudged by the other."""
-    judged = store.for_job(d, job_key(job), started_by_name(job), lane="llm", old=old_of(job))
+    judged = store.for_job(d, job_key(job), started_by_name(job), lane="llm", old=old_of(job), strict=retried(job))
     return {"unjudged": len([t for t in job.trials if t.trial_name not in judged]), "keyed": bool(key("llm"))}
 
 
@@ -406,7 +427,8 @@ def side_of(job, trial, column) -> dict | None:
     """One side's score as the compare page shows it, from the trial's own
     current record, the job opened from its column's workspace `column`: the expectation, the level it rounds to, the judge's
     confidence, the provenance. None until scored under the current vocabulary."""
-    rec = store.load(store.home(), job_key(job, column), trial.trial_name, started=started_of(trial), old=old_of(job, column))
+    rec = store.load(store.home(), job_key(job, column), trial.trial_name, started=started_of(trial), old=old_of(job, column),
+                     strict=strict(trial))
     if not rec or not store.is_current(rec):
         return None
     a = (rec.get("answers") or {}).get(SIDE_QUESTION)
@@ -465,7 +487,8 @@ def judge_side(job, trial, column, api_key: str, post=None, calibration=None) ->
     when it has them all."""
     if not trial.has_trajectory:
         raise client.JudgeError(0, "this trial has no trajectory to judge")
-    rec = store.load(store.home(), job_key(job, column), trial.trial_name, started=started_of(trial), old=old_of(job, column))
+    rec = store.load(store.home(), job_key(job, column), trial.trial_name, started=started_of(trial), old=old_of(job, column),
+                     strict=strict(trial))
     have = (rec.get("answers") or {}) if store.is_current(rec) else {}
     ids = [q for q in side_ids(trial) if q not in have]
     if not ids:
@@ -474,7 +497,8 @@ def judge_side(job, trial, column, api_key: str, post=None, calibration=None) ->
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
     return batch.ask_and_store(store.home(), job_key(job, column), trial.trial_name, _states_for(trial, traj, ids), api_key, post=post,
-                               calibration=calibration, started=started_of(trial), old=old_of(job, column), job_dir=job.dir)
+                               calibration=calibration, started=started_of(trial), old=old_of(job, column), job_dir=job.dir,
+                               strict=strict(trial))
 
 
 def _sides_todo(view) -> list:
@@ -560,7 +584,8 @@ def judge_control(side, jobs, api_key: str, post=None, calibration=None) -> dict
     if trial is None:
         raise client.JudgeError(0, f"{side.control} trial {side.trial_name} is not in this workspace")
     return batch.ask_and_store(store.home(), job_key(job), trial.trial_name, control_states(side, trial), api_key, post=post,
-                               calibration=calibration, started=started_of(trial), old=old_of(job), job_dir=job.dir)
+                               calibration=calibration, started=started_of(trial), old=old_of(job), job_dir=job.dir,
+                               strict=strict(trial))
 
 
 def triage_summary(report, jobs) -> dict:

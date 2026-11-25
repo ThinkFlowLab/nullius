@@ -187,6 +187,29 @@ class EachTryItsOwn(unittest.TestCase):
             shown = [web.judge.judgement_of(job, t)["answers"]["failure_cause"]["choice"] for t in (first, last)]
         self.assertEqual(shown, ["first", "last"])
 
+    def test_a_try_judged_while_it_was_the_last_keeps_its_record_once_moved_aside(self):
+        from nullius.runs import parse
+        tmp = Path(tempfile.mkdtemp(prefix="nullius-judge-tries-")); self.addCleanup(shutil.rmtree, tmp, True)
+        d = copy_job(tmp / "runs" / "job-x")
+        asked = lambda *a, **k: {"questions": Q.VERSION, "answers": {"failure_cause": {"choice": "first"}}}
+        with patch.object(web.judge.store, "home", return_value=str(tmp / "data")), \
+                patch.object(web.judge.trajectory, "load", return_value=SimpleNamespace(error=None)), \
+                patch.object(web.judge, "_trial_ids_and_states", return_value={}), \
+                patch.object(web.judge.batch, "ask_states", asked), web.app.test_request_context("/"):
+            job = parse.parse_job(str(d))
+            web.judge.judge_trial(job, next(t for t in job.trials if t.trial_name == TRIAL), "k", calibration={})
+            (d / "retried").mkdir()
+            shutil.move(d / TRIAL, d / "retried" / f"{TRIAL}.try-1")                # the runner tries the attempt again
+            shutil.copytree(d / "retried" / f"{TRIAL}.try-1", d / TRIAL)
+            res = json.loads((d / TRIAL / "result.json").read_text())
+            (d / TRIAL / "result.json").write_text(json.dumps(dict(res, started_at="2026-12-01T00:00:00Z", standard={"retries": 1})))
+            job = parse.parse_job(str(d))
+            (_, first), (_, last) = parse.tries(next(t for t in job.trials if t.trial_name == TRIAL))
+            web.judge.store.save(str(tmp / "data"), job.uid, TRIAL, {"questions": Q.VERSION, "answers": {"q": 1}}, lane="llm")
+            self.assertEqual(web.judge.judgement_of(job, first)["answers"]["failure_cause"]["choice"], "first")
+            self.assertIsNone(web.judge.judgement_of(job, last))
+            self.assertEqual([web.judge.judgement_of(job, t, lane="llm") for t in (first, last)], [None, None])   # no start: whose is unknown
+
 
 if __name__ == "__main__":
     unittest.main()

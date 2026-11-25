@@ -41,7 +41,7 @@ class CalibrationReads(unittest.TestCase):
     def reads_to_judge_all(self, n):
         web.shared.open_workspace(workspace.create(web.shared.WS_HOME, [], f"w{n}"))
         job_id = "job"
-        trials = [NS(trial_name=f"t{i}", key=f"t{i}", has_trajectory=True, trajectory_path="-", started_at=None, outcome="resolved") for i in range(n)]
+        trials = [NS(trial_name=f"t{i}", key=f"t{i}", has_trajectory=True, trajectory_path="-", started_at=None, outcome="resolved", n_retries=0) for i in range(n)]
         job = NS(job_id=job_id, uid=f"uid-{n}", dir=str(self.tmp), dataset="", dataset_path="", trials=trials)
         real_open, reads = builtins.open, [0]
 
