@@ -163,7 +163,7 @@ def workspace_rename():
 @app.route("/workspaces/delete/<name>", methods=["POST"])
 def workspace_delete(name):
     """Remove a workspace - its cache and imports, never the job roots it
-    read. The open one closes first. Takes the form token."""
+    read. The open one closes once it is removed. Takes the form token."""
     shared._require_csrf()
     ws = shared.STATE["workspace"]
     try:
@@ -171,13 +171,13 @@ def workspace_delete(name):
     except ValueError as e:
         flash(str(e), "error")
         return redirect(url_for("workspaces_page"))
-    if ws is not None and ws.name == name:
-        shared.close_workspace()
     try:
         removed = workspace.delete(shared.WS_HOME, name)
-    except ValueError as e:                # a folder of it could not be read meanwhile: nothing removed
+    except ValueError as e:                # a folder of it could not be read meanwhile: nothing removed, still open
         flash(str(e), "error")
         return redirect(url_for("workspaces_page"))
+    if removed and ws is not None and ws.name == name:
+        shared.close_workspace(save=False)          # its folder is gone: nothing to save into
     if removed:
         flash(Markup(f'Removed workspace <span class="mono">{escape(name)}</span>; its job roots are untouched.'), "")
     else:

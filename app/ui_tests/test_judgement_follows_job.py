@@ -4,6 +4,7 @@ workspace, and stays apart from another job of the same name."""
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import replace
 import shutil
 import tempfile
@@ -227,6 +228,20 @@ class JudgementsKeptBefore(unittest.TestCase):
         self.assertTrue(Path(self.ws.dir, "judgements", "job-x", f"{TRIAL}.json").is_file())
         self.assertIsNotNone(web.shared.STATE["workspace"])                  # left open, as it was
         self.assertIn("cannot be read", self.get("/workspaces").get_data(as_text=True))
+        copy_job(self.tmp / "runs" / "job-x")
+        with self.subTest("a folder of its imports cannot be listed once the delete has begun"):
+            os.makedirs(self.ws.imports_dir, exist_ok=True)
+            real = os.walk
+            def walk(top, *a, onerror=None, **k):
+                if os.path.realpath(top) == os.path.realpath(self.ws.imports_dir):
+                    onerror(PermissionError(13, "Permission denied", top)); return iter(())
+                return real(top, *a, onerror=onerror, **k)
+            with patch("os.walk", walk):
+                r = self.client.post(f"/workspaces/delete/{self.ws.name}", data={"csrf": self.token()}); self.addCleanup(r.close)
+            self.assertIsNotNone(web.shared.STATE["workspace"])
+        r = self.client.post(f"/workspaces/delete/{self.ws.name}", data={"csrf": self.token()}); self.addCleanup(r.close)
+        self.assertIsNone(web.shared.STATE["workspace"])
+        self.assertFalse(Path(self.ws.dir).exists())                          # closed without being saved again
 
 
 class EachTryItsOwn(unittest.TestCase):
