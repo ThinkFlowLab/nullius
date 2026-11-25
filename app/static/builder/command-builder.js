@@ -751,7 +751,7 @@
           ...(on && !picked ? [tile({attr: 'std-taskset', key: on, data: ` data-of="${esc(x.id)}"`, on: true, title: on})] : [])].join('') + '</div>';
     // the dataset's name only where several are chosen: one chosen is the one above
     const head = C.datasetsOf(rec).length > 1 ? esc(x.label) + ': which tasks?' : 'Which tasks?';
-    return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="nb-inlinebutton" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.name) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>` + choice;
+    return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="btn ghost sm" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.name) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>` + choice;
   }
   // a dataset's proofs as its card shows them: its controls, then whether its ids are stable and nothing leaks
   const datasetChecks = (b, x) => (x.controls || []).map(c => controlChip(c)).join('') + checkChip('stable', (x.proofs || {}).units, (x.failed || {}).units, 'the same ids twice, each unique')
@@ -773,7 +773,7 @@
       ...(on && !picked ? [tile({attr: 'std-family-set', key: on, data: was + ` data-in="${esc(x.id)}"`, on: true, title: on})] : [])];
     const page = `/benchmarks/${encodeURIComponent(b.key)}/tasks/${encodeURIComponent(picked ? picked.of.id : whole.id)}`;
     const head = C.datasetsOf(rec).length > 1 ? esc(whole.label) + ': which tasks?' : 'Which tasks?';
-    return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="nb-inlinebutton" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.label) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>`
+    return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="btn ghost sm" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.label) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>`
       + `<div class="nb-pick-grid std-optgrid">${own.join('')}</div>` + (yours.length ? `<div class="nb-pick-grid std-optgrid std-yoursets" aria-label="Your task sets">${yours.join('')}</div>` : '');
   }
   // A chosen dataset's plan begun on a part: all of it, or specific tasks, ticked in the list of the plan's tasks (the

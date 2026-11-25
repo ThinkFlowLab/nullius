@@ -372,7 +372,7 @@ require('node:vm').runInNewContext(require('node:fs').readFileSync(process.argv[
   // the text takes the keyboard's focus only where the box cannot
   const text = writable ? '<span class="tasks-row">' : '<span class="tasks-row" tabindex="0">';
   assert.ok(rows.includes(`${text}<span class="tasks-title">${long.slice(0, 99)}…</span>`), rows);
-  assert.ok(rows.includes(`<span class="tasks-whole">${long}</span><small class="tasks-id mono faint">os__a</small></span>`), rows);
+  assert.ok(rows.includes(`<span class="tasks-whole">${long}</span><small class="tasks-id mono faint small">os__a</small></span>`), rows);
   // an id alone is its own title, with nothing beside it
   assert.ok(rows.includes('<tr data-id="b" title="b">'), rows);
   assert.ok(rows.includes('<span class="tasks-title">b</span><span class="tasks-whole">b</span></span>'), rows);
@@ -726,7 +726,7 @@ class TheBenchmarksSection(Case):
         self.assertIn('<summary class="btn sm" aria-haspopup="true">New task set</summary>', head)
         self.assertIn('<details class="bench-newset pop">', head)          # a menu: not a disclosure, no chevron
         for d in gaia["datasets"]:                    # several datasets: a choice of them, each its tasks' page
-            self.assertIn(f'<a href="/benchmarks/gaia/tasks/{d["id"]}">{d.get("label") or d["id"]}<small>', head)
+            self.assertIn(f'<a href="/benchmarks/gaia/tasks/{d["id"]}">{d.get("label") or d["id"]}<span class="muted">', head)
         [only] = _GET("benchmark", "humaneval")["datasets"]
         one = self.section("humaneval")              # one dataset: the button is its link
         self.assertIn(f'<a class="btn sm" href="/benchmarks/humaneval/tasks/{only["id"]}">New task set</a>', one)
@@ -1141,7 +1141,7 @@ class TheJobPage(Case):
         self.assertEqual(sets.revision(sets.load("fakebench", "every-2"))["units"], ["good"])        # the same words: another set
 
     def test_the_job_page_takes_a_set_s_name_by_the_tasks_page_s_rule(self):
-        name_field = lambda html, form: re.search(r'<input name="name"[^>]*>', re.search(form, html, re.S).group(0)).group(0)
+        name_field = lambda html, form: re.search(r'<input type="text" name="name"[^>]*>', re.search(form, html, re.S).group(0)).group(0)
         here = name_field(self.page("of-a-set"), r'<form class="run-saveset-form".*?</form>')
         there = name_field(self.get("/benchmarks/fakebench/tasks/all").get_data(as_text=True), r'<form class="tasks-form" id="tasks-create">.*?</form>')
         most = lambda field: re.search(r'maxlength="(\d+)"', field).group(1)

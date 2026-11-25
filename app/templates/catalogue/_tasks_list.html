@@ -10,19 +10,19 @@
       <button type="button" class="btn ghost sm" id="tasks-match" hidden>Select the matches</button>
       <button type="button" class="btn ghost sm" id="tasks-show" aria-pressed="false">Show selected</button>
       <details class="tasks-paste"><summary class="btn ghost sm">Paste ids</summary>
-        <div class="tasks-paste-box"><textarea id="tasks-paste" rows="4" placeholder="One id a line, or separated by spaces or commas" spellcheck="false"></textarea>
+        <div class="tasks-paste-box"><textarea class="mono small" id="tasks-paste" rows="4" placeholder="One id a line, or separated by spaces or commas" spellcheck="false"></textarea>
           <button type="button" class="btn sm" id="tasks-paste-add">Add</button></div>
       </details>
       <button type="button" class="btn ghost sm" id="tasks-clear">Clear</button>
     </div>
-    <p class="tasks-count" id="tasks-count" aria-live="polite"></p>
+    <p class="tasks-count muted small" id="tasks-count" aria-live="polite"></p>
     <div class="tasks-scroll">
       <table class="grid tasks-table" id="tasks-table" hidden>
         <thead><tr><th scope="col" class="tasks-tick"><span class="sr">Chosen</span></th><th scope="col">Task</th><th scope="col" id="tasks-cat-head">Category</th></tr></thead>
         <tbody id="tasks-rows"></tbody>
       </table>
     </div>
-    <nav class="tasks-pages" id="tasks-pages" aria-label="Pages" hidden>
+    <nav class="tasks-pages muted small" id="tasks-pages" aria-label="Pages" hidden>
       <button type="button" class="btn ghost sm" data-page="prev">Previous</button><span id="tasks-page-of"></span><button type="button" class="btn ghost sm" data-page="next">Next</button>
     </nav>
 {% endmacro %}
