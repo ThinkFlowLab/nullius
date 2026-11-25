@@ -30,7 +30,9 @@
   function chosenLine() {
     $('tasks-chosen').textContent = `${chosen.size.toLocaleString('en-US')} chosen`;
     if ($('tasks-bar-chosen')) $('tasks-bar-chosen').textContent = $('tasks-chosen').textContent;
-    $('tasks-show').disabled = !chosen.size && !st.showing;
+    // Show selected and Clear once something is chosen; Show all while the chosen are shown
+    $('tasks-show').hidden = !chosen.size && !st.showing;
+    $('tasks-clear').hidden = !chosen.size;
   }
   // a task on one line: its title cut to the width, the whole text in the row's tooltip and, while its box (its text
   // where the box is disabled) has the keyboard's focus, in place; its id beside it on hover or focus. A click
@@ -160,7 +162,7 @@
   $('tasks-paste-add')?.addEventListener('click', async () => {
     const ids = [...new Set($('tasks-paste').value.split(/[\s,]+/).map(s => s.trim()).filter(s => s && !s.startsWith('#')))];
     ids.forEach(id => chosen.add(id));
-    $('tasks-paste').value = ''; $('tasks-paste').closest('details').open = false;
+    $('tasks-paste').value = ''; $('tasks-paste-open').open = false;
     window.nulliusNotify?.(`${count(ids.length)} added.`);
     load();
   });

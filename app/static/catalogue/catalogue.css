@@ -450,10 +450,11 @@ a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underli
 .filter-pill[aria-pressed="true"] .tasks-n { color: inherit; opacity: .8; }
 .tasks-sel { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
 .tasks-sel b { margin-right: 6px; }
-.tasks-paste { position: relative; }
 .tasks-paste > summary { list-style: none; }
 .tasks-paste > summary::-webkit-details-marker { display: none; }
-.tasks-paste-box { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin-top: 8px; width: min(420px, calc(100vw - 64px)); }
+/* the box opens on its own line below the row of the chosen tasks' controls */
+.tasks-paste-box { display: none; flex-direction: column; gap: 8px; align-items: flex-start; margin-top: 10px; width: min(420px, 100%); }
+.tasks-sel:has(.tasks-paste[open]) + .tasks-paste-box { display: flex; }
 .tasks-paste-box textarea { width: 100%; box-sizing: border-box; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
 .tasks-list { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
 .tasks-count { margin: 14px 0 6px; }

@@ -71,13 +71,13 @@
     <div class="tasks-sel" role="group" aria-label="Chosen {{ nouns }}">
       <b id="tasks-chosen">0 chosen</b>
       <button type="button" class="btn ghost sm" id="tasks-match" hidden>Select the matches</button>
-      <button type="button" class="btn ghost sm" id="tasks-show" aria-pressed="false">Show selected</button>
-      <details class="tasks-paste"><summary class="btn ghost sm">Paste ids</summary>
-        <div class="tasks-paste-box"><textarea class="mono small" id="tasks-paste" rows="4" placeholder="One id a line, or separated by spaces or commas" spellcheck="false"></textarea>
-          <button type="button" class="btn sm" id="tasks-paste-add">Add</button></div>
-      </details>
-      <button type="button" class="btn ghost sm" id="tasks-clear">Clear</button>
+      <button type="button" class="btn ghost sm" id="tasks-show" aria-pressed="false" hidden>Show selected</button>
+      <details class="tasks-paste" id="tasks-paste-open"><summary class="btn ghost sm" aria-controls="tasks-paste-box">Paste ids</summary></details>
+      <button type="button" class="btn ghost sm" id="tasks-clear" hidden>Clear</button>
     </div>
+    {#- the box Paste ids opens, on its own line below the row #}
+    <div class="tasks-paste-box" id="tasks-paste-box"><textarea class="mono small" id="tasks-paste" rows="4" aria-label="Ids to add" placeholder="One id a line, or separated by spaces or commas" spellcheck="false"></textarea>
+      <button type="button" class="btn sm" id="tasks-paste-add">Add</button></div>
     <p class="tasks-count muted small" id="tasks-count" aria-live="polite"></p>
     <div class="tasks-scroll">
       <table class="grid tasks-table" id="tasks-table" hidden>
