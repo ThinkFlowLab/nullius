@@ -65,11 +65,12 @@ def _score(ts, graded):
 
 def contribution(jobs: Sequence[Job], *, benchmark: str, version: str,
                  datasets: Mapping[str, Mapping[str, str] | None], dataset: str = "",
-                 metric: str = "Score", graded: bool = False) -> Contribution:
+                 metric: str = "Score", graded: bool = False, sizes: Mapping[str, int] | None = None) -> Contribution:
     """Select by coverage, finish and qualified run id, never by outcome.
 
 The caller passes one agent/version/setup row and qualified job ids. A selected
-dataset reads only that dataset. Whole entries require explicit identities to
+dataset reads only that dataset; without a manifest its declared size (``sizes``)
+is its total, its tasks told apart by recorded name. Whole entries require explicit identities to
 join several datasets; they cannot infer overlap from short task names.
 """
     if metric not in ("Score", "pass^3") or (graded and metric != "Score"):
@@ -78,7 +79,10 @@ join several datasets; they cannot infer overlap from short task names.
     if not scope:
         return Contribution(reason="Dataset unavailable")
     manifests = list(scope.values())
-    total = len({canonical for manifest in manifests for canonical in manifest.values()}) if all(m is not None for m in manifests) else None
+    if all(m is not None for m in manifests):
+        total = len({canonical for manifest in manifests for canonical in manifest.values()})
+    else:
+        total = (sizes or {}).get(next(iter(scope))) if len(scope) == 1 else None
     pool = [j for j in jobs if eligible(j) and j.dataset in scope
             and j.identity.get("benchmark") == benchmark
             and version and j.identity.get("benchmark_version") == version]
@@ -103,6 +107,9 @@ join several datasets; they cannot infer overlap from short task names.
         for canonical, ts in _groups(j, manifest).items():
             union.setdefault(canonical, (j.job_id, canonical, tuple(attempts.ordered(ts))))
     tasks = tuple(union.values())
+    if total is not None and len(tasks) > total:
+        # more names than the dataset declares: the names are not its tasks
+        total = None
     groups = [ts for _, _, ts in tasks]
     excluded = sum(not attempts.ran(ts) for ts in groups)
     covered = sum(bool(attempts.ran(ts)) for ts in groups)

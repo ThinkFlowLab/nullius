@@ -41,7 +41,7 @@ class ConfigurationExamples(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.path = Path(self.directory.name) / "scoring.json"
-        self.benchmarks = [{"key": "gaia", "_version": "v1", "_default": "v1", "datasets": [{"id": "first"}], "score": {"kind": "pass"}}]
+        self.benchmarks = [{"key": "gaia", "_version": "v1", "_default": "v1", "datasets": [{"id": "gaia-validation"}], "score": {"kind": "pass"}}]
         self.defaults = configuration.defaults(self.benchmarks)
 
     def test_c1_c5_all_fifteen_axes_and_defaults(self):
@@ -49,7 +49,9 @@ class ConfigurationExamples(unittest.TestCase):
         self.assertEqual(len(axes), 15)
         self.assertEqual([axes[k]["weight"] for k in configuration.CAPABILITIES], [.12, .12, .08, .15, .15, .10, .08, .20])
         self.assertTrue(all(axes[k]["weight"] == 0 for k in configuration.DOMAINS))
-        self.assertEqual(axes["Retrieval"]["entries"][0]["version"], "v1")
+        self.assertEqual([(e["dataset"], e["version"], e["weight"]) for e in axes["Retrieval"]["entries"]], [("gaia-validation", "v1", 1)])
+        self.assertEqual([(e["dataset"], e["weight"]) for e in axes["Execution"]["entries"]], [("gaia-validation", .5)])
+        self.assertFalse(any(e["benchmark"] != "gaia" for a in axes.values() for e in a["entries"]))
 
     def test_c19_invalid_values_preserve_stored_bytes(self):
         configuration.save(self.path, self.defaults, self.benchmarks)

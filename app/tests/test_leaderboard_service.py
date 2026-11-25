@@ -150,8 +150,8 @@ class RecordedRuns(unittest.TestCase):
         _write_run(self.folder / "one", "same", "gaia", "gaia-validation", cost=1)
         _write_run(self.folder / "two", "same", "tau3-bench", "banking_knowledge", cost=3)
         row, = self.rows(self.folder / "one", self.folder / "two")
-        runs = [e["runs"] for e in row["axes"]["Retrieval"]["entries"]]
-        self.assertTrue(all(len(r) == 1 for r in runs))
+        runs = [e["runs"] for e in row["axes"]["Retrieval"]["entries"] if e["runs"]]
+        self.assertEqual([len(r) for r in runs], [1, 1])
         self.assertNotEqual(runs[0], runs[1])
         self.assertEqual(row["metrics"]["cost"], {"value": 2, "count": 2})
 

@@ -54,6 +54,14 @@ class Contributions(unittest.TestCase):
         self.assertEqual((got.score, got.covered, got.total), (.5, 4, 4))
         self.assertEqual(self.contribution([first, second], manifests, dataset="first").score, .5)
 
+    def test_a_declared_size_counts_coverage_by_recorded_name(self):
+        partial = run("partial", ["resolved", "agent_error", "resolved"])
+        got = self.contribution([partial], sizes={"first": 50})
+        self.assertEqual((got.covered, got.total), (3, 50))
+        self.assertIsNone(self.contribution([partial], sizes={"first": 2}).total)
+        self.assertIsNone(self.contribution([partial, run("b", ["resolved"], dataset="second")], {"first": None, "second": None},
+                                            sizes={"first": 50, "second": 50}).total)
+
     def test_c2_unknown_overlap_and_unavailable_slice_are_not_guessed(self):
         runs = [run("a", ["resolved"]), run("b", ["resolved"], dataset="second")]
         got = self.contribution(runs, {"first": None, "second": None})

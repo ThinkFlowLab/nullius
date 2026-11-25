@@ -16,7 +16,8 @@ class BoardExamples(unittest.TestCase):
         self.config = configuration.defaults(self.benchmarks)
         for axis in self.config["axes"].values():
             axis["weight"] = 0
-        self.config["axes"]["Retrieval"]["weight"] = 1
+        self.config["axes"]["Retrieval"] = {"weight": 1, "entries": [
+            {"benchmark": "gaia", "dataset": "", "version": "v1", "metric": "Score", "weight": 1}]}
 
     def make_run(self, name, outcomes, **identity):
         result = run(name, outcomes, agent_name=name)

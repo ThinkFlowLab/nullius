@@ -8,8 +8,11 @@ def choices(benchmark):
 
 
 def select(benchmark, dataset, runs):
+    """The manifests, the runs read as the entry's datasets, the dataset and each dataset's declared size."""
     manifests = {d["id"]: d.get("tasks") if isinstance(d.get("tasks"), dict) else None
                  for d in benchmark.get("datasets", [])}
+    sizes = {d["id"]: d["units"] for d in benchmark.get("datasets", [])
+             if isinstance(d.get("units"), int) and not isinstance(d.get("units"), bool) and d["units"] > 0}
     recorded = {f"{benchmark['key']}/{d}": d for d in manifests}
     normalized = [replace(j, dataset=recorded.get(j.dataset, j.dataset)) for j in runs]
     part = next((p for p in benchmark.get("task_parts", []) if p["id"] == dataset), None)
@@ -20,5 +23,5 @@ def select(benchmark, dataset, runs):
                      for d, m in manifests.items()}
         normalized = [replace(j, trials=[t for t in j.trials if matches(t.task_name)]) for j in normalized]
         normalized = [j for j in normalized if j.trials]
-        dataset = ""
-    return manifests, normalized, dataset
+        dataset, sizes = "", {}
+    return manifests, normalized, dataset, sizes

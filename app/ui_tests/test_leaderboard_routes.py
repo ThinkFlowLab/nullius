@@ -93,7 +93,9 @@ class LeaderboardRoutes(unittest.TestCase):
         benchmarks = service.catalogue()[1]
         settings = configuration.defaults(benchmarks)
         self.assertEqual(settings["axes"]["Home"]["entries"], [])          # starts with no benchmark
-        office = next(e for e in settings["axes"]["Work"]["entries"] if e["dataset"] == "office")
+        version = next(e["version"] for e in settings["axes"]["Execution"]["entries"] if e["benchmark"] == "osworld1")
+        office = {"benchmark": "osworld1", "dataset": "office", "version": version, "metric": "Score", "weight": 1}
+        settings["axes"]["Work"]["entries"] = [office]
         settings["axes"]["Home"]["entries"] = [dict(office, dataset="os")]
         configuration.save(configuration.location(), settings, benchmarks)
         doc = self.client.get("/api/leaderboard").get_json()

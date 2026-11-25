@@ -14,16 +14,30 @@ DOMAINS = ("Travel", "Dining", "Shopping", "Money", "Health", "Home", "Work")
 CAPABILITIES = ("Memory", "Safety", "Consistency", "Personalization", "Proactivity", "Retrieval", "Communication", "Execution")
 AXES = CAPABILITIES + DOMAINS
 OVERALL = (.12, .12, .08, .15, .15, .10, .08, .20, 0, 0, 0, 0, 0, 0, 0)
+# Each axis's benchmarks, from what their tasks were counted to need: a direct
+# entry weighs 1, a partial one 0.5. A whole-benchmark flag over several disjoint
+# datasets is shared out among them.
+DIRECT, PARTIAL = 1, .5
+TAU = ("airline", "retail", "telecom", "banking_knowledge")
 DEFAULT_ENTRIES = {
-    "Consistency": [("tau3-bench", "", "pass^3")],
-    "Retrieval": [("gaia", "", "Score"), ("tau3-bench", "banking_knowledge", "Score")],
-    "Communication": [("tau3-bench", "telecom", "Score")],
-    "Execution": [(k, "", "Score") for k in ("osworld1", "osworld2", "swe-bench-verified", "terminal-bench")],
-    "Travel": [("tau3-bench", "airline", "Score")],
-    "Shopping": [("tau3-bench", "retail", "Score")],
-    "Money": [("tau3-bench", "banking_knowledge", "Score")],
-    "Work": [("osworld1", "office", "Score"), ("swe-bench-verified", "", "Score"),
-             ("terminal-bench", "", "Score"), ("open-telco", "teleqna-lite", "Score")],
+    "Safety": [("tau3-bench", "retail", "Score", DIRECT), ("tau3-bench", "airline", "Score", PARTIAL),
+               ("tau3-bench", "banking_knowledge", "Score", PARTIAL), ("osworld1", "test_infeasible", "Score", PARTIAL),
+               ("osworld2", "test_v2", "Score", PARTIAL)],
+    "Consistency": [("tau3-bench", d, "pass^3", PARTIAL / len(TAU)) for d in TAU],
+    "Retrieval": [("gaia", "gaia-validation", "Score", DIRECT), ("tau3-bench", "banking_knowledge", "Score", DIRECT),
+                  ("osworld2", "test_v2", "Score", PARTIAL)],
+    "Communication": [("tau3-bench", d, "Score", DIRECT / len(TAU)) for d in TAU],
+    "Execution": [("osworld1", "test_nogdrive", "Score", DIRECT), ("osworld2", "test_v2", "Score", DIRECT),
+                  ("swe-bench-verified", "verified", "Score", DIRECT), ("terminal-bench", "full", "Score", DIRECT),
+                  ("gaia", "gaia-validation", "Score", PARTIAL), ("gsm8k", "test", "Score", PARTIAL),
+                  ("humaneval", "humaneval", "Score", PARTIAL)]
+                 + [("tau3-bench", d, "Score", DIRECT / len(TAU)) for d in TAU],
+    "Travel": [("tau3-bench", "airline", "Score", DIRECT)],
+    "Shopping": [("tau3-bench", "retail", "Score", DIRECT)],
+    "Money": [("tau3-bench", "banking_knowledge", "Score", DIRECT), ("osworld2", "websites35", "Score", PARTIAL)],
+    "Work": [("swe-bench-verified", "verified", "Score", DIRECT), ("terminal-bench", "full", "Score", DIRECT),
+             ("osworld2", "test_v2", "Score", DIRECT), ("osworld1", "test_nogdrive", "Score", PARTIAL),
+             ("humaneval", "humaneval", "Score", PARTIAL), ("open-telco", "teleqna-lite", "Score", PARTIAL)],
 }
 
 
@@ -32,12 +46,14 @@ def location():
 
 
 def defaults(benchmarks):
-    versions = {b["key"]: definitions.version_identity(b) for b in benchmarks
-                if b.get("_version") == b.get("_default")}
+    defaults_of = {b["key"]: b for b in benchmarks if b.get("_version") == b.get("_default")}
+    versions = {k: definitions.version_identity(b) for k, b in defaults_of.items()}
+    declared = lambda key, dataset: not dataset or dataset in {c["id"] for c in scopes.choices(defaults_of[key])}
     return {"schema": 1, "custom": [], "axes": {
         axis: {"weight": weight, "entries": [
-            {"benchmark": key, "dataset": dataset, "version": versions[key], "metric": metric, "weight": 1}
-            for key, dataset, metric in DEFAULT_ENTRIES.get(axis, []) if key in versions]}
+            {"benchmark": key, "dataset": dataset, "version": versions[key], "metric": metric, "weight": weight}
+            for key, dataset, metric, weight in DEFAULT_ENTRIES.get(axis, [])
+            if key in versions and declared(key, dataset)]}
         for axis, weight in zip(AXES, OVERALL)}}
 
 

@@ -301,8 +301,9 @@ ID. A better score never wins selection. Repeated attempts stay with their task;
 repeated runs are not pooled. Explicit merged runs replace their source shards.
 A whole-benchmark entry unions selected datasets by canonical task identity;
 an overlap uses the same run precedence and retains that task's attempts.
-Unknown identities make aggregation or full coverage unavailable rather than
-guessing aliases. A dataset entry reads only that dataset. A declared task-name
+Unknown identities make aggregation unavailable rather than guessing aliases.
+A dataset without a task list counts coverage against its declared task count,
+by recorded task name. A dataset entry reads only that dataset. A declared task-name
 part reads only tasks matching its catalogue prefixes, across the selected
 datasets; its coverage uses the same filtered task union.
 

@@ -109,9 +109,9 @@ def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_ope
                     if bench is None:
                         evidence["reason"] = "Benchmark version unavailable"
                     else:
-                        manifests, normalized, dataset = scopes.select(bench, entry["dataset"], runs)
+                        manifests, normalized, dataset, sizes = scopes.select(bench, entry["dataset"], runs)
                         got = scoring.contribution(normalized, benchmark=entry["benchmark"], version=entry["version"], datasets=manifests,
-                                                   dataset=dataset, metric=entry["metric"], graded=bench.get("score", {}).get("kind") == "score")
+                                                   dataset=dataset, sizes=sizes, metric=entry["metric"], graded=bench.get("score", {}).get("kind") == "score")
                         evidence.update(score=got.score, tasks=got.total, covered=got.covered, excluded=got.excluded,
                                         runs=list(got.run_ids), reason=got.reason, note=got.note)
                         if entry["weight"] > 0 and got.score is not None:
