@@ -86,7 +86,10 @@ on npm or PyPI, a Hugging Face page, a website) and a description. From the
 link and the agent's own docs, find, in this order:
 
 1. **Already here?** `cli list` reads bundled and user entries together. An
-   agent already in the catalogue gets a version, not a second folder (step 5).
+   agent already in the catalogue gets a version, not a second folder (step 5):
+   **Official**, a tag, branch or commit of its official source, or
+   **Experiment**, another source or someone's fixes. Say which when reporting.
+   With no entry yet, strongly recommend an official version first.
 2. **ACP.** Does the agent speak ACP itself (an `acp` subcommand or flag)?
    Else is there a maintained adapter - the vendor's own, then one the ACP
    project lists? Note its package, latest release and date, and whether it

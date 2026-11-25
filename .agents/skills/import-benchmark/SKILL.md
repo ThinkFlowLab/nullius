@@ -108,9 +108,11 @@ Leave out a route that cannot carry it, and say why in one line. If the user
 already named one (the prompt or the conversation), do not ask again: say
 which you took. Both can sit on one entry, so "both" is an answer too.
 
-A user's own repository - a fork they fixed or extended - is a version of the
-benchmark's one entry on the standard (`import-standard`, "the user's own
-source"), never a second entry.
+A benchmark has one entry, and each version of it is **Official** (a tag, branch or
+commit of the official source) or **Experiment** (another source, or someone's
+fixes: a user's own repository or fork, `import-standard`, "the user's own
+source"). Say which when reporting. With no entry yet, strongly recommend an
+official version first, the experiment after it.
 
 ## Citation: the benchmark's papers only
 
@@ -139,8 +141,8 @@ When they do, write it locally:
   or `community`, adapted by the community), its `scoring` in two or three words (the
   card's tag: `Tests`, `Lean compiler`), and its `datasets` nested in it, one by
   registry or Hub name (or local path) with its task count, `official` link,
-  and `verifier` - and its `citation` and `citation_source`. The builder takes a benchmark's first dataset as its default, so a
-  second version is a benchmark entry of its own.
+  and `verifier` - and its `citation` and `citation_source`. The builder takes a benchmark's first dataset as its default: a second
+  version is another dataset of the same entry, after the official default.
 - **What reads its trials.** The `source` a trial records (the registry name,
   the Hub's `org/name`, or a `-p` folder's name) must reach the benchmark's
   report block - its `sources` in `benchmark.json`, matched exactly; a

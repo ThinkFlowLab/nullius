@@ -277,11 +277,12 @@ prints the writable folder under the active user catalogue. Work there, then:
   (`docs/standard.md`, "A driver that holds the conversation");
 - keep one integration per benchmark. Add reading, retrieval and execution choices
   as options; update the existing driver and invalidate affected proofs rather than
-  creating numbered development revisions. Reserve versions for explicit upstream
-  releases or user-requested forks; never copy proofs from a different implementation;
+  creating numbered development revisions. A version is Official (a tag, branch or
+  commit of the official source) or Experiment (another source, or someone's fixes),
+  the official one first; never copy proofs from a different implementation;
 - **the user's own source** - a fork with a fix, at a tag, a branch or a
   commit, any repository (a private one is fetched with this machine's git
-  credentials) - is a version too, never a second folder and never a patch
+  credentials) - is an Experiment version, never a second folder and never a patch
   of ours: `cli new version KEY NAME`, then `versions.NAME.upstream` =
   `{repository, tag?, tested}` (a branch pinned by its commit). Fetch it into
   the scratchpad, diff it against the pinned upstream (`git diff

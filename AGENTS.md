@@ -58,7 +58,7 @@ is: `grep -m1 '"""' app/nullius/*.py app/nullius/runs/*.py`.
 | `app/templates/`, `app/static/` | The interface, under the same names |
 | `app/tests/`, `app/ui_tests/` | Backend and route suites; fixtures are small and hand-made |
 | `app/site/`, `docs/` | The website; the documentation it publishes |
-| `.agents/skills/` | Skills, written `/name` here; `.claude/skills` is a link to it |
+| `.agents/skills/` | Skills, `/name` here; `.claude/skills` links to it |
 
 ## Commands
 
@@ -118,15 +118,17 @@ Add neither by default.
 
 ## Catalogue
 
-- One entry per benchmark; what it supports is an option. A version is an
-  upstream release or a requested fork, never a change of our driver.
+- One entry per benchmark or agent; what it supports is an option. Each version is
+  **Official**, a tag, branch or commit of the official source, or **Experiment**,
+  another source or someone's fixes; never a change of our driver. Bring an
+  official version first.
 - Definitions hold configuration. Proof runs write only `proofs.json`: a bundled
   entry's in a user copy, which then hides the bundled one. Read both through
   `contract/definitions.py`; never infer proven ports from raw JSON.
 
 ## Issues and pull requests
 
-The `file-issue` skill files both. The templates hold the shape and an example.
+The `file-issue` skill files both. The templates hold an example.
 
 - Search issues and pull requests first, here and where the cause lives.
 - A pull request opens as a draft, with `Closes #n` when it finishes its issue,
@@ -150,8 +152,6 @@ Short and plain: issues, pull requests, their comments, docs.
   restated diff.
 
 ## Read first
-
-The row, before changing that area.
 
 | Working on | Read |
 | --- | --- |
