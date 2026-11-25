@@ -240,7 +240,11 @@ def new_run_prerequisites():
     shared._require_csrf()
     if not shared._local_client():
         abort(403, description="Machines are checked from a browser on the application host only.")
-    body = request.get_json(silent=True) or {}
+    return prerequisites_of(request.get_json(silent=True) or {})
+
+
+def prerequisites_of(body: dict):
+    """``new_run_prerequisites`` past its guards, for the page and the API (``web/api.py``)."""
     recipe = body.get("recipe") if isinstance(body.get("recipe"), dict) else {}
     if len(json.dumps(recipe)) > 200_000:
         abort(413)

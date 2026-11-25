@@ -90,6 +90,7 @@
     </div>
     <div class="st-nav-group">
       <div class="st-nav-label">Application</div>
+      {{ section_link('api-access', 'API access', 'api', 'api token tokens remote access another machine client sdk script mcp assistant') }}
       {{ section_link('storage', 'Local data', 'disk', 'settings.json config catalogue workspaces runs cache licences storage paths file') }}
     </div>
     <p class="st-search-empty" role="status" hidden>No settings found.</p>
@@ -391,6 +392,7 @@
     {% endfor %}{% endfor %}
   </div>{% endif %}
   {% include 'settings/data_providers.html' %}
+  {% include 'settings/api_access.html' %}
   <section class="st-section" id="sandbox" aria-labelledby="sandbox-h" data-sandbox="{{ url_for('settings_sandbox') }}"{% if writable %} data-csrf="{{ csrf }}" data-boat="{{ url_for('settings_sandbox_boat') }}"{% endif %}>
     <div class="st-section-head"><h2 id="sandbox-h">Sandbox</h2><p>Where agents run, apart from this machine.</p></div>
     <div class="st-card" data-boat-card>
@@ -481,6 +483,7 @@
 <script src="{{ url_for('static', filename='settings/sandbox.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/prices.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/data-providers.js') }}"></script>
+<script src="{{ url_for('static', filename='settings/api-access.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/constraints.js') }}"></script>
 <script src="{{ url_for('static', filename='settings/hosts.js') }}"></script>
 {% if writable %}

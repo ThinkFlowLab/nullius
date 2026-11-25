@@ -6,7 +6,7 @@ import os
 import shutil
 import socket
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
-from nullius import constraints, execution, hosts, paths, prerequisites, prices, providers, sandbox, secrets, settings
+from nullius import access, constraints, execution, hosts, paths, prerequisites, prices, providers, sandbox, secrets, settings
 from nullius.standard.backends import boat, container
 from nullius.standard.pages import recipe as standard_recipe
 from nullius.judge import client
@@ -44,7 +44,7 @@ def settings_page():
                                           ("Cache", paths.cache_dir())],
                            unread=[dict(u, inherited=u["name"] not in withheld, startup=u["instead"] in settings.STARTUP)
                                    for u in settings.unread(shared.ENV_FILE)],
-                           prices=prices.state(),
+                           prices=prices.state(), api_tokens=_api_tokens(),
                            machines=_machines(), constraint_table=constraints.TABLE,
                            provider_cards=provider_cards({r["name"]: r for r in rows}),
                            ssh_hosts=hosts.scan_ssh_config(), judges=(client.decision_judge(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), decision_providers=client.decision_judge_providers(os.environ),
@@ -339,6 +339,39 @@ def settings_sandbox_logout():
     _sandbox_guard("Docker logs out")
     got = sandbox.logout()
     return jsonify(got), (200 if got["ok"] else 502)
+
+
+def _api_tokens() -> list:
+    return [access.shown(r) for r in access.listing()]
+
+
+@app.route("/settings/api/create", methods=["POST"])
+def settings_api_create():
+    """A new token of the HTTP API (``nullius.access``): its value is in this answer and nowhere after it. Same guards as Save."""
+    _sandbox_guard("Tokens are created")
+    f = request.form
+    try:
+        days = f.get("days", "")
+        if days and not days.isdigit():
+            raise ValueError(f"a token expires after 1 to {access.MAX_DAYS} days, or never")
+        value, record = access.create(f.get("name", "").strip(), f.get("scope", "read"), int(days) if days else None)
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)[:1].upper() + str(e)[1:] + "."), 400
+    response = jsonify(ok=True, value=value, token=access.shown(record), tokens=_api_tokens())
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/settings/api/revoke", methods=["POST"])
+def settings_api_revoke():
+    _sandbox_guard("Tokens are revoked")
+    try:
+        gone = access.revoke(request.form.get("id", ""))
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)[:1].upper() + str(e)[1:] + "."), 400
+    if not gone:
+        return jsonify(ok=False, error="That token is gone already."), 404
+    return jsonify(ok=True, tokens=_api_tokens())
 
 
 @app.route("/settings/prices/update", methods=["POST"])

@@ -13,6 +13,7 @@ Existing results open without credentials.
 | [Hosts](run-hosts.md) | SSH machines |
 | [Data providers](data-providers.md) | Hugging Face and Docker Hub connections |
 | [Sandbox](sandbox.md) | Docker on this machine, the Boat key |
+| [API access](../api.md#tokens) | Tokens for scripts and assistants on other machines |
 | [General](other.md) | Tour and checklist |
 
 ## Variables

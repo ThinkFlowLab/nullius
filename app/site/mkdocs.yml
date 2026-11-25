@@ -78,6 +78,7 @@ nav:
           - Core concepts: concepts.md
       - Run evaluations:
           - Run builder: builder.md
+          - From another machine: api.md
       - Understand results:
           - Read results: results.md
           - Judgement: judgement.md

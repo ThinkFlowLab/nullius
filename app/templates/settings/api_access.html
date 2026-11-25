@@ -1,0 +1,28 @@
+{# The HTTP API's tokens (nullius.access), outside the form: api-access.js draws the state and answers the buttons. #}
+<section class="st-section" id="api-access" aria-labelledby="api-access-h" data-state='{{ api_tokens|tojson }}'{% if writable %} data-csrf="{{ csrf }}" data-create="{{ url_for('settings_api_create') }}" data-revoke="{{ url_for('settings_api_revoke') }}"{% endif %}>
+  <div class="st-section-head"><h2 id="api-access-h">API access</h2><p>Tokens for scripts and assistants on other machines.</p></div>
+  <fieldset class="st-card st-api-new" data-api-new hidden>
+    <legend><svg class="ic st-icon" aria-hidden="true"><use href="#i-token"/></svg><span data-api-new-name></span></legend>
+    <div class="st-api-shown"><code class="mono small st-api-token" data-api-new-token></code><button type="button" class="btn sm" data-api-copy><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button><button type="button" class="btn sm ghost" data-api-done>Done</button></div>
+    <p class="st-about" role="status">Copy it now: it is shown once.</p>
+  </fieldset>
+  <fieldset class="st-card" data-api-list hidden>
+    <legend><svg class="ic st-icon" aria-hidden="true"><use href="#i-token"/></svg>Tokens</legend>
+    <div class="st-sandbox-rows" data-api-rows></div>
+  </fieldset>
+  {% if writable %}
+  <fieldset class="st-card">
+    <legend><svg class="ic st-icon" aria-hidden="true"><use href="#i-plus"/></svg>New token</legend>
+    <form class="st-sandbox-rows" data-api-add autocomplete="off">
+      <div class="st-row"><label class="st-row-label" for="api-token-name">Name</label>
+        <div class="st-row-value"><input class="st-input" id="api-token-name" name="name" type="text" spellcheck="false" autocomplete="off" maxlength="64" required></div></div>
+      {% for field, label, choices in [('scope', 'Access', [('read', 'Read', 'Results, recipes and runs'), ('run', 'Read and run', 'Also start and stop runs, ask a judge, save recipes')]),
+                                       ('days', 'Expires', [('', 'Never', ''), ('30', '30 days', ''), ('90', '90 days', ''), ('365', '1 year', '')])] %}
+      <div class="st-row"><span class="st-row-label" id="api-token-{{ field }}">{{ label }}</span>
+        <div class="st-row-value"><div class="st-tabs" role="group" aria-labelledby="api-token-{{ field }}" data-api-choice="{{ field }}">{% for value, text, tip in choices %}<button type="button" class="st-tab{{ ' on' if loop.first }}" aria-pressed="{{ 'true' if loop.first else 'false' }}" data-value="{{ value }}"{% if tip %} title="{{ tip }}"{% endif %}>{{ text }}</button>{% endfor %}</div></div></div>
+      {% endfor %}
+      <div class="st-row"><span class="st-row-label"></span><span class="st-value"><button type="submit" class="btn sm">Create</button></span></div>
+    </form>
+  </fieldset>
+  {% endif %}
+</section>

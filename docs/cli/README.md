@@ -23,6 +23,7 @@ From a source checkout, replace `nullius` with
 | [Model prices](../settings/model-prices.md) | `nullius prices [list\|update\|set\|remove]` |
 | [Migration](../getting-started.md#migrate-an-existing-checkout) | `nullius migrate --from CHECKOUT [--secrets PATH] [--apply]` |
 | [Provider records](../settings/model-providers.md#older-settings) | `nullius migrate --providers [--apply]` |
+| [From another machine](../api.md) | `nullius access`, `nullius remote`, `nullius mcp` |
 | [Pages from a shell](pages.md) | |
 | [Exit codes and output](exit-codes.md) | |
 

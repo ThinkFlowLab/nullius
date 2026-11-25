@@ -15,6 +15,7 @@ Each page's command, or why there is none.
 | `/workspaces/open/<name>` | `nullius serve <root>...`, `WORKSPACE=<name>` |
 | `/workspaces` | `nullius workspace list [--home DIR] [--json]` |
 | `/settings` | User `settings.json`, or the environment; `nullius paths` locates the file |
+| Settings, API access | `nullius access create`, `list`, `revoke` |
 | `/benchmarks` | `nullius standard list` for standard entries; Harbor entries on the page |
 | `/agents`, `/capabilities` | `nullius standard list` includes agents, capabilities and their proven ports |
 | A benchmark's *Prove it* | `nullius standard prove KEY` ([Prove](prove.md)) |
@@ -32,15 +33,19 @@ Each page's command, or why there is none.
 | A picture the agent sent its model | `/trial/…/picture/<sha256>` |
 | One task side by side | `/compare/task/<task>` |
 
+## From another machine
+
+`nullius remote` asks a served Nullius for the same reads, and checks, starts and stops its recipes: [From another machine](../api.md).
+
 ## No command yet
 
 | Page | What it would be |
 | --- | --- |
 | `/trial/…/save-trace` | a `harbor-trace-v1` writer |
-| `/judge/…` | `judge.cli job <root> <id> --confirm` |
+| `/judge/…` | `judge.cli job <root> <id> --confirm`; today `nullius remote judge` against a served Nullius |
 | Rename or delete a workspace | `nullius workspace rename`, `nullius workspace delete --yes` |
 | Unlink a workspace's root, delete its folder | `workspace.forget`, `execution.delete`; today `POST /workspaces/<name>/roots/unlink` and `/roots/delete` |
-| `/new-run` | `recipes.cli`; today `POST /new-run/runner` |
+| `/new-run` | `recipes.cli`; today `POST /new-run/runner`, or `nullius remote check` and `run` against a served Nullius |
 | Delete a launch | `execution.delete`; today `POST /launch/<key>/delete` |
 | `/launches`, add a launch to a workspace | today `POST /launch/<key>/add` |
 
