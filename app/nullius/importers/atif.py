@@ -429,7 +429,9 @@ def _trial_roots(job_dir: str) -> list:
         return []
     roots, root = [], os.path.commonpath([path for _, path in found])
     while True:
-        if all(_trial_name(path, root) == name for name, path in found):
+        # a name another document's took is its own name with a digest of its path
+        if all(name in (_trial_name(path, root), _trial_name(path, root) + "__"
+                        + hashlib.sha256(_shown(path, root).encode()).hexdigest()[:8]) for name, path in found):
             roots.append(root)
         if os.path.dirname(root) == root:
             return roots

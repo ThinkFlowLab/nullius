@@ -144,6 +144,17 @@ class OneFolderPerSource(unittest.TestCase):
                 self.assertNotEqual(jb, ja)
                 self.assertEqual(parse.parse_job(ja).uid, old.uid)
 
+    def test_a_conversion_from_before_ids_with_names_of_colliding_paths_keeps_its_folder(self):
+        src, out = self.tmp / "x" / "run", str(self.tmp / "imported")
+        write_doc(str(src / "a"), "b.json", minimal())
+        write_doc(str(src), "a__b.json", minimal())
+        [job] = atif.convert(str(src), out)
+        self.assertEqual(len([t for t in trials(job) if t.startswith("a__b__")]), 2)
+        forget_id(job, command="python3 -m nullius.importers.cli run")
+        uid = parse.parse_job(job).uid
+        self.assertEqual(atif.convert(str(src), out), [job])
+        self.assertEqual(parse.parse_job(job).uid, uid)
+
     def test_one_path_in_two_formats_is_two_sources(self):
         src, out = str(self.tmp / "both"), str(self.tmp / "imported")
         write_doc(src, "export.json", otlp_doc())
