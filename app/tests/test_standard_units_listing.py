@@ -56,6 +56,12 @@ for line in sys.stdin:
     print(json.dumps(out), flush=True)
 '''
 MODE = {"mode": {"summary": "how many tasks the listing gives", "values": ["long", "short"], "default": "long"}}
+REJECTING_DRIVER = r'''import json, os, sys
+for line in sys.stdin:
+    message = 'Authentication failed for ' + os.environ['HF_TOKEN'] + os.environ.get('EXTRA_TOKEN', '')
+    print(message, file=sys.stderr, flush=True)
+    print(json.dumps({'error': message}), flush=True)
+'''
 
 
 class Scratch(unittest.TestCase):
@@ -327,6 +333,50 @@ def gated(bench: dict) -> dict:
 
 
 class Licences(Scratch):
+    def test_driver_secrets_are_absent_from_files_and_command_output(self):
+        self.b = gated(self.b)
+        self.b["environments"]["data"]["needs_secrets"].append({"name": "EXTRA_TOKEN", "to": "driver"})
+        Path(self.b["_here"], "driver.py").write_text(REJECTING_DRIVER)
+        extra = "another-made-up-credential"
+        for token in ("made-up-listing-credential", "tiny"):
+            with self.subTest(token=token):
+                files = []
+                remove = shutil.rmtree
+
+                def capture(path, **kwargs):
+                    files.extend(p.read_bytes() for p in Path(self.tmp).rglob("*") if p.is_file())
+                    remove(path, **kwargs)
+
+                with mock.patch.object(units.run, "Licences", return_value={
+                        "HF_TOKEN": {"kind": "value", "value": token},
+                        "EXTRA_TOKEN": {"kind": "value", "value": extra}}), \
+                        mock.patch.object(units.shutil, "rmtree", capture):
+                    code, out, err = self.cli("units", "described", "--dataset", "all")
+                self.assertEqual((code, out), (2, ""))
+                self.assertTrue(files)
+                for content in (out.encode(), err.encode(), *files):
+                    with self.subTest(content=content):
+                        self.assertNotIn(token.encode(), content)
+                        self.assertNotIn(extra.encode(), content)
+                self.assertIn("Authentication failed for [REDACTED]", err)
+                self.assertIn(b"Authentication failed for [REDACTED][REDACTED]\n", files)
+
+    def test_a_secret_in_a_successful_reply_is_redacted_before_caching(self):
+        self.b = gated(self.b)
+        self.b["driver"]["describe"] = False
+        Path(self.b["_here"], "driver.py").write_text(
+            REJECTING_DRIVER.replace("{'error': message}", "{'units': [message]}"))
+        token = 'made-up-quoted-"credential'
+        with mock.patch.dict(os.environ, {"HF_TOKEN": token}):
+            code, out, err = self.cli("units", "described", "--dataset", "all")
+        self.assertEqual(code, 0, err)
+        self.assertIn("Authentication failed for [REDACTED]", out)
+        cached = units.listing(self.b, "all")
+        self.assertEqual(cached["tasks"][0]["id"], "Authentication failed for [REDACTED]")
+        for content in (out, err, *(p.read_text() for p in Path(self.tmp).rglob("*") if p.is_file())):
+            self.assertNotIn(token, content)
+            self.assertNotIn(json.dumps(token)[1:-1], content)
+
     def given(self):
         path = Path(self.b["_here"], "given")
         return path.read_text() if path.exists() else None

@@ -34,10 +34,13 @@ import json
 import os
 import random
 import shutil
+import subprocess
 import tempfile
+import threading
 from typing import Dict, List, Optional, Tuple
 
 from nullius import ondisk, paths
+from nullius.redact import redact
 from nullius.standard.contract import definitions
 from nullius.standard.protocols import jsonl
 from nullius.standard.requirements import install
@@ -182,6 +185,58 @@ def missing_text(needs: List[dict]) -> str:
         for n in needs)
 
 
+class _ListingProc(jsonl.Proc):
+    """A listing's driver with its supplied secrets removed before output is kept."""
+
+    def __init__(self, cmd, cwd, env, log, credentials):
+        super().__init__(cmd, cwd, env, log)
+        self.secrets = sorted(set(credentials.values()) - {""}, key=len, reverse=True)
+
+    def _clean(self, value):
+        if isinstance(value, dict):
+            return {self._clean(k): self._clean(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._clean(v) for v in value]
+        if isinstance(value, str):
+            for secret in self.secrets:
+                value = value.replace(secret, "[REDACTED]")
+            return redact(value)
+        return value
+
+    def start(self):
+        self.err = open(self.log, "a")
+        try:
+            self.p = subprocess.Popen(self.cmd, cwd=self.cwd, env=self.env, stdin=subprocess.PIPE,
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1,
+                                      start_new_session=True)
+        except OSError:
+            self.err.close()
+            raise
+        self._stderr = threading.Thread(target=self._log, daemon=True)
+        self._stderr.start()
+        threading.Thread(target=self._read, daemon=True).start()
+        return self
+
+    def _log(self):
+        with self.p.stderr, open(self.log, "a") as out:
+            for line in self.p.stderr:
+                out.write(self._clean(line))
+                out.flush()
+
+    def _read(self):
+        for line in self.p.stdout:
+            try:
+                line = json.dumps(self._clean(json.loads(line)))
+            except ValueError:
+                line = self._clean(line)
+            self.lines.put(line)
+        self.lines.put(None)
+
+    def close(self):
+        super().close()
+        self._stderr.join()
+
+
 def _start(bench: dict, ds: dict, values: dict, work: str, licences=None) -> jsonl.Proc:
     light = _light(bench)
     try:
@@ -193,13 +248,15 @@ def _start(bench: dict, ds: dict, values: dict, work: str, licences=None) -> jso
     home, cwd = os.path.join(work, "driver-home"), os.path.join(work, "driver")
     os.makedirs(home)
     os.makedirs(cwd)
-    env = run.base_env(home, {**extra, **run.driver_secrets(bench, _held(bench, licences)),
+    credentials = run.driver_secrets(bench, _held(bench, licences))
+    env = run.base_env(home, {**extra, **credentials,
                               "NULLIUS_UPSTREAM": up or "", "NULLIUS_DATASET": data or "",
                               "NULLIUS_DATASET_ID": ds["id"], "PYTHONPATH": run.driver_path(),
                               "PYTHONDONTWRITEBYTECODE": "1", "NULLIUS_VERSION": str(bench.get("_version") or ""),
                               **run.option_env(values)})
     try:
-        return jsonl.Proc(cmd, cwd, env, os.path.join(work, "driver.log")).start()
+        args = (cmd, cwd, env, os.path.join(work, "driver.log"))
+        return (_ListingProc(*args, credentials) if credentials else jsonl.Proc(*args)).start()
     except OSError as e:
         raise Refused(f"cannot start {bench['key']}'s driver for its listing: {e}")
 

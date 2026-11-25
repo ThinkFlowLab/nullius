@@ -26,7 +26,7 @@ from nullius.standard.pages import recipe
 from nullius.standard.protocols import jsonl
 from nullius.standard.requirements import install
 from nullius.standard.runner import job, sets, units
-from tests.test_standard_units_listing import DRIVER
+from tests.test_standard_units_listing import DRIVER, REJECTING_DRIVER, gated
 from .test_routes import web
 
 FIXTURES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tests", "fixtures", "standard", "catalogue")
@@ -293,6 +293,30 @@ class AFirstListing(Case):
     """Each answer of the state function: in the cache, shown at once; light, made out of the request with what it
     fetches said; full, never started, with what it needs said; refused, why. No request starts a fetch or an
     install inside itself."""
+
+    def test_preparation_keeps_and_shows_no_driver_secret(self):
+        from web import catalogue
+        self.b = gated(self.b)
+        Path(self.b["_here"], "driver.py").write_text(REJECTING_DRIVER)
+        token = "made-up-page-credential"
+        self.stack.enter_context(patch.object(units.run, "Licences", return_value={
+            "HF_TOKEN": {"kind": "value", "value": token}}))
+        self.stack.enter_context(patch.dict(catalogue._PREPARING, {}, clear=True))
+
+        def join():
+            for job in catalogue._PREPARING.values():
+                job["thread"].join(5)
+                self.assertFalse(job["thread"].is_alive())
+
+        self.addCleanup(join)
+        first = self.post("/benchmarks/described/tasks/all/prepare", {})
+        join()
+        record = catalogue._PREPARING[catalogue._listing_key(self.b, "all")]
+        shown = self.listing()
+        for value in (json.dumps(first), record["error"], json.dumps(shown)):
+            self.assertNotIn(token, value)
+        self.assertIn("Authentication failed for [REDACTED]", record["error"])
+        self.assertEqual(shown["error"], record["error"])
 
     def test_preparation_errors_belong_to_the_resolved_version(self):
         from web import catalogue
