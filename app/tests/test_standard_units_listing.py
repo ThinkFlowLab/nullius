@@ -380,6 +380,15 @@ class Licences(Scratch):
             self.assertNotIn(token, content)
             self.assertNotIn(json.dumps(token)[1:-1], content)
 
+    def test_a_driver_that_ends_says_why_whatever_the_bytes_of_its_stderr(self):
+        self.b = gated(self.b)
+        Path(self.b["_here"], "driver.py").write_text("import os, sys\nsys.stdin.readline()\n"
+            "sys.stderr.buffer.write(b'\\xff failed for ' + os.environ['HF_TOKEN'].encode() + b'\\n')\n")
+        with mock.patch.dict(os.environ, {"HF_TOKEN": "made-up-bytes"}):
+            code, out, err = self.cli("units", "described", "--dataset", "all")
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("ended without replying (\ufffd failed for [REDACTED])\n", err)
+
     def given(self):
         path = Path(self.b["_here"], "given")
         return path.read_text() if path.exists() else None

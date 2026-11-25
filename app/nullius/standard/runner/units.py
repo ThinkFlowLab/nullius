@@ -207,8 +207,8 @@ class _ListingProc(jsonl.Proc):
         self.err = open(self.log, "a")
         try:
             self.p = subprocess.Popen(self.cmd, cwd=self.cwd, env=self.env, stdin=subprocess.PIPE,
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1,
-                                      start_new_session=True)
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="replace",
+                                      bufsize=1, start_new_session=True)
         except OSError:
             self.err.close()
             raise
@@ -232,9 +232,13 @@ class _ListingProc(jsonl.Proc):
             self.lines.put(line)
         self.lines.put(None)
 
+    def _tail(self):
+        self._stderr.join(3)                    # the driver's last lines written to the log first
+        return super()._tail()
+
     def close(self):
         super().close()
-        self._stderr.join()
+        self._stderr.join(3)                    # a child of the driver may still hold its stderr
 
 
 def _start(bench: dict, ds: dict, values: dict, work: str, licences=None) -> jsonl.Proc:
