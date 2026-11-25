@@ -75,4 +75,5 @@ nullius standard recount <dir> [--read CMD] [--yes REGEX] [--compare A B] [--jso
 | Yes or no | An answer reads yes when its label is the recorded one's, or matches `--yes`. |
 | The result | Each arm's yes by target, and an exact sign test between two arms. |
 | Goes on | Run again, it sends only the unanswered, under its cap or one above the spend. |
+| Reading rule | Earlier studies using the built-in reader can resume; user-supplied rules must still match. |
 | `recount` | A kept study or replay read again by another rule, with no send. |

@@ -545,6 +545,21 @@ def _canonical(arguments) -> str:
     return json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
+# Kept for the fingerprint of plans made before failed replies were excluded.
+def _previous_first_tool_call(a: dict) -> str:
+    """The default rule: the first tool call's name and its arguments as canonical JSON; ``no call`` for an
+    answer without one; ``error: ...`` for a failed one."""
+    if a.get("status") != 200:
+        return f"error: HTTP {a.get('status')}"
+    if a.get("error"):
+        e = a["error"]
+        return "error: " + str(e.get("code") or e.get("type") or e.get("message") if isinstance(e, dict) else e)[:80]
+    if not a.get("tool_calls"):
+        return "no call"
+    c = a["tool_calls"][0]
+    return f"{c['name']} {_canonical(c.get('arguments'))}"
+
+
 def first_tool_call(a: dict) -> str:
     """The default rule: the first tool call's name and its arguments as canonical JSON; ``no call`` for an
     answer without one; ``error: ...`` for a failed one."""

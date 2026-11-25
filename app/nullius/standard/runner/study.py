@@ -375,6 +375,11 @@ def study(out: str, targets: Sequence[Target], arms: Sequence[Arm] = (), times: 
     if kept is not None:
         if kept.get("schema") != SCHEMA or not isinstance(kept.get("plan"), dict):
             raise Refused(f"{out}/study.json is not a study's")
+        if rule is rp.first_tool_call:
+            previous = types.FunctionType(rp._previous_first_tool_call.__code__.replace(
+                co_name="first_tool_call", co_qualname="first_tool_call"), vars(rp))
+            if kept["plan"].get("rule") == dict(plan["rule"], fingerprint=_function_fingerprint(previous)):
+                kept["plan"]["rule"] = plan["rule"]
         if not plan["rule"].get("command") and (not plan["rule"].get("fingerprint")
                                               or not kept["plan"].get("rule", {}).get("fingerprint")):
             if not same_rule:

@@ -5,6 +5,7 @@ endpoint on loopback, as a run records them; the studies send to the same endpoi
 from __future__ import annotations
 
 import io
+import inspect
 import json
 import os
 import subprocess
@@ -100,6 +101,33 @@ class SignTest(unittest.TestCase):
 
 
 class Studies(StudyCase):
+    def test_the_previous_default_reader_resumes_and_migrates_its_plan(self):
+        source = inspect.getsource(replay.first_tool_call)
+        source = source.replace('    if a.get("failed"):\n        return "error: " + a["failed"]\n', '')
+        scope = dict(vars(replay))
+        exec(compile(source, "<previous reader>", "exec"), scope)
+        previous = scope["first_tool_call"]
+        previous.rule = replay.first_tool_call.rule
+        prices = {"m": {"input": 1.0, "output": 100.0}}
+        Upstream.cost = 0.1
+        before = self.run_study(rule=previous, max_usd=0.25, prices=prices)
+        self.assertEqual((before["state"], before["left"]), ("stopped", 10))
+        kept = Path(self.out, "study.json").read_bytes()
+        dry = self.run_study(max_usd=0.5, prices=prices, dry_run=True)
+        self.assertEqual(dry["sends"]["answered"], 2)
+        self.assertEqual(Path(self.out, "study.json").read_bytes(), kept)
+        after = self.run_study(max_usd=0.5, prices=prices)
+        self.assertEqual((after["left"], len(Upstream.seen)), (8, 4))
+        self.assertEqual(after["plan"]["rule"], study.rule_record(replay.first_tool_call))
+        self.assertEqual(json.loads(Path(self.out, "study.json").read_text())["plan"]["rule"], after["plan"]["rule"])
+        with self.assertRaisesRegex(study.Refused, "other reading rule"):
+            self.run_study(rule=previous, max_usd=0.5, prices=prices)
+        changed = lambda a: "changed"
+        changed.rule = replay.first_tool_call.rule
+        with self.assertRaisesRegex(study.Refused, "other reading rule"):
+            self.run_study(rule=changed, max_usd=0.5, prices=prices)
+        self.assertEqual(len(Upstream.seen), 4)
+
     def test_identical_requests_keep_the_largest_prompt_booking(self):
         Model.answers = {}
         request = self.prepared(call=1).request
