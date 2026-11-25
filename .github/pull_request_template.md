@@ -1,10 +1,10 @@
 <!--
-Open it as a draft. Under 150 words, 250 for a large feature, images aside.
-What was wrong, then what changed. One fact per line; fragments are fine. Drop
-facts, not words. No background, no file tour: the diff shows it. No key, email
-address or private link.
-Title: type(scope): summary, as in AGENTS.md. A squash makes it the commit and
-this body its message: delete this comment, and the Closes line without an issue.
+Open it as a draft. Under 150 words, 250 for a large feature, images and Agents
+aside. What was wrong, then what changed. One fact per line; fragments are fine.
+Drop facts, not words. No background, no file tour: the diff shows it. No key,
+email address or private link.
+Title: type(scope): summary, as in AGENTS.md. A squash makes it the whole commit.
+Without an issue, delete the Closes line.
 
 Example:
 
@@ -26,6 +26,11 @@ Closes #n
 
 - Two hosts that already share a file share it until one key is uploaded again.
 - Undo: revert.
+
+## Agents
+
+- Claude Code, Opus 5.5: code
+- Codex, GPT-6.2 Sol: review
 -->
 
 Closes #
@@ -44,3 +49,8 @@ files changed: "Nothing visible changes." Else delete. -->
 ## Verified
 
 ## Risk
+
+## Agents
+
+<!-- Each agent and model that wrote, reviewed or tested the change, and what it
+did. A model you do not know is "unknown", never a guess. By hand: "none". -->

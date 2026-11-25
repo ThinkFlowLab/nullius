@@ -90,5 +90,7 @@ decision by the repository owner.
 Commit messages are about the change and why it was made. No machine
 attribution: no `Co-Authored-By: Claude`, no session metadata, no generated-by
 signature. A real person who contributed is named as a co-author as usual.
+The agents and models used are named in the pull request, under `## Agents`; a
+squash keeps its title alone.
 
 Nothing merges without the repository owner's word.
