@@ -223,11 +223,11 @@
         {% if task_sets %}
         <div class="tasks-scroll"><table class="grid bench-sets">
           {% set made = task_sets|selectattr('version_label')|list %}
-          <thead><tr><th scope="col">Name</th><th scope="col">Dataset</th><th scope="col" class="num">{{ std.units.nouns|capitalize }}</th>{% if made %}<th scope="col">Made at</th>{% endif %}<th scope="col">Date</th></tr></thead>
+          <thead><tr><th scope="col">Name</th><th scope="col">Dataset</th><th scope="col" class="num">{{ std.units.nouns|capitalize }}</th>{% if made %}<th scope="col" class="bench-made">Made at</th>{% endif %}<th scope="col">Date</th></tr></thead>
           <tbody>{% for s in task_sets %}
             <tr><td><a href="{{ url_for('benchmark_tasks', key=b.key, dataset=s.dataset, set=s.name) }}">{{ s.label }}</a>{% if s.description %}<small class="muted small">{{ s.description }}</small>{% endif %}</td>
               <td>{{ (std.datasets|selectattr('id', 'equalto', s.dataset)|map(attribute='label')|first) or s.dataset }}</td>
-              <td class="num">{{ s.units }}</td>{% if made %}<td>{{ s.version_label }}</td>{% endif %}<td>{{ s.date[:10] }}</td></tr>
+              <td class="num">{{ s.units }}</td>{% if made %}<td class="bench-made nowrap">{{ s.version_label }}</td>{% endif %}<td class="nowrap">{{ s.date[:10] }}</td></tr>
           {% endfor %}</tbody>
         </table></div>
         {% endif %}

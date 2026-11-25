@@ -432,6 +432,8 @@ a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underli
 /* A benchmark's task sets, and a dataset's tasks: browsed, ticked and kept as a set (catalogue/tasks.html). */
 .bench-sets td, .bench-sets th { vertical-align: top; }
 .bench-sets small { display: block; }
+/* on a phone the version a set was made at stays on its own page, and the others fit the width */
+@media (max-width: 640px) { .bench-sets .bench-made { display: none; } .bench-sets th, .bench-sets td { padding: .55rem .4rem; } }
 .bench-setlinks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .bench-sets-group { margin: 14px 0 0; }
 .bench-ownsets { margin-top: 8px; }
