@@ -22,9 +22,9 @@ list, no history.
   upstream's code at a pin, in its own environment. Ask before writing more
   than glue.
 - **Reuse before adding**, for example `ondisk`, `redact`, `paths`, `providers`.
-- **No machine attribution** in a commit or a pull request: no assistant
-  `Co-Authored-By`, session link or generated-by line. Human co-authors
-  and existing commits stay.
+- **No machine attribution** in a commit: no assistant `Co-Authored-By`, session
+  link or generated-by line. A pull request names its agents and models under
+  `## Agents` alone. Human co-authors and existing commits stay.
 - **Nothing merges without the owner's word.**
 
 ## Pages and commands
@@ -138,7 +138,7 @@ The `file-issue` skill files both.
 - A pull request opens as a draft, with `Closes #n` when it finishes its issue,
   else `Refs #n`.
 - Title: `type(scope): summary`, lowercase except names, no final period. A squash
-  makes it the commit on `main`, and the body its message.
+  makes it the whole commit.
   - Types: `feat` `fix` `perf` `refactor` `docs` `test` `ci` `build` `chore` `revert`
   - Scopes: `standard` `catalogue` `runs` `traces` `compare` `judge` `builder`
     `web` `execution` `settings` `docs` `site` `ci` `release`
