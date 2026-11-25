@@ -359,6 +359,32 @@ class Studies(StudyCase):
                 self.assertEqual((doc["state"], doc["left"], doc["starts"][1]["answered"], doc["starts"][1]["failed"]),
                                  ("done", 0, 2, 0))
 
+    def test_saved_replies_without_failed_are_classified_before_resume(self):
+        Model.answers = {}
+        read = replay.command_rule("echo read")
+        bodies = ({"choices": [{"message": {"content": "partial"}, "finish_reason": "error"}]},
+                  {"choices": [{"message": {"content": "partial"}, "finish_reason": "stop"}],
+                   "error": {"code": 502, "message": "cut"}},
+                  {"choices": []})
+        for n, body in enumerate(bodies):
+            for completed in (True, False):
+                with self.subTest(body=body, completed=completed):
+                    out = os.path.join(self.tmp, f"old-{n}-{completed}")
+                    Upstream.body = body
+                    with mock.patch.object(replay, "_no_answer", return_value=None):
+                        before = self.run_study(out=out, times=1, targets=self.targets[:1], rule=read)
+                    self.assertEqual(before["state"], "done")
+                    rows = [json.loads(line) for line in Path(out, "completed.jsonl").read_text().splitlines()]
+                    self.assertTrue(all("failed" not in a for a in rows))
+                    if not completed:
+                        Path(out, "completed.jsonl").unlink()
+                    self.assertEqual(study._answered(out), {})
+                    self.assertEqual(study.recount(out, rule=read)["read"], 0)
+                    Upstream.body, Upstream.seen = None, []
+                    after = self.run_study(out=out, times=1, targets=self.targets[:1], rule=read)
+                    self.assertEqual((len(Upstream.seen), after["state"], after["left"]), (2, "done", 0))
+                    self.assertEqual([r["arms"]["recorded"]["answered"] for r in after["table"]], [1])
+
     def test_a_stopped_study_goes_on_and_no_call_is_sent_twice(self):
         """Stopped after 5 sends, started again: the 7 not answered are sent, each slot once in all."""
         doc = self.run_study(stop_after=5)

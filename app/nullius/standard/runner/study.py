@@ -311,6 +311,8 @@ def _answered(out: str) -> Dict[tuple, dict]:
     for a in rp._jsonl(os.path.join(out, "completed.jsonl")) + rp._jsonl(os.path.join(out, "answers.jsonl")):
         rp._inside(out, a.get("relay") or "", exchanges.FOLDER, (a.get("route") or "") + ".jsonl")
         slot = (a.get("target"), a.get("arm"), a.get("k"))
+        if "failed" not in a and "body" not in a and slot not in got:
+            a = dict(_reply(out, a.get("relay") or "", a.get("route") or "") or {}, **a)
         if rp.answered(a) and slot not in got:
             got[slot] = a
         elif slot in got and (a.get("relay"), a.get("route")) == (got[slot].get("relay"), got[slot].get("route")):

@@ -539,7 +539,8 @@ def answer(path: str, status: int, body: bytes, streamed: bool) -> dict:
 def answered(a: dict) -> bool:
     """Whether a send was answered: HTTP 200, not refused, and not a reply that ended on an error or holds no
     choice. Any other is a failure: not counted, and sent again when a study goes on."""
-    return a.get("status") == 200 and not a.get("refused") and not a.get("failed")
+    failed = a["failed"] if "failed" in a else _no_answer(a, (a.get("body") or "").encode(), bool(a.get("streamed")))
+    return a.get("status") == 200 and not a.get("refused") and not failed
 
 
 def _canonical(arguments) -> str:
