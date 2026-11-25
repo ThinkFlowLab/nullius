@@ -1,7 +1,7 @@
 """The builder's saved recipes from a shell, and a recipe launched as the builder's Run launches it.
 
     nullius recipes list [--json]
-    nullius recipes launch <recipe> [--where MACHINE]... [--workspace NAME] [--server URL] [--yes] [--wait] [--json]
+    nullius recipes launch <recipe> [--where MACHINE]... [--workspace NAME] [--server URL] [--yes] [--wait | --dry-run] [--json]
 
 ``list`` reads the saved recipes (``store.listing``) and writes nothing.
 
@@ -10,10 +10,12 @@ Run sends it: the builder's data (``GET /new-run``, which holds the form token),
 (``POST /new-run/runner``), what each machine lacks (``POST /new-run/prerequisites``), then ``POST /run``. The
 server makes the launch and follows it, as one it started from the page: one process follows a runs folder
 (``execution``), and the pages list the runs it follows. The recipe is a saved one, by its name or its id, or a
-recipe file as the builder exports it.
+recipe file as the builder exports it. ``--dry-run`` stops before ``POST /run`` and prints what the Review step
+shows: nothing starts, no job or workspace is made.
 
-The exit codes are the contract in ``docs/cli/exit-codes.md``: 0 done, 2 usage, 3 no such recipe, 4 refused (by the
-compile, a machine, the question Run asks, the server, or with ``--wait`` a launch that ended otherwise than done or paused).
+The exit codes are the contract in ``docs/cli/exit-codes.md``: 0 done (with ``--dry-run``: Run would start it), 2 usage,
+3 no such recipe, 4 refused (by the compile, a machine, the question Run asks, the server, or with ``--wait`` a launch
+that ended otherwise than done or paused).
 """
 from __future__ import annotations
 
@@ -29,7 +31,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from nullius import execution
+from nullius import execution, workspace
 from nullius.recipes import store
 
 EXIT_OK, EXIT_NOT_FOUND, EXIT_REFUSED = 0, 3, 4
@@ -98,9 +100,10 @@ def find(ref: str) -> dict:
     raise LookupError(f"no saved recipe or recipe file {ref}")
 
 
-def launch(server: Server, recipe: dict, where=None, into: str = "", yes: bool = False, now=None) -> dict:
-    """Send ``recipe`` as the builder's Run does; the server's answer to ``POST /run``, with ``review``, the rows of
-    the Review step, and ``launch``, the launch's key. ``Refused`` when the builder would not start it."""
+def review(server: Server, recipe: dict, where=None, into: str = "", yes: bool = False, now=None) -> tuple:
+    """What the builder's Review step shows for ``recipe``, nothing started: (the recipe as Run sends it, the answer
+    to ``POST /new-run/runner`` with ``prerequisites``, the answer to ``POST /new-run/prerequisites``, and
+    ``refused``, why Run would not start it, else "")."""
     if (recipe.get("harness") or "harbor") != STANDARD:
         raise Refused("a Harbor recipe runs by the script its Review step generates: docs/builder.md")
     status, text = server.send("GET", "/new-run")
@@ -115,20 +118,30 @@ def launch(server: Server, recipe: dict, where=None, into: str = "", yes: bool =
     stamp = (now or datetime.datetime.now()).strftime("%m%d-%H%M%S")
     recipe = dict(recipe, name=f"{recipe.get('name') or ''}-{stamp}", **({"where": where[0] if len(where) == 1 else list(where)} if where else {}))
     _, out = server.json("POST", "/new-run/runner", {"recipe": recipe})
-    if out.get("errors"):
-        raise Refused(" ".join(e.get("message", "") for e in out["errors"]))
-    if out.get("confirm") and not yes:
-        raise Refused(f"Run asks first: {out['confirm']} --yes answers yes")
-    _, pre = server.json("POST", "/new-run/prerequisites", {"recipe": recipe, "provider": recipe.get("provider") or ""})
-    if not pre.get("ready"):
-        lacks = [f"{m.get('label')}: {r.get('label')}" + (f" ({r['detail']})" if r.get("detail") else "")
-                 for m in pre.get("machines") or [] for r in m.get("rows") or [] if r.get("state") == "missing"]
-        raise Refused("a machine lacks what the run needs: " + ("; ".join(lacks + list(pre.get("errors") or [])) or "see Review"))
+    pre = {"machines": [], "ready": False, "errors": []}           # an error of the compile: no machine is asked
+    if not out.get("errors"):
+        _, pre = server.json("POST", "/new-run/prerequisites", {"recipe": recipe, "provider": recipe.get("provider") or ""})
+    lacks = [f"{m.get('label')}: {r.get('label')}" + (f" ({r['detail']})" if r.get("detail") else "")
+             for m in pre.get("machines") or [] for r in m.get("rows") or [] if r.get("state") == "missing"]
+    why = ("A workspace's name is lowercase letters, digits and dashes." if into and workspace.slug(into) != into
+           else " ".join(e.get("message", "") for e in out["errors"]) if out.get("errors")
+           else f"Run asks first: {out['confirm']} --yes answers yes" if out.get("confirm") and not yes
+           else "" if pre.get("ready")
+           else "a machine lacks what the run needs: " + ("; ".join(lacks + list(pre.get("errors") or [])) or "see Review"))
+    return recipe, dict(out, prerequisites=pre, refused=why)
+
+
+def launch(server: Server, recipe: dict, where=None, into: str = "", yes: bool = False, now=None) -> dict:
+    """Send ``recipe`` as the builder's Run does; the server's answer to ``POST /run``, with ``review``, the rows of
+    the Review step, and ``launch``, the launch's key. ``Refused`` when the builder would not start it."""
+    recipe, seen = review(server, recipe, where, into, yes, now)
+    if seen["refused"]:
+        raise Refused(seen["refused"])
     body = {"name": recipe["name"], "where": recipe.get("where") or "local", "recipe": recipe, **({"workspace": into} if into else {})}
     status, got = server.json("POST", "/run", body)
     if not got.get("ok"):
         raise Refused(got.get("error") or f"POST /run: HTTP {status}")
-    return dict(got, review=out.get("review") or [], launch=f"run:{got['id']}")
+    return dict(got, review=seen.get("review") or [], launch=f"run:{got['id']}")
 
 
 def wait(server: Server, run_ids, every: float = POLL_SECONDS) -> dict:
@@ -170,6 +183,8 @@ def _launch(a) -> int:
         print(e, file=sys.stderr)
         return EXIT_REFUSED
     server = Server(a.server or default_server())
+    if a.dry_run:
+        return _dry_run(server, recipe, a)
     try:
         got = launch(server, recipe, a.where, a.workspace or "", a.yes)
         runs = got.get("runs") or [got]
@@ -191,6 +206,33 @@ def _launch(a) -> int:
     return EXIT_REFUSED if any(s.get("state") != "done" for s in ended.values()) else EXIT_OK
 
 
+def _dry_run(server: Server, recipe: dict, a) -> int:
+    """What Run would launch, as the Review step shows it; exit 0 when Run would start it."""
+    try:
+        _, seen = review(server, recipe, a.where, a.workspace or "", a.yes)
+    except Refused as e:
+        print(e, file=sys.stderr)
+        return EXIT_REFUSED
+    pre = seen["prerequisites"]
+    if a.json:
+        json.dump(seen, sys.stdout, indent=1, ensure_ascii=False)
+        sys.stdout.write("\n")
+    else:
+        for _, label, value in seen.get("review") or []:
+            print(f"{label}: {value}")
+        for m in pre.get("machines") or []:
+            lacks = [f"{r.get('label')} {r.get('state')}" + (f" ({r['detail']})" if r.get("detail") else "")
+                     for r in m.get("rows") or [] if r.get("state") != "ok"]
+            print(f"Prerequisites, {m.get('label')}: {'; '.join(lacks) or 'ready'}")
+        for note in (seen.get("notes") or []) + (pre.get("notes") or []):
+            print(f"Note: {note}")
+        print("Not launched: --dry-run")
+    if seen["refused"]:
+        print(seen["refused"], file=sys.stderr)
+        return EXIT_REFUSED
+    return EXIT_OK
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="nullius recipes", description=__doc__.split("\n\n")[0],
                                  epilog="exit codes: 0 done, 2 usage, 3 no such recipe, 4 refused")
@@ -204,7 +246,9 @@ def main(argv=None) -> int:
     la.add_argument("--workspace", metavar="NAME", help="the workspace the launch goes into, made when there is none (default: the open one, as Run)")
     la.add_argument("--server", metavar="URL", help="the Nullius server on this machine (default http://127.0.0.1:APP_PORT, else 5057)")
     la.add_argument("--yes", action="store_true", help="answer yes to the question Run asks before a run of every unit")
-    la.add_argument("--wait", action="store_true", help="return when the launch has ended or paused on a question; exit 4 unless it ended done")
+    ends = la.add_mutually_exclusive_group()
+    ends.add_argument("--wait", action="store_true", help="return when the launch has ended or paused on a question; exit 4 unless it ended done")
+    ends.add_argument("--dry-run", action="store_true", help="print what the Review step shows and launch nothing; exit 0 when Run would start it")
     la.add_argument("--json", action="store_true", help="one JSON document: the server's answer to the launch")
     a = ap.parse_args(argv)
     return {"list": _list, "launch": _launch}[a.cmd](a)

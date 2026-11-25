@@ -20,7 +20,7 @@ Each page's command, or why there is none.
 | A benchmark's *Prove it* | `nullius standard prove KEY` ([Prove](prove.md)) |
 | *Prove its ports* | `nullius standard conform KEY` ([Conform](conform.md)) |
 | `/run` | `nullius standard run` per dataset and choice, `--shard I/N` per machine, in the shell ([Run](run.md)) |
-| `/new-run`, its Run | `nullius recipes launch <recipe> [--where MACHINE] [--workspace NAME]`, through the server ([Launch a recipe](recipes.md)) |
+| `/new-run`: its Review, its Run | `nullius recipes launch <recipe> [--dry-run]`, through the server ([Launch a recipe](recipes.md)) |
 | `/recipes` | `nullius recipes list [--json]` |
 
 ## While the app runs

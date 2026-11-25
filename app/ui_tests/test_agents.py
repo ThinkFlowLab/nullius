@@ -453,8 +453,9 @@ class BuilderStandard(unittest.TestCase):
 
     def test_recipes_launch_starts_the_plan_run_starts_into_the_workspace_it_names(self):
         """`nullius recipes launch` asks the server what the builder asks it: a saved recipe, on a host, starts the
-        plan Run starts for the same recipe, into the workspace named; the launch's key is printed. Run's question is
-        refused without --yes and a recipe that is not there exits 3, nothing started."""
+        plan Run starts for the same recipe, into the workspace named; the launch's key is printed. --dry-run prints the
+        Review step's rows and starts nothing. Run's question is refused without --yes and a recipe that is not there
+        exits 3, nothing started."""
         import contextlib, datetime, io
         from nullius import prerequisites
         from nullius.recipes import cli as recipes, store
@@ -482,10 +483,21 @@ class BuilderStandard(unittest.TestCase):
             self.assertEqual(recipes.main(["launch", "fake on two", "--server", "http://localhost"]), 0)
         self.assertRegex(out.getvalue(), r"^launch run:fake-\d{4}-\d{6}-1\n")
         self.assertEqual(into[-1], "")                                                    # no workspace named: the open one, as Run
+        held = (list(self.started), list(into))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(recipes.main(["launch", "fake on two", "--dry-run", "--workspace", "dry", "--server", "http://localhost"]), 0)
+            self.assertEqual(recipes.main(["launch", "fake on two", "--dry-run", "--json", "--server", "http://localhost"]), 0)
+        shown, doc = out.getvalue().split("Not launched: --dry-run\n")
+        self.assertRegex(shown, r"^Benchmark: .*\nRunner: Nullius\n(.*\n)*Scope: first 2 .*\n(.*\n)*Prerequisites, this machine: ready\n")
+        self.assertEqual((json.loads(doc)["refused"], json.loads(doc)["prerequisites"]["ready"]), ("", True))
+        self.assertEqual((self.started, into), held)                                       # no run, no workspace
         self.started.clear()
         store.save(self.recipe(name="every", title="every unit", limit=""))
         with contextlib.redirect_stderr(io.StringIO()) as err:
             self.assertEqual(recipes.main(["launch", "every unit", "--server", "http://localhost"]), 4)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(recipes.main(["launch", "every unit", "--dry-run", "--server", "http://localhost"]), 4)
+            self.assertIn("\nScope: all ", out.getvalue())
             self.assertEqual(recipes.main(["launch", "nowhere", "--server", "http://localhost"]), 3)
         self.assertIn("--yes answers yes", err.getvalue())
         self.assertEqual(self.started, [])
