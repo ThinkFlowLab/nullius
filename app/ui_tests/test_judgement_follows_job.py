@@ -265,7 +265,12 @@ class EachTryItsOwn(unittest.TestCase):
                 patch.object(web.judge, "_trial_ids_and_states", return_value={}), \
                 patch.object(web.judge.batch, "ask_states", asked), web.app.test_request_context("/"):
             job = parse.parse_job(str(d))
-            web.judge.judge_trial(job, next(t for t in job.trials if t.trial_name == TRIAL), "k", calibration={})
+            t = next(t for t in job.trials if t.trial_name == TRIAL)
+            web.judge.judge_trial(job, t, "k", calibration={})
+            web.judge.store.save(str(tmp / "data"), job.uid, TRIAL, {"questions": Q.VERSION, "answers": {
+                "control_failure_cause": {"choice": "x"}}}, started=web.judge.started_of(t))
+            web.judge.store.save(str(tmp / "data"), job.uid, f"{TRIAL}.try-1", {"questions": Q.VERSION, "answers": {
+                "failure_cause": {"choice": "unstamped"}}}, lane="llm")                  # under the try's name, before starts were kept
             (d / "retried").mkdir()
             shutil.move(d / TRIAL, d / "retried" / f"{TRIAL}.try-1")                # the runner tries the attempt again
             shutil.copytree(d / "retried" / f"{TRIAL}.try-1", d / TRIAL)
@@ -277,6 +282,9 @@ class EachTryItsOwn(unittest.TestCase):
             self.assertEqual(web.judge.judgement_of(job, first)["answers"]["failure_cause"]["choice"], "first")
             self.assertIsNone(web.judge.judgement_of(job, last))
             self.assertEqual([web.judge.judgement_of(job, t, lane="llm") for t in (first, last)], [None, None])   # no start: whose is unknown
+            side = SimpleNamespace(present=True, failed=True, broke_tests=False, control="nop", job_id=job.job_id, trial_name=TRIAL)
+            report = SimpleNamespace(rows=[SimpleNamespace(verdict="unclear", task_base="hello", nop=side, oracle=SimpleNamespace(present=False))])
+            self.assertEqual(web.judge.triage_summary(report, [job])["judged"], 0)       # the first try's cause, not the last's
 
 
 if __name__ == "__main__":

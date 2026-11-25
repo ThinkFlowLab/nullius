@@ -150,10 +150,12 @@ def _of(rec: Optional[dict], started: Optional[str], strict: bool = False) -> bo
     runs an attempt again under its trial's name, and what was asked of the
     try before is not this one's. A record from before tries were told
     apart, or a check that names no start, takes it as it is, unless
-    `strict` (an attempt with several tries): which try it judged is unknown."""
-    if not started or not rec:
+    `strict` (an attempt with several tries): both starts are then needed, and the same."""
+    if not rec:
         return True
-    return rec.get("trial_started_at") == started or (not strict and rec.get("trial_started_at") is None)
+    if strict:
+        return bool(started) and rec.get("trial_started_at") == started
+    return not started or rec.get("trial_started_at") in (started, None)
 
 
 def _try(version: str, started: str) -> str:
@@ -323,9 +325,9 @@ def _merged(cur: dict, data: dict) -> dict:
     """`cur`, a file's records, with the records `data` of an older store
     added: each one not there yet. Where `cur` has another under its key, the
     one shown stays there and the other is kept beside: of two tries, the
-    later try's shown and the earlier under its own start (`_try`); of one
-    try, the newer by `asked_at` shown and the other under ``<key>~<its
-    digest>``. Nothing is dropped, and a record copied in once is never
+    later try's shown; of one try, the newer by `asked_at`. The other is kept
+    under its start (`_try`), so a try still finds it, or with none under
+    ``<key>~<its digest>``. Nothing is dropped, and a record copied in once is never
     copied again (`ADOPTED`), even after a save has changed it."""
     cur = dict(cur)
     adopted = set(cur.get(ADOPTED) or ())
@@ -346,7 +348,7 @@ def _merged(cur: dict, data: dict) -> dict:
             tries = bool(a and b and a != b)
             newer = str(b) > str(a) if tries else str(rec.get("asked_at") or "") > str(now.get("asked_at") or "")
             shown, other = (rec, now) if newer else (now, rec)
-            slot = _try(k, other["trial_started_at"]) if tries else f"{k}~{_digest(other)}"
+            slot = _try(k, other["trial_started_at"]) if other.get("trial_started_at") else f"{k}~{_digest(other)}"
             if slot in cur:
                 slot = f"{slot}~{_digest(other)}"
             cur[k], cur[slot] = shown, other

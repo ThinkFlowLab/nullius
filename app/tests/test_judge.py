@@ -244,6 +244,13 @@ class Versions(unittest.TestCase):
         # a record from before tries were told apart is taken as it is
         store.save(d, "job", "old", self.record(questions.VERSION, task_completed={"noul": 0.5}))
         self.assertIsNotNone(store.load(d, "job", "old", started=retry))
+        # one of several tries is its own only by a start, and the same: an unstamped record is none's
+        self.assertIsNone(store.load(d, "job", "old", started=None, strict=True))
+        got = store.save(d, "job", "old", self.record(questions.VERSION, failure_cause={"choice": "x"}), strict=True)
+        self.assertEqual(sorted(got["answers"]), ["failure_cause"])
+        # a stamped record stays found by its start under an older, newer, unstamped one
+        old = {store._paths(d, "job", "t")[0]: [{questions.VERSION: dict(self.record(questions.VERSION, q={"choice": "y"}), asked_at="2099-01-01T00:00:00Z")}]}
+        self.assertEqual(sorted(store.load(d, "job", "t", started=retry, old=old, strict=True)["answers"]), ["failure_cause"])
 
 
 class Batch(unittest.TestCase):

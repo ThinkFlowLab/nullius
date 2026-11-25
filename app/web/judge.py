@@ -114,8 +114,9 @@ def started_by_name(job) -> dict:
 
 
 def strict(trial) -> bool:
-    """Whether the trial is one try of an attempt with several: a record that names no start is then no try's."""
-    return bool(trial.n_retries) or trial.key != trial.trial_name
+    """Whether the trial is one try of an attempt with several, read under its attempt's name: a
+    record is then its own only by its start. A try with no start keeps its own name (`slot`)."""
+    return (bool(trial.n_retries) or trial.key != trial.trial_name) and slot(trial) == trial.key
 
 
 def retried(job) -> set:
@@ -133,7 +134,7 @@ def judgement_of(job, trial, lane: str = "decision") -> dict | None:
     """A try's record (`slot`); else one kept under the try's own name, as before."""
     uid, start, old = job_key(job), started_of(trial), old_of(job)
     return (store.load(store.home(), uid, slot(trial), lane=lane, started=start, old=old, strict=strict(trial))
-            or (store.load(store.home(), uid, trial.trial_name, lane=lane, started=start, old=old)
+            or (store.load(store.home(), uid, trial.trial_name, lane=lane, started=start, old=old, strict=strict(trial))
                 if slot(trial) != trial.trial_name else None))
 
 
@@ -625,8 +626,8 @@ def triage_summary(report, jobs) -> dict:
     sides = triage_sides(report)
     rows, judged, todo = {}, 0, []
     for row, s in sides:
-        job, _ = _control_trial(s, jobs)
-        rec = store.load(store.home(), job_key(job), s.trial_name, old=old_of(job)) if job else None
+        job, trial = _control_trial(s, jobs)
+        rec = judgement_of(job, trial) if trial else None
         a = ((rec.get("answers") or {}).get("control_failure_cause")) if store.is_current(rec) else None
         if a:
             rows.setdefault(row.task_base, {})[s.control] = _choice_row("control_failure_cause", a)
