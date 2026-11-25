@@ -560,7 +560,9 @@
       <tr data-outcome="{{ w.outcome }}" data-cause="" data-status="" data-flags="" data-trial="{{ w.trial }}" data-tokens="0" data-total="0" data-i="{{ trial_rows|length + loop.index0 }}">
         <td>{% if picking %}<input class="pick-row" type="checkbox" value="{{ w.trial }}" data-first{% if w.outcome == 'no_result' %}="none"{% endif %} data-trials="{{ w.trials|join(' ') }}" aria-label="Choose {{ w.unit }}">{% endif -%}
           <span class="task" title="{{ w.unit }}">{{ w.unit }}</span>{% if w.running %} <span class="badge again-now">running</span>{% endif %}</td>
-        <td>{% if w.outcome == 'not_run' %}<span class="oc oc-not_run"><i></i>Not run</span>{% else %}<span class="oc oc-no_result"><i></i>No result</span> <span class="exn">{{ 'begun, ended with none' if w.folder else 'never run' }}</span>{% endif %}</td>
+        {%- set said = 'Not run' if w.outcome == 'not_run' else 'No result' %}
+        <td class="outcome"><span class="group-pass"><b class="faint">—</b><span class="sqs" aria-hidden="true"><i class="sw oc-{{ w.outcome }}" title="{{ said }}"></i></span><span class="oc-word">{{ said }}</span></span>
+          {%- if w.outcome == 'no_result' %} <span class="exn">{{ 'begun, ended with none' if w.folder else 'never run' }}</span>{% endif %}</td>
         <td colspan="20"></td>
       </tr>
       {% endfor %}<tr class="empty" id="no-trial-matches" hidden><td colspan="20">No trial matches <button class="fclear plain" type="button" data-clear>Show all {{ job.trials|length + waiting|length }}</button></td></tr>

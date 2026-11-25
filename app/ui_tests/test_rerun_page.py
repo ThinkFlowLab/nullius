@@ -283,8 +283,8 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         self.assertEqual(text(html, r'<span class="cnt" id="trial-count">.*?</span>'), "5")
         self.assertEqual(text(html, r'<a class="fx" data-o="no_result".*?</a>'), "No result 3")
         rows = {n: text(html, rf'<tr data-outcome="no_result"[^>]*data-trial="{n}".*?</tr>') for n in waiting}
-        self.assertEqual(rows, {"t-2__u0002": "t-2 No result begun, ended with none", "t-3__u0003": "t-3 No result never run",
-                                "t-4__u0004": "t-4 No result never run"})
+        self.assertEqual(rows, {"t-2__u0002": "t-2 — No result begun, ended with none", "t-3__u0003": "t-3 — No result never run",
+                                "t-4__u0004": "t-4 — No result never run"})
         self.assertIn('data-first="On this machine, in this job: a task with no result gets its first;', html)
         for n in waiting:                                                        # the question says "with no result"
             self.assertIn(f'value="{n}" data-first="none"', html)

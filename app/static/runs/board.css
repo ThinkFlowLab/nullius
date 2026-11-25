@@ -359,10 +359,10 @@
 .rp .tt:has(.pick-row) td:first-child { min-width: 172px; }      /* the tick's room, beside the name's */
 /* a task with no result: a hollow mark, no outcome's colour */
 .rp .oc-no_result { --oc: transparent; }
-.rp .sw.oc-no_result, .rp .oc-no_result i, .rp .odot.oc-no_result { box-shadow: inset 0 0 0 1.5px var(--text-faint); }
+.rp .sw.oc-no_result, .rp .odot.oc-no_result { box-shadow: inset 0 0 0 1.5px var(--text-faint); }
 /* a task of the plan not run yet: a dashed mark, no outcome's colour */
 .rp .oc-not_run { --oc: transparent; }
-.rp .sw.oc-not_run, .rp .oc-not_run i, .rp .odot.oc-not_run { outline: 1.5px dashed var(--text-faint); outline-offset: -1.5px; }
+.rp .sw.oc-not_run, .rp .odot.oc-not_run { outline: 1.5px dashed var(--text-faint); outline-offset: -1.5px; }
 /* the sets that name tasks not run: one line each, its tasks not run at its end */
 .rp .plan-sets .popm { left: auto; right: 0; grid-template-columns: auto; }
 .rp .plan-sets .popm button { display: flex; justify-content: space-between; gap: 14px; padding: 4px 2px; font: 12.5px var(--sans); color: var(--text); text-align: left; }

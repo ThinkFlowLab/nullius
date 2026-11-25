@@ -59,7 +59,7 @@ class PartRunPage(unittest.TestCase):
         self.assertNotIn('data-o="no_result"', html)
         rest = [f"t-{k}__u{k:04d}" for k in (3, 4, 5)]
         rows = {n: text(html, rf'<tr data-outcome="not_run"[^>]*data-trial="{n}".*?</tr>') for n in rest}
-        self.assertEqual(rows, {n: f"{n[:3]} Not run" for n in rest})
+        self.assertEqual(rows, {n: f"{n[:3]} — Not run" for n in rest})
         self.assertEqual(re.findall(r'<input class="pick-row" type="checkbox" value="([^"]+)" data-first', html), rest)
         self.assertEqual(text(html, r'<span class="cnt" id="trial-count">.*?</span>'), "6")
         self.assertRegex(html, r'<button class="btn sm ghost" id="pick-rest" type="button" aria-haspopup="dialog" '
@@ -135,7 +135,7 @@ class PartRunPage(unittest.TestCase):
         self.assertEqual(text(html, r'<span id="plan-run".*?</span>'), "2 of 6 planned tasks run")
         rows = re.findall(r'<tr data-outcome="not_run".*?</tr>', html, re.S)
         self.assertEqual(len(rows), 4)
-        self.assertEqual([text(row, r".*") for row in rows], [f"t-{k} Not run" for k in range(2, 6)])
+        self.assertEqual([text(row, r".*") for row in rows], [f"t-{k} — Not run" for k in range(2, 6)])
         ticks = [dict(value=re.search(r'value="([^"]+)"', row)[1],
                       trials=re.search(r'data-trials="([^"]+)"', row)[1]) for row in rows]
         picks = re.findall(r'data-pick="([^"]+)"', html)
