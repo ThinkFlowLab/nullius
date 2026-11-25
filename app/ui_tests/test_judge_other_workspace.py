@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from contextlib import ExitStack
 from pathlib import Path
+from types import SimpleNamespace as NS
 from unittest.mock import patch
 
 from flask import url_for
@@ -28,6 +29,7 @@ class JudgementsOfAnotherWorkspace(unittest.TestCase):
         tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="nullius-judge-ws-")))
         shutil.copytree(JOB, tmp / "a" / "job-x")
         shutil.copytree(JOB, tmp / "b" / "job-y")
+        (tmp / "b" / "job-y" / TRIAL / "agent" / "trajectory.json").write_text("{}")
         stack.enter_context(patch.object(web.shared, "WS_HOME", str(tmp / "workspaces")))
         stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}, clear=True))
         self.a = workspace.create(web.shared.WS_HOME, [str(tmp / "a")], "A")
@@ -52,6 +54,20 @@ class JudgementsOfAnotherWorkspace(unittest.TestCase):
                 web.judge.batch.ask_and_store(web.judge.ws_dir(), job.job_id, trial.trial_name, {}, None)
         self.assertNotIn("judgements", os.listdir(self.a.dir), "a judgement of B's trial was written into A")
         self.assertIsNotNone(store.load(self.b.dir, "job-y", TRIAL))
+
+    def test_judge_all_and_task_judging_write_into_its_own_workspace(self):
+        rec = {"questions": Q.VERSION, "answers": {"q": {"choice": "x"}}, "judge": {"model": "m"}}
+        client = web.app.test_client()
+        with client.session_transaction() as sess:
+            sess["csrf"] = "t"
+        with patch.dict(os.environ, TYPESAFE_API_KEY="ts-fake"), patch.object(web.judge.batch, "ask_states", side_effect=lambda *a, **k: dict(rec)), \
+                patch.object(web.judge.trajectory, "load", lambda path: NS(error=None)), patch.object(web.judge, "_trial_ids_and_states", lambda trial, traj: {}), \
+                patch.object(web.judge, "_task_instruction", lambda trial: "Say hello."):
+            for route in ("job", "tasks"):
+                self.assertEqual(client.post(f"/judge/{route}/job-y?workspace={self.b.name}", data={"csrf": "t"}).status_code, 302)
+        self.assertNotIn("judgements", os.listdir(self.a.dir), "Judge all on B's job wrote into A")
+        self.assertIsNotNone(store.load(self.b.dir, "job-y", TRIAL))
+        self.assertTrue(any(k.startswith("task_") for k in os.listdir(Path(self.b.dir) / "judgements")), os.listdir(Path(self.b.dir) / "judgements"))
 
     def test_the_judge_forms_post_back_to_that_workspace(self):
         with web.app.test_request_context(self.url):
