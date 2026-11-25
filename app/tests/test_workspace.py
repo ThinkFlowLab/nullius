@@ -183,6 +183,23 @@ class Lifecycle(unittest.TestCase):
         workspace.touch(b)
         self.assertEqual(workspace.last_open(self.home).name, "b")
 
+    def test_an_unopened_workspace_is_remembered_only_after_it_is_opened(self):
+        a = workspace.create(self.home, [], "destination", opened=False)
+        self.assertEqual((a.opened, a.closed), ("", True))
+        self.assertIsNone(workspace.last_open(self.home))
+        with patch.object(workspace, "_now", return_value="2000-01-01T00:00:00+00:00"):
+            b = workspace.create(self.home, [], "existing")
+        c = workspace.create(self.home, [], "another", opened=False)
+        self.assertEqual((workspace.load(self.home, c.name).opened, c.closed), ("", True))
+        self.assertEqual(workspace.last_open(self.home).name, b.name)
+        b.closed = True
+        workspace.save(b)
+        self.assertIsNone(workspace.last_open(self.home))
+        workspace.touch(a)
+        self.assertTrue(a.opened)
+        self.assertFalse(a.closed)
+        self.assertEqual(workspace.last_open(self.home).name, a.name)
+
 
 class Holding(unittest.TestCase):
     def test_each_folder_lists_the_workspaces_with_a_root_in_it(self):

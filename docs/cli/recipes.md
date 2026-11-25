@@ -16,7 +16,7 @@ nullius recipes launch recipe.json --wait --json
 | --- | --- |
 | `<recipe>` | A recipe file, or an exact saved id, display name, then internal name; ambiguous matches are listed and refused |
 | `--where MACHINE` | `local`, the server's machine, or a host's entry in Settings, in place of the recipe's *Where*; repeated, one shard each |
-| `--workspace NAME` | The workspace the launch goes into, made when there is none; the open workspace stays open. Default: the open one, as Run |
+| `--workspace NAME` | The launch destination, made unopened when missing; the open workspace still reopens after restart. Default: the open one, as Run |
 | `--server URL` | The Nullius server on this machine (default `http://127.0.0.1:` and `APP_PORT`, else 5057) |
 | `--yes` | Answers the question Run asks before a run of every unit |
 | `--wait` | Returns when the launch has ended, or paused on the question its page asks; exits 4 unless it ended done |

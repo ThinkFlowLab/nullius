@@ -426,6 +426,22 @@ class ReopenAtStart(unittest.TestCase):
         self.root.rmdir()                                      # roots gone: it opens as the open action does
         self.assertEqual(self.restart().roots, [str(self.root)])
 
+    def test_a_launch_destination_does_not_replace_the_workspace_reopened(self):
+        with patch.object(workspace, "_now", return_value="2000-01-01T00:00:00+00:00"):
+            ws = workspace.create(self.home, [str(self.root)], label="existing")
+            web.shared.open_workspace(ws)
+        filed = []
+        run = SimpleNamespace(jobs=str(self.tmp / "runs" / "launch" / "jobs"), file_under=filed.append)
+        web.shared.adopt_runs([run], "destination")
+        destination = workspace.load(self.home, "destination")
+        self.assertEqual((destination.opened, destination.closed), ("", True))
+        self.assertEqual((destination.roots, filed), ([run.jobs], ["destination"]))
+        self.assertIs(web.shared.STATE["workspace"], ws)
+        self.assertEqual(self.restart().name, ws.name)
+        web.shared.open_workspace(destination)
+        self.assertTrue(workspace.load(self.home, destination.name).opened)
+        self.assertEqual(self.restart().name, destination.name)
+
     def test_a_second_server_on_the_runs_folder_stops_with_one_line(self):
         refused = execution.Followed("another Nullius follows the runs in /r: stop it before starting this one")
         with patch.object(execution, "restore", side_effect=refused), self.assertRaises(SystemExit) as end:
