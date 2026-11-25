@@ -8,8 +8,8 @@ description: File a GitHub issue or open a pull request here with gh, short and 
 **Short.** What was wrong, then what changed. One fact per line; fragments are
 fine. Quotes and numbers. No background, file tour, hedging or restated diff.
 
-- Under 150 words, 250 for a large feature, not counting images, quoted output
-  and Acceptance.
+- Under 150 words, 250 for a large feature, not counting images, quoted output,
+  Acceptance and Agents.
 - Drop facts, not words. Full words, real names: a stranger must be able to act on
   it. A fact nobody acts on goes.
 
@@ -19,8 +19,8 @@ fine. Quotes and numbers. No background, file tour, hedging or restated diff.
 | Comprehensive tests were added and the change was verified thoroughly across browsers. | Route suite 690. Chromium, Firefox, WebKit. Not checked: macOS Safari. |
 
 Never: a key, token, password, email address, personal message, private link,
-host name, site address or machine attribution. A security problem goes to the
-address in SECURITY.md, never to an issue.
+host name, site address, or machine attribution outside `## Agents`. A security
+problem goes to the address in SECURITY.md, never to an issue.
 
 ## First
 
@@ -55,6 +55,11 @@ section, or write "Nothing visible changes." when templates or static files did.
 `gh` cannot upload images: add them in the browser. "Not checked" is a valid line.
 
     gh pr create --draft --title "fix(web): ..." --body-file pr.md
+
+`## Agents` names each agent and model that wrote, reviewed or tested the change,
+subagents included, and what it did. Working on it later, add your line. A model
+you do not know is "unknown", never a guess. A squash keeps the title alone, so
+none of it reaches `main`.
 
 It stays a draft until the user says it is ready: CI runs then.
 
