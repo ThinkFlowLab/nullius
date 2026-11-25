@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from nullius import workspace
 from nullius.judge import questions as Q, store
+from nullius.runs import parse
 
 from tests.test_workspace import _job_dir
 
@@ -265,6 +266,21 @@ class Adopt(unittest.TestCase):
         self.assertEqual(store.move(home_dir), ["w (1 record of a job still starting)"])
         self.assertFalse(os.path.isdir(os.path.join(self.home, "judgements", j.uid)))
         self.assertEqual(store.single(store.owners(ws, names={"job-x"})), {})
+
+    def test_a_finished_job_whose_config_cannot_be_read_owns_none_of_them(self):
+        r1 = os.path.join(self.tmp, "r1")
+        d = _job_dir(r1, "job-x")
+        home_dir = os.path.join(self.tmp, "ws")
+        ws = workspace.create(home_dir, [r1], label="w")
+        t0 = workspace.load_jobs(ws, ws.roots)[0].trials[0].trial_name
+        store.save(ws.dir, "job-x", t0, rec("2026-01-01T00:00:00Z"))
+        with open(os.path.join(d, "config.json"), "w") as f:
+            f.write('{"job_name": "job-x", "agents"')                              # the display parse still derives one
+        self.assertTrue(parse.parse_job(d).uid)
+        self.assertEqual(store.move(home_dir), ["w (1 record of a job that cannot be read)"])
+        self.assertFalse(os.path.isdir(os.path.join(self.home, "judgements")) and
+                         [n for n in os.listdir(os.path.join(self.home, "judgements")) if not n.startswith(".")])
+        self.assertEqual(store.adopt_owned(ws), set())
 
     def test_deleting_a_workspace_keeps_the_failure_analyses_of_its_imports(self):
         from nullius.runs import failure_analysis as fa

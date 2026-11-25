@@ -472,12 +472,14 @@ def _places(ws_dir: str, job, into: str):
 def owners(ws, into: Optional[str] = None, names=None) -> Optional[dict]:
     """Who each older file of the workspace `ws`'s store may belong to: {the file: {the file of the
     user's store it belongs in: the job's folder}}, over every job its roots hold, read afresh. A
-    job with no identity yet claims the files it would own under ``("pending", its folder)``, so
-    they have no single owner until it has one. `names`: the job folders whose names share a
+    job with no identity yet claims the files it would own under ``("pending", its folder)``, and one
+    whose identity cannot be read (`uid.strict`) under ``("unread", its folder)``, so they have no
+    single owner until it has one. `names`: the job folders whose names share a
     spelling (`_names`) with one of these only, all that can claim a job's own files. None while one
     of its roots, or a folder in one that may be a job, cannot be read: its jobs, and so the owners,
     are unknown."""
-    from nullius.runs import parse
+    from dataclasses import replace
+    from nullius.runs import parse, uid as job_uid
     into = into or home()
     roots = ws.job_roots or ws.roots
     spelt = None if names is None else {s for n in names for s in _names(n)}
@@ -490,9 +492,13 @@ def owners(ws, into: Optional[str] = None, names=None) -> Optional[dict]:
         return None
     out: dict = {}
     for d in dirs:
+        try:
+            uid = job_uid.strict(d)                      # never the display parse's: a job read in part is no owner
+        except OSError:
+            uid = None
         for job in parse.split_agents([parse.parse_job(d)]):
-            for src, dest in _places(ws.dir, job, into):
-                out.setdefault(src, {}).setdefault(dest or ("pending", d), d)
+            for src, dest in _places(ws.dir, replace(job, uid=uid or ""), into):
+                out.setdefault(src, {}).setdefault(dest or ("pending" if uid == "" else "unread", d), d)
     return out
 
 
@@ -597,7 +603,7 @@ def move(home_dir: str, into: Optional[str] = None) -> list:
     are, and mark each workspace whose every file went (`moved`), so reads stop consulting it.
     A workspace is left for a later move, as one line in the list returned, while one of its roots
     or folders cannot be read, or one of its files cannot be read, belongs to no job its roots
-    hold, or may belong to several (`owners`: a job id two jobs share, or one still starting):
+    hold, or may belong to several (`owners`: a job id two jobs share, one still starting, or one that cannot be read):
     such a file is copied nowhere, and still read as before. Safe to run again."""
     into = into or home()
     left = []
@@ -613,7 +619,7 @@ def move(home_dir: str, into: Optional[str] = None) -> list:
             continue
         raw = {f: _bytes(os.path.join(ws.dir, f)) for f in files}
         one = single(owned)
-        unread, shared, pending, by_dest = 0, 0, 0, {}
+        unread, shared, pending, hidden, by_dest = 0, 0, 0, 0, {}
         for src, dests in owned.items():
             rel = os.path.relpath(src, ws.dir)
             data = _old(src, raw.get(rel))
@@ -622,6 +628,8 @@ def move(home_dir: str, into: Optional[str] = None) -> list:
             elif src not in one:                         # unresolved: whose it is cannot be told
                 if all(isinstance(d, str) for d in dests):
                     shared += 1
+                elif any(d[0] == "unread" for d in dests if not isinstance(d, str)):
+                    hidden += 1
                 else:
                     pending += 1
             elif data:
@@ -633,7 +641,8 @@ def move(home_dir: str, into: Optional[str] = None) -> list:
         why = [_plural(n, *w) for n, w in ((unread, ("file cannot be read", "files cannot be read")),
                                            (orphans, ("record of no job found", "records of no job found")),
                                            (shared, ("record two jobs share", "records several jobs share")),
-                                           (pending, ("record of a job still starting", "records of jobs still starting"))) if n]
+                                           (pending, ("record of a job still starting", "records of jobs still starting")),
+                                           (hidden, ("record of a job that cannot be read", "records of jobs that cannot be read"))) if n]
         if why:
             left.append(f"{ws.label} ({', '.join(why)})")
         else:
