@@ -443,7 +443,27 @@ class Wiring(FakeUnits):
                 scored = driver.score("type", ws, [], "")
                 self.assertTrue(scored["passed"], scored)
                 self.assertEqual((scored["detail"]["steps_used"], scored["detail"]["actions"]), (1, 3))
+                self.assertEqual(scored["detail"]["ended"], end)
                 self.assertEqual(u.final, "typed")
+
+    def test_setup_names_the_progress_file_and_score_says_the_count(self):
+        for unit, clicks, ended in (("click", 1, "turn"), ("limit", 2, "steps")):
+            with self.subTest(unit=unit):
+                ws, s = self.unit(unit)
+                u = driver.OPEN[unit]
+                self.assertEqual(s["progress"], os.path.join("verifier", "computer-progress.json"))
+                path = os.path.join(os.path.dirname(ws), s["progress"])
+                with open(path) as f:
+                    self.assertEqual(json.load(f), {"steps": 0, "steps_limit": u.steps, "ended": "", "open": 0})
+                c = driver.Client(s["mcp"][0]["args"][0])
+                for label in checks.ORDER[:clicks] if unit == "limit" else [u.expected["target"]]:
+                    self.assertFalse(c.call("click", dict(zip("xy", driver.centre(u.boxes[label]))))[0])
+                c.close()
+                got = driver.score(unit, ws, [], "done")
+                self.assertEqual((got["detail"]["steps_used"], got["detail"]["steps"], got["detail"]["ended"]),
+                                 (clicks, u.steps, ended))
+                with open(path) as f:
+                    self.assertEqual(json.load(f), {"steps": clicks, "steps_limit": u.steps, "ended": ended, "open": 0})
 
     def test_a_client_that_acts_past_its_budget_fails(self):
         for wrong in (None, {"x": "bad", "y": 100}):                              # a wrong call is counted too
@@ -1139,6 +1159,7 @@ class Window(unittest.TestCase):
     def test_the_server_has_the_window_before_the_task(self):
         ws, s = self.unit("click")
         u, c = driver.OPEN["click"], self.client(s)
+        progress = os.path.join(os.path.dirname(ws), s["progress"])
         names = [t["name"] for t in c.ask("tools/list", {})["result"]["tools"]]
         self.assertNotIn("python", names)
         self.assertIn("prepare", names)
@@ -1148,6 +1169,14 @@ class Window(unittest.TestCase):
         self.assertIn("the task has not been given yet", said)
         self.assertEqual(c.call("prepare", {"actions": ["print(1)"], "files": ["/tmp/agent/a"]}),
                          (False, {"files": {"/tmp/agent/a": None}}))
+        deadline = time.monotonic() + 5              # the answer reaches the client before the progress file follows it
+        while True:
+            with open(progress) as f:
+                counted = json.load(f)
+            if counted["open"] == 0 or time.monotonic() > deadline:
+                break
+            time.sleep(0.01)
+        self.assertEqual(counted, {"steps": 0, "steps_limit": u.steps, "ended": "", "open": 0})   # the window takes no step
         self.assertEqual(driver.task_given("click", ws), {})
         self.assertEqual(c.call("step", {"actions": [f"pyautogui.click({x}, {y})"], "files": ["/tmp/agent/a"]}),
                          (False, {"steps_left": u.steps - 1, "done": False, "files": {"/tmp/agent/a": None}}))
@@ -1155,6 +1184,9 @@ class Window(unittest.TestCase):
         got = driver.score("click", ws, [], "done")
         self.assertTrue(got["passed"], got)
         self.assertEqual(got["detail"]["calls"], ["click", "prepare", "step", "prepare"])
+        self.assertEqual((got["detail"]["steps_used"], got["detail"]["ended"]), (1, "turn"))
+        with open(progress) as f:
+            self.assertEqual(json.load(f), {"steps": 1, "steps_limit": u.steps, "ended": "turn", "open": 0})
         with open(os.path.join(os.path.dirname(ws), "verifier", "computer-prepare.jsonl")) as f:
             self.assertEqual([json.loads(line)["actions"] for line in f], [["print(1)"]])
 

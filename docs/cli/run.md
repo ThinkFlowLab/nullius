@@ -68,7 +68,7 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | --- | --- | --- |
 | `setup` | The benchmark's `limits.setup_seconds` for an agent's unit, else 600 s; an own image's `prepare` step its `seconds` | Environment setup error |
 | `image` | 3600 s: an own image's pull or build | Environment setup error |
-| `agent` | The task's `agent_seconds`, else the Original setup's `turn_seconds`, else `limits.turn_seconds`, else 900 s: the agent's whole work on the unit, every turn of a conversation and the simulated user's between them; each add and each recall of a capability (its reader has `limits.turn_seconds`); an Original setup's answerer; the oracle | Agent timeout |
+| `agent` | The task's `agent_seconds`, else the Original setup's `turn_seconds`, else `limits.turn_seconds`, else 900 s: the agent's whole work on the unit, every turn of a conversation and the simulated user's between them; each add and each recall of a capability (its reader has `limits.turn_seconds`); an Original setup's answerer; the oracle | Agent timeout; scored where the benchmark [scores the cut](#a-unit-cut-at-a-limit) |
 | `verify` | The verify step's `seconds`, else the agent's default | Verifier error |
 | `score` | The benchmark's `limits.score_seconds`, else 600 s: the driver's `score` | Verifier error |
 
@@ -81,10 +81,20 @@ Each phase of a unit has a time limit. `--timeout PHASE=SECONDS` (repeatable) fo
 | Rule | Detail |
 | --- | --- |
 | What is counted | Each call the provider answered on the unit's agent route. A refused call (a 429, an error) is not one; the judge's and the simulated user's never are |
-| Past it | The unit ends as `UnitCallCapError`, an Agent error, and is not checked. The run goes on |
+| Past it | The unit ends as `UnitCallCapError`, an Agent error, and is not checked, unless the benchmark [scores the cut](#a-unit-cut-at-a-limit). The run goes on |
 | Not exact | Calls in flight together may pass it by the few already sent |
 | The upstream's own | A step limit of the benchmark's (τ³-bench's `--max-steps`, an OSWorld agent's `--max_steps`) still holds; this cap is on top |
 | The result | `config.json` records it under `standard.max_calls` |
+
+## A unit cut at a limit
+
+A benchmark that names a cut in `limits.scored_cuts` still scores an agent's unit that cut ends; elsewhere the cut stays an error. A unit where nothing moved, or whose last call the provider refused, stays an error.
+
+| Cut | When |
+| --- | --- |
+| `time` | The agent's time ran out: its turn is cancelled and the unit scored. |
+| `calls` | The cap refused the agent's next model call; the unit is scored at once. |
+| `end` | The agent's turn went on 60 s after the benchmark's own loop ended. |
 
 ## The exchange record
 

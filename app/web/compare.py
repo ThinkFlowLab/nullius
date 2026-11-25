@@ -305,7 +305,7 @@ def compare_detail(row, jobs):
         field("Env / Verify", [fmt_phase(t) for t in row],
              [phase_total(t) for t in row], "lower",
              "Container build / verifier run"),
-        field("Steps", [_dash(s.get("steps")) for s in stats],
+        field("Trace steps", [_dash(s.get("steps")) for s in stats],
              hint="Trajectory steps — not ranked, fewer isn't inherently better"),
         field("Tool calls", [_dash(s.get("calls")) for s in stats],
              hint="Real calls; writer placeholders excluded — not ranked"),

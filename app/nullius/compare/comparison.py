@@ -197,14 +197,17 @@ def build(selected: Sequence[SelectedRun], cohort: str = "whole", set_aside: fro
         for trial in trials:
             by_task.setdefault(key(selection, trial), [[] for _ in selected])[column].append(trial)
 
+    scored_only = [selection.job.scored_only for selection in selected]
+
     def task_row(task_key, columns):
         return TaskRow(*task_key, tuple(ts[-1] if ts else None for ts in columns), tuple(len(ts) for ts in columns),
-                       tuple(task_attempts.Attempts(tuple(task_attempts.ordered(ts))) if ts else None for ts in columns))
+                       tuple(task_attempts.Attempts(tuple(task_attempts.ordered(ts)), scored_only[i]) if ts else None
+                             for i, ts in enumerate(columns)))
 
     rows = [task_row(task_key, columns) for task_key, columns in by_task.items()]
     rows.sort(key=lambda row: (-round(row.movement, 3), not row.rate_moved, not row.differs, row.dataset, row.task))
     # pass@k from the rows' own tasks, so the summary and the table count alike
-    pass_k = tuple(task_attempts.for_tasks(row.tried[column].trials for row in rows if row.tried[column])
+    pass_k = tuple(None if scored_only[column] else task_attempts.for_tasks(row.tried[column].trials for row in rows if row.tried[column])
                    for column in range(len(selected)))
     return Comparison(selected, cohort, tuple(jobs), tuple(rows), len(common - set_aside),
                       tuple(excluded), tuple(repeated), datasets_match, known, pass_k, tuple(aside))
