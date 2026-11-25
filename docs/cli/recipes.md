@@ -24,8 +24,7 @@ nullius recipes launch recipe.json --wait --json
 
 | Rule | Detail |
 | --- | --- |
-| The server | `launch` needs `nullius serve` running here: the server starts the launch and follows it, as one started from the page. `nullius standard run` runs in the shell instead ([Run a benchmark](run.md)) |
-| What it sends | The builder's requests: `GET /new-run`, `POST /new-run/runner`, `POST /new-run/prerequisites`, `POST /run` |
+| The server | `launch` needs `nullius serve` running here; `nullius standard run` runs without it ([Run a benchmark](run.md)) |
 | Refused | An error of the compile, a machine missing a prerequisite, the question without `--yes`, a Harbor recipe: nothing starts |
 | The name | The recipe's name and the second, as each Run names a new job |
 | What it prints | `launch run:<id>`, the launch's key; per run its machine, its state, its jobs folder and its job pages |

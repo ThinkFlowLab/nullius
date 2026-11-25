@@ -107,7 +107,6 @@ and Delete work only from a browser on the application host.
 | Delete launch | Once every run of the launch has ended. Deletes each run's `<RUNS_DIR>/<name>/` (a shard per machine included), every job of the launch, their judgements in every workspace, and each run's copy on its host when ticked. A run still going is refused: stop it first. A launch with jobs from elsewhere has no Delete |
 | Restart of Nullius | Reattaches; the job goes back into the workspace it started in, under the name a rename gave it, while that workspace exists, without opening it. The workspace open before the restart opens again. One process follows a runs folder: a second `nullius serve` on it stops with a message |
 | Cannot run from the page | Generated tasks and custom agents are not supported by Run |
-| From a shell | `nullius recipes launch <recipe>` sends a saved recipe of the standard to the server as Run does: [Launch a recipe](cli/recipes.md) |
 | Refused | Reads *refused* on the runs page, with why; the job was never written |
 | Files | `<RUNS_DIR>/<name>/`: script, log, `run.json`, `jobs/`; default `runs/` under the user data directory (`nullius paths`) |
 

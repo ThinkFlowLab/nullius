@@ -1,8 +1,8 @@
 ## What this repository runs
 
 Nullius reads run output and runs a benchmark only on an explicit **Run**
-from the builder's Review step, or `nullius recipes launch`, which sends a
-saved standard recipe to the server as Run does: a **Nullius standard** recipe
+from the builder's Review step, or `nullius recipes launch`, the same from a
+shell: a **Nullius standard** recipe
 (`docs/standard.md`) or a **Harbor** recipe, on this machine or a Settings host
 (`nullius/execution.py`). A benchmark's own scripts run as its Original
 setup.
