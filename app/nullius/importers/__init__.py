@@ -142,12 +142,42 @@ def write_if_changed(path: str, data: bytes) -> bool:
     return True
 
 
+def _reserved(job_dir: str) -> dict:
+    """Trial name -> the document it was given to, as the job's ``config.json``
+    keeps it across conversions: a name stays its document's after its folder
+    is pruned."""
+    try:
+        with open(os.path.join(job_dir, "config.json"), encoding="utf-8") as fh:
+            reserved = json.load(fh)["trial_documents"]
+        return {str(k): str(v) for k, v in reserved.items() if v}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
+
+
+def reservations(job_dir: str, written) -> dict:
+    """The ``trial_documents`` to keep in *job_dir*'s ``config.json``: what
+    it kept, with *written* ((name, document) pairs) on top."""
+    reserved = _reserved(job_dir)
+    reserved.update((name, identity) for name, identity in written if identity)
+    return dict(sorted(reserved.items()))
+
+
 def existing_trials(job_dir: str, identity_of) -> tuple[dict, set]:
     """The trials a previous conversion left in *job_dir*: name -> the
     document each holds, by ``identity_of(trial_dir)`` (None when the files
-    cannot tell), and the names of folders two documents were once written
+    cannot tell), with the names reserved for documents whose folders are
+    gone, and the names of folders two documents were once written
     into: a name its ``config.json`` lists twice among its tasks, or, without
     that list, any name when the job counted more trials than it has folders."""
+    trials, merged = _folders(job_dir, identity_of)
+    held = set(trials.values())
+    for name, identity in _reserved(job_dir).items():
+        if name not in trials and identity not in held:
+            trials[name] = identity
+    return trials, merged
+
+
+def _folders(job_dir: str, identity_of) -> tuple[dict, set]:
     trials = {}
     if os.path.isdir(job_dir):
         for name in sorted(os.listdir(job_dir)):

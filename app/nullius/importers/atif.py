@@ -54,7 +54,8 @@ file.
 Re-converting is idempotent: trial names are
 deterministic (the document's path relative to the tree, a bare
 ``trajectory.json`` named after its directory), every file is rewritten in
-place, and a trial the tree no longer holds is removed.
+place, and a trial the tree no longer holds is removed; its name stays
+its document's, kept in the job's ``config.json`` under ``trial_documents``.
 """
 from __future__ import annotations
 
@@ -376,6 +377,8 @@ def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str
         "agents": [{"name": agent["name"],
                     "model_name": agent["model_info"]["name"]}],
         "tasks": [{"name": f"{NAME}/{s['trial_dir']}"} for s in summaries],
+        "trial_documents": importers.reservations(
+            job_dir, ((name, os.path.realpath(path)) for (path, _doc), name in zip(docs, names))),
     })
     return job_dir
 

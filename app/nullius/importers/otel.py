@@ -224,9 +224,9 @@ def _trace_id_in(trial_dir: str):
 def _write_job(documents: list, out_root: str, job_name: str, command: str,
                root: str, skipped: list) -> str:
     job_dir = os.path.join(out_root, job_name)
+    ids = [str(doc.get("session_id") or "") for doc in documents]
     names = importers.unique_names(
-        [(str(doc.get("session_id") or ""), trial_name_of(doc), trial_name_of(doc, full=True))
-         for doc in documents],
+        [(tid, trial_name_of(doc), trial_name_of(doc, full=True)) for tid, doc in zip(ids, documents)],
         *importers.existing_trials(job_dir, _trace_id_in))
     os.makedirs(job_dir, exist_ok=True)
     summaries = [write_trial(doc, job_dir, name) for doc, name in zip(documents, names)]
@@ -260,6 +260,7 @@ def _write_job(documents: list, out_root: str, job_name: str, command: str,
         "datasets": [{"name": NAME, "path": root, "n_tasks": len(summaries)}],
         "import": {"format": reader.FORMAT, "conventions": reader.CONVENTIONS,
                    "skipped": skipped},
+        "trial_documents": importers.reservations(job_dir, zip(names, ids)),
     })
     return job_dir
 
