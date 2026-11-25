@@ -111,6 +111,26 @@ class RunDelete(unittest.TestCase):
         execution.delete(["r1", "r2"], self.home, self.root)
         self.assertEqual(store.job_dirs(self.data, [uid]), [])
 
+    def test_a_run_that_stays_keeps_the_judgements_of_its_jobs(self):
+        uid = self.judged(self.jobs, "job-a")
+        r2 = os.path.dirname(self.run_("r2"))                                          # a copy of job-a, deleted with r1
+        real = shutil.rmtree
+
+        def fails(path, *a, **k):
+            if os.path.realpath(path) == os.path.realpath(r2):
+                os.remove(os.path.join(r2, "jobs", "job-a", "config.json"))           # in part: its identity read now is another
+                raise PermissionError(13, "Permission denied", path)
+            return real(path, *a, **k)
+        with patch.object(execution.shutil, "rmtree", fails):
+            got = execution.delete(["r1", "r2"], self.home, self.root)
+        self.assertEqual(got["stays"], ["r2"])
+        self.assertTrue(store.job_dirs(self.data, [uid]))
+        with self.subTest("a root that cannot be listed when they are decided"), \
+                patch.object(execution, "_copies", side_effect=PermissionError(13, "Permission denied")):
+            _job_dir(os.path.join(r2, "jobs"), "job-a")                                 # whole again: job-a's last folder
+            execution.delete(["r2"], self.home, self.root)
+            self.assertTrue(store.job_dirs(self.data, [uid]))
+
     def test_a_copy_is_told_from_its_files_not_from_a_cached_parse(self):
         start = lambda d, at: _write_json(os.path.join(d, "result.json"), {"id": "j1", "started_at": at, "stats": {}})
         start(os.path.join(self.jobs, "job-a"), "2026-09-04T00:00:00Z")
