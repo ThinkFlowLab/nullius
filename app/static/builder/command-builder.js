@@ -6,7 +6,8 @@
   // the model's providers (POST /new-run/endpoints), a pick or a slug typed and Enter joins the list under it, each
   // removable. Empty: any provider. What a row shows is C.servedRow's; `compiled()` is the server's last compile and
   // the key of the recipe it was made for (C.servedKey).
-  function servedRows({C, root, r, compiled, esc, button, providers}) {
+  // A role whose model is being typed has no row: `typing(role)`.
+  function servedRows({C, root, r, compiled, esc, button, providers, typing = () => false}) {
     const NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
     // the model a Served by is for, as the step shows it: the field's, else the leaderboard's or the official one
     const shown = (rec, role) => {
@@ -43,7 +44,7 @@
       const rec = r();
       root.querySelectorAll('input[data-served-by]').forEach(input => {
         const role = input.dataset.servedBy, s = row(rec, role), list = root.querySelector(`[data-served-list="${role}"]`);
-        input.closest('.std-served').hidden = !C.servedRoles(rec).includes(role) || !s.visible;
+        input.closest('.std-served').hidden = !C.servedRoles(rec).includes(role) || !s.visible || typing(role);
         Object.assign(input.dataset, {servedModel: s.model, servedPending: String(s.pending), chosen: s.chosen.join(',')});
         input.placeholder = s.placeholder;
         if (list && list.dataset.of !== JSON.stringify(s.chosen)) { list.dataset.of = JSON.stringify(s.chosen); list.innerHTML = chips(role, s.chosen); }
@@ -219,9 +220,10 @@
   };
   // The standard's recipe as the server compiles it from the definitions (POST
   // /new-run/runner). Nothing typed here is a command; Run sends the choices.
-  let runnerOut = null, runnerKey = '', runnerTimer, runnerServed = null;
+  let runnerOut = null, runnerKey = '', runnerOutKey = '', runnerTimer, runnerServed = null;
   // Served by's rows (servedRows above), given the models the server last named and what decided them (C.servedCompiled)
-  const {field: servedField, sync: syncServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders});
+  const {field: servedField, sync: syncServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders,
+    typing: role => !!root.querySelector(`[data-field="${role === 'model' ? role : role + '_model'}"][data-typing]`)});
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
@@ -913,11 +915,17 @@
         + (C.standardKeyless(rec) || (b.needs || []).some(n => n.startsWith('cap.')) ? '' : field('Model calls per ' + u.noun, 'max_calls', rec.max_calls ?? '', {type: 'number', min: 1, placeholder: 'none'}))
         // the whole run's, shared by its jobs (recipe.py); a run that calls no model spends nothing: no cap to offer
         + (C.standardKeyless(rec) ? '' : field('Spending cap (USD)', 'max_usd', rec.max_usd ?? '', {type: 'number', min: 0, placeholder: 'none'})
-          + field('Spending cap per ' + u.noun + ' (USD)', 'max_usd_per_unit', rec.max_usd_per_unit ?? '', {type: 'number', min: 0, placeholder: 'none'}))
+          + field('Spending cap per ' + u.noun + ' (USD)', 'max_usd_per_unit', rec.max_usd_per_unit ?? '', {type: 'number', min: 0, placeholder: 'none'})
+          + exchangesKept(rec))
         + standardTimeLimits(rec, b, u) + benchLimits(rec, b);
     }
     return '';
   }
+  // What each unit's relay keeps of its agent's calls, read on the trial's Conversation tab (recipe.py: run --exchanges):
+  // the pictures and the text, the text alone (each picture's size and kind kept), or nothing; small cards, the first the default
+  const KEEPS = [['whole', 'Pictures and text'], ['text', 'Text alone'], ['off', 'Nothing']];
+  const exchangesKept = rec => '<div class="std-exchanges-row"><span class="ui-field-copy" title="What each trial keeps of its calls to the model, shown on its Conversation tab. The pictures take most of the room.">Model calls saved</span>'
+    + `<div class="std-valgrid std-exchanges" role="radiogroup" aria-label="Model calls saved">${KEEPS.map(([v, t]) => `<button type="button" class="nb-tile std-val" data-std-exchanges="${v}" aria-pressed="${(rec.exchanges || 'whole') === v}"><strong>${t}</strong></button>`).join('')}</div></div>`;
   // The bounds the benchmark's upstream has of its own (its steps, its errors: options with ``limit``), in a section
   // of the benchmark's name after the run's scope and its time limits: those the chosen datasets and participants
   // take, each empty at its default, shown greyed - an agent's own under ``by`` (OSWorld's agents' steps).
@@ -988,7 +996,7 @@
       if (step === S.model) syncServed();
       if (!accepted.current) return;
       const dropped = dropStartTasks(r(), out.errors);
-      runnerOut = out;
+      runnerOut = out; runnerOutKey = key;
       if (step === REVIEW || dropped && step === S.dataset) renderForm();
       refreshPlan();
     }, 120);
@@ -1089,6 +1097,32 @@
     $('#nb-next').textContent=step===REVIEW?'Export recipe JSON':stepName(steps[nextShown(step,1)],nextShown(step,1))+' →';
     placeThumb();
   }
+  // The open step's errors. The Model step says none over a model being typed, nor before one is chosen or its field left.
+  let modelActed=false;
+  function localErrors() {
+    const rec=r(),el=document.activeElement,typing=root.contains(el)&&el.dataset.typing;
+    if(step===REVIEW)modelActed=true;
+    // nor the last check's while the next is on its way
+    const quiet=step===S.model&&(typing||C.isStandard(rec)&&runnerKey!==runnerOutKey);
+    $('#nb-localerrors').textContent=fieldErrors($('#nb-form'),quiet?[]:compiled.errors.filter(e=>e.step===step&&!e.shown&&!(e.unset&&!modelActed)),esc).map(e=>e.message).join(' ');
+  }
+  // A model picked, entered, or left in its field: the recipe takes it at once. What the page shows of it waits for a
+  // press to end, so a button pressed to leave the field does not move from under the pointer.
+  let pressing=false,afterPress=null;
+  document.addEventListener('pointerdown',()=>{pressing=true;},true);
+  for(const end of ['pointerup','pointercancel'])document.addEventListener(end,()=>{pressing=false;const show=afterPress;afterPress=null;if(show)setTimeout(show);},true);
+  function commitModel(el) {
+    if(document.activeElement===el&&!document.hasFocus())return;   // the window lost the focus, not the field: still being typed
+    const rec=r(),key=el.dataset.field,value=el.value.trim(),changed=value!==(rec[key]||'');
+    modelActed=true;delete el.dataset.typing;
+    if(changed){
+      if(rec.modelFormat!=='provider-id'){for(const k of ['model','userModel','evalModel'])if(typeof rec[k]==='string')rec[k]=C.bareModel(rec[k]);rec.modelFormat='provider-id';}
+      C.setModelOf(rec,key,value);saveDraft();   // the field's pin goes with its model
+    }
+    const show=()=>{syncServed();refreshPlan();};      // asks nothing of a recipe already checked
+    if(pressing)afterPress=show;
+    else queueMicrotask(show);
+  }
   function refreshPlan() {
     const rec=r();
     if(C.isStandard(rec)){
@@ -1096,7 +1130,7 @@
       const out=runnerOut||{errors:[],notes:[]};
       compiled={errors:out.errors||[],notes:out.notes||[]};
     }else{compiled=C.compile(rec);}
-    $('#nb-localerrors').textContent=fieldErrors($('#nb-form'),compiled.errors.filter(e=>e.step===step&&!e.shown),esc).map(e=>e.message).join(' ');
+    localErrors();
     const errors=$('#nb-errors');
     if(errors){
       errors.hidden=!compiled.errors.length;
@@ -1241,6 +1275,7 @@
     // a provider taken out of a Served by. Its row's label does not then focus the field (its menu would open); by
     // key, the keyboard goes back to that field
     if(d.servedRemove!==undefined){event.preventDefault();C.removeServed(r(),d.servedRole,d.servedRemove);syncServed();refreshPlan();if(event.detail===0)root.querySelector(`input[data-served-by="${d.servedRole}"]`)?.focus();return;}
+    if(d.stdExchanges!==undefined){const rec=r();if(d.stdExchanges==='whole')delete rec.exchanges;else rec.exchanges=d.stdExchanges;renderForm();refreshPlan();return;}
     if(d.benchOpt!==undefined){const rec=r(),o=((C.standardBench(rec)||{}).options||{})[d.benchOpt]||{};rec.bench_options={...(rec.bench_options||{})};if(d.benchVal===o.default)delete rec.bench_options[d.benchOpt];else rec.bench_options[d.benchOpt]=d.benchVal;renderForm();refreshPlan();return;}
     if(d.hostreqCheck!==undefined){hostReq(d.hostreqCheck,'check',d.hostreqName);return;}
     if(d.hostreqInstall!==undefined){hostReq(d.hostreqInstall,'install',d.hostreqName);return;}
@@ -1291,7 +1326,7 @@
     else if(b.id==='nb-next'){if(step===REVIEW){if(!compiled.errors.length)download(JSON.stringify(r(),null,2)+'\n',r().name+'.json','application/json');return;}step=nextShown(step,1);}
     else if(b.id==='nb-back')step=nextShown(step,-1);
     else if(b.id==='nb-save'){if(schema.local)openSave();return;}
-    else if(b.id==='nb-startover'){try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});savedId='';runnerOut=null;runnerKey='';step=S.benchmark;tab='select';status('Started over from the defaults.');}
+    else if(b.id==='nb-startover'){try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});savedId='';runnerOut=null;runnerKey='';modelActed=false;step=S.benchmark;tab='select';status('Started over from the defaults.');}
     else if(b.id==='nb-save-cancel'){$('#nb-save-dialog').close();return;}
     else if(b.id==='nb-saved-toggle'){renderSaved();$('#nb-saved').showModal();loadSaved();return;}
     else if(b.id==='nb-saved-close'){$('#nb-saved').close();return;}
@@ -1310,7 +1345,7 @@
     if(el.id==='nb-recipe-title'){updateSavePreview();return;}
     if(d.servedBy!==undefined)return;   // what is typed in a Served by filters its menu: a pick, or Enter, adds it (nb-pick)
     if(d.stdUnsandboxed!==undefined)return;   // a box's value is no tick: its change sets the recipe
-    if(d.providerModel && rec.modelFormat !== 'provider-id'){for(const key of ['model','userModel','evalModel'])if(typeof rec[key]==='string')rec[key]=C.bareModel(rec[key]);rec.modelFormat='provider-id';}
+    if(d.providerModel){d.typing='true';syncServed();localErrors();return;}   // what is typed in a model field filters its list: a pick, Enter or leaving the field sets it
     if(d.field){const p=d.field.startsWith('param:')?C.parameters().find(p=>p.key===d.field.slice(6)):null;
       const typed=el.type==='number'?(el.value===''?'':Number(el.value)):el.value,value=d.field==='limit'?atMost(el,typed):typed;
       if(p)rec.params[p.key]=p.type==='optional-boolean'?(value==='__default__'?null:value==='true'):value;
@@ -1319,7 +1354,6 @@
       else if(!d.providerModel&&['model','userModel','evalModel'].includes(d.field)&&/^(openrouter|openai)\//.test(String(value))){rec.provider=C.providerOf(rec,value);rec[d.field]=C.bareModel(value);
         renderForm();refreshPlan();const f=root.querySelector(`[data-field="${d.field}"]`);if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);}return;}   // the provider the prefix named, and whether it is set
       else if(d.field==='provider'){C.setChoice(rec,value);renderForm();refreshPlan();return;}   // whether it is set in Settings, and the names a runner's models are sent as, follow the provider
-      else if(['model','simulator_model','judge_model'].includes(d.field)){C.setModelOf(rec,d.field,value);syncServed();}   // the field's pin goes with its model; its Served by follows, in place
       else rec[d.field]=value;
       if(el.list?.id==='nb-paths')completeDirectory(el.value);
     }else if(d.stdMinutes){const t=Object.assign({},rec.timeouts);if(el.value===''||!(Number(el.value)>0))delete t[d.stdMinutes];else t[d.stdMinutes]=Number(el.value);if(Object.keys(t).length)rec.timeouts=t;else delete rec.timeouts;refreshPlan();return;
@@ -1336,6 +1370,7 @@
   // no cap, unsaid. It is said, and the field emptied, so that it shows what the recipe holds
   root.addEventListener('focusout',event=>{
     const el=event.target;
+    if(el.dataset.providerModel)commitModel(el);      // a change undone by hand since the focus fires no change event
     if(el.type==='number'&&(el.dataset.field||el.dataset.stdMinutes||el.dataset.benchOptSelect)&&el.validity&&el.validity.badInput){el.value='';window.nulliusNotify?.(`${el.getAttribute('aria-label')}: enter a number.`,{error:true,key:'bad-number'});}
     else if(el.dataset.field==='limit'&&el.value!==''&&atMost(el,Number(el.value))!==Number(el.value)){el.value=el.max;window.nulliusNotify?.(`${el.getAttribute('aria-label')}: at most ${el.max}, all of them.`,{key:'at-most'});}
   });
@@ -1343,7 +1378,8 @@
   root.addEventListener('nb-pick',event=>{const role=event.target.dataset.servedBy;if(!role)return;C.addServed(r(),role,event.detail);syncServed();refreshPlan();});
   root.addEventListener('change',async event=>{
     const el=event.target,d=el.dataset;
-    if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
+    if(d.providerModel)commitModel(el);
+    else if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
     else if(d.stdVersion!==undefined){   // in place: only the card's count changes on this step, so nothing else is drawn again
       C.setStandardBenchmark(r(),el.value);benchTasks();render(false,false);}

@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from nullius import workspace
+from nullius.runs import parse
 from .test_routes import web
 
 
@@ -74,6 +75,31 @@ class ScoredJobFromDisk(unittest.TestCase):
         text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", self.page(f"/compare?pick={name}:loco-gpt-4-turbo&pick={name}:loco-gpt-3.5")))
         self.assertRegex(text, r"Category 1 0\.75 0\.25 ")
         self.assertRegex(text, r"Category 4 0\.50 1\.00 ")
+
+class ScoredAttempts(unittest.TestCase):
+    """A scored task's row: its mean score, and a square per attempt filled by its score."""
+
+    def row(self, scores):
+        with tempfile.TemporaryDirectory(prefix="nullius-scored-attempts-") as d:
+            job_id = "attempts"
+            scored_job(Path(d), job_id, {f"t{n}": [("1", score)] for n, score in enumerate(scores)})
+            for n in range(len(scores)):
+                path = Path(d, job_id, f"t{n}", "result.json")
+                path.write_text(json.dumps(dict(json.loads(path.read_text()), task_name="locomo10/t")))
+            job = parse.parse_job(str(Path(d, job_id)))
+            with patch.object(web.shared, "_jobs_for_request", return_value=[job]):
+                page = web.app.test_client().get(f"/job/{job_id}")
+            self.addCleanup(page.close)
+            return re.search(r'<span class="group-pass">.*?</td>', page.get_data(as_text=True), re.S)[0]
+
+    def test_squares_are_filled_by_scores_out_of_one_only(self):
+        row = self.row([1.0, 0.5, 0.0])
+        self.assertIn('title="Mean score of 3 attempts"><b>0.50</b>', row)
+        self.assertEqual(re.findall(r"--fill:(\d+)%", row), ["100", "50", "0"])
+        self.assertIn('title="Attempt 2: 0.50"', row)
+        row = self.row([3.0, 0.5])
+        self.assertIn("<b>1.75</b>", row)
+        self.assertNotIn("sw-fill", row); self.assertNotIn("--fill", row)
 
 
 if __name__ == "__main__":

@@ -52,6 +52,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 
 ## Good to know
 
+- With any agent but OSWorld's own, a task cut short by its time (2 hours), by the run's cap of model calls or after its end is scored as the desktop stands.
 - Original runs one of OSWorld's own agents, chosen by the Agent option (M3 by default), with a model it is published with.
 - Providers: OpenAI for OpenAI CUA; OpenAI-compatible for Muse Spark (Meta's API) and for EvoCUA, AutoGLM-OS and Mano (your model server); OpenRouter for the others.
 - At this version only the null control has run through Nullius. OSWorld's agents are the same code as in main (044bc33), where M3, PromptAgent and Qwen-CUA completed tasks.
@@ -81,7 +82,7 @@ Open-ended tasks on a real Ubuntu desktop and its applications, each in a VM of 
 - The agent's python and upload calls do not mark OSWorld's desktop as used; each unit's desktop is reset once, before the agent's first call.
 - Only 12 of OSWorld's agents are offered; the others fail at the pinned commit or need services the relay cannot reach.
 - The VMs run only on Docker's default socket, not on rootless Docker or a Docker context. Podman is untested.
-- A task run by one of OSWorld's own agents and still running after 2 hours is stopped and gets no score. For an agent, the task's setup may take 1 hour, the agent's turn 2 hours and the scoring 10 minutes; past any of them the task gets no score.
+- No score past: 2 hours with OSWorld's own agents; 1 hour of setup or 10 minutes of scoring with any other agent.
 - Its evaluator fixes, key repeat turned off in the VM and one retired task make its scores comparable only with this version's, not with the paper's or main (044bc33)'s.
 
 ## Cite

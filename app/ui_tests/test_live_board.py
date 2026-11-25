@@ -355,8 +355,8 @@ class LiveBoard(unittest.TestCase):
             hero = html.split('id="run-hero"', 1)[1].split("</div>\n  </div>", 1)[0]
             self.assertIn(">Mean score<", hero); self.assertIn('id="adjusted-rate">0.67<', hero)        # two of the three cases, not the mean of two tasks
             self.assertNotIn("Adjusted rate", hero); self.assertIn("No pass or fail in this benchmark: no rate", hero)
-            self.assertIn('<span class="oc oc-scored"><i></i>Scored</span>', html)                     # neither resolved nor failed: an outcome of its own
-            self.assertRegex(html, r'class="badge trial-score" title="The mean score of its 2 parts[^"]*">0\.50<')
+            self.assertRegex(html, r'<b title="The mean score of its 2 parts[^"]*">0\.50</b>')          # neither resolved nor failed: its score
+            self.assertIn('<span class="oc-word sr">Scored</span>', html)
             trial = self.client.get("/trial/parts-arm/t1"); self.addCleanup(trial.close)
             html = trial.get_data(as_text=True)
             self.assertEqual(trial.status_code, 200)
@@ -527,10 +527,58 @@ for (const query of ['', '?view=live', '?view=logs', '?view=results']) {
         self.assertIsNone(quiet["n_input_tokens"]); self.assertIsNone(quiet["cost_usd"])
         out = self.render(dict(s, trials=[dict(quiet, timeout_sec=None)]), selected=quiet["trial"])
         self.assertNotIn(">Steps<", out["flight"]); self.assertNotIn(">Tokens<", out["flight"])   # nothing reported them: no column
-        self.assertIn("of —", visible(out["flight"]))                                           # no limit: "—", not a number
+        self.assertNotRegex(visible(out["flight"]), r"\d:\d\d of ")                             # no limit: the time alone
+        self.assertNotIn("of —", visible(out["flight"])); self.assertNotIn("no limit", out["drawer"])
         text = self.board(out)
         self.assertNotIn("step 0", text); self.assertNotIn("tokens 0", text); self.assertNotIn("$0", text)
         self.assertNotIn("Steps", out["drawer"]); self.assertNotIn("Cost", out["drawer"])        # the drawer lists only what was reported
+
+    def running_with(self, **fields):
+        """The rate-eta snapshot's running trial, given ``fields``, alone on the board."""
+        s = json.loads((FIXTURE / "rate-eta" / "expected.json").read_text())
+        t = next(t for t in s["trials"] if t["state"] == "running")
+        return self.render(dict(s, trials=[dict(t, **fields)]), selected=t["trial"])
+
+    def test_renderer_draws_the_steps_of_the_limit_and_the_calls_of_a_running_trial(self):
+        """Both numbers when both are known: a bar and "37 of 100", then the calls of the cap."""
+        out = self.running_with(step=37, step_limit=100, calls=41, calls_limit=100)
+        flight = visible(out["flight"])
+        self.assertIn("telecom-0 agent run 2:40 of 1:00:00 37 of 100 41 of 100 182.4k", flight)
+        self.assertIn("width:37.0%", out["flight"])
+        self.assertIn(">Steps<", out["flight"]); self.assertIn(">Model calls<", out["flight"])
+        drawer = visible(out["drawer"])
+        self.assertIn("Steps 37 of 100", drawer); self.assertIn("Model calls 41 of 100", drawer)
+        full = self.running_with(step=120, step_limit=100)                                     # past its limit: a full bar, never more
+        self.assertIn('width:100.0%', full["flight"]); self.assertIn("120 of 100", visible(full["flight"]))
+
+    def test_renderer_says_the_calls_with_and_without_a_cap(self):
+        for fields, said in (({"calls": 41}, "41"), ({"calls": 1}, "1"), ({"calls": 0}, "0"),
+                             ({"calls": 41, "calls_limit": 100}, "41 of 100"), ({"calls": 1, "calls_limit": 100}, "1 of 100")):
+            with self.subTest(fields):
+                out = self.running_with(**fields)
+                self.assertRegex(visible(out["flight"]), rf"2:40 of 1:00:00 8 {said} 182\.4k")   # no step limit: the bare step, as before
+                self.assertNotIn(" steps", visible(out["flight"]))
+        none = self.running_with(calls=None)
+        self.assertNotIn("calls", visible(none["flight"])); self.assertNotIn("Model calls", none["drawer"])
+
+    def test_renderer_says_the_limits_time_only_where_the_phase_has_one(self):
+        timed, open_ended = self.running_with(), self.running_with(timeout_sec=None)
+        self.assertIn("agent run 2:40 of 1:00:00", visible(timed["flight"])); self.assertIn("agent run, 2:40 of 1:00:00", visible(timed["drawer"]))
+        self.assertIn("agent run 2:40 8", visible(open_ended["flight"])); self.assertIn("agent run, 2:40 · my-agent", visible(open_ended["drawer"]))
+        self.assertNotIn("of —", visible(open_ended["flight"])); self.assertNotIn("no limit", open_ended["drawer"])
+
+    def test_renderer_draws_a_feed_without_the_runners_counts_as_before(self):
+        """No step limit and no calls on any trial: no calls column, the bare step, the columns as they were."""
+        for name in ("expected.json", "rate-eta/expected.json", "harbor-progress-x8/expected.json"):
+            with self.subTest(name):
+                s = json.loads((FIXTURE / name).read_text())
+                self.assertFalse(any(k in t for t in s["trials"] for k in ("step_limit", "calls", "calls_limit")))
+                live = dict(s, state="running", running=True, finished_at=None)
+                out = self.render(live, selected=s["trials"][0]["trial"])
+                self.assertNotRegex(visible(out["flight"]), r"\d+ (of \d+ )?(calls?|steps)\b")
+                self.assertNotIn("Model calls", out["flight"] + out["drawer"]); self.assertNotIn("lb-steps", out["flight"])
+                self.assertNotRegex(visible(out["drawer"]), r"Steps \d+ of")
+        self.assertIn("telecom-0 agent run 2:40 of 1:00:00 8 182.4k", visible(self.running_with()["flight"]))   # the base's words
 
     def test_renderer_reads_harbors_recorded_run(self):
         s = json.loads((FIXTURE / "harbor-oracle-x4" / "expected.json").read_text())

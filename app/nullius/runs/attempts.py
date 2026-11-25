@@ -63,6 +63,10 @@ def ordered(trials) -> list:
 # the benchmark gives a score and no pass or fail.
 NO_VERDICT = frozenset({classify.UNKNOWN, classify.SCORED})
 
+# Outcomes the benchmark's own check gave.
+VERIFIED = frozenset({classify.RESOLVED, classify.FAILED_VERIFICATION, classify.PATCH_FAILED_TESTS, classify.PATCH_NOT_APPLIED,
+                      classify.NO_PATCH})
+
 # The numbers a task's row shows as a mean over its attempts.
 MEANS = ("tokens", "dur_total", "dur_env", "dur_agent", "dur_verifier")
 
@@ -74,14 +78,17 @@ def ran(trials) -> tuple:
 
 def has_verdict(trials) -> bool:
     """Whether an attempt that ran was passed or failed, so a pass count over
-    them means something."""
-    return any(t.outcome not in NO_VERDICT for t in ran(trials))
+    them means something. Never beside a score with no pass or fail: an attempt
+    that crashed there was not failed by the benchmark."""
+    graded = any(t.outcome == classify.SCORED and t.score is not None for t in ran(trials))
+    return any(t.outcome not in NO_VERDICT and not (graded and t.outcome not in VERIFIED) for t in ran(trials))
 
 
 @dataclass(frozen=True)
 class Attempts:
-    """Every attempt at one task in one job, numbered from 1."""
+    """Every attempt at one task in one job, numbered from 1; ``scored_only``, the job's."""
     trials: tuple
+    scored_only: bool = False
 
     @property
     def n(self) -> int:
@@ -107,7 +114,7 @@ class Attempts:
     def has_verdicts(self) -> bool:
         """False when no attempt that ran was passed or failed (all unknown,
         scored or infra)."""
-        return has_verdict(self.trials)
+        return not self.scored_only and has_verdict(self.trials)
 
     @property
     def scores(self) -> list:
@@ -171,13 +178,13 @@ def _by_task_name(job) -> dict[str, list]:
 
 def by_task(job) -> dict[str, Attempts]:
     """Every task of the job that was attempted more than once, by task name."""
-    return {task: Attempts(tuple(ordered(ts))) for task, ts in _by_task_name(job).items() if len(ts) > 1}
+    return {task: Attempts(tuple(ordered(ts)), job.scored_only) for task, ts in _by_task_name(job).items() if len(ts) > 1}
 
 
 def of(job, trial) -> Attempts | None:
     """The attempts at this trial's task, or None when it was attempted once."""
     same = [t for t in job.trials if t.task_name == trial.task_name]
-    return Attempts(tuple(ordered(same))) if len(same) > 1 else None
+    return Attempts(tuple(ordered(same)), job.scored_only) if len(same) > 1 else None
 
 
 def grouped(job) -> list[tuple]:
@@ -237,5 +244,5 @@ def for_tasks(tasks: Iterable[Sequence]) -> dict | None:
 
 
 def for_job(job) -> dict | None:
-    """``for_tasks`` over a parsed job, its tasks by task name."""
-    return for_tasks(_by_task_name(job).values())
+    """``for_tasks`` over a parsed job, its tasks by task name; None for a job with scores and no pass or fail."""
+    return None if job.scored_only else for_tasks(_by_task_name(job).values())

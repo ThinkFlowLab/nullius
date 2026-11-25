@@ -38,10 +38,11 @@
 
 {# How a run did at one task over its attempts, as its adjusted rate reads
    them: passes over the attempts that ran, infra counted apart. `word` false
-   leaves out "passed", for a row with no room. #}
+   leaves out the words and the infra count, for a row with no room. #}
 {% macro attempt_count(attempts, word=true) -%}
 {%- if attempts.has_verdicts %}<b>{{ attempts.n_passed }}/{{ attempts.n_ran }}</b>{% if word %} passed{% endif %}
-{%- elif attempts.mean_score is not none %}mean <b>{{ '%.2f'|format(attempts.mean_score) }}</b> over {{ attempts.n_scored }}
-{%- else %}{{ attempts.n }} attempts{% endif %}
-{%- if attempts.n_infra %}<span class="faint"> · {{ attempts.n_infra }} infra</span>{% endif %}
+{%- elif attempts.mean_score is not none %}<span title="Mean score of {{ attempts.n_scored }} attempt{{ '' if attempts.n_scored == 1 else 's' }}">{% if word %}mean {% endif %}<b>{{ '%.2f'|format(attempts.mean_score) }}</b></span>
+{%- elif word %}{{ attempts.n }} attempts
+{%- else %}<b class="faint">—</b>{% endif %}
+{%- if word and attempts.n_infra %}<span class="faint"> · {{ attempts.n_infra }} infra</span>{% endif %}
 {%- endmacro %}

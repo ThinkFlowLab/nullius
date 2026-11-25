@@ -9,6 +9,7 @@ Each page's command, or why there is none.
 | `/runs` | `nullius runs list <root>... [--json]` |
 | `/job/<id>` | `nullius runs show <root> <id> [--json]` |
 | `/trial/<job>/<trial>` | `nullius runs show <root> <job> <trial> [--json]` |
+| A trial's Conversation, by call | `nullius runs show <root> <job> <trial> --calls` |
 | `/import`, `/use-path` | `nullius import <run tree> -o <job root> [--json]`; `--list` |
 | `/compare` | `nullius compare <root> <id> <id>... [--matched] [--json]` |
 | `/workspaces/open/<name>` | `nullius serve <root>...`, `WORKSPACE=<name>` |
@@ -28,6 +29,7 @@ Each page's command, or why there is none.
 | --- | --- |
 | The live board | `/job/<id>/live` |
 | A trial's conversation, spans, artifacts | `/trial/…/conversation`, `/trial/…/trace-span`, `/trial/…/artifact/<key>`, `/trial/…/artifact/<key>/download` |
+| A picture the agent sent its model | `/trial/…/picture/<sha256>` |
 | One task side by side | `/compare/task/<task>` |
 
 ## No command yet

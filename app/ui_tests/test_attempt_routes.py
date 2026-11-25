@@ -151,6 +151,22 @@ class AttemptRoutes(unittest.TestCase):
         # a task attempted once is an ordinary row
         self.assertRegex(html, r'data-trial="single__a"[^>]*>\s*<td><a class="task" [^>]*>single</a></td>')
 
+    def test_every_trial_of_the_job_page_shows_its_number_then_its_square(self):
+        """A pass, a fail and an infra failure, alone or inside a group; a word only for what did not pass."""
+        run = written_job(self.root, "one-form", [("p__a", "p", 0, 1, None), ("f__a", "f", 1, 0, None),
+                                                  ("i__a", "i", 2, None, "ApiRateLimitError"),
+                                                  ("g__a", "g", 3, 1, None), ("g__b", "g", 4, 0, None)])
+        self.stack.enter_context(patch.object(workspace, "load_jobs", return_value=[run]))
+        html = self.get("/job/one-form")
+        for name, number, word in (("p__a", "1/1", False), ("f__a", "0/1", True), ("i__a", "—", True),
+                                   ("g__a", "1/1", False), ("g__b", "0/1", True)):
+            with self.subTest(name):
+                cell = html.split(f'data-trial="{name}"', 1)[1].split('<td class="outcome">', 1)[1].split("</td>", 1)[0]
+                self.assertEqual(re.search(r"<b[^>]*>([^<]*)</b>", cell)[1], number)
+                self.assertEqual(cell.count('<i class="sw '), 1)
+                self.assertEqual('class="oc-word"' in cell, word)
+        self.assertIn("<b>1/2</b>", re.search(r'<tr class="task-group".*?</tr>', html, re.S)[0])
+
     def test_job_page_has_pass_at_k_only_when_every_task_was_tried_twice(self):
         self.assertNotIn('id="pass-k"', self.get("/job/repeat-run"))
         only = repeated_job(self.root, "repeat-only", single=False)
@@ -168,7 +184,7 @@ class AttemptRoutes(unittest.TestCase):
         self.stack.enter_context(patch.object(workspace, "load_jobs", return_value=[run]))
         head = re.search(r'<tr class="task-group"[^>]*>(.*?)</tr>', self.get("/job/infra-run"), re.S)
         # one pass over the two attempts that ran; the rate-limited one is apart, and out of the means
-        self.assertIn('<b>1/2</b><span class="faint"> · 1 infra</span>', head.group(1))
+        self.assertIn('<span class="faint">1 infra</span>', head.group(1))
         self.assertIn('data-tip="Mean of 2 attempts · 110 to 510">310</span>', head.group(1))
         self.assertIn('data-tokens="310.0"', head.group(0))
 

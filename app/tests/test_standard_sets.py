@@ -628,8 +628,9 @@ class Running(Scratch):
         code, out, err = self.run_cli("--name", "plain")
         self.assertEqual(code, 0, out + err)
         cfg = read(os.path.join(self.jobs, "plain", "config.json"))
-        self.assertEqual(sorted(cfg["standard"]), ["backend", "benchmark", "benchmark_options", "control", "kind", "needs",
-                                                   "permissions_granted", "plugged", "provider", "retries", "unsandboxed"])
+        self.assertEqual(sorted(cfg["standard"]), ["backend", "benchmark", "benchmark_options", "control", "exchanges",
+                                                   "exchanges_max_mb", "kind", "needs", "permissions_granted", "plugged",
+                                                   "provider", "retries", "unsandboxed"])
 
 
 class Listing(Scratch):

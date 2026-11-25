@@ -58,6 +58,17 @@
   const pressure = t => (t.timeout_sec && t.elapsed_sec != null ? t.elapsed_sec / t.timeout_sec : 0);
   // A planned trial outside the part of the plan now running (the snapshot's `part`): not run, not queued.
   const outside = (s, t) => Array.isArray(s.part) && t.state === 'queued' && !s.part.includes(t.trial);
+  // the steps of the limit where the benchmark counts them (a bar while the trial runs), else the bare count
+  function stepsCell(t, bar) {
+    if (t.step == null) return '<td class="num lb-stepcell na">—</td>';
+    if (!(t.step_limit > 0)) return `<td class="num lb-stepcell">${esc(t.step)}</td>`;
+    const text = `<b>${esc(t.step)}</b> of ${esc(t.step_limit)}`;
+    return bar ? `<td class="num lb-stepcell"><span class="lb-limit lb-steps"><span class="lb-bar"><i style="width:${(100 * Math.min(1, t.step / t.step_limit)).toFixed(1)}%"></i></span><span>${text}</span></span></td>`
+      : `<td class="num lb-stepcell">${text}</td>`;
+  }
+  const callsCell = t => t.calls == null ? '<td class="num na">—</td>'
+    : `<td class="num">${esc(t.calls)}${t.calls_limit ? ' of ' + esc(t.calls_limit) : ''}</td>`;
+  const ofLimit = t => `<b>${clock(t.elapsed_sec)}</b>${t.timeout_sec ? ' of ' + clock(t.timeout_sec) : ''}`;
   function stateOf(s) {
     const C = s.counts || {};
     // Infer an omitted state from running and the counts.
@@ -204,15 +215,15 @@
     const doneRows = opts.showAll ? done : done.slice(-FLIGHT_SHOWN);
     const queuedRows = opts.showAll ? queued : queued.slice(0, FLIGHT_SHOWN);
     // a column appears once some trial reported it; a single missing cell is "—"
-    const has = {steps: trials.some(t => t.step != null), tokens: trials.some(t => tokensOf(t) != null), line: trials.some(t => t.activity || t.last_line)};
+    const has = {steps: trials.some(t => t.step != null), calls: trials.some(t => t.calls != null), tokens: trials.some(t => tokensOf(t) != null), line: trials.some(t => t.activity || t.last_line)};
     const body = rows.map(t => {
       const k = PHASES.indexOf(t.phase), p = pressure(t), tok = tokensOf(t), line = t.activity || t.last_line;
       const dim = opts.filter && t.outcome !== opts.filter ? ' dim' : '';
       return `<tr class="lb-row lbp-${esc(t.phase)}${dim}" data-trial="${esc(t.trial)}" tabindex="0" aria-current="${opts.selected === t.trial}">
         <td><span class="task" title="${esc(t.task || t.trial)}">${esc(shortTask(t))}</span>${agents.length > 1 ? `<small>${esc(t.agent || '')}</small>` : ''}${t.attempt > 1 ? `<small class="lb-retry" title="Tried again after: ${esc((t.retried || []).join(', '))}">retried ${t.attempt === 2 ? 'once' : (t.attempt - 1) + ' times'}, after ${esc((t.retried || []).slice(-1)[0] || 'an error').replace('_', ' ')}</small>` : ''}</td>
         <td><span class="lb-phase"><span class="lb-ticks">${PHASES.map((_, j) => `<s class="${j < k ? 'done' : j === k ? 'now' : ''}"></s>`).join('')}</span>${esc(PHASE_LABEL[t.phase] || t.phase || '—')}</span></td>
-        <td><span class="lb-limit"><span class="lb-bar${p > .6 ? ' near' : ''}"><i style="width:${(100 * Math.min(1, p)).toFixed(1)}%"></i></span><span><b>${clock(t.elapsed_sec)}</b> of ${t.timeout_sec ? clock(t.timeout_sec) : '—'}</span></span></td>
-        ${has.steps ? `<td class="num${t.step == null ? ' na' : ''}">${t.step == null ? '—' : esc(t.step)}</td>` : ''}
+        <td><span class="lb-limit"><span class="lb-bar${p > .6 ? ' near' : ''}"><i style="width:${(100 * Math.min(1, p)).toFixed(1)}%"></i></span><span>${ofLimit(t)}</span></span></td>
+        ${has.steps ? stepsCell(t, true) : ''}${has.calls ? callsCell(t) : ''}
         ${has.tokens ? `<td class="num${tok == null ? ' na' : ''}">${count(tok)}</td>` : ''}
         ${has.line ? `<td><span class="lb-line${line ? '' : ' na'}" title="${esc(line || '')}">${line ? redacted(line) : '—'}</span></td>` : ''}<td class="lb-go"></td></tr>`;
     }).join('') + queuedRows.map(t => {
@@ -230,15 +241,15 @@
         <td><span class="task" title="${esc(t.task || t.trial)}">${esc(shortTask(t))}</span>${agents.length > 1 ? `<small>${esc(t.agent || '')}</small>` : ''}</td>
         <td><span class="lb-outcome lbo-${esc(t.outcome || 'cancelled')}"><i></i>${esc(OUTCOME_LABEL[t.outcome] || 'Ended')}</span></td>
         <td><span class="lb-took">${t.total_sec != null ? `<b>${clock(t.total_sec)}</b> in all` : '—'}</span></td>
-        ${has.steps ? `<td class="num${t.step == null ? ' na' : ''}">${t.step == null ? '—' : esc(t.step)}</td>` : ''}
+        ${has.steps ? stepsCell(t, false) : ''}${has.calls ? callsCell(t) : ''}
         ${has.tokens ? `<td class="num${tok == null ? ' na' : ''}">${count(tok)}</td>` : ''}
         ${has.line ? `<td><span class="lb-line${line ? '' : ' na'}" title="${esc(line || '')}">${line ? redacted(line) : '—'}</span></td>` : ''}<td class="lb-go">${href ? `<a class="lb-open-row" href="${esc(href)}">Open →</a>` : ''}</td></tr>`;
     }).join('');
     const said = [busy ? (opts.showAll ? `All ${running.length} in flight` : `${rows.length} of ${running.length} in flight`) + ', nearest their limit first' : '',
       waits ? (opts.showAll ? `all ${queued.length} queued` : `the first ${queuedRows.length} of ${queued.length} queued`) : '',
       many ? (opts.showAll ? `all ${done.length} ended` : `the last ${doneRows.length} of ${done.length} ended`) : ''].filter(Boolean).join(' · ');
-    const more = busy || many || waits ?`<div class="lb-more"><span>${said}</span><button type="button" class="btn sm ghost" data-show-all>${opts.showAll ? 'Show fewer' : 'Show all'}</button></div>` : '';
-    return `<div class="lb-scroll"><table class="lb-table"><thead><tr><th>${busy ? 'Trial, the running nearest their limit first' : 'Trial'}</th><th>Phase, or how it ended</th><th>Time in phase, of its limit</th>${has.steps ? '<th class="num">Steps</th>' : ''}${has.tokens ? '<th class="num">Tokens</th>' : ''}${has.line ? '<th>Last line, redacted</th>' : ''}<th class="lb-go" aria-label="Trial page"></th></tr></thead><tbody>${body}</tbody></table></div>${more}`;
+    const more = busy || many || waits ? `<div class="lb-more"><span>${said}</span><button type="button" class="btn sm ghost" data-show-all>${opts.showAll ? 'Show fewer' : 'Show all'}</button></div>` : '';
+    return `<div class="lb-scroll"><table class="lb-table"><thead><tr><th>${busy ? 'Trial, the running nearest their limit first' : 'Trial'}</th><th>Phase, or how it ended</th><th>Time in phase, of its limit</th>${has.steps ? '<th>Steps</th>' : ''}${has.calls ? '<th class="num">Model calls</th>' : ''}${has.tokens ? '<th class="num">Tokens</th>' : ''}${has.line ? '<th>Last line, redacted</th>' : ''}<th class="lb-go" aria-label="Trial page"></th></tr></thead><tbody>${body}</tbody></table></div>${more}`;
   }
   // One trial: its phases on its own clock, from the feed's own phase events
   // (the route carries them as `timeline`), the time left in the phase it is in,
@@ -267,11 +278,12 @@
       return (k + 1 < keys.length ? secs(starts[keys[k + 1]]) : end) - secs(starts[p]);
     };
     const phases = PHASES.map(p => { const d = dur(p); return `<span class="lbp-${p}${d == null ? ' later' : ''}"><i></i>${PHASE_LABEL[p]}<b>${d == null ? '—' : clock(d)}${p === cur ? ' so far' : ''}</b></span>`; }).join('');
-    const facts = [['Steps', t.step, v => esc(v)], ['Input', t.n_input_tokens, count], ['Cached', t.n_cache_tokens, count], ['Output', t.n_output_tokens, count],
+    const facts = [['Steps', t.step, v => esc(v) + (t.step_limit > 0 ? ' of ' + esc(t.step_limit) : '')],
+      ['Model calls', t.calls, v => esc(v) + (t.calls_limit ? ' of ' + esc(t.calls_limit) : '')], ['Input', t.n_input_tokens, count], ['Cached', t.n_cache_tokens, count], ['Output', t.n_output_tokens, count],
       ['Cost', t.cost_usd, v => '$' + Number(v).toFixed(2)], ['Reward', t.reward, v => Number(v).toFixed(2)], ['Score', t.score, v => Number(v).toFixed(2)]].filter(f => f[1] != null);
     const events = (s.tail || []).filter(e => e.trial === t.trial).slice(-6);
     const state = t.state === 'done' ? `${OUTCOME_LABEL[t.outcome] || 'Ended'}${t.total_sec != null ? ', ' + clock(t.total_sec) + ' in all' : ''}`
-      : t.state === 'running' ? `${PHASE_LABEL[t.phase] || t.phase}, ${clock(t.elapsed_sec)} of ${t.timeout_sec ? clock(t.timeout_sec) : 'no limit'}`
+      : t.state === 'running' ? `${PHASE_LABEL[t.phase] || t.phase}, ${clock(t.elapsed_sec)}${t.timeout_sec ? ' of ' + clock(t.timeout_sec) : ''}`
       : stateOf(s) === 'finished' || outside(s, t) ? 'Not run' : `Queued${t.position != null ? ', position ' + (t.position + 1) : ''}`;
     const href = trialHref(t, opts);
     return `<header><h3>${esc(shortTask(t))}<small>${esc(state)}${t.agent ? ' · ' + esc(t.agent) : ''}</small></h3><button class="lb-x" type="button" data-close aria-label="Close trial detail"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></header>

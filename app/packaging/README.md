@@ -7,9 +7,6 @@ a source distribution and `SHA256SUMS`. It does not publish the release or
 upload to PyPI. A separate manual `publish to PyPI` workflow uploads reviewed
 GitHub release assets.
 
-The repository stays private; publication to PyPI makes the uploaded package
-and its included source public, independently of GitHub access.
-
 `pyproject.toml` owns the package version. The release tag is that version
 prefixed with `v`. Release
 notes live in `docs/releases/<tag>.md`.

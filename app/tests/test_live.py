@@ -171,6 +171,33 @@ class Fold(unittest.TestCase):
         self.assertIsNone(quiet.trials[0].step)
         self.assertIsNone(quiet.snapshot()["totals"]["n_input_tokens"])
 
+    def test_a_runners_step_limit_and_calls_fold_beside_the_step(self):
+        """The standard's runner reports a unit's steps of its limit and its model calls of a cap: the latest of
+        each is the trial's, kept when a later report leaves it out, and a new attempt starts with none."""
+        lines = [ev(1, "trial.phase", phase="agent_run", timeout_sec=7200),
+                 ev(2, "trial.progress", step=3, step_limit=100, calls=4, calls_limit=100, n_input_tokens=40),
+                 ev(3, "trial.progress", step=5, calls=7)]
+        t = board_of(*lines).snapshot()["trials"][0]
+        self.assertEqual((t["step"], t["step_limit"], t["calls"], t["calls_limit"], t["n_input_tokens"]), (5, 100, 7, 100, 40))
+        keys = list(t)
+        self.assertEqual(keys[keys.index("step"):keys.index("step") + 4], ["step", "step_limit", "calls", "calls_limit"])
+        calls_only = board_of(ev(1, "trial.phase", phase="agent_run"), ev(2, "trial.progress", calls=2)).snapshot()["trials"][0]
+        self.assertEqual((calls_only["step"], calls_only["step_limit"], calls_only["calls"], calls_only["calls_limit"]), (None, None, 2, None))
+        lines += [ev(4, "trial.end", outcome="agent_error"), ev(5, "trial.phase", phase="agent_run")]
+        again = board_of(*lines).snapshot()["trials"][0]
+        self.assertEqual(again["attempt"], 2)
+        for key in ("step", "n_input_tokens"):
+            self.assertIsNone(again[key])
+        for key in live.PROGRESS:                 # the attempt's own counts: none yet, so none in its snapshot
+            self.assertNotIn(key, again)
+        # a feed without the runner's counts: none of their keys in the snapshot, and every other key it had
+        t = board_of(ev(1, "trial.phase", phase="agent_run"), ev(2, "trial.progress", step=3, n_input_tokens=10)).snapshot()["trials"][0]
+        for key in live.PROGRESS:
+            self.assertNotIn(key, t)
+        self.assertEqual(list(t), ["trial", "task", "agent", "model", "position", "state", "phase", "since", "elapsed_sec",
+                                   "timeout_sec", "phases_done", "step", "n_input_tokens", "n_cache_tokens", "n_output_tokens",
+                                   "cost_usd", "activity", "last_line", "outcome", "reward", "durations", "total_sec"])
+
     def test_trial_end_records_outcome_reward_durations_and_totals(self):
         b = board_of(ev(1, "trial.phase", phase="agent_run"),
                      ev(2, "trial.end", outcome="resolved", reward=1.0,

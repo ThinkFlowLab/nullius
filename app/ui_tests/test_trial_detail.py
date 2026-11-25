@@ -76,6 +76,8 @@ class TrialDetail(unittest.TestCase):
         self.assertNotIn("tool_calls", said); self.assertNotIn("run.py", said)
         self.assertIn("Result timed out Steps 15 Score 0.25",       # text, or a number the head does not show
                       text_of(self.panel(self.page({"result": "timed out", "steps": 15, "score": 0.25}))))
+        self.assertEqual(text_of(self.panel(self.page({"steps": 15, "steps_limit": 60, "ended": "steps", "rank": 7}, standard={}))),
+                         "Rank 7")                           # the head's steps of their limit and what ended the work
         self.assertIn("checks ✓ saved × closed notes · cursor: not taken", said)
         self.assertRegex(html, r'<span class="ok">✓</span> saved')
         self.assertRegex(html, r'<span class="bad">×</span> closed')

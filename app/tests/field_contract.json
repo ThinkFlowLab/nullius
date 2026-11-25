@@ -12,6 +12,7 @@
    "n_scored",
    "ran",
    "rate",
+   "scored_only",
    "scores",
    "trials"
   ]
@@ -439,6 +440,9 @@
    "dur_phases",
    "dur_total",
    "dur_verifier",
+   "ended_by",
+   "ended_label",
+   "ended_tag",
    "env_type",
    "exception_message",
    "exception_type",
@@ -475,6 +479,7 @@
    "score",
    "source",
    "started_at",
+   "stop_reason",
    "task_base",
    "task_name",
    "trace_path",
