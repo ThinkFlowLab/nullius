@@ -330,6 +330,35 @@ class Studies(StudyCase):
                 doc = self.run_study(out=out, times=1, targets=self.targets[:1], rule=read, yes="^72$")
                 self.assertEqual((doc["starts"][1]["answered"], doc["left"], doc["state"]), (2, 0, "done"))
 
+    def test_a_stream_needs_a_choice_before_its_usage_only_event(self):
+        Model.answers = {}
+        self.record_trial("stream__u0002", 1, path="/chat/completions", req={
+            "model": "m", "max_tokens": 1000, "stream": True,
+            "messages": [{"role": "user", "content": "Use one tool call."}]})
+        targets = [study.Target(self.job, "stream__u0002", 1)]
+        usage = {"choices": [], "usage": {"prompt_tokens": 50, "completion_tokens": 1}}
+
+        def stream(handler):
+            raw = handler.rfile.read(int(handler.headers["Content-Length"]))
+            Upstream.seen.append((handler.path, dict(handler.headers), raw))
+            handler.send_response(200)
+            handler.send_header("Content-Type", "text/event-stream")
+            handler.end_headers()
+            handler.wfile.write(("".join("data: " + json.dumps(e) + "\n\n" for e in events)
+                                 + "data: [DONE]\n\n").encode())
+
+        read = replay.command_rule("echo read")
+        for n, events in enumerate(([usage, usage], [{"usage": usage["usage"]}], [])):
+            with self.subTest(events=events), mock.patch.object(Model, "do_POST", stream):
+                out = os.path.join(self.tmp, f"stream-{n}")
+                doc = self.run_study(out=out, times=1, targets=targets, rule=read)
+                self.assertEqual((doc["state"], doc["left"], doc["starts"][0]["answered"], doc["starts"][0]["failed"]),
+                                 ("stopped", 2, 0, 2))
+                events[:] = [{"choices": [{"index": 0, "delta": {"content": "ok"}, "finish_reason": "stop"}]}, usage]
+                doc = self.run_study(out=out, times=1, targets=targets, rule=read)
+                self.assertEqual((doc["state"], doc["left"], doc["starts"][1]["answered"], doc["starts"][1]["failed"]),
+                                 ("done", 0, 2, 0))
+
     def test_a_stopped_study_goes_on_and_no_call_is_sent_twice(self):
         """Stopped after 5 sends, started again: the 7 not answered are sent, each slot once in all."""
         doc = self.run_study(stop_after=5)

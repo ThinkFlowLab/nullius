@@ -494,17 +494,23 @@ def _read_rule(rule: Rule, a: dict, keys) -> str:
         raise Refused("reading rule failed: " + exchanges._cut_key(str(e), keys)) from None
 
 
-def _no_answer(a: dict, body: bytes, streamed: bool) -> Optional[str]:
+def _no_answer(a: dict, body: bytes, streamed: bool, path: str = "") -> Optional[str]:
     """Why a reply of HTTP 200 is no answer: it ended on an error (an error object, a choice that ended
     ``error``, a Responses status ``failed``) or holds no choice; None for an answer."""
     end = a.get("end")
     if a.get("error") or any(e in ("error", "failed") for e in (end.values() if isinstance(end, dict) else [end])):
         return "the reply ended on an error"
-    try:
-        got = None if streamed else json.loads(body)
-    except ValueError:
-        return None
-    return "the reply holds no choice" if isinstance(got, dict) and "choices" in got and not got["choices"] else None
+    parts = [line[5:].strip() for line in body.splitlines() if line.startswith(b"data:")] if streamed else [body]
+    choices = []
+    for part in parts:
+        try:
+            got = json.loads(part)
+        except ValueError:
+            continue
+        if isinstance(got, dict) and "choices" in got:
+            choices.append(bool(got["choices"]))
+    chat = streamed and path and protocol(path) == "chat"
+    return "the reply holds no choice" if (choices or chat) and not any(choices) else None
 
 
 def answer(path: str, status: int, body: bytes, streamed: bool) -> dict:
@@ -521,7 +527,7 @@ def answer(path: str, status: int, body: bytes, streamed: bool) -> dict:
                                    for c in got.get("tool_calls") or [] if isinstance(c, dict)],
                     "usage": got.get("usage")})
         out.update(relay.reply_facts(path, body, streamed))
-        why = _no_answer(out, body, streamed)
+        why = _no_answer(out, body, streamed, path)
         if why:
             out["failed"] = why
     else:

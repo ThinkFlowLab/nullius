@@ -52,6 +52,8 @@ print(json.loads(answer["text"])["action"])
 
 A reply that ends on an error or holds no choice is a failure: not counted, and sent again by a study.
 
+A streamed chat reply needs a choice in at least one event; its final usage-only event is allowed.
+
 The replay's folder (`--out DIR`, else under `replays/`) holds `replay.json` with the counts, the request sent and each answer.
 
 ## A study over many calls
