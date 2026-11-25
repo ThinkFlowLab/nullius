@@ -6,6 +6,7 @@
 {% block title %}{{ job.job_id }} — Nullius{% endblock %}
 {% block crumb %}/ {{ job.job_id }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='runs/live-board.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{# the dialogs' frame #}
 <link rel="stylesheet" href="{{ url_for('static', filename='runs/board.css') }}">{% endblock %}
 {% block body %}{% set oc = job.counts %}
 
@@ -376,11 +377,11 @@
       <div class="popm" role="group" aria-label="Token split"><span>input</span><b>{{ '{:,}'.format(job.total_input_tokens) }}</b><span>cached (part of input)</span><b>{{ '{:,}'.format(job.total_cache_tokens) }}</b><span>output</span><b>{{ '{:,}'.format(job.total_output_tokens) }}</b></div></details></div>
     <div class="kv" data-tip="{{ 'A control never calls a model, so this is a real zero' if job.is_control else 'Only recorded by agents that report it' }}"><span class="k">Cost</span><span class="v">{{ job.total_cost_usd|usd(job.kind) }}</span></div>
     {% if job_cap or (job.budget and job.budget.max_usd) %}<div class="kv" id="run-cap" data-tip="One cap for the whole run: each later part has what the parts before it left{% if job.budget.unsettled_usd %}. {{ job.budget.unsettled_usd|usd }} stays booked for calls whose cost was never reported{% endif %}"><span class="k">Spending cap</span><span class="v">{{ (job_cap or job.budget).max_usd|cap }}</span></div>
-    {% if job_cap %}<div class="sp cap-spent" id="cap-spent">{{ job_cap.spent_usd|cap }} spent{% if again and again.where %} · <button class="plain" id="cap-change" type="button" aria-haspopup="dialog">Change</button>{% elif rerunning %} · <span class="faint">change it when this part ends</span>{% endif %}</div>{% endif %}
+    {% if job_cap %}<div class="sp cap-spent small muted" id="cap-spent">{{ job_cap.spent_usd|cap }} spent{% if again and again.where %} · <button class="plain" id="cap-change" type="button" aria-haspopup="dialog">Change</button>{% elif rerunning %} · <span class="faint">change it when this part ends</span>{% endif %}</div>{% endif %}
     {% if job.budget.not_run %}<div class="sp"><details class="pop"><summary aria-label="The units not run"><span class="tw"></span>{{ job.budget.not_run|length }} not run</summary>
       <div class="popm cap-units" role="group" aria-label="The units not run">{% for u in job.budget.not_run %}<span>{{ u }}</span>{% endfor %}</div></details></div>{% endif %}
     {% elif again and again.where and job.standard %}<div class="kv" id="run-cap"><span class="k">Spending cap</span><span class="v faint">none</span></div>
-    <div class="sp cap-spent" id="cap-spent"><button class="plain" id="cap-change" type="button" aria-haspopup="dialog">Set</button></div>{% endif %}
+    <div class="sp cap-spent small muted" id="cap-spent"><button class="plain" id="cap-change" type="button" aria-haspopup="dialog">Set</button></div>{% endif %}
     {% if job.budget and job.budget.unit_max_usd %}<div class="kv" id="unit-cap" data-tip="For each {{ job.runner_items[0] if job.runner_items else 'trial' }}, its judge's calls apart: one that reaches it is cut off there and counts against the agent, and the run goes on"><span class="k">Cap per {{ job.runner_items[0] if job.runner_items else 'trial' }}</span><span class="v">{{ job.budget.unit_max_usd|cap }}</span></div>
     {% if job.budget.over_unit %}<div class="sp"><details class="pop"><summary aria-label="The units that reached it"><span class="tw"></span>{{ job.budget.over_unit|length }} reached it</summary>
       <div class="popm cap-units" role="group" aria-label="The units that reached it">{% for u in job.budget.over_unit %}<span>{{ u }}</span>{% endfor %}</div></details></div>{% endif %}{% endif %}
@@ -416,13 +417,13 @@
     {%- if again and again.where %}
     <div class="pick" id="rerun-pick" role="group" aria-label="Run tasks again">
       <button class="fclear plain" id="pick-shown" type="button">Select the rows shown</button>
-      <span class="pick-n" id="pick-count" aria-live="polite">0 chosen</span>
+      <span class="pick-n small muted" id="pick-count" aria-live="polite">0 chosen</span>
       <button class="btn sm" id="rerun-open" type="button" aria-haspopup="dialog" disabled>Run selected again</button>
       {%- set rest = waiting|rejectattr('running')|list %}
       {%- if rest %}
       {%- if plan_sets %}
       <details class="pop plan-sets" id="plan-sets"><summary class="btn sm ghost" aria-haspopup="true">Run a set</summary>
-        <div class="popm" role="group" aria-label="Run the tasks of a set not yet run">{% for s in plan_sets %}<button class="plain" type="button" data-pick="{{ s.trials|join(' ') }}">{{ s.name }}<b>{{ s.tasks }}</b></button>{% endfor %}</div></details>
+        <div class="popm plan-sets-menu" role="group" aria-label="Run the tasks of a set not yet run">{% for s in plan_sets %}<button class="plain plan-set" type="button" data-pick="{{ s.trials|join(' ') }}">{{ s.name }}<b>{{ s.tasks }}</b></button>{% endfor %}</div></details>
       {%- endif %}
       <button class="btn sm ghost" id="pick-rest" type="button" aria-haspopup="dialog" data-pick="{{ rest|map(attribute='trial')|join(' ') }}">Run the rest · {{ rest|map(attribute='unit')|unique|list|length }}</button>
       {%- endif %}
@@ -573,12 +574,12 @@
 {%- if picking %}
 {#- what Run selected again asks: the count, the names and a reason, the budget left; for tasks that never ran, one short
     question and the budget left. The page fills the words and the names from the ticks #}
-<dialog class="rerun-ask" id="rerun-ask" aria-labelledby="rerun-ask-h" data-post="{{ url_for('job_rerun', job_id=job.job_id) }}" data-csrf="{{ csrf }}" data-where="{{ again.where }}">
+<dialog class="std-how rerun-ask" id="rerun-ask" aria-labelledby="rerun-ask-h" data-post="{{ url_for('job_rerun', job_id=job.job_id) }}" data-csrf="{{ csrf }}" data-where="{{ again.where }}">
   <form method="dialog">
-    <h2 id="rerun-ask-h">Run <span data-n>0 tasks</span> again</h2>
+    <div class="std-how-head"><h2 id="rerun-ask-h">Run <span data-n>0 tasks</span> again</h2></div>
     <p class="small muted"{% if waiting %} data-first="On {{ again.where }}, in this job: a task with no result gets its first; any other result is replaced, its earlier tries kept."{% endif %}>On {{ again.where }}, in this job: each result replaces the task's, and the earlier tries stay.</p>
-    <ul class="rerun-names" data-names></ul>
-    <label data-reason>Reason <span class="faint">(optional)</span><input type="text" name="reason" maxlength="200" autocomplete="off"></label>
+    <ul class="rerun-names mono small" data-names></ul>
+    <label class="small" data-reason>Reason <span class="faint">(optional)</span><input type="text" name="reason" maxlength="200" autocomplete="off"></label>
     {%- if job_cap %}
     <p class="small" id="rerun-budget">{% if job_cap.closed %}Budget for the whole run: {{ job_cap.max_usd|cap }}, {% if job_cap.left_usd > 0 %}{{ job_cap.spent_usd|cap }} spent; the last part stopped at it{% else %}all spent{% endif %}. Change it to run more.{% else %}Budget for the whole run: {{ job_cap.max_usd|cap }}, {{ job_cap.left_usd|cap }} left.{% endif %}</p>
     {%- endif %}
@@ -587,11 +588,11 @@
   </form>
 </dialog>
 {#- the job's one spending cap, changed for its next part #}
-<dialog class="rerun-ask" id="cap-ask" aria-labelledby="cap-ask-h" data-post="{{ url_for('job_cap_change', job_id=job.job_id) }}" data-csrf="{{ csrf }}">
+<dialog class="std-how rerun-ask" id="cap-ask" aria-labelledby="cap-ask-h" data-post="{{ url_for('job_cap_change', job_id=job.job_id) }}" data-csrf="{{ csrf }}">
   <form method="dialog">
-    <h2 id="cap-ask-h">Spending cap for the whole run</h2>
+    <div class="std-how-head"><h2 id="cap-ask-h">Spending cap for the whole run</h2></div>
     <p class="small muted">{% if job_cap %}{{ job_cap.spent_usd|cap }} spent so far. {% endif %}The new cap applies from the next part.</p>
-    <label>Cap, USD<input type="number" name="max_usd" min="0" step="any" inputmode="decimal" required{% if job_cap %} value="{{ job_cap.max_usd }}"{% endif %}></label>
+    <label class="small">Cap, USD<input type="number" name="max_usd" min="0" step="any" inputmode="decimal" required{% if job_cap %} value="{{ job_cap.max_usd }}"{% endif %}></label>
     <p class="small bad" data-error hidden></p>
     <div class="rerun-acts"><button type="submit" value="cancel" class="btn ghost" formnovalidate>Cancel</button><button type="submit" value="save" class="btn">Save</button></div>
   </form>
@@ -607,8 +608,8 @@
       {% for r in job.reruns|reverse %}
       <dt>{{ r.at[:16]|replace('T', ' ') }}{{ 'Z' if r.at.endswith('+00:00') }}{% if r.stopped %} <span class="faint">stopped</span>{% endif %}</dt>
       <dd>{% if r.reason %}<p class="rerun-reason">{{ r.reason }}</p>{% endif %}
-        <ul class="rerun-rows">{% for x in r.replaced %}<li><span class="mono">{{ x.unit or x.trial }}</span>{% for k, v in x.was.items() %} <span class="faint">{{ k }}</span> {{ v }}{% endfor %}{% if x.trial in (r.no_result or []) %} <span class="faint">no result</span>{% endif %} → {% for k, v in x.now.items() %}<span class="faint">{{ k }}</span> {{ v }} {% endfor %}<span class="faint">try {{ x.try }}</span></li>{% endfor %}
-          {%- for x in r.begun or [] %}<li><span class="mono">{{ x.unit or x.trial }}</span> <span class="faint">first run</span> → {% for k, v in x.now.items() %}<span class="faint">{{ k }}</span> {{ v }} {% endfor %}</li>{% endfor %}
+        <ul class="rerun-rows">{% for x in r.replaced %}<li><span class="mono small rerun-unit">{{ x.unit or x.trial }}</span>{% for k, v in x.was.items() %} <span class="faint">{{ k }}</span> {{ v }}{% endfor %}{% if x.trial in (r.no_result or []) %} <span class="faint">no result</span>{% endif %} → {% for k, v in x.now.items() %}<span class="faint">{{ k }}</span> {{ v }} {% endfor %}<span class="faint">try {{ x.try }}</span></li>{% endfor %}
+          {%- for x in r.begun or [] %}<li><span class="mono small rerun-unit">{{ x.unit or x.trial }}</span> <span class="faint">first run</span> → {% for k, v in x.now.items() %}<span class="faint">{{ k }}</span> {{ v }} {% endfor %}</li>{% endfor %}
           {%- set left = r.trials|reject('in', r.replaced|map(attribute='trial')|list + (r.begun or [])|map(attribute='trial')|list)|list %}{% if left %}<li class="faint">{{ left|length }} not replaced: {{ left|join(', ') }}</li>{% endif %}</ul>
         {% set n = r.trials|n_tasks %}<span class="faint">{{ n }} task{{ '' if n == 1 else 's' }}{% if r.spent_usd is not none %} · {{ r.spent_usd|usd }} spent{% endif %}</span></dd>
       {% endfor %}

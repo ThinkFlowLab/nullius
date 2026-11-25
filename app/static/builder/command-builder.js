@@ -787,7 +787,7 @@
       tile({attr: 'std-start-pick', key: x.id, on: !!ids, title: 'Specific ' + u.nouns, meta: ids ? ids.length + ' chosen' : ''}),
       ...(older ? [tile({attr: 'std-start', key: on, data, on: true, title: older})] : [])];
     return `<div class="nb-sectionhead std-sethead"><h3>${C.datasetsOf(rec).length > 1 ? esc(x.label) + ': start with' : 'Start with'}</h3>`
-      + (ids ? `<button type="button" class="nb-inlinebutton" data-std-start-pick="${esc(x.id)}">Change the ${esc(u.nouns)} <span aria-hidden="true">→</span></button>` : '')
+      + (ids ? `<button type="button" class="btn ghost sm" data-std-start-pick="${esc(x.id)}">Change the ${esc(u.nouns)} <span aria-hidden="true">→</span></button>` : '')
       + `</div><div class="nb-pick-grid std-optgrid">${tiles.join('')}</div>`;
   }
   // Specific tasks: the tasks page's list (catalogue/tasks.js) in a dialog, of the dataset's tasks at the recipe's

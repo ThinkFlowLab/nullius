@@ -86,7 +86,7 @@ class CappedJobPage(unittest.TestCase):
         self.assertEqual(self.text(html, r'<div class="alert" id="cap-stopped">.*?</div>'),
                          "Stopped at its spending cap of $0.50, with $0.44 spent: 1 cut off, 4 not run.")   # a neutral notice: nothing failed
         self.assertEqual(self.text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap $0.50")
-        self.assertEqual(self.text(html, r'<div class="sp cap-spent" id="cap-spent">.*?</div>').split(" · ")[0], "$0.44 spent")   # the same spend, the booked calls with it
+        self.assertEqual(self.text(html, r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>').split(" · ")[0], "$0.44 spent")   # the same spend, the booked calls with it
         self.assertIn("$0.03", unescape(html))                                            # what stays booked for calls whose cost was never reported
         self.assertEqual(self.text(html, r'<div class="popm cap-units".*?</div>'), "t-6 t-7 t-8 t-9")
         self.assertIn("4 not run</summary>", html)

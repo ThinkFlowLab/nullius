@@ -105,11 +105,11 @@ class RerunPage(unittest.TestCase):
         html = self.page("/job/r1?view=results")
         self.assertEqual(re.findall(r'<input class="pick-row" type="checkbox" value="([^"]+)"', html), [trial_name(k) for k in range(3)])
         self.assertIn('<button class="fclear plain" id="pick-shown" type="button">Select the rows shown</button>', html)
-        self.assertIn('<span class="pick-n" id="pick-count" aria-live="polite">0 chosen</span>', html)
+        self.assertIn('<span class="pick-n small muted" id="pick-count" aria-live="polite">0 chosen</span>', html)
         self.assertIn('<button class="btn sm" id="rerun-open" type="button" aria-haspopup="dialog" disabled>Run selected again</button>', html)
         # the filter the bar's button reads: each row's outcome, the tick inside it
         self.assertRegex(html, r'<tr data-outcome="failed_verification"[^>]*data-trial="t-1__u0001"[^>]*>\s*<td><input class="pick-row"')
-        ask = text(html, r'<dialog class="rerun-ask".*?</dialog>')
+        ask = text(html, r'<dialog class="std-how rerun-ask".*?</dialog>')
         self.assertEqual(ask, "Run 0 tasks again On this machine, in this job: each result replaces the task's, and the earlier tries stay. "
                               "Reason (optional) Cancel Run 0 tasks again")
         self.assertIn('data-post="/job/r1/rerun"', html)
@@ -255,9 +255,9 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         tabs = text(trial, r'<nav class="try-tabs".*?</nav>')
         self.assertTrue(tabs.startswith("Try 1"), tabs); self.assertIn("Try 2 run again by hand", tabs)
         self.assertIn('title="Try 2: Resolved, run again by hand: the provider failed"', trial)
-        self.assertEqual(text(trial, r'<p class="try-why".*?</p>'), "Run again by hand: the provider failed")
+        self.assertEqual(text(trial, r'<p class="try-why muted small".*?</p>'), "Run again by hand: the provider failed")
         earlier = self.page(f"/trial/r1/{trial_name(1)}.try-1")
-        self.assertNotIn('class="try-why"', earlier)                              # the earlier try was the run's own
+        self.assertNotIn('class="try-why', earlier)                              # the earlier try was the run's own
 
     def interrupted(self, d):
         """The job as an interrupted run leaves it: five tasks planned, as its feed says; t-2 begun and killed (a
@@ -337,9 +337,9 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         self.open(d.parent)
         html = self.page("/job/r1?view=results")
         self.assertEqual(text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap $4.00")
-        self.assertEqual(text(html, r'<div class="sp cap-spent" id="cap-spent">.*?</div>'), "$0.31 spent · Change")
+        self.assertEqual(text(html, r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>'), "$0.31 spent · Change")
         self.assertEqual(text(html, r'<p class="small" id="rerun-budget">.*?</p>'), "Budget for the whole run: $4.00, $3.69 left.")
-        self.assertEqual(text(html, r'<dialog class="rerun-ask" id="cap-ask".*?</dialog>'),
+        self.assertEqual(text(html, r'<dialog class="std-how rerun-ask" id="cap-ask".*?</dialog>'),
                          "Spending cap for the whole run $0.31 spent so far. The new cap applies from the next part. Cap, USD Cancel Save")
         r = self.cap("r1", {"max_usd": "6"})
         self.assertEqual((r.status_code, r.json["left_usd"]), (200, 5.69), r.get_data(as_text=True))
@@ -356,7 +356,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         self.assertEqual(self.post("r1", {"trials": [trial_name(1)]}).status_code, 200)
         self.assertIn(f"--unit {trial_name(1)} --from-run", self.asked[-1][1]["script"])
         self.assertEqual(json.loads((self.tmp / "runs" / "r1" / "run.json").read_text())["plan"]["caps"], {})
-        self.assertEqual(text(self.page("/job/r1?view=results"), r'<div class="sp cap-spent" id="cap-spent">.*?</div>'), "$0.40 spent · Change")
+        self.assertEqual(text(self.page("/job/r1?view=results"), r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>'), "$0.40 spent · Change")
 
     def test_a_change_is_refused_at_or_under_what_was_spent_and_while_a_part_runs(self):
         d = self.run_of()
@@ -373,7 +373,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         ex.part, ex.state, ex.launched = 1, "running", "again-1"
         r = self.cap("r1", {"max_usd": "6"})
         self.assertEqual((r.status_code, r.json["error"]), (409, "Still running: more tasks can be started once it has ended."))
-        self.assertEqual(text(self.page("/job/r1?view=results"), r'<div class="sp cap-spent" id="cap-spent">.*?</div>'),
+        self.assertEqual(text(self.page("/job/r1?view=results"), r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>'),
                          "$0.31 spent · change it when this part ends")
         self.assertEqual(ex.plan.caps, {})
 
@@ -412,7 +412,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         self.open(d.parent)
         html = self.page("/job/r1?view=results")
         self.assertEqual(text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap $0.50")
-        self.assertEqual(text(html, r'<div class="sp cap-spent" id="cap-spent">.*?</div>'), "$0.1012 spent · Change")
+        self.assertEqual(text(html, r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>'), "$0.1012 spent · Change")
         later = text(html, r'<details id="reruns" open>.*?</details>')
         self.assertIn("1 task · $0.0012 spent", later)
         self.assertNotIn("$2.00", later)                                          # that part's own cap: the job has one now
@@ -427,7 +427,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
                         "spent_total_usd": 0.726, "closed": True}, reruns=[part(1, 0.1815, True)])
         self.open(d.parent)
         html = self.page("/job/r1?view=results")
-        line = text(html, r'<div class="kv" id="run-cap".*?</div>') + " · " + text(html, r'<div class="sp cap-spent" id="cap-spent">.*?</div>')
+        line = text(html, r'<div class="kv" id="run-cap".*?</div>') + " · " + text(html, r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>')
         self.assertEqual(line, "Spending cap $0.80 · $0.726 spent · Change")
         self.assertEqual(text(html, r'<div class="alert" id="cap-stopped">.*?</div>'),
                          "Stopped at its spending cap of $0.80, with $0.726 spent.")         # the job's, not the first run's $0.5445
@@ -460,7 +460,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
             noisy += 0.1                                                         # 0.7999999999999999, as a ledger adds its calls
         self.capped(d, {"max_usd": 0.5, "spent_usd": noisy, "stopped": True, "cut_off": [], "not_run": [], "spent_total_usd": noisy})
         self.open(d.parent)
-        self.assertEqual(text(self.page("/job/r1?view=results"), r'<div class="sp cap-spent" id="cap-spent">.*?</div>'), "$0.80 spent · Change")
+        self.assertEqual(text(self.page("/job/r1?view=results"), r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>'), "$0.80 spent · Change")
         for typed in ("0.8", "0.80000000001"):
             with self.subTest(typed=typed):
                 r = self.cap("r1", {"max_usd": typed})
@@ -472,7 +472,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         self.open(d.parent)
         html = self.page("/job/r1?view=results")
         self.assertEqual(text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap none")
-        self.assertEqual(text(html, r'<div class="sp cap-spent" id="cap-spent">.*?</div>'), "Set")
+        self.assertEqual(text(html, r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>'), "Set")
         self.assertNotIn('id="rerun-budget"', html)
         self.assertEqual(self.post("r1", {"trials": [trial_name(0)]}).status_code, 200)
         self.assertNotIn("--max-usd", self.asked[-1][1]["script"])

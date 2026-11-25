@@ -327,9 +327,9 @@ process.stdout.write(JSON.stringify(out));
         tabs = text(trial, r'<nav class="try-tabs".*?</nav>')
         self.assertRegex(tabs, r"^Try 1 first run, in a later part \S+ Try 2 run again by hand"); self.assertNotIn("Try 1 run again", tabs)
         self.assertRegex(trial, r'title="Try 1: [^"]*, first run, in a later part: the rest of the plan"')
-        self.assertEqual(text(trial, r'<p class="try-why".*?</p>'), "Run again by hand: the provider failed")
+        self.assertEqual(text(trial, r'<p class="try-why muted small".*?</p>'), "Run again by hand: the provider failed")
         earlier = self.page(f"/trial/r1/{name}.try-1")
-        self.assertEqual(text(earlier, r'<p class="try-why".*?</p>'), "First run, in a later part: the rest of the plan")
+        self.assertEqual(text(earlier, r'<p class="try-why muted small".*?</p>'), "First run, in a later part: the rest of the plan")
 
     def test_first_run_label_strips_only_the_archive_suffix(self):
         name = "case.try-1__u0000"

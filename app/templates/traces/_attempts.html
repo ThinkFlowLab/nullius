@@ -28,12 +28,12 @@
   <a class="try-tab oc-{{ t.outcome }}" data-keep-tab
      href="{{ url_for('trial', job_id=job.job_id, trial_name=t.trial_name, workspace=workspace) }}"
      title="Try {{ n }}: {{ t.outcome_label }}{% if t.rerun %}, {{ t|try_mark(job) }}{% if t.rerun.reason %}: {{ t.rerun.reason }}{% endif %}{% endif %}"{% if t.trial_name == current.trial_name %} aria-current="page"{% endif %}>Try {{ n }}
-    {%- if t.rerun %}<span class="try-by">{{ t|try_mark(job) }}</span>{% endif %}
+    {%- if t.rerun %}<span class="try-by muted">{{ t|try_mark(job) }}</span>{% endif %}
     {%- if t.dur_total is not none %}<span class="try-dur">{{ t.dur_total|secs }}</span>{% endif %}</a>
   {%- endfor %}
 </nav>
 {%- if current.rerun and current.rerun.reason %}
-<p class="try-why" id="try-why">{{ (current|try_mark(job))|capitalize }}: {{ current.rerun.reason }}</p>{% endif %}
+<p class="try-why muted small" id="try-why">{{ (current|try_mark(job))|capitalize }}: {{ current.rerun.reason }}</p>{% endif %}
 {%- endmacro %}
 
 {# How a run did at one task over its attempts, as its adjusted rate reads

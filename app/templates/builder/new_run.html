@@ -36,10 +36,10 @@
     </form>
   </dialog>
   {#- Start with specific tasks: the tasks page's list of the plan's tasks, mounted afresh each time (catalogue/tasks.js) -#}
-  <dialog id="nb-tasks" class="nb-dialog nb-tasks-dialog" aria-labelledby="nb-tasks-title">
-    <div class="nb-dialoghead"><h2 id="nb-tasks-title">Start with</h2><button type="button" class="nb-dialogclose" id="nb-tasks-close" aria-label="Close">×</button></div>
+  <dialog id="nb-tasks" class="std-how tasks-dialog" aria-labelledby="nb-tasks-title">
+    <div class="std-how-head"><h2 id="nb-tasks-title">Start with</h2><button type="button" class="std-how-x" id="nb-tasks-close" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     <div id="nb-tasks-body"></div>
-    <div class="nb-dialogactions"><button class="nb-button nb-primary" id="nb-tasks-done" type="button">Done</button></div>
+    <div class="tasks-dialog-acts"><button class="btn" id="nb-tasks-done" type="button">Done</button></div>
   </dialog>
   <template id="nb-tasks-list"><article class="tasks-page nb-tasks-page" id="tasks-page" data-manual="true" data-writable="true">
     <p class="bench-blocked tasks-state" id="tasks-state" role="status" hidden></p>
