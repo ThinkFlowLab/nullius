@@ -187,6 +187,15 @@ class Write(Catalogue):
         self.assertEqual(definitions.problems(dict(raw, _here=os.path.dirname(self.root)), "agent"), [])
         self.assertEqual(match.fit(BENCH, definitions.get("agent", "flat", self.root)), [])
 
+    def test_new_version_is_not_stopped_by_a_leftover_temporary_name(self):
+        self.new_version("bot", "1.1.0")
+        path = os.path.join(self.user, "agents", "bot", "agent.json")
+        os.makedirs(path + ".part")                                  # another writer's name: never this write's own
+        self.new_version("bot", "1.2.0")
+        self.assertEqual(list(self.read("bot", user=True)["versions"])[:2], ["1.2.0", "1.1.0"])
+        with open(path) as f:
+            self.assertTrue(f.read().endswith("}\n"))
+
     def test_new_version_copies_the_default_and_refuses_a_duplicate(self):
         self.new_version("bot", "1.1.0")
         self.assertEqual(self.read("bot", user=True)["versions"]["1.1.0"],
