@@ -837,7 +837,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                 add("model", f"Served by: no job of this recipe calls {roles[role]}; leave it empty.")
     if errors:
         return out
-    nouns = (b.get("units") or {}).get("nouns", "units")
+    nouns = bench_nouns = (b.get("units") or {}).get("nouns", "units")   # a dataset's count is always the benchmark's
     if picks and all(p.get("setup") for p in picks):          # only setups: a unit is theirs (a conversation)
         nouns = picks[0]["o"]["units"]["nouns"]
     each = [None if picks and all(p.get("setup") for p in picks) else (set_of[x["id"]]["units"] if x["id"] in set_of else x.get("units"))
@@ -961,8 +961,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["review"] = [[STEP["benchmark"], "Benchmark", f"{b['label']} · needs {', '.join(b['needs'])}"],
                      [STEP["runner"], "Runner", "Nullius"],
                      [STEP["dataset"], "Datasets" if many else "Dataset",
-                      ", ".join(f"{x.get('label') or x['id']}" + (f" · task set {set_of[x['id']]['label']} · {set_of[x['id']]['units']} {nouns}"
-                                                                   if x["id"] in set_of else f" · {x['units']} {nouns}" if x.get("units") else "") for x in dss)],
+                      ", ".join(f"{x.get('label') or x['id']}" + (f" · task set {set_of[x['id']]['label']} · {set_of[x['id']]['units']} {bench_nouns}"
+                                                                   if x["id"] in set_of else f" · {x['units']} {bench_nouns}" if x.get("units") else "") for x in dss)],
                      *[[STEP["limits" if (b.get("options") or {})[k].get("limit") else "dataset" if (b.get("options") or {})[k].get("step") else "agent"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
                         _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)")
                         + ("" if all(per_ds[x["id"]].get(k) == v for x in dss) else f" · {', '.join(x.get('label') or x['id'] for x in dss if per_ds[x['id']].get(k) == v)}")]

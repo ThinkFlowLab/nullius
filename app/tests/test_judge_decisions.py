@@ -6,6 +6,7 @@ from __future__ import annotations
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
+import os
 import shutil
 import tempfile
 import threading
@@ -205,6 +206,13 @@ class DecisionModels(unittest.TestCase):
         self.assertEqual(url, "https://openrouter.ai/api/v1/models?output_modalities=decisions")
         self.assertNotIn("Authorization", headers); self.assertNotIn("sk-or-fixture", json.dumps(headers))
         self.assertEqual(timeout, 5)
+
+    def test_a_leftover_temporary_name_does_not_stop_the_cache(self):
+        file = os.path.join(self.home, "cache", "openrouter-decision-models.json")
+        os.makedirs(file + ".tmp")                                   # another writer's name: never this write's own
+        first = self.models()
+        with open(file, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"at": self.now, "models": first})
 
     def test_the_cache_is_used_while_fresh_and_kept_when_the_network_fails(self):
         first = self.models()

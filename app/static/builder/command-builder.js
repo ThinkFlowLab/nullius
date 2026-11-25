@@ -786,10 +786,11 @@
       const nested = C.nestedDatasets(b), chosen = C.datasetsOf(rec);
       const shown = nested ? b.datasets.filter(x => !x.subset_of) : b.datasets;
       const on = x => nested ? chosen.some(id => C.wholeOf(b, id) === x.id) : chosen.includes(x.id);
+      const du = b.units || {noun: 'unit', nouns: 'units'};   // a dataset's count, and a task set's, is the benchmark's, whoever runs it
       return `<div class="nb-sectionhead"><h2>Which datasets?</h2></div>`
         + `<div class="nb-pick-grid std-optgrid">${shown.map(x => tile({attr: 'std-dataset', key: x.id, on: on(x), title: x.label,
-          tip: x.summary || '', meta: x.units ? x.units + ' ' + u.nouns : '', foot: datasetChecks(b, x)})).join('')}</div>`
-        + b.datasets.filter(x => chosen.includes(x.id)).map(x => nested ? familyChoice(rec, b, x, u) : taskSetChoice(rec, b, x, u)).join('')
+          tip: x.summary || '', meta: x.units ? x.units + ' ' + du.nouns : '', foot: datasetChecks(b, x)})).join('')}</div>`
+        + b.datasets.filter(x => chosen.includes(x.id)).map(x => nested ? familyChoice(rec, b, x, du) : taskSetChoice(rec, b, x, du)).join('')
         + benchOptions(rec, b, 'dataset') + credentialWarnings(b, b.datasets.filter(x => chosen.includes(x.id)));
     }
     if (step === S.agent) {

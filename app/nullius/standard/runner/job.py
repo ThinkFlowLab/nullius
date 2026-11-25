@@ -29,6 +29,7 @@ import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
+from nullius import ondisk
 from nullius.standard.calls import ledger
 from nullius.traces import otel
 from nullius.traces.breakdown import breakdown
@@ -607,8 +608,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     ``exchanges`` and ``exchanges_max_mb``: what each unit's relay kept of
     its agent's calls (``run --exchanges``) and its bound in MB, said for
     every run that gives them."""
-    with open(os.path.join(job_dir, "config.json"), "w") as f:
-        json.dump({"job_name": job, "runner": "standard", "runner_label": "Nullius",
+    ondisk.write_whole(os.path.join(job_dir, "config.json"), json.dumps({"job_name": job, "runner": "standard", "runner_label": "Nullius",
                    "standard": {"benchmark": bench["key"], **_version(bench), "plugged": other.get("_ref") or other["key"], "kind": other["_kind"], "provider": provider,
                                 "needs": bench["needs"], "permissions_granted": granted,
                                 "unsandboxed": granted and backend == "local", "backend": backend,
@@ -627,7 +627,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],
                    "n_concurrent_trials": concurrency,
                    "agents": [{"name": agent_name(other), "model_name": model}],
-                   "datasets": [{"name": f"{bench['key']}/{dataset}", "n_tasks": len(units)}]}, f, indent=2)
+                   "datasets": [{"name": f"{bench['key']}/{dataset}", "n_tasks": len(units)}]}, indent=2))
 
 
 #: an error kind naming the machine or the benchmark's side rather than the agent: the live board's infra_error
@@ -707,10 +707,9 @@ def write_result(job_dir: str, job: str, t0: float, t1: float, results: List[dic
     errored = sum(1 for r in results if r.get("exception_info"))
     hat = pass_hat(results)
     who = served_total(results, served)
-    with open(os.path.join(job_dir, "result.json"), "w") as f:
-        json.dump({"id": job, "started_at": iso(t0), "finished_at": iso(t1), "n_total_trials": planned,
+    ondisk.write_whole(os.path.join(job_dir, "result.json"), json.dumps({"id": job, "started_at": iso(t0), "finished_at": iso(t1), "n_total_trials": planned,
                    "stats": {"n_completed_trials": len(results) - errored, "n_errored_trials": errored,
                              "n_cancelled_trials": planned - len(results), "n_running_trials": 0, "n_pending_trials": 0,
                              "n_retries": n_retries(results)},
                    **({"pass_hat_k": hat} if hat else {}), **({"budget": budget} if budget else {}),
-                   **({"served": who} if who else {})}, f, indent=1)
+                   **({"served": who} if who else {})}, indent=1))
