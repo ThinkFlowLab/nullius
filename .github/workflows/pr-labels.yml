@@ -31,10 +31,11 @@ jobs:
     # An edit matters only when it changes the base. A review of a fork's pull
     # request gets a read-only token: the next run labels it.
     if: ${{ (github.event.action != 'edited' || github.event.changes.base) && (github.event_name != 'pull_request_review' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    # On the job, so a skipped edit cancels nothing.
+    # One at a time: each writes the labels of every pull request. All wait, as a
+    # cancelled one marks its commit. On the job, so a skipped edit does not wait.
     concurrency:
       group: ${{ github.workflow }}
-      cancel-in-progress: true
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
