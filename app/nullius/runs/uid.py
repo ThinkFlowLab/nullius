@@ -12,8 +12,11 @@ under this identity, so it follows the job and not the folder.
   ``standard.uuid``). A ``uuid5`` over fixed facts read from the files: the
   format, the folder name, what ran and when it started. No path is a fact,
   so a copy or a move keeps it; a renamed folder is a new job.
-- **pending**: a job with no trial and no start yet (a Harbor job
-  preparing): nothing fixed to derive from.
+- **pending**: nothing fixed to derive from yet: a job with no trial and no
+  start (a Harbor job preparing), or a standard job from before
+  ``standard.uuid`` without its ``result.json`` (still running, or killed).
+  Its start is the one ``result.json`` will record; the feed's start is
+  never read, since it differs from the result's and would change the uid.
 
 Old files are never rewritten to gain an id: a derived id is a pure function
 of the files. The facts carry ``"v": 1``; a change of their canonical form
@@ -27,32 +30,6 @@ import uuid
 
 #: fixed for good: changing one changes every derived identity
 NS_JOB = uuid.UUID("6f0f3a52-5c1e-4d39-9a2b-6a4c1f0e7d21")
-
-FEED = "events.jsonl"
-
-
-def _start(job_dir: str, res: dict, feed: bool):
-    """When the job started, read so that a source appearing later never changes it:
-    ``result.json``'s ``started_at`` when it has one; else, for a standard job (``feed``),
-    the feed's ``job.start``, the only start a killed one has (a job this runner starts declares
-    its uuid before either is written, so only an older build's run moves between them). A Harbor job reads
-    ``result.json`` only, since the feed is Nullius's and may appear after it. None without."""
-    if res.get("started_at"):
-        return str(res["started_at"])
-    if feed:
-        try:
-            with open(os.path.join(job_dir, FEED), encoding="utf-8", errors="replace") as fh:
-                for _, line in zip(range(32), fh):
-                    try:
-                        ev = json.loads(line)
-                    except ValueError:
-                        continue
-                    if isinstance(ev, dict) and ev.get("event") == "job.start" and ev.get("ts"):
-                        return str(ev["ts"])
-        except OSError:
-            pass
-    return None
-
 
 def _declared(cfg: dict):
     std = cfg.get("standard") if isinstance(cfg.get("standard"), dict) else {}
@@ -70,14 +47,16 @@ def _has_trial(job_dir: str) -> bool:
 
 
 def facts(job_dir: str, cfg: dict, res: dict):
-    """The fixed facts a derived identity is made of, as strings, or None for
-    a job with no trial and no start."""
+    """The fixed facts a derived identity is made of, as strings, or None while
+    pending. The start is ``result.json``'s only, which nothing later rewrites."""
     std = cfg.get("standard") if isinstance(cfg.get("standard"), dict) else {}
     agents = [a for a in cfg.get("agents") or [] if isinstance(a, dict)]
     if isinstance(cfg.get("harness"), str):          # an import: its folder names its source
         # shortcut: two imports of one source basename share an identity; a per-source id replaces this.
         return {"v": 1, "format": cfg["harness"], "folder": os.path.basename(job_dir)}
-    start = _start(job_dir, res, feed=bool(std))
+    start = str(res["started_at"]) if res.get("started_at") else None
+    if std and not res:
+        return None
     if start is None and not _has_trial(job_dir):
         return None
     if std:

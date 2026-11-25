@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import unittest
 
+from nullius import workspace
 from nullius.runs import parse
 from nullius.standard.runner import job
 
@@ -95,25 +96,26 @@ class JobUid(unittest.TestCase):
         with open(os.path.join(d, "events.jsonl"), "wb") as f:
             f.write(junk + json.dumps({"event": "job.start", "ts": ts}).encode() + b"\n")
 
-    def test_a_feed_that_is_not_utf8_is_read_not_raised(self):
-        clean, bad, none = (self.older_standard(os.path.join(self.tmp, n), None) for n in "abc")   # killed: no start in result.json
-        self.feed(clean, "2026-01-01T00:00:01Z")
-        self.feed(bad, "2026-01-01T00:00:01Z", junk=b"\xff\xfe not text\n")
-        j = parse.parse_job(bad)
-        self.assertEqual((j.uid, j.uid_source), (parse.parse_job(clean).uid, "derived"))
-        self.assertNotEqual(j.uid, parse.parse_job(none).uid)
-
-    def test_an_older_standard_jobs_start_is_its_result_else_its_feed(self):
+    def test_an_older_standard_job_is_pending_until_its_result_and_never_follows_the_feed(self):
         with self.subTest("ended: a feed that appears or goes leaves it"):
             d = self.older_standard(os.path.join(self.tmp, "ended"), "2026-01-01T00:00:00Z")
             before = parse.parse_job(d).uid
             self.feed(d, "2026-02-02T00:00:00Z")                      # a re-run in place, or a copy with its feed
             self.assertEqual(parse.parse_job(d).uid, before)
-        with self.subTest("killed: the feed's start, and another start is another job"):
-            a, b = (self.older_standard(os.path.join(self.tmp, n), None) for n in ("k1", "k2"))
-            self.feed(a, "2026-01-01T00:00:00Z")
-            self.feed(b, "2026-01-01T00:00:09Z")
-            self.assertNotEqual(parse.parse_job(a).uid, parse.parse_job(b).uid)
+        with self.subTest("running or killed: pending, feed or not, until result.json, read through the cache"):
+            d = self.older_standard(os.path.join(self.tmp, "killed"), "2026-01-01T00:00:00Z")
+            ended = parse.parse_job(d).uid
+            res = read(os.path.join(d, "result.json"))
+            os.remove(os.path.join(d, "result.json"))
+            ws = workspace.create(os.path.join(self.tmp, "ws"), [os.path.dirname(d)], label="w")
+            for junk in (None, b"\xff\xfe not text\n"):
+                if junk is not None:
+                    self.feed(d, "2026-01-01T00:00:01Z", junk=junk)
+                for j in (parse.parse_job(d), workspace.load_job(ws, d)[0]):
+                    self.assertEqual((j.uid, j.uid_source), ("", "pending"))
+            write(os.path.join(d, "result.json"), res)
+            j = workspace.load_job(ws, d)[0]
+            self.assertEqual((j.uid, j.uid_source), (ended, "derived"))
 
     def test_a_resumed_job_whose_uuid_is_not_one_keeps_the_identity_it_was_read_under(self):
         d = self.older_standard(self.tmp, "2026-01-01T00:00:00Z")
