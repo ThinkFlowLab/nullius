@@ -1,0 +1,107 @@
+name: pr-labels
+
+# Keeps four labels true on every open pull request: "merge conflict", "ci
+# failing", "stacked" and "needs review". Each run checks them all: a push to main can make any
+# of them conflict, and a push to one changes those stacked on it.
+#
+# pull_request_target, so the token can label a fork's pull request. Safe
+# because nothing is checked out: never add a checkout here.
+
+on:
+  push:
+    branches: [main]
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, ready_for_review, converted_to_draft]
+  pull_request_review:
+    types: [submitted, dismissed]
+  workflow_run:
+    workflows: [tests]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: read          # which workflow a check belongs to
+  checks: read
+  contents: read
+  pull-requests: write   # the labels
+  statuses: read
+
+jobs:
+  label:
+    # An edit matters only when it changes the base. A review of a fork's pull
+    # request gets a read-only token: the next run labels it.
+    if: ${{ (github.event.action != 'edited' || github.event.changes.base) && (github.event_name != 'pull_request_review' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    # On the job, so a skipped edit cancels nothing.
+    concurrency:
+      group: ${{ github.workflow }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh label create "merge conflict" --color b60205 --force \
+            --description "Conflicts with its base: merge or rebase it"
+          gh label create "ci failing" --color d93f0b --force \
+            --description "A check failed on its latest commit"
+          gh label create "stacked" --color c5def5 --force \
+            --description "Based on another branch than main"
+          gh label create "needs review" --color 0e8a16 --force \
+            --description "Tests pass, no conflict, no verdict on its latest commit"
+          # GitHub computes mergeability after being asked: UNKNOWN until then,
+          # and a pull request still UNKNOWN keeps the label it has.
+          for attempt in 1 2 3 4 5 6; do
+            sleep 10
+            prs=$(gh pr list --state open --limit 100 \
+              --json number,isDraft,mergeable,baseRefName,headRefOid,labels,statusCheckRollup)
+            jq -e 'any(.[]; .mergeable == "UNKNOWN")' <<< "$prs" > /dev/null || break
+          done
+          # The verdicts of those who can push: a comment is not one, and a
+          # dismissed one no longer is.
+          reviews=$(gh api graphql -F owner='{owner}' -F name='{repo}' -f query='
+            query($owner: String!, $name: String!) {
+              repository(owner: $owner, name: $name) {
+                pullRequests(states: OPEN, first: 100, orderBy: {field: CREATED_AT, direction: DESC}) {
+                  nodes { number reviews(last: 50, states: [APPROVED, CHANGES_REQUESTED]) {
+                    nodes { authorCanPushToRepository commit { oid } } } } } } }')
+          # One line per label to change. A check that ran twice on a commit
+          # counts by its latest run; a cancelled one says nothing.
+          jq -r --argjson reviews "$reviews" '
+            def latest:
+              [.statusCheckRollup[]?
+                | select((.conclusion // .state) | IN("SKIPPED", "CANCELLED") | not)]
+              | group_by([.workflowName, .name // .context])
+              | map(max_by(.startedAt) | {workflowName, result: (.conclusion // .state)});
+            def failing:
+              any(latest[]; .result | IN("FAILURE", "ERROR", "TIMED_OUT", "STARTUP_FAILURE"));
+            def passed:
+              [latest[] | select(.workflowName == "tests") | .result]
+              | length > 0 and all(.[]; . == "SUCCESS");
+            def reviewed:
+              .number as $number | .headRefOid as $head
+              | any($reviews.data.repository.pullRequests.nodes[]
+                    | select(.number == $number) | .reviews.nodes[];
+                    .authorCanPushToRepository and .commit.oid == $head);
+            def needs_review:
+              if .isDraft or .baseRefName != "main" or failing or (passed | not) or reviewed then false
+              elif .mergeable == "UNKNOWN" then null
+              else .mergeable == "MERGEABLE" end;
+            .[] | .number as $number | [.labels[].name] as $has
+            | [["merge conflict", (if .mergeable == "UNKNOWN" then null else .mergeable == "CONFLICTING" end)],
+               ["ci failing", failing],
+               ["stacked", .baseRefName != "main"],
+               ["needs review", needs_review]][]
+            | select(.[1] != null and .[1] != (.[0] | IN($has[])))
+            | [$number, (if .[1] then "add" else "remove" end), .[0]] | @tsv' <<< "$prs" |
+          while IFS=$'\t' read -r number change label; do
+            echo "#$number: $change $label"
+            if [ "$change" = add ]; then
+              gh api "repos/$GH_REPO/issues/$number/labels" -f "labels[]=$label" --silent
+            else
+              gh api -X DELETE "repos/$GH_REPO/issues/$number/labels/${label// /%20}" --silent
+            fi
+          done
