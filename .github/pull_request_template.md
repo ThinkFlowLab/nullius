@@ -34,7 +34,8 @@ Closes #
 
 ## Before and after
 
-<!-- When the change is visible: an image pair per place, same width. Else delete. -->
+<!-- Visible: an image pair per place, same width. Not, though templates or static
+files changed: "Nothing visible changes." Else delete. -->
 
 | Before | After |
 | --- | --- |

@@ -59,16 +59,8 @@ python3 app/tests/parallel.py
 uv run --no-project --with-requirements app/requirements.txt python app/tests/parallel.py app/ui_tests
 ```
 
-Two pins are refreshed by hand after a deliberate change, and the suite fails
-while they are stale:
-
-```bash
-# after changing a class the templates render
-python3 app/tests/field_contract.py --write
-
-# after changing a definition under app/nullius/catalogue
-python3 app/tests/catalogue_docs.py --write
-```
+Some files are refreshed by hand after a deliberate change, and the suite fails
+while they are stale: [AGENTS.md](AGENTS.md), "Commands", lists them.
 
 A change to the interface also gets a look in a browser: the pages it touches,
 in both themes, at the widths it affects. The owner's rules for every page are

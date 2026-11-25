@@ -11,8 +11,11 @@ body:
     id: priority
     attributes:
       label: Priority
-      description: How deep it reaches. low, docs and pages · medium, web layer or catalogue · high, backend · extreme, what runs and proves
-      options: [low, medium, high, extreme]
+      options:
+        - "P0 · Fix now: unsafe, loses money or data, or nothing runs"
+        - "P1 · Next: a wrong result or a broken path, with no way around it"
+        - "P2 · Planned: limited in scope, has a way around it, or a missing feature"
+        - "P3 · When convenient: wording, layout, tests"
     validations:
       required: true
   - type: textarea

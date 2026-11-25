@@ -741,6 +741,8 @@ class PrJudgeWorkflow(unittest.TestCase):
         self.assertEqual([c["ok"] for c in sig["checks"]], [False, False, False, False])
         self.assertEqual(sig["images"], 1)
         self.assertEqual(sig["visible"], ["app/static/style.css"])
+        for body, seen in (("Nothing visible changes.", []), ("<!-- or: Nothing visible changes. -->", ["app/static/style.css"])):
+            self.assertEqual(J.signals_of(diff, {"body": "## Before and after\n" + body, "commit_messages": []})["visible"], seen)
         clean = J.signals_of("diff --git a/docs/a.md b/docs/a.md\n--- a/docs/a.md\n+++ b/docs/a.md\n@@ -1 +1,2 @@\n+x\n", {"body": "", "commit_messages": []})
         self.assertIsNone(clean["risk_floor"])
         self.assertTrue(all(c["ok"] for c in clean["checks"]))

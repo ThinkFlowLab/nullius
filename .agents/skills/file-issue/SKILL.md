@@ -39,8 +39,8 @@ diff.
     gh issue create --title "<what is wrong, as a reader sees it>" \
       --label <bug or enhancement> --label <P0 to P3> --body-file issue.md
 
-- The label `P0` to `P3` as `gh label list` describes it. Undecided: the lowest
-  defensible, and say under Priority that it is a placeholder.
+- Priority: `P0` to `P3` as the form describes them, in the body and as the label.
+  Undecided: the lowest defensible, and say that it is a placeholder.
 - `--assignee aitianshi` where that is the real owner, else nobody.
 - Reuse labels. Set the native type (`Bug`, `Feature`) too; where `gh` lacks it,
   the GraphQL mutation `updateIssue` takes `issueTypeId`.
@@ -50,9 +50,9 @@ diff.
 
 The body is `.github/pull_request_template.md`; its comment is the example. The
 title's types and scopes are in AGENTS.md. A visible change has an image pair per
-place that changed, of one width, under `## Before and after`; otherwise drop the
-section. `gh` cannot upload images: add them in the browser. "Not checked" is a
-valid line.
+place that changed, of one width, under `## Before and after`. Otherwise drop the
+section, or write "Nothing visible changes." when templates or static files did.
+`gh` cannot upload images: add them in the browser. "Not checked" is a valid line.
 
     gh pr create --draft --title "fix(web): ..." --body-file pr.md
 
