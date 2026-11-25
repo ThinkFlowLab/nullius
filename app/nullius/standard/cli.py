@@ -7,7 +7,7 @@
     PYTHONPATH=app python3 -m nullius.standard.cli new benchmark|agent|capability KEY [--family F] [--port P]
     PYTHONPATH=app python3 -m nullius.standard.cli new version KEY VERSION
     PYTHONPATH=app python3 -m nullius.standard.cli conform AGENT|CAPABILITY --model M [--provider P] [--port PORT ...] [--attempts K] [--option NAME=VALUE ...] [--unsandboxed | --backend container | --backend boat]
-    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS ...] [--max-turns N] [--max-calls N] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--unsandboxed | --backend container | --backend boat [--boat-size SIZE]]
+    PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] AGENT|CAPABILITY --model M [--provider P] [--units FILE] [--limit N] [-j N] [--option NAME=VALUE ...] [--bench-option NAME=VALUE ...] [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H] ...] [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS ...] [--max-turns N] [--max-calls N] [--constraint KEY=VALUE ...] [--served-by [MODEL=]SLUG[,SLUG...] ...] [--exchanges whole|text|off] [--exchanges-max-mb N] [--unsandboxed | --backend container | --backend boat [--boat-size SIZE]]
     PYTHONPATH=app python3 -m nullius.standard.cli run BENCHMARK[@VERSION] nop|oracle [--dataset D] [--units FILE] [--limit N]
     PYTHONPATH=app python3 -m nullius.standard.cli prove BENCHMARK[@VERSION] [--dataset D] [--limit N] [--bench-option NAME=VALUE ...] [--job nop|oracle=JOB_DIR ...]
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --shard I/N [--launch ID]
@@ -55,7 +55,10 @@ sets one of the agent's or capability's options (``options`` in its definition);
 the rest keep the vendor's defaults, and the job's config records them all.
 ``--served-by [MODEL=]SLUG[,SLUG...]`` lets only those serving providers answer
 a model on OpenRouter, in that order (``run.served_by``); each call's record
-names the provider that served it.
+names the provider that served it. ``--exchanges`` says what each unit's relay
+keeps of its agent's calls (``standard/calls/exchanges.py``): ``whole`` by default,
+``text`` without the pictures' bytes, or ``off``; ``--exchanges-max-mb`` bounds
+a unit's.
 A run says each stage before its first unit, and each unit's end, as one
 ``[nullius] stage=...`` line on stderr and in the job's ``progress.jsonl``
 (``nullius/progress.py``).
@@ -89,6 +92,7 @@ if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
     settings.load(paths.settings_file())
 
 from nullius.standard.backends import boat
+from nullius.standard.calls import exchanges
 from nullius.standard.contract import definitions, match, ports, proofs
 from nullius.standard.proofs import conform, fidelity, pins, prove
 from nullius.standard.runner import job, merge, run, sets, shard
@@ -605,6 +609,7 @@ def cmd_run(a):
                       prices=prices(a.price), max_usd=a.max_usd, max_usd_per_unit=a.max_usd_per_unit, prices_unreachable=unreachable,
                       constraints=given,
                       timeouts=timeouts(a.timeout), max_turns=a.max_turns, max_calls=a.max_calls,
+                      exchanges=a.exchanges, exchanges_max_mb=a.exchanges_max_mb,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
                       **({"task_set": task_set} if task_set else {}),
                       **({"served_by": run.served_by(a.served_by, a.model or "")} if a.served_by else {}),
@@ -1106,6 +1111,12 @@ def main(argv=None):
             p.add_argument("--max-calls", type=int, metavar="N",
                            help="the most model calls a unit's agent may make, the whole unit through: past it the relay refuses "
                                 "the next call and the unit is the agent's error, as a timeout is")
+            p.add_argument("--exchanges", default=exchanges.DEFAULT, choices=exchanges.MODES,
+                           help="what each unit's relay keeps of its agent's calls: the request as sent and the reply as it "
+                                "arrived (whole, the default), the same without the pictures' bytes (text), or the call record alone (off)")
+            p.add_argument("--exchanges-max-mb", type=int, default=exchanges.MAX_MB, metavar="N",
+                           help="a unit's bound on what it keeps of its calls, in MB: past it a call's line says cut and the call "
+                                f"record goes on (default {exchanges.MAX_MB})")
     v = sub.add_parser("prove", help="prove a benchmark: its controls, its units, no leak; record what passed")
     v.add_argument("benchmark")
     v.add_argument("--dataset", help="one dataset (default: each)")

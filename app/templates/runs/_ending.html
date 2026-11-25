@@ -1,0 +1,6 @@
+{# Recorded stop reasons, independent of the scored outcome and judge flags. #}
+{% macro ending(trial, reached=false) -%}
+{% if trial.ended_tag -%}
+<span class="badge ended-by">{{ trial.ended_tag }}{% if reached and trial.ended_by in ('time', 'steps', 'calls') %} reached{% endif %}</span>
+{%- endif %}
+{%- endmacro %}

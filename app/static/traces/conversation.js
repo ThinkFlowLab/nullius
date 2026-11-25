@@ -14,6 +14,21 @@
     return node;
   };
   const number = value => Number(value).toLocaleString();
+  // A picture of the conversation over the page: one dialog, made at the first, closed by Close, Esc or a click
+  // outside the picture (on the backdrop, which is the dialog itself)
+  let viewer = null;
+  const viewPicture = (url, alt) => {
+    if (!viewer) {
+      viewer = el('dialog', 'picture-view'); viewer.setAttribute('aria-label', 'Picture');
+      const box = el('div', 'picture-view-box');
+      box.append(button('Close', () => viewer.close(), false, 'btn sm picture-view-close'), el('img', 'picture-view-img'));
+      viewer.append(box);
+      viewer.addEventListener('click', event => { if (event.target === viewer) viewer.close(); });
+      document.body.append(viewer);
+    }
+    const img = viewer.querySelector('img'); img.src = url; img.alt = alt;
+    viewer.showModal();
+  };
   const readJSON = async (url, signal) => {
     const response = await nulliusFetch(url, {signal, headers: {'Accept': 'application/json'}, cache: 'no-store'});
     if (!response.ok) throw new Error(response.status === 404 ? 'This evidence is no longer in the current workspace or trace view.' : 'Could not load this evidence. Try again.');
@@ -85,7 +100,7 @@
   let loadConversation = () => {};
   if (reader?.querySelector('.reader-layout')) {
     const urlState = new URL(location.href).searchParams;
-    let state = {q: urlState.get('c_q') || '', kind: urlState.get('c_kind') || 'all',
+    let state = {q: urlState.get('c_q') || '', kind: urlState.get('c_kind') || reader.dataset.defaultKind || 'all',
       page: urlState.get('c_page') || 1, position: urlState.get('c_position'),
       section: urlState.get('c_section'), chunk: urlState.get('c_chunk') || 0};
     let controller, latest;
@@ -96,6 +111,102 @@
     const indexHost = reader.querySelector('.reader-rows');
     const pages = reader.querySelector('.reader-pages');
     const change = patch => { state = {...state, ...patch}; loadConversation(); };
+    // The view by model call: one row a call, then what it sent, its answer and the steps under it.
+    const clock = iso => { const at = new Date(iso); return Number.isNaN(at.getTime()) ? '' : at.toLocaleTimeString(); };
+    const size = value => value >= 1048576 ? `${(value / 1048576).toFixed(1)} MB` : `${number(Math.max(1, Math.round(value / 1024)))} KB`;
+    const said = value => typeof value === 'string' ? value : JSON.stringify(value);
+    const part = (title, children) => { const box = el('div', 'call-part'); box.append(el('h4', '', title), ...children); return box; };
+    const picture = p => {
+      if (!p.url) return el('span', 'call-picture-kept', [p.type, p.bytes ? size(p.bytes) : '', 'not kept'].filter(Boolean).join(' · '));
+      const link = el('a', 'call-picture-link'); link.href = p.url; link.target = '_blank'; link.rel = 'noopener';
+      const img = el('img', 'call-picture'); img.src = p.url; img.alt = `Picture ${p.sha256.slice(0, 12)}, ${p.type}`;
+      img.loading = 'lazy'; img.decoding = 'async'; link.title = `sha256 ${p.sha256}`;
+      // a click opens it over the page; a click with a key held still opens it in a tab of its own
+      link.addEventListener('click', event => {
+        if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault(); viewPicture(p.url, img.alt);
+      });
+      link.append(img); return link;
+    };
+    const item = (entry, selected) => {
+      const node = button('', () => change({section: entry.key, chunk: 0}), false, 'call-item');
+      node.setAttribute('aria-pressed', String(selected === entry.key));
+      node.append(el('span', 'call-item-kind', entry.label), el('span', 'call-item-preview', entry.preview));
+      if (entry.characters) node.append(el('span', 'call-item-size mono', number(entry.characters)));
+      return node;
+    };
+    const step = entry => {
+      const node = button('', () => { searchInput.value = ''; change({kind: 'all', q: '', step: String(entry.step_id), position: null, page: 1, section: null, chunk: 0}); }, false, 'call-item');
+      node.append(el('span', 'call-item-kind mono', `#${entry.step_id} ${entry.source || ''}`), el('span', 'call-item-preview', entry.preview));
+      return node;
+    };
+    const textWindow = content => {
+      const block = el('div', 'reader-content'), head = el('div', 'reader-content-head');
+      head.append(el('h4', '', content.label), el('span', 'mono', `${number(content.characters)} characters`));
+      block.append(head);
+      if (content.text) { const pre = el('pre', '', content.text); pre.tabIndex = 0; pre.setAttribute('aria-label', content.label); block.append(pre); }
+      else block.append(el('p', 'muted', 'No content recorded.'));
+      const nav = el('nav', 'reader-content-nav'); nav.setAttribute('aria-label', 'Content pages');
+      nav.append(button('← Previous', () => change({section: content.key, chunk: content.chunk - 1}), content.chunk === 0),
+        el('span', '', `Part ${number(content.chunk + 1)} / ${number(content.chunks)} · ${number(content.start + (content.characters ? 1 : 0))}–${number(content.end)}`),
+        button('Next →', () => change({section: content.key, chunk: content.chunk + 1}), content.chunk + 1 >= content.chunks));
+      block.append(nav); return block;
+    };
+    const renderCalls = data => {
+      status.textContent = `${number(data.matches)} of ${number(data.total)} calls${data.query ? ` match “${data.query}”` : ''}. ${data.notice || 'Select a call to see what it sent and answered.'}`;
+      indexHost.replaceChildren();
+      data.rows.forEach(row => {
+        const node = button('', () => change({position: row.position, section: null, chunk: 0}), false, 'reader-row');
+        node.setAttribute('aria-current', String(row.position === data.selected?.position));
+        const meta = el('span', 'reader-row-meta');
+        meta.append(el('span', 'mono', row.label));
+        if (row.time) meta.append(el('span', '', clock(row.time)));
+        if (row.tokens && row.tokens.input !== undefined) meta.append(el('span', '', `${number(row.tokens.input)} in · ${number(row.tokens.output || 0)} out`));
+        if (row.pictures) meta.append(el('span', '', `${row.pictures} picture${row.pictures === 1 ? '' : 's'}`));
+        if (row.unreadable || row.status !== 200) meta.append(el('span', 'reader-error', '!'));
+        node.append(meta, el('span', 'reader-row-preview', row.preview)); indexHost.append(node);
+      });
+      pages.querySelector('span').textContent = `${data.page} / ${data.pages}`;
+      pages.querySelector('[data-page=previous]').disabled = data.page <= 1;
+      pages.querySelector('[data-page=next]').disabled = data.page >= data.pages;
+      selectedHost.replaceChildren();
+      const chosen = data.selected;
+      if (!chosen) { selectedHost.append(el('p', 'muted', data.notice || 'No calls match.')); return; }
+      const header = el('div', 'reader-step-nav'), info = el('div');
+      info.append(el('h3', '', [chosen.label, chosen.model, chosen.side ? 'side call' : ''].filter(Boolean).join(' · ')));
+      const facts = [`${chosen.match_number} of ${data.matches} calls`];
+      if (chosen.time) facts.push(chosen.time);
+      if (chosen.seconds !== null) facts.push(`${chosen.seconds.toFixed(2)}s`);
+      const t = chosen.tokens || {};
+      if (t.input !== undefined) facts.push(`input ${number(t.input)}${t.cached ? ` (cached ${number(t.cached)})` : ''} · output ${number(t.output || 0)}${t.reasoning ? ` (reasoning ${number(t.reasoning)})` : ''}`);
+      if (chosen.cost_usd !== null) facts.push(`$${chosen.cost_usd.toFixed(4)}${chosen.cost_from === 'estimate' ? ' estimated' : ''}`);
+      info.append(el('p', '', facts.join(' · ')));
+      const actions = el('div', 'reader-step-actions');
+      actions.append(button('← Previous', () => change({position: chosen.previous, section: null, chunk: 0}), chosen.previous === null), button('Next →', () => change({position: chosen.next, section: null, chunk: 0}), chosen.next === null));
+      header.append(info, actions); selectedHost.append(header);
+      const selected = chosen.content?.key, sent = [], answer = [];
+      if (!chosen.sent.recorded) sent.push(el('p', chosen.sent.unreadable ? 'small bad' : 'muted', chosen.sent.note));
+      else {
+        if (!chosen.sent.items.length && !chosen.sent.folded) sent.push(el('p', 'muted', 'Nothing the call before did not send.'));
+        chosen.sent.items.forEach(entry => {
+          sent.push(item(entry, selected));
+          if (entry.pictures.length) { const row = el('div', 'call-pictures'); entry.pictures.forEach(p => row.append(picture(p))); sent.push(row); }
+        });
+        const folded = chosen.sent.folded;
+        if (folded) sent.push(item({key: folded.key, label: 'Rewritten or dropped', preview: [folded.rewritten ? `${folded.rewritten} rewritten` : '', folded.dropped ? `${folded.dropped} dropped` : ''].filter(Boolean).join(' · ')}, selected));
+      }
+      selectedHost.append(part('Sent', sent));
+      const a = chosen.answer;
+      const ended = [a.end ? `ended ${said(a.end)}` : '', a.served_by ? `served by ${a.served_by}` : '', a.abridged ? 'abridged in the call record' : ''].filter(Boolean);
+      if (ended.length) answer.push(el('p', 'call-facts', ended.join(' · ')));
+      if (a.error) answer.push(el('p', 'small bad', `Error in the reply · ${a.error.message || said(a.error)}`));
+      a.items.forEach(entry => answer.push(item(entry, selected)));
+      if (!a.items.length) answer.push(el('p', 'muted', chosen.refused ? 'Refused: nothing was sent.' : 'No answer recorded.'));
+      selectedHost.append(part('Answer', answer));
+      if (chosen.content) selectedHost.append(textWindow(chosen.content));
+      if (chosen.before.length) selectedHost.append(part('Before the first call', chosen.before.map(step)));
+      if (chosen.steps.length) selectedHost.append(part('Steps under it', [...chosen.steps.map(step), ...(chosen.more_steps ? [el('p', 'muted small', `and ${number(chosen.more_steps)} more`)] : [])]));
+    };
     loadConversation = async () => {
       conversationStarted = true;
       controller?.abort(); controller = new AbortController();
@@ -118,6 +229,8 @@
           else current.searchParams.delete(`c_${key}`);
         });
         history.replaceState(null, '', current);
+        reader.querySelectorAll('[data-kind]').forEach(node => node.setAttribute('aria-pressed', String(node.dataset.kind === data.kind)));
+        if (data.view === 'calls') { renderCalls(data); return; }
         status.textContent = `${number(data.matches)} of ${number(data.total)} source steps${data.query ? ` match “${data.query}”` : ''}. ${data.notice || 'Select a row to keep its message and tools together.'}`;
         reader.querySelectorAll('[data-kind]').forEach(node => node.setAttribute('aria-pressed', String(node.dataset.kind === data.kind)));
         indexHost.replaceChildren();
@@ -179,6 +292,12 @@
       if (event.key === 'End') next = tabs.length - 1;
       if (next !== undefined) { event.preventDefault(); tabs[next].focus(); openTab(tabs[next].dataset.tab); }
     });
+  });
+  // a link of the Artifacts tab to another tab of this page opens it in place
+  document.getElementById('trial-artifacts')?.addEventListener('click', event => {
+    const link = event.target.closest('a[data-open-tab]');
+    if (!link || !tabs.some(tab => tab.dataset.tab === link.dataset.openTab)) return;
+    event.preventDefault(); openTab(link.dataset.openTab); document.getElementById('tab-' + link.dataset.openTab)?.focus();
   });
   openTab(location.hash.startsWith('#span=') ? 'trace' : new URL(location.href).searchParams.get('tab') || 'overview', false);
 

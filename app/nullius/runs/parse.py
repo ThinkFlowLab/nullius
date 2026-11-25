@@ -31,7 +31,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "19"
+SCHEMA = "20"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness, so a limit the run survived leaves nothing in result.json —
@@ -75,6 +75,11 @@ def _retries_of(res: dict) -> int:
     return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
 
 
+# What ended an agent's work on a standard trial (`Trial.ended_by`), by its name; any other end a benchmark's
+# detail names reads as written: a tag up to ENDED_CHARS characters, a longer one in failure analysis.
+ENDED_LABELS = {"agent": "Agent", "done": "Done", "fail": "Fail", "steps": "Step limit", "time": "Time limit",
+                "calls": "Call limit", "end": "Task end"}
+ENDED_CHARS = 16
 SCORE_BYTES = 1024 * 1024
 
 
@@ -169,6 +174,30 @@ def score_detail(trial_dir: str, leave_out=(), shown=None) -> dict | None:
 
     visit(detail)
     return {"fields": fields, "groups": groups} if fields or groups else None
+
+
+def _ended_by(res: dict, trial_dir: str) -> str:
+    """What ended the agent's work on a standard trial: the run's cut when its record has one (``standard.cut``:
+    ``time``, the agent's time; ``calls``, the run's cap on its model calls); else the benchmark's own end as its
+    score's detail says it (``detail.ended``: ``done``, ``fail``, ``steps``; ``turn``, the agent ended its turn
+    first: ``agent``; any other text of the benchmark's, redacted); ``end`` for a turn cut
+    after the benchmark's end with no detail to name it. "" when the trial says none of these."""
+    std = res.get("standard") if isinstance(res.get("standard"), dict) else None
+    if std is None:
+        return ""
+    cut = std.get("cut")
+    if cut in ("time", "calls"):
+        return cut
+    said = _read_score(trial_dir)
+    detail = said.get("detail") if isinstance(said, dict) else None
+    ended = detail.get("ended") if isinstance(detail, dict) else None
+    if ended in ("done", "fail", "steps"):
+        return ended
+    if isinstance(ended, str) and ended.strip() and ended != "turn":
+        return redact(ended.strip())               # the benchmark's own end, which the pages have no label for
+    if cut == "end":
+        return "end"
+    return "agent" if ended == "turn" else ""
 
 
 def count_rate_limits(path: str) -> int | None:
@@ -296,6 +325,24 @@ class Trial:
     started_at: datetime | None = None
     finished_at: datetime | None = None
     phases: dict = field(default_factory=dict)
+    # What ended the agent's work on a standard trial (`_ended_by`): `agent`,
+    # `done`, `fail`, `steps`, `time`, `calls` or `end`, or the benchmark's own
+    # word for it; "" when it says none.
+    ended_by: str = ""
+
+    @property
+    def ended_label(self) -> str:
+        return ENDED_LABELS.get(self.ended_by, self.ended_by)
+
+    @property
+    def ended_tag(self) -> str:
+        """What cut the agent's work short, for a tag: "" for a normal end and for a reason too long for one."""
+        return "" if self.is_infra or self.ended_by in ("agent", "done", "fail") or len(self.ended_label) > ENDED_CHARS else self.ended_label
+
+    @property
+    def stop_reason(self) -> str:
+        """The benchmark's own reason when it is too long for a tag."""
+        return self.ended_label if len(self.ended_label) > ENDED_CHARS else ""
 
     @property
     def dur_phases(self) -> float:
@@ -818,6 +865,7 @@ def parse_trial(job_id: str, trial_dir: str) -> Trial | None:
         started_at=_iso(res.get("started_at")),
         finished_at=_iso(res.get("finished_at")),
         phases=phases,
+        ended_by=_ended_by(res, trial_dir),
     )
 
 

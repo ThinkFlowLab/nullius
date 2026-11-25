@@ -458,7 +458,7 @@ class Routes(unittest.TestCase):
             page = self.get_ok("/job/crash-run").get_data(as_text=True)
             self.assertIn('<b>1/2</b>', re.search(r'<div class="meter".*?</div>', page, re.S).group(0))       # solved over the trials that ran
             self.assertRegex(page, r'data-o="unknown" href="\?outcome=unknown"\s+data-tip="[^"]*"><i class="sw"></i><b>1</b><span>Unknown')
-            self.assertIn('<span class="oc oc-unknown"><i></i>Unknown</span><details class="exd"><summary><span class="tw"></span>SomethingNobodyHasWrittenYetError</summary><code>the reader fell over</code>', page)
+            self.assertIn('<span class="oc-word">Unknown</span></span><details class="exd"><summary><span class="tw"></span>SomethingNobodyHasWrittenYetError</summary><code>the reader fell over</code>', page)
             trial_page = self.get_ok("/trial/crash-run/task-crash").get_data(as_text=True)
         head = trial_page.split("<div class=\"trial-head\">", 1)[0]
         self.assertIn('<span class="tag oc-unknown">Unknown</span>', head)

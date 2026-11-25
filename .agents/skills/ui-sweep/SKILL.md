@@ -67,7 +67,7 @@ rules.
    It exits nonzero for page JavaScript errors or clipped text and prints the
    affected screenshots; `report.json` also lists each one's red warning lines.
    Resolve the script relative to this skill; in a checkout it is
-   `.claude/skills/ui-sweep/scripts/sweep.py`. Keep captures outside installed
+   `.agents/skills/ui-sweep/scripts/sweep.py`. Keep captures outside installed
    package resources.
 
 3. Look at every screenshot of what changed, with `.claude/rules/ui.md`

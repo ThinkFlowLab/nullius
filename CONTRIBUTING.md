@@ -35,8 +35,8 @@ for the container backend and for Harbor recipes.
 - `app/nullius/catalogue/` holds the benchmarks, agents and capabilities, one folder
   each.
 
-[AGENTS.md](AGENTS.md) is the map of the repository and the rules every
-contributor and coding assistant follows. Read it before your first change.
+[AGENTS.md](AGENTS.md) holds the rules every contributor and coding assistant
+follows. Read it before your first change.
 
 The tests require a Flask-free backend, one provider of `nullius`, and the template fields pinned in `app/tests/field_contract.json`.
 
@@ -44,31 +44,23 @@ The tests require a Flask-free backend, one provider of `nullius`, and the templ
 
 Use the import skills rather than writing an entry by hand: `/import-benchmark`,
 `/import-standard`, `/import-agent` and `/import-capability` under
-`.claude/skills/`. Each pins the upstream, wraps the upstream's own code and
+`.agents/skills/`. Each pins the upstream, wraps the upstream's own code and
 proves what fits. Nullius is a facilitator, not a re-implementer: anything
 beyond glue is asked about first. The *+ Add* button on the Benchmarks, Agents
 and Capabilities pages writes the prompt for any assistant.
 
 ## Running the tests
 
-From the repository root. The backend suite needs nothing installed; only the
-route suite needs Flask.
+From the repository root. The backend suite needs git and uv; only the route suite
+needs Flask.
 
 ```bash
 python3 app/tests/parallel.py
 uv run --no-project --with-requirements app/requirements.txt python app/tests/parallel.py app/ui_tests
 ```
 
-Two pins are refreshed by hand after a deliberate change, and the suite fails
-while they are stale:
-
-```bash
-# after changing a class the templates render
-python3 app/tests/field_contract.py --write
-
-# after changing a definition under app/nullius/catalogue
-python3 app/tests/catalogue_docs.py --write
-```
+Some files are refreshed by hand after a deliberate change, and the suite fails
+while they are stale: [AGENTS.md](AGENTS.md), "Commands", lists them.
 
 A change to the interface also gets a look in a browser: the pages it touches,
 in both themes, at the widths it affects. The owner's rules for every page are
@@ -87,16 +79,16 @@ decision by the repository owner.
 
 - **Small and targeted.** One change per pull request; no refactoring of
   unrelated areas on the way.
-- **Fill in the template.** The PR judge compares the description with the
-  diff and with the linked issue's acceptance list.
+- **Open it as a draft.** Mark it ready when it is: the checks run then.
+- **Fill in the template, short.** It holds an example. The PR judge compares it
+  with the diff and with the linked issue's acceptance list.
 - **Reference the issue** so it shows in the issue's Development panel.
 - **Say what you verified.** Tests run, browser checks made, widths tried.
   "Not verified" is an honest answer.
-- **No key, no address, no private link** in a body, a commit or a screenshot.
+- **No key, no email address, no private link** in a body, a commit or a screenshot.
 
 Commit messages are about the change and why it was made. No machine
 attribution: no `Co-Authored-By: Claude`, no session metadata, no generated-by
-signature. A hook rejects them; do not bypass it. A real person who contributed
-is named as a co-author as usual.
+signature. A real person who contributed is named as a co-author as usual.
 
 Nothing merges without the repository owner's word.

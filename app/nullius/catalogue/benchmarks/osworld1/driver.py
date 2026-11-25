@@ -20,8 +20,9 @@ setup    - the task's instruction, for the null control. For an agent
            asks for the agent's first step, setup answers the prompt (the
            instruction, a blank line and the desktop user's password line),
            the MCP server computer (the port's pipe, joined to the runner's
-           socket) and the agent's time. The options max_steps and pause are
-           the loop's
+           socket), the agent's time and, as progress, the port's progress
+           file inside the trial. The options max_steps and pause are the
+           loop's
 task_given - an agent's unit (driver.task_given): the agent is about to be
            given its task. The runner is told on its lifeline, closes the
            port's window before the task and says so; this answers then
@@ -46,7 +47,9 @@ score    - for a setup, the upstream's result.txt: what the agent's runner
            folder, never the workspace, and only from a runner this driver
            started that ended by itself with status 0, through folders opened
            without following a link. It copies result.txt, the call log and the
-           record of prepare calls to the trial's verifier/osworld/.
+           record of prepare calls to the trial's verifier/osworld/, and its
+           detail says the steps taken, the budget and what ended the loop,
+           from the progress file.
            For the null control, nop.py: the upstream's run_single_example
            with an agent that answers DONE at its first step, its result.txt
            read the same way
@@ -110,6 +113,7 @@ AGENTS["agents"] = {e["start"]["driver"]["agent"]: dict(e["start"]["driver"], mo
                     for e in AGENTS["agents"].values()}
 VM =os.path.join(UP, "docker_vm_data", "Ubuntu.qcow2")     # where the upstream's DockerVMManager puts it
 RESULTS = "results"
+PROGRESS = "progress.json"                                   # the port's progress file, in an agent's runner folder
 # VM starts on one machine, one after another: the upstream's docker provider creates each container under
 # /tmp/docker_port_allocation.lck, and a start that waits there more than 10 s fails (LOCK_TIMEOUT)
 START_LOCK = "/tmp/nullius-osworld1-vm-start.lck"
@@ -494,6 +498,7 @@ def _start_runner(unit, dir, instruction, until):
                 "--socket", os.path.join(sock_dir, "s"), "--ready", ready, "--lifeline", str(life_r),
                 "--steps", "100" if steps == "default" else steps, "--pause", str(_option("pause", "3.0", float)),
                 "--vm", vm, "--calls", os.path.join(where, "computer-calls.jsonl"), "--held", held,
+                "--progress", os.path.join(where, PROGRESS),
                 "--prepared", os.path.join(where, "computer-prepare.jsonl"),
                 "--given", os.path.join(sock_dir, "given.json")]
         lock = open(START_LOCK, "a")
@@ -548,7 +553,7 @@ def _start_runner(unit, dir, instruction, until):
     pipe = os.path.join(os.path.dirname(os.path.abspath(_port().__file__)), "computer_pipe.py")
     return {"prompt": instruction + "\n\n" + PASSWORD_LINE.format(password=said.get("password") or ""),
             "mcp": [{"name": "computer", "server": "computer", "args": [pipe, os.path.join(sock_dir, "s")]}],
-            "agent_seconds": AGENT_SECONDS}
+            "agent_seconds": AGENT_SECONDS, "progress": os.path.join(".work", "osworld", PROGRESS)}
 
 
 def _has(log, text, start=0):
@@ -820,13 +825,19 @@ def _agent_score(where, dir, domain, eid):
         except (OSError, RuntimeError):
             pass
     calls = kept["computer-calls.jsonl"]
+    try:
+        count = json.loads(_plain(trial, ".work", "osworld", PROGRESS))
+        count = count if isinstance(count, dict) else {}
+    except (OSError, RuntimeError, ValueError):
+        count = {}
     out = os.path.join(trial, "verifier", "osworld")
     os.makedirs(out, exist_ok=True)
     for name, data in [("result.txt", result)] + sorted(kept.items()):
         with open(os.path.join(out, name), "wb") as f:
             f.write(data)
     return {"reward": value, "detail": {"result": value, "by": "runner.py, run_single_example, DesktopEnv.evaluate",
-                                        "tool_calls": len(calls.splitlines())}}
+                                        "tool_calls": len(calls.splitlines()), "steps": count.get("steps"),
+                                        "steps_limit": count.get("steps_limit"), "ended": count.get("ended")}}
 
 
 def _scored(where, how):

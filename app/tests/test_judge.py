@@ -668,7 +668,7 @@ class PrJudgeWorkflow(unittest.TestCase):
                                      "diff --git a/app/ui_tests/test_run.py b/app/ui_tests/test_run.py\n--- /dev/null\n+++ b/app/ui_tests/test_run.py\n@@ -0,0 +1 @@\n+def test_run_button(): pass\n", encoding="utf-8")
         args = [sys.executable, str(self.SCRIPT), "--pr-file", str(tmp / "pr.md"), "--diff-file", str(tmp / "pr.diff"), "--dry", "--out-json", str(tmp / "j.json")]
         if with_issue:
-            (tmp / "issue.md").write_text("Run from Review\n\n## Acceptance\n- [ ] A Run button on the Review step\n- [ ] A test clicks it\n", encoding="utf-8")
+            (tmp / "issue.md").write_text("Run from Review\n\n## Acceptance\n- [ ] A Run button on the Review step\n- [ ] `--run now|later` starts it\n", encoding="utf-8")
             args += ["--issue-file", str(tmp / "issue.md")]
         done = subprocess.run(args, capture_output=True, text=True, cwd=str(tmp), env={"PATH": "/usr/bin:/bin"})
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -678,11 +678,12 @@ class PrJudgeWorkflow(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp(prefix="nullius-judge-pr-")); self.addCleanup(shutil.rmtree, tmp, True)
         rec, out = self._dry(tmp, with_issue=True)
         self.assertEqual(rec["criteria_source"], "acceptance heading")
-        self.assertEqual([r["text"] for r in rec["criteria"]], ["A Run button on the Review step", "A test clicks it"])
+        self.assertEqual([r["text"] for r in rec["criteria"]], ["A Run button on the Review step", "`--run now|later` starts it"])
         self.assertEqual(rec["usage"]["calls"], 0)
         self.assertEqual(rec["estimate"]["calls"], 9)                     # (2 criteria + the description) × k=3
         self.assertIn("dry run", out)
         self.assertIn("Acceptance criteria, 2", out)
+        self.assertIn("`--run now\\|later` starts it |", out)             # a bar would split the row
         self.assertTrue(all(r["state_chars"] > 0 and not r["truncated"] for r in rec["criteria"]))   # the states were built; the record keeps their size, not their text
 
     def test_a_pull_request_without_an_issue_is_judged_on_its_description_alone(self):
@@ -741,10 +742,17 @@ class PrJudgeWorkflow(unittest.TestCase):
         self.assertEqual([c["ok"] for c in sig["checks"]], [False, False, False, False])
         self.assertEqual(sig["images"], 1)
         self.assertEqual(sig["visible"], ["app/static/style.css"])
+        for body, seen in (("Nothing visible changes.", []), ("<!-- or: Nothing visible changes. -->", ["app/static/style.css"])):
+            self.assertEqual(J.signals_of(diff, {"body": "## Before and after\n" + body, "commit_messages": []})["visible"], seen)
         clean = J.signals_of("diff --git a/docs/a.md b/docs/a.md\n--- a/docs/a.md\n+++ b/docs/a.md\n@@ -1 +1,2 @@\n+x\n", {"body": "", "commit_messages": []})
         self.assertIsNone(clean["risk_floor"])
         self.assertTrue(all(c["ok"] for c in clean["checks"]))
         self.assertEqual(clean["visible"], [])
+
+        self.assertNotIn("a hint", J.description_block({"body": "<!-- a hint\n-->\n## What\nthe change"})[0])
+        block, _ = J.diff_block(diff, 10_000)
+        self.assertLess(block.index("a/app/static/style.css"), block.index("a/app/tests/test_x.py"))            # code before tests
+        self.assertEqual(J.criteria_of("### Acceptance\n\n- [ ]\n- [ ] A box\n")[0], ["A box"])
 
         body = "Closes #1\n\n## What\nthe change\n\n## Verified\nnot verified\n\n## Risk\nnone"
         self.assertEqual(J.section(body, "verified"), "not verified")

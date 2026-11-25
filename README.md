@@ -158,7 +158,7 @@ uv run --no-project --with-requirements app/requirements.txt \
 ```
 
 The [tests workflow](https://github.com/thinkflowlab/nullius/actions/workflows/tests.yml)
-runs both suites on pull requests.
+runs both suites on pull requests that are not drafts.
 
 ## License
 

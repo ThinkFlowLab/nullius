@@ -93,7 +93,7 @@
               <label>{{ s.units.nouns|capitalize }}<input name="limit" type="number" min="1" placeholder="all" autocomplete="off"></label>
               {% if s.judged %}
               {% if providers %}<label>Judge's provider<select name="provider">{% for p, label in providers %}<option value="{{ p }}">{{ label }}</option>{% endfor %}</select></label>{% endif %}
-              <label>Judge model<input name="judge_model" placeholder="its own" autocomplete="off" spellcheck="false"></label>
+              <label>Judge model<input name="judge_model" data-model-picker="[name=provider]" placeholder="its own" autocomplete="off" spellcheck="false"></label>
               {% endif %}
             </div>
             {% if s.judged and not providers %}<p>The judge needs a model key first: set one in <a href="{{ url_for('settings_page') }}">Settings</a>.</p>
@@ -325,4 +325,6 @@
   </div>
 </article>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='catalogue/catalogue.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='tables.js') }}"></script>
+<script src="{{ url_for('static', filename='model-picker.js') }}"></script>
+<script src="{{ url_for('static', filename='catalogue/catalogue.js') }}"></script>{% endblock %}

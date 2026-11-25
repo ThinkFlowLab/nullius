@@ -1821,6 +1821,15 @@ select.ui-select-native { display: none !important; }
 .ui-select-option[aria-disabled=true] { opacity: .45; cursor: default; }
 @media (max-width: 560px) { .ui-select-trigger { font-size: 16px; } }
 
+/* A model field's picker (model-picker.js). */
+.nb-model-control { display: flex; position: relative; min-width: 0; }
+.nb-model-open { display: grid; place-items: center; padding: 0; position: absolute; right: 1px; top: 1px; bottom: 1px; width: 32px; border: 0; background: transparent; color: var(--text-dim); border-radius: 7px; }
+.nb-model-control > input[role=combobox] { width: 100%; min-width: 0; padding-right: 36px; }
+.nb-model-control:has(> input[hidden]) { display: none; }
+.nb-model-option { display: flex; flex-direction: column; gap: 2px; }
+.nb-model-option small, .nb-model-status { color: var(--text-dim); font-size: 12px; }
+.nb-model-status { padding: 8px 9px; }
+
 /* Shared slider: <div class="ui-range"><input type="range"><div class="ui-range-ends"><span>…</span><span>…</span></div></div>.
    --fill (0 to 1) is the filled part, kept by controls.js. .marked draws a tick at --mark (0 to 1): past it the
    track is dotted, a step beyond the values (No limit); .ui-range-at-mark labels the tick. .unset: no value chosen.

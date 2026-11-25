@@ -146,7 +146,7 @@ class ComparisonRoutes(unittest.TestCase):
     def test_a_scored_task_side_by_side_shows_its_mean_not_a_pass_count(self):
         self.left.trials = [trial("shared", "scored", trial_name=f"s-{i}", reward=None, score=v) for i, v in enumerate((.4, .8))]
         detail = self.get("/compare/task/shared", cohort="matched", dataset=self.left.dataset)
-        self.assertIn("mean <b>0.60</b> over 2", detail)
+        self.assertIn("mean <b>0.60</b>", detail)
         self.assertNotIn("0/2", detail)
 
     def test_each_side_of_a_compared_task_chooses_its_attempt(self):

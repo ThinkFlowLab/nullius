@@ -261,6 +261,9 @@
     }
     if (Number.isInteger(raw.turns) && raw.turns >= 1) r.turns = raw.turns;
     if (Number.isInteger(raw.max_calls) && raw.max_calls >= 1) r.max_calls = raw.max_calls;   // the most model calls of a unit's agent
+    // what each unit's relay keeps of its agent's calls, and its bound in MB (recipe.py: run --exchanges)
+    if (['whole', 'text', 'off'].includes(raw.exchanges)) r.exchanges = raw.exchanges;
+    if (Number.isInteger(raw.exchanges_max_mb) && raw.exchanges_max_mb >= 1) r.exchanges_max_mb = raw.exchanges_max_mb;
     for (const key of ['judge_model', 'simulator_model']) if (typeof raw[key] === 'string' && raw[key].trim()) r[key] = raw[key].trim();
     // Served by: each field's serving providers, slugs in their order (the server checks them as --served-by)
     if (raw.served_by && typeof raw.served_by === 'object' && !Array.isArray(raw.served_by))
@@ -536,7 +539,7 @@
   const RESERVED = ['agent','a','model','m','dataset','d','path','p','n-tasks','l','n-concurrent','n','max-retries','r','env','e','job-name','jobs-dir','o','agent-timeout-multiplier','include-task-name','i','ak','agent-kwarg','ek','environment-kwarg','verifier-kwarg','agent-env','ae'];
   function validate(r) {
     const errors = [], notes = [];
-    const add = (step, message, group) => errors.push({step, message, ...(group ? {group} : {})});
+    const add = (step, message, group, unset) => errors.push({step, message, ...(group ? {group} : {}), ...(unset ? {unset} : {})});
     if (isStandard(r)) return {errors, notes};   // compiled and checked by the server, from its definition files
     if (r.harness !== 'harbor') { add(STEP.runner, RUNNER_GONE); return {errors, notes}; }
     const blocker = routeBlocker(r.benchmark);
@@ -560,9 +563,9 @@
     const named = r.model.trim() || (benchmarkCallsModel(r) && r.agents.every(id => agentById(id, r)?.control) ? (r.userModel || '').trim() : '');
     if (callsModel && r.model_choice === 'paper') {
       const allowed = Object.values(paperModels(r).sent?.[r.provider] || {});
-      if (!allowed.includes(r.model)) add(STEP.model, 'Choose one of the paper models on this provider.');
+      if (!allowed.includes(r.model)) add(STEP.model, 'Choose one of the paper models on this provider.', '', !r.model);
     }
-    if (callsModel && !named) add(STEP.model, benchmarkCallsModel(r) ? 'Enter a model for the agent and/or simulated user and evaluator.' : 'Enter a model.');
+    if (callsModel && !named) add(STEP.model, benchmarkCallsModel(r) ? 'Enter a model for the agent and/or simulated user and evaluator.' : 'Enter a model.', '', true);
     if (callsModel && !PROVIDERS.includes(r.provider)) add(STEP.model, 'Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider.');
     for (const [key,label] of [['keyEnv','API key source variable'],['urlEnv','Endpoint source variable']]) {
       if (callsModel && (key !== 'urlEnv' || r[key]) && !/^[A-Z_][A-Z0-9_]*$/.test(r[key])) add(STEP.model, label + ' must be an environment variable name.');

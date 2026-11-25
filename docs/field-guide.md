@@ -183,6 +183,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `cost_usd` | The cost `result.json` records: on Harbor, priced by the agent from its own table; on a standard run, the relay's record: the provider's own figure where its reply carried one, else an estimate from the user's price list (Settings, Model prices) for exactly that model name. A benchmark option's embeddings are the run's, never a trial's. None recorded reads —, never `$0.00`. | derived | any |
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
 | `exception_type` | What ended the trial, if anything. It decides the infra / agent split. | measured | any |
+| `ended_by` | What ended the agent's work: `agent`, the benchmark's own end, or a limit (`time`, `calls`, `end`). | measured | standard |
 | `n_retries` | Retries a standard run's attempt took. | measured | any |
 | `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log: no count, never 0. | inferred | any |
 
@@ -198,6 +199,7 @@ These fields are stored in the standard's job and trial files ([Run a benchmark]
 | `standard.served_by` | In the same config: the allowed OpenRouter provider slugs by model, in the order tried. | measured | standard |
 | `served / standard.served` | In the job's `result.json` and each trial's `result.json`, respectively: answered calls by provider (`calls`), calls naming none (`unnamed`), and each pinned model's `held`. Counts cover every relay route; the job also includes the benchmark's own relay. Tokens and cost are the agent's own calls'. | measured | standard |
 | `held` | `true` when every answered call names an allowed provider, `unknown` for an absent or different name, and `null` for no answered calls. Names are lowercased with spaces as dashes and compared with the slug before `/`; endpoint variants cannot be verified. Merging different pins marks the affected models `unknown`. | inferred | standard |
+| `standard.cut` | The limit that cut a unit its benchmark still scored: `time`, `calls` or `end`. | measured | standard |
 | `request.routing / request.routing_asked / reply.served_by / reply.end / reply.error` | In `agent/calls.jsonl`: routing sent, the caller's routing when replaced, the answering provider, the reply's ending and any error inside a 200 response. | measured | standard |
 
 ## Trajectory metrics, inside a single run {#trajectory}

@@ -12,7 +12,7 @@ from urllib.parse import quote
 from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 from markupsafe import Markup, escape
 from werkzeug.http import quote_header_value
-from nullius.traces import behavior, charts, conversation, trace, trajectory
+from nullius.traces import behavior, calls, charts, conversation, trace, trajectory
 from nullius.runs import artifacts, attempts as task_attempts, evidence, parse
 from nullius import importers as harnesses
 
@@ -171,6 +171,45 @@ def _parsed_trace(path, filt):
     return tr
 
 
+# A trial's calls read for a view (``calls.view``): every page of them, every picture asked for, would
+# parse its store again. Kept by the files read (size, mtime), a few trials at a time; a view is not
+# changed once read.
+_CALLS: "OrderedDict" = OrderedDict()
+_CALLS_MAX = 8
+
+
+def _calls_view(trial, traj=None):
+    path = trial.trajectory_path if trial.has_trajectory else ""
+    key = (os.path.realpath(trial.dir), calls.signature(trial.dir, path))
+    with _PARSED_LOCK:
+        if key in _CALLS:
+            _CALLS.move_to_end(key)
+            return _CALLS[key]
+    if traj is None and path:
+        traj = trajectory.load(path)
+    got = calls.view(trial.dir, traj)
+    with _PARSED_LOCK:
+        _CALLS[key] = got
+        while len(_CALLS) > _CALLS_MAX:
+            _CALLS.popitem(last=False)
+    return got
+
+
+@app.route("/trial/<job_id>/<trial_name>/picture/<sha256>")
+def trial_picture(job_id, trial_name, sha256):
+    """A picture the trial's agent sent its model, by its sha256: only one its own store lists, of an
+    image type. Its content is its hash's, so the browser may keep it for good."""
+    _, t = _trial_evidence(job_id, trial_name, tries=True)
+    try:
+        data, kind = calls.picture(_calls_view(t), sha256)
+    except LookupError:
+        abort(404)
+    response = app.response_class(data, mimetype=kind)
+    response.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 @app.route("/trial/<job_id>/<trial_name>/artifact/<key>")
 def artifact_page(job_id, trial_name, key):
     job, trial = _trial_evidence(job_id, trial_name, tries=True)
@@ -215,6 +254,19 @@ def artifact_download(job_id, trial_name, key):
 def conversation_data(job_id, trial_name):
     _, t = _trial_evidence(job_id, trial_name, tries=True)
     traj = trajectory.load(t.trajectory_path) if t.has_trajectory else None
+    view = _calls_view(t, traj) if request.args.get("kind") == "calls" else None
+    if view is not None and (view["calls"] or view.get("notice")):
+        payload = calls.page(view, query=request.args.get("q", ""), page=request.args.get("page", 1),
+                             position=request.args.get("position"), step=request.args.get("step"),
+                             section=request.args.get("section"), chunk=request.args.get("chunk", 0))
+        for item in ((payload["selected"] or {}).get("sent") or {}).get("items") or []:
+            for pic in item["pictures"]:
+                if pic["stored"]:
+                    pic["url"] = url_for("trial_picture", job_id=job_id, trial_name=trial_name, sha256=pic["sha256"],
+                                         workspace=request.args.get("workspace"))
+        response = jsonify(payload)
+        response.headers["Cache-Control"] = "no-store"
+        return response
     payload = conversation.page(
         traj, query=request.args.get("q", ""), kind=request.args.get("kind", "all"),
         page=request.args.get("page", 1), position=request.args.get("position"),
@@ -272,14 +324,24 @@ def trial(job_id, trial_name):
                 bench_parts["shows"] = list(dict.fromkeys(k for x in bench_parts["parts"] if isinstance(x.get("shows"), dict) for k in x["shows"]))
         except (OSError, ValueError):
             pass
+    steps_of = None
+    if j.runner:
+        # the benchmark's own count of the trial's steps and its limit, as its score said them
+        counted = parse.read_detail(t.dir) or {}
+        whole = lambda v, least: isinstance(v, int) and not isinstance(v, bool) and v >= least
+        if whole(counted.get("steps"), 0) and whole(counted.get("steps_limit"), 1):
+            steps_of = {"steps": counted["steps"], "limit": counted["steps_limit"]}
     # What the benchmark recorded of a trial that fell short: the rows its entry names, else its whole detail,
     # excluding execution metadata and numbers already shown above.
     short = bool(j.runner) and t.outcome != "resolved" and not (t.score is not None and t.score >= 1)
     named = evidence.declared(t.source)
+    # its end is left out where the page says it already
+    said_end = (parse.read_detail(t.dir) or {}).get("ended") in ("done", "fail", "steps", "turn", t.ended_by) if j.runner else False
     head = [x for x in (t.reward, t.score) if x is not None]
     shown = {"result": head, "score": head, "reward_info.reward": head, "steps": [traj.n_steps] if ok else []}
     detail = parse.score_detail(t.dir, leave_out=("by", "tool_calls", "max_steps", "max_errors",
-                                               "seed", "trial", "split", "attempts", "agent", "judge", "evaluation"),
+                                               "seed", "trial", "split", "attempts", "agent", "judge", "evaluation",
+                                               *(("ended",) if said_end else ()), *(("steps", "steps_limit") if steps_of else ())),
                                 shown=shown) if short and named is None else None
     reply = next((s.message for s in reversed(traj.steps) if s.source == "agent" and s.message), "") if ok else ""
     rows = evidence.rows(t.dir, named, reply) if short and named else []
@@ -301,11 +363,19 @@ def trial(job_id, trial_name):
                                 key=record["key"], workspace=request.args.get("workspace"))
         record["download"] = url_for("artifact_download", job_id=job_id, trial_name=trial_name,
                                      key=record["key"], workspace=request.args.get("workspace"))
+    pictures = calls.pictures_kept(t.dir)        # the pictures sent to the model, a row of their own
+    n_calls = calls.recorded(t.dir)
+    if not n_calls and os.path.isdir(calls.store_folder(t.dir)):
+        notice = _calls_view(t, traj).get("notice")
+        if notice:
+            flash(notice, "error")
     return render_template(
-        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts, detail=detail, evidence=rows,
+        "traces/trial.html", job=j, trial=t, traj=traj, loc=loc, bench_parts=bench_parts, detail=detail, evidence=rows, steps_of=steps_of,
+        stop_reason=t.stop_reason if short else "",
         trace=tr, charts=ch, viewing=viewing, imported_from=_imported_from(j),
         chart_filter=cfilt, default_save_name=SAVED_TRACE_DEFAULT,
-        artifacts=records, attempt=attempt, attempts=task_attempts.of(j, attempt), tries=_tries(attempt),
+        artifacts=records, pictures=pictures, attempt=attempt, attempts=task_attempts.of(j, attempt), tries=_tries(attempt),
+        n_calls=n_calls,
         # an earlier try is evidence only: the job counts its last, and only that is judged
         judgement=_judgement_panel(j, t) if attempt is t else None,
         llm_judgement=_judgement_panel(j, t, "llm") if attempt is t else None, csrf=shared._csrf_token(),
@@ -326,7 +396,7 @@ def trial_attempts(job_id, trial_name):
     j, t = _trial_evidence(job_id, trial_name, tries=True)
     t = _attempt_of(j, t)
     # a task tried once has no tab that leads here; its one line still answers
-    attempts = task_attempts.of(j, t) or task_attempts.Attempts((t,))
+    attempts = task_attempts.of(j, t) or task_attempts.Attempts((t,), j.scored_only)
     tries = {a.trial_name: _tries(a) for a in attempts.trials if a.n_retries}
     return render_template("traces/attempts.html", job=j, trial=t, attempts=attempts, tries=tries,
                            imported_from=_imported_from(j))
