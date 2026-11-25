@@ -5,7 +5,7 @@ A named list of one dataset's units, frozen once made, that a run names and its 
 ```bash title="Commands"
 nullius standard units <benchmark> --dataset D [--bench-option NAME=VALUE]... [--search TEXT] [--category FIELD=VALUE]... [--json]
 nullius standard set create <benchmark>[@version] "WORDS" [--dataset D] (--units FILE | --search TEXT | --category FIELD=VALUE... \
-    | --from-job JOB_DIR [--outcome O,...]... [--unit ID]...) [--description TEXT]
+    | --sample N [--seed S] | --from-job JOB_DIR [--outcome O,...]... [--unit ID]...) [--description TEXT]
 nullius standard set list [<benchmark>] [--json]
 nullius standard set show <benchmark> NAME [--json]
 nullius standard set rename <benchmark> NAME "WORDS"
@@ -18,6 +18,7 @@ nullius standard run <benchmark> <other> --set NAME ...
 nullius standard units osworld1 --dataset test_nogdrive --search tab --category domain=chrome
 nullius standard set create humaneval "first ten" --dataset humaneval --units ten.txt
 nullius standard set create humaneval misses --from-job jobs_standard/JOB --outcome failed,infra
+nullius standard set create gaia twenty --dataset gaia-validation --sample 20 --seed 7
 nullius standard run humaneval reference --model gpt-5-mini --set first-ten --unsandboxed
 ```
 
@@ -25,7 +26,10 @@ nullius standard run humaneval reference --model gpt-5-mini --set first-ten --un
 | --- | --- |
 | `units` | Each task's id, title, text and categories; ids alone when the driver has no `describe`. |
 | A listing | Prepares the upstream, the dataset and, without `driver.list_command`, the driver's environment; starts no unit. |
+| Its licences | The driver gets its `to: driver` secrets, as a run's; one not set is refused first. |
+| Driver output | Supplied secrets are redacted before a listing is stored or its logs and errors are kept or shown. |
 | `--search`, `--category` | Every word in the id, title or text; one field's values widen, two fields narrow. |
+| `--sample N` | N of the listed or matched tasks at random; `--seed S` repeats a draw, and the note keeps it. |
 | The entry | `sets/<benchmark>/NAME.json` in the user catalogue, a plain file to copy or keep. |
 | Frozen | No command changes a set's list; `rename` changes its label; jobs find it by id. |
 | Its name | Up to 80 characters with a letter or a digit; commands take its slug. |

@@ -27,7 +27,7 @@ from nullius.standard.pages import recipe
 from nullius.standard.protocols import jsonl
 from nullius.standard.requirements import install
 from nullius.standard.runner import job, sets, units
-from tests.test_standard_units_listing import DRIVER, MODE
+from tests.test_standard_units_listing import DRIVER, MODE, REJECTING_DRIVER, gated
 from .test_routes import web
 
 FIXTURES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tests", "fixtures", "standard", "catalogue")
@@ -319,6 +319,32 @@ class TheTasksPagesData(Case):
         r = self.client.get("/benchmarks/described/tasks/all/listing?within=nowhere"); self.addCleanup(r.close)
         self.assertEqual((r.status_code, r.get_json()["error"]), (400, "There is no task set nowhere."))
 
+    def test_pick_at_random_draws_as_set_create_sample_does_and_the_set_keeps_its_seed(self):
+        units.listing(self.b, "all")
+        alpha = [t["id"] for t in units.find(self.b, "all", categories={"kind": ["alpha"]}, size=None)["tasks"]]
+        got = self.listing(ids=1, sample=5, seed=7, cat=["kind=alpha"])
+        self.assertEqual((got["ids"], got["seed"]), (units.draw(alpha, 5, 7)[0], 7))
+        self.assertEqual(got["note"], "matched by --category kind=alpha; drawn by --sample 5 --seed 7")
+        drawn = self.listing(ids=1, sample=5)                 # no seed: one drawn, and given
+        self.assertEqual(drawn["ids"], units.draw([f"t{i:03d}" for i in range(250)], 5, drawn["seed"])[0])
+        for sample, said in (("251", "--sample 251: the list holds 250"), ("x", "--sample x: a whole number from 1")):
+            r = self.client.get(f"/benchmarks/described/tasks/all/listing?ids=1&sample={sample}"); self.addCleanup(r.close)
+            self.assertEqual((r.status_code, r.get_json()["error"]), (400, said))
+        self.post("/benchmarks/described/tasks/all/save", {"name": "five", "units": got["ids"], "note": got["note"]})
+        self.assertEqual(sets.revision(sets.load("described", "five"))["note"], got["note"])
+
+    def test_invalid_sample_and_seed_numbers_are_refused(self):
+        units.listing(self.b, "all")
+        for field, minimum in (("sample", 1), ("seed", 0)):
+            for word in ("²", "9" * 4301):
+                with self.subTest(field=field, length=len(word)):
+                    query = {"ids": "1", "sample": "2", "seed": "7", field: word}
+                    r = self.client.get("/benchmarks/described/tasks/all/listing", query_string=query)
+                    self.addCleanup(r.close)
+                    self.assertEqual(r.status_code, 400)
+                    self.assertEqual(r.get_json(), {"ok": False,
+                        "error": f"--{field} {word}: a whole number from {minimum}"})
+
     def test_an_unknown_category_is_refused_plainly(self):
         units.listing(self.b, "all")
         r = self.client.get("/benchmarks/described/tasks/all/listing?cat=colour=red"); self.addCleanup(r.close)
@@ -407,6 +433,30 @@ class AFirstListing(Case):
     fetches said; full, never started, with what it needs said; refused, why. No request starts a fetch or an
     install inside itself."""
 
+    def test_preparation_keeps_and_shows_no_driver_secret(self):
+        from web import catalogue
+        self.b = gated(self.b)
+        Path(self.b["_here"], "driver.py").write_text(REJECTING_DRIVER)
+        token = "page-credential"
+        self.stack.enter_context(patch.object(units.run, "Licences", return_value={
+            "HF_TOKEN": {"kind": "value", "value": token}}))
+        self.stack.enter_context(patch.dict(catalogue._PREPARING, {}, clear=True))
+
+        def join():
+            for job in catalogue._PREPARING.values():
+                job["thread"].join(5)
+                self.assertFalse(job["thread"].is_alive())
+
+        self.addCleanup(join)
+        first = self.post("/benchmarks/described/tasks/all/prepare", {})
+        join()
+        record = catalogue._PREPARING[catalogue._listing_key(self.b, "all", {})]
+        shown = self.listing()
+        for value in (json.dumps(first), record["error"], json.dumps(shown)):
+            self.assertNotIn(token, value)
+        self.assertIn("Authentication failed for [REDACTED]", record["error"])
+        self.assertEqual(shown["error"], record["error"])
+
     def test_preparation_errors_belong_to_the_resolved_version(self):
         from web import catalogue
         versions = {v: dict(self.b, _version=v, _ref=f"described@{v}") for v in ("1", "2")}
@@ -483,21 +533,46 @@ class AFirstListing(Case):
         self.assertNotEqual(made[0], threading.current_thread().name)
         self.assertEqual(self.starts(), 0)
 
-    def test_a_listing_that_needs_the_full_environment_is_never_started_and_says_what_it_needs(self):
+    def test_a_listing_that_needs_the_full_environment_starts_on_a_click_and_says_what_it_installs(self):
         self.stack.enter_context(patch.object(units, "state", lambda b, d, o=None: {
-            "state": "full", "fetch": [{"what": "environment", "text": "the driver's environment, installed with uv"}], "reason": ""}))
+            "state": "full", "fetch": [{"what": "environment", "text": "the driver's environment, installed with uv"}],
+            "reason": "", "needs": []}))
         self.no_fetch_no_install()
-        called = []
-        self.stack.enter_context(patch.object(units, "listing", lambda *a, **k: called.append(a)))
+        html = self.get("/benchmarks/described/tasks/all").get_data(as_text=True)
+        self.assertIn('<button type="button" class="btn sm" id="tasks-list-go">List tasks</button>', html)
+        self.assertIn('<div class="tasks-bar" id="tasks-bar" hidden>', html)           # no search until there is a list
         got = self.listing()
         self.assertFalse(got["ready"])
-        self.assertEqual(got["say"], "The list of tasks needs the benchmark's own environment on this machine (the driver's environment, "
-                                     "installed with uv): run the dataset once, or list it with the units command, then reload. "
-                                     "Ids can still be pasted.")
-        self.assertFalse(self.post("/benchmarks/described/tasks/all/prepare", {})["preparing"])
+        self.assertEqual((got["say"], got["about"]), ("List the tasks to choose from, or paste their ids.",
+                                                      "Listing fetches the driver's environment, installed with uv."))
         rows = self.post("/benchmarks/described/tasks/all/rows", {"units": ["t001"]})
         self.assertEqual((rows["ready"], [t["id"] for t in rows["tasks"]]), (False, ["t001"]))        # pasted ids, kept as they are
-        self.assertEqual(called, [])
+        # the click: the listing made in a thread of its own, the request answered at once
+        release, made = threading.Event(), []
+        self.stack.enter_context(patch.object(units, "listing", lambda *a, **k: (release.wait(10), made.append(1))))
+        got = self.post("/benchmarks/described/tasks/all/prepare", {})
+        self.assertTrue(got["preparing"])
+        self.assertEqual(got["say"], "Preparing the list of tasks: fetching the driver's environment, installed with uv. "
+                                     "Ids can be pasted meanwhile.")
+        release.set()
+        for _ in range(100):
+            if made:
+                break
+            time.sleep(0.02)
+        self.assertEqual(made, [1])
+        r = self.client.get("/benchmarks/described/tasks/all", headers={"X-Forwarded-For": "192.0.2.4"}); self.addCleanup(r.close)
+        self.assertNotIn("tasks-list-go", r.get_data(as_text=True))       # started from a browser on the application host
+
+    def test_a_licence_not_set_is_said_with_where_to_set_it_and_nothing_starts(self):
+        self.stack.enter_context(patch.object(units, "state", lambda b, d, o=None: {
+            "state": "refused", "fetch": [], "reason": "cannot list described's dataset all: it needs a Hugging Face token",
+            "needs": [{"name": "HF_TOKEN", "provider": "huggingface"}]}))
+        self.no_fetch_no_install()
+        self.stack.enter_context(patch.object(units, "listing", side_effect=AssertionError("a listing started")))
+        got = self.listing()
+        self.assertEqual(got["say"], "The list of tasks needs a Hugging Face token. Ids can still be pasted.")
+        self.assertEqual(got["link"], {"href": "/settings#data-providers", "text": "Add it in Settings → Data providers"})
+        self.assertFalse(self.post("/benchmarks/described/tasks/all/prepare", {})["preparing"])
 
     def test_a_refused_listing_says_why(self):
         self.stack.enter_context(patch.object(units, "state", lambda b, d, o=None: {"state": "refused", "fetch": [], "reason": "git is not on this machine"}))
@@ -721,12 +796,11 @@ class TheBenchmarksSection(Case):
         self.assertNotIn("<table", part)
 
     def test_new_task_set_in_the_sections_head_opens_the_tasks_of_a_dataset(self):
-        gaia = _GET("benchmark", "gaia")
-        head = re.search(r'<div class="bench-section-head">(.*?)</div>\s*</details>', self.section("gaia"), re.S).group(1)
-        self.assertIn('<summary class="btn sm" aria-haspopup="true">New task set</summary>', head)
-        self.assertIn('<details class="bench-newset pop">', head)          # a menu: not a disclosure, no chevron
-        for d in gaia["datasets"]:                    # several datasets: a choice of them, each its tasks' page
-            self.assertIn(f'<a href="/benchmarks/gaia/tasks/{d["id"]}">{d.get("label") or d["id"]}<span class="muted">', head)
+        telco = _GET("benchmark", "open-telco")
+        part = self.section("open-telco")
+        self.assertNotIn("New task set", part)         # several datasets: no menu, the button of each opens its tasks
+        for d in telco["datasets"]:
+            self.assertIn(f'<a class="btn ghost sm" href="/benchmarks/open-telco/tasks/{d["id"]}">', part)
         [only] = _GET("benchmark", "humaneval")["datasets"]
         one = self.section("humaneval")              # one dataset: the button is its link
         self.assertIn(f'<a class="btn sm" href="/benchmarks/humaneval/tasks/{only["id"]}">New task set</a>', one)
@@ -778,7 +852,7 @@ class TheBenchmarksOwnSets(Case):
         self.assertLess(text.index("From OSWorld1"), text.index("Yours"))
         self.assertLess(text.index("Yours"), text.index("Chrome tabs"))
         # a benchmark that declares nothing is drawn as before
-        self.assertNotIn("From ", visible(self.section("gaia")))
+        self.assertNotIn("From ", visible(self.section("open-telco")))
 
     def node_program(self, body):
         node = shutil.which("node")
@@ -817,7 +891,7 @@ class TheBenchmarksOwnSets(Case):
         self.assertEqual((got["whole"]["datasets"], got["whole"].get("task_sets")), (["test_all"], None))
 
     def test_a_benchmark_that_declares_nothing_is_drawn_as_before(self):
-        got = self.node_program("const b=C.standardBench(C.createStandard('gaia'));"
+        got = self.node_program("const b=C.standardBench(C.createStandard('open-telco'));"
                                 "process.stdout.write(JSON.stringify({nested:C.nestedDatasets(b),n:b.datasets.length}));")
         self.assertEqual(got["nested"], False)
         self.assertGreater(got["n"], 1)

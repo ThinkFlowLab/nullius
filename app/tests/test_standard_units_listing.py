@@ -5,8 +5,9 @@ its ids; the listing cached by its options; ``set create --search`` and ``--cate
 listing gives and the filter in its note; OSWorld1's ``describe`` from its task files. A definition's
 ``driver.list_command`` listing with no driver environment, OSWorld1's giving the driver's ids in its order;
 ``state`` giving each of its answers and starting nothing; the command's one line before a first listing that
-fetches. No key, no network: each driver is a script of the test's own, the fake benchmark's or OSWorld1's on
-task files of the test's own."""
+fetches; a licence the driver needs, given to it as a run gives it, and refused first when none is held;
+``--sample`` drawing N of the listed tasks by a seed. No key, no network: each driver is a script of the test's
+own, the fake benchmark's or OSWorld1's on task files of the test's own."""
 from __future__ import annotations
 
 import contextlib
@@ -33,6 +34,9 @@ OSWORLD1 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 DRIVER = r'''import json, os, sys
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "started"), "a") as f:
     f.write("started\n")
+if os.environ.get("HF_TOKEN"):           # a licence bound for the driver, as the listing gave it
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "given"), "w") as f:
+        f.write(os.environ["HF_TOKEN"])
 KINDS = ("alpha", "beta", "gamma")
 N = 20 if os.environ.get("NULLIUS_OPTION_MODE") == "short" else 250
 IDS = [f"t{i:03d}" for i in range(N)]
@@ -52,6 +56,12 @@ for line in sys.stdin:
     print(json.dumps(out), flush=True)
 '''
 MODE = {"mode": {"summary": "how many tasks the listing gives", "values": ["long", "short"], "default": "long"}}
+REJECTING_DRIVER = r'''import json, os, sys
+for line in sys.stdin:
+    message = 'Authentication failed for ' + os.environ['HF_TOKEN'] + os.environ.get('EXTRA_TOKEN', '')
+    print(message, file=sys.stderr, flush=True)
+    print(json.dumps({'error': message}), flush=True)
+'''
 
 
 class Scratch(unittest.TestCase):
@@ -280,6 +290,41 @@ class SetFromAFilter(Scratch):
         self.assertEqual(code, 0, err)
         self.assertEqual(len(sets.revision(sets.load("described", "by-kind"))["units"]), 83)
 
+    def test_a_sample_is_n_of_the_listed_tasks_the_same_for_the_same_seed_and_its_seed_in_the_note(self):
+        listed = self.ids(units.find(self.b, "all", size=None))
+        for name, seed in (("one", "7"), ("two", "7"), ("three", "8")):
+            code, out, err = self.cli("set", "create", "described", name, "--dataset", "all", "--sample", "5", "--seed", seed)
+            self.assertEqual(code, 0, err)
+        one, two, three = (sets.revision(sets.load("described", n)) for n in ("one", "two", "three"))
+        self.assertEqual(one["units"], two["units"])
+        self.assertEqual(one["units"], ["t038", "t082", "t101", "t166", "t242"])
+        self.assertEqual(three["units"], ["t032", "t058", "t094", "t096", "t246"])
+        self.assertNotEqual(one["units"], three["units"])
+        self.assertEqual(len(one["units"]), 5)
+        self.assertEqual(one["units"], [u for u in listed if u in one["units"]])          # in the listing's order
+        self.assertEqual(one["note"], "drawn by --sample 5 --seed 7")
+        self.assertIn("drawn with --seed 8", out)
+        # of the tasks a filter matches; with no seed, one is drawn, shown and kept
+        code, out, err = self.cli("set", "create", "described", "gammas", "--dataset", "all", "--category", "kind=gamma",
+                                  "--sample", "3")
+        self.assertEqual(code, 0, err)
+        got = sets.revision(sets.load("described", "gammas"))
+        seed = int(out.rsplit("--seed ", 1)[1])
+        self.assertEqual(got["note"], f"matched by --category kind=gamma; drawn by --sample 3 --seed {seed}")
+        gammas = self.ids(units.find(self.b, "all", categories={"kind": ["gamma"]}, size=None))
+        self.assertEqual(got["units"], units.draw(gammas, 3, seed)[0])
+        self.assertTrue(set(got["units"]) <= set(gammas))
+        for args, said in ((["--sample", "251"], "refused: --sample 251: the list holds 250\n"),
+                           (["--sample", "0"], "refused: --sample 0: a whole number from 1\n"),
+                           (["--seed", "3"], "refused: --seed draws --sample's tasks: give it with --sample\n"),
+                           (["--sample", "2", "--units", os.path.join(self.tmp, "x.txt")], None)):
+            with self.subTest(args=args):
+                code, out, err = self.cli("set", "create", "described", "too-many", "--dataset", "all", *args)
+                self.assertEqual((code, out), (2, ""))
+                self.assertEqual(err, said or "refused: set create: --units FILE, --from-job JOB_DIR, or --search, "
+                                              "--category and --sample\n")
+        self.assertEqual(sorted(e["name"] for e in sets.entries("described")[0]), ["gammas", "one", "three", "two"])
+
     def test_a_filter_that_matches_nothing_or_beside_another_source_is_refused(self):
         for args, said in ((["--search", "wombat"], "no task of all matches --search \"wombat\""),
                            (["--search", "t1", "--units", os.path.join(self.tmp, "x.txt")], "--units FILE, --from-job"),
@@ -289,6 +334,106 @@ class SetFromAFilter(Scratch):
                 self.assertEqual((code, out), (2, ""))
                 self.assertIn(said, err)
         self.assertFalse(os.path.exists(os.path.join(self.cat, "sets")))
+
+
+def gated(bench: dict) -> dict:
+    """``bench`` with its dataset in an environment that needs a data provider's token, bound for the driver."""
+    return dict(bench, datasets=[dict(d, environment="data") for d in bench["datasets"]],
+                environments={"data": {"summary": "the data", "needs_secrets": [
+                    {"name": "HF_TOKEN", "to": "driver", "provider": "huggingface"}]}})
+
+
+class Licences(Scratch):
+    def test_driver_secrets_are_absent_from_files_and_command_output(self):
+        self.b = gated(self.b)
+        self.b["environments"]["data"]["needs_secrets"].append({"name": "EXTRA_TOKEN", "to": "driver"})
+        Path(self.b["_here"], "driver.py").write_text(REJECTING_DRIVER)
+        extra = "another-made-up-credential"
+        for token in ("made-up-listing-credential", "tiny"):
+            with self.subTest(token=token):
+                files = []
+                remove = shutil.rmtree
+
+                def capture(path, **kwargs):
+                    files.extend(p.read_bytes() for p in Path(self.tmp).rglob("*") if p.is_file())
+                    remove(path, **kwargs)
+
+                with mock.patch.object(units.run, "Licences", return_value={
+                        "HF_TOKEN": {"kind": "value", "value": token},
+                        "EXTRA_TOKEN": {"kind": "value", "value": extra}}), \
+                        mock.patch.object(units.shutil, "rmtree", capture):
+                    code, out, err = self.cli("units", "described", "--dataset", "all")
+                self.assertEqual((code, out), (2, ""))
+                self.assertTrue(files)
+                for content in (out.encode(), err.encode(), *files):
+                    with self.subTest(content=content):
+                        self.assertNotIn(token.encode(), content)
+                        self.assertNotIn(extra.encode(), content)
+                self.assertIn("Authentication failed for [REDACTED]", err)
+                self.assertIn(b"Authentication failed for [REDACTED][REDACTED]\n", files)
+
+    def test_a_secret_in_a_successful_reply_is_redacted_before_caching(self):
+        self.b = gated(self.b)
+        self.b["driver"]["describe"] = False
+        Path(self.b["_here"], "driver.py").write_text(
+            REJECTING_DRIVER.replace("{'error': message}", "{'units': [message]}"))
+        token = 'made-up-quoted-"credential'
+        with mock.patch.dict(os.environ, {"HF_TOKEN": token}):
+            code, out, err = self.cli("units", "described", "--dataset", "all")
+        self.assertEqual(code, 0, err)
+        self.assertIn("Authentication failed for [REDACTED]", out)
+        cached = units.listing(self.b, "all")
+        self.assertEqual(cached["tasks"][0]["id"], "Authentication failed for [REDACTED]")
+        for content in (out, err, *(p.read_text() for p in Path(self.tmp).rglob("*") if p.is_file())):
+            self.assertNotIn(token, content)
+            self.assertNotIn(json.dumps(token)[1:-1], content)
+
+    def test_a_driver_that_ends_says_why_whatever_the_bytes_of_its_stderr(self):
+        self.b = gated(self.b)
+        Path(self.b["_here"], "driver.py").write_text("import os, sys\nsys.stdin.readline()\n"
+            "sys.stderr.buffer.write(b'\\xff failed for ' + os.environ['HF_TOKEN'].encode() + b'\\n')\n")
+        with mock.patch.dict(os.environ, {"HF_TOKEN": "made-up-bytes"}):
+            code, out, err = self.cli("units", "described", "--dataset", "all")
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("ended without replying (\ufffd failed for [REDACTED])\n", err)
+
+    def test_a_secret_is_redacted_as_a_json_string_or_a_url_holds_it(self):
+        self.b = gated(self.b)
+        Path(self.b["_here"], "driver.py").write_text("import json, os, sys, urllib.parse as u\nsys.stdin.readline()\n"
+            "t = os.environ['HF_TOKEN']\n"
+            "print(json.dumps([t]), json.dumps([t], ensure_ascii=False), u.quote(t, safe=''), u.quote_plus(t), file=sys.stderr)\n")
+        with mock.patch.dict(os.environ, {"HF_TOKEN": 'made/up "key" \u00e9+1'}):
+            code, out, err = self.cli("units", "described", "--dataset", "all")
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn('(["[REDACTED]"] ["[REDACTED]"] [REDACTED] [REDACTED])\n', err)
+
+    def test_a_listing_with_a_secret_keeps_its_tasks_texts_whole(self):
+        self.b = gated(self.b)
+        said = "Ask the bearer Kristiansen for the password: quokka-folder"
+        Path(self.b["_here"], "driver.py").write_text(DRIVER.replace("Rename the folder called Quokka", said))
+        with mock.patch.object(units.run, "Licences", return_value={"HF_TOKEN": {"kind": "value", "value": "made-up"}}):
+            self.assertEqual(units.find(self.b, "all", search="t011")["tasks"][0]["text"], said)
+
+    def given(self):
+        path = Path(self.b["_here"], "given")
+        return path.read_text() if path.exists() else None
+
+    def test_the_driver_gets_its_licence_and_none_held_is_refused_before_it_starts(self):
+        self.b = gated(self.b)
+        env = {k: v for k, v in os.environ.items() if k != "HF_TOKEN"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            code, out, err = self.cli("units", "described", "--dataset", "all")
+        self.assertEqual((code, out, self.starts()), (2, "", 0))
+        self.assertEqual(err, "refused: cannot list described's dataset all: it needs a Hugging Face token, HF_TOKEN "
+                              "(Settings → Data providers)\n")
+        with self.assertRaisesRegex(units.Refused, "needs a Hugging Face token"):
+            units.listing(self.b, "all")
+        # held, from the provider's variable as a headless run takes it, or from the store: the driver gets it
+        with mock.patch.dict(os.environ, dict(env, HF_TOKEN="from-env"), clear=True):
+            code, out, err = self.cli("units", "described", "--dataset", "all", "--search", "t042")
+        self.assertEqual((code, out.splitlines()[0], self.given()), (0, "1 of 250 tasks of all", "from-env"))
+        units.listing(dict(self.b, options={}), "all", licences={"HF_TOKEN": {"kind": "value", "value": "from-the-store"}})
+        self.assertEqual(self.given(), "from-the-store")
 
 
 ASKED = AssertionError("the listing asked for the driver's environment")
@@ -383,13 +528,13 @@ class State(Scratch):
 
     def test_cached(self):
         units.find(self.b, "all")
-        self.assertEqual(self.asked(self.b), {"state": "cached", "fetch": [], "reason": ""})
+        self.assertEqual(self.asked(self.b), {"state": "cached", "fetch": [], "reason": "", "needs": []})
         self.assertEqual(self.asked(self.b, options={"mode": "short"})["state"], "full")    # not listed under it
 
     def test_light_and_what_it_fetches(self):
         light = [sys.executable, "{here}/driver.py"]
         self.assertEqual(self.asked(dict(self.b, driver=dict(HEAVY, list_command=light))),
-                         {"state": "light", "fetch": [], "reason": ""})
+                         {"state": "light", "fetch": [], "reason": "", "needs": []})
         got = self.asked(self.fetching(list_command=light))
         self.assertEqual((got["state"], got["reason"]), ("light", ""))
         self.assertEqual(got["fetch"], [{"what": "upstream", "text": "the upstream https://example.org/upstream.git at aaaaaaaaaaaa"},
@@ -420,10 +565,10 @@ class State(Scratch):
             return sha256(path)
 
         with mock.patch.object(units.ondisk, "sha256_of", side_effect=digest):
-            self.assertEqual(self.asked(bench), {"state": "light", "fetch": [], "reason": ""})
+            self.assertEqual(self.asked(bench), {"state": "light", "fetch": [], "reason": "", "needs": []})
 
     def test_full_and_the_environment_it_installs(self):
-        self.assertEqual(self.asked(self.b), {"state": "full", "fetch": [], "reason": ""})
+        self.assertEqual(self.asked(self.b), {"state": "full", "fetch": [], "reason": "", "needs": []})
         got = self.asked(self.fetching())
         self.assertEqual((got["state"], [f["what"] for f in got["fetch"]]), ("full", ["upstream", "dataset", "environment"]))
         self.assertEqual(got["fetch"][2]["text"], "the driver's environment, installed with uv")
@@ -444,6 +589,15 @@ class State(Scratch):
                 self.assertIn(said, got["reason"])
         with self.assertRaisesRegex(units.NotFound, "no dataset 'nope'"):
             self.asked(self.b, "nope")
+
+    def test_a_licence_its_driver_needs_and_none_holds_is_refused_first(self):
+        bench = dict(gated(self.fetching()))
+        got = self.asked(bench, programs=())                  # before the programs and the fetches are looked at
+        self.assertEqual((got["state"], got["fetch"], got["needs"]), ("refused", [], [{"name": "HF_TOKEN", "provider": "huggingface"}]))
+        self.assertEqual(got["reason"], "cannot list described's dataset all: it needs a Hugging Face token, HF_TOKEN "
+                                        "(Settings → Data providers)")
+        with mock.patch.object(units.run, "Licences", return_value={"HF_TOKEN": {"kind": "value", "value": "v"}}):
+            self.assertEqual(self.asked(bench)["state"], "full")
 
 
 class FirstListing(Scratch):

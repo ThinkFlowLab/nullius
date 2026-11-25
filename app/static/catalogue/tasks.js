@@ -1,7 +1,8 @@
 // A dataset's tasks (templates/catalogue/tasks.html): the server gives a page of 100 tasks for a search and category
 // values (web/catalogue.py, standard/runner/units.py); this page keeps the chosen ids alone. The listing is asked for once the
 // page has loaded: in the cache, it shows at once; one that can be made lightly is started out of the request and
-// the page asks again until it is ready; one that needs the benchmark's full environment is never started here.
+// the page asks again until it is ready; one that needs the benchmark's full environment is started on a click
+// (List questions), the same way. Until there is a list, the search is hidden.
 // The run builder mounts the same list in a dialog (nulliusTasks, data-manual): the tasks of a dataset or of one of
 // its sets (data-within), its ticks given back through onChange.
 (() => {
@@ -12,6 +13,9 @@ function mount(page, opts = {}) {
   const changed = () => opts.onChange && opts.onChange([...chosen]);
   // opened from a set: its members first; Show all browses the dataset
   const st = {q: '', cats: {}, page: 1, showing: !!d.set && chosen.size > 0, ready: false, total: 0, pages: 1};
+  // the last draw of Pick at random ({ids, seed, note}), while the chosen are the ones it drew
+  let drawn = null;
+  const picked = () => !!drawn && drawn.ids.size === chosen.size && [...chosen].every(id => drawn.ids.has(id));
   const label = field => field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   // the listing at the version the page shows (data-version, empty for the benchmark's default)
@@ -24,14 +28,22 @@ function mount(page, opts = {}) {
   const post = (url, body) => nulliusFetch(at(url), {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': d.csrf}, body: JSON.stringify(body)});
   const count = n => `${n.toLocaleString('en-US')} ${n === 1 ? nouns.replace(/s$/, '') : nouns}`;
 
-  function say(text, warn) {
+  // the notice: its line, and a link to where a licence is set or the button that starts a full listing
+  function say(text, warn, got) {
     if (page.isConnected === false) return;
-    const el = $('tasks-state'); el.hidden = !text; el.textContent = text || ''; el.classList.toggle('tasks-warn', !!warn);
+    const el = $('tasks-state'), link = $('tasks-state-link'), list = $('tasks-list');
+    el.hidden = !text; $('tasks-state-text').textContent = text || ''; el.classList.toggle('tasks-warn', !!warn);
+    link.hidden = !(got && got.link);
+    if (got && got.link) { link.href = got.link.href; link.textContent = got.link.text; }
+    const startable = !!got && got.state === 'full' && !got.preparing && d.local === 'true';
+    if (list) { list.hidden = !startable; $('tasks-list-about').textContent = startable ? got.about || '' : ''; }
   }
   function chosenLine() {
     $('tasks-chosen').textContent = `${chosen.size.toLocaleString('en-US')} chosen`;
     if ($('tasks-bar-chosen')) $('tasks-bar-chosen').textContent = $('tasks-chosen').textContent;
-    $('tasks-show').disabled = !chosen.size && !st.showing;
+    // Show selected and Clear once something is chosen; Show all while the chosen are shown
+    $('tasks-show').hidden = !chosen.size && !st.showing;
+    $('tasks-clear').hidden = !chosen.size;
   }
   // a task on one line: its title cut to the width, the whole text in the row's tooltip and, while its box (its text
   // where the box is disabled) has the keyboard's focus, in place; its id beside it on hover or focus. A click
@@ -80,21 +92,26 @@ function mount(page, opts = {}) {
   let polling = null, asked = 0;
   // not in the cache: the server's line for its state; a light listing started once, out of any request, then asked
   // again every few seconds until it is ready
+  function prepare(got) {
+    return post(d.prepare, {}).then(r => r.json()).then(g => {
+      if (page.isConnected === false) return;
+      say(g.say || got.say, false, g); polling = setTimeout(load, 2500);
+    })
+      .catch(() => say('The list could not be started. Reload the page.', true));
+  }
   function notReady(got) {
     if ($('tasks-match')) $('tasks-match').hidden = true;
-    const light = got.state === 'light' && !got.error;
-    say(got.say, !light);
-    if (!light) return;
+    $('tasks-bar').hidden = true;
+    const light = got.state === 'light' && !got.error, full = got.state === 'full';
+    say(got.say, !light && !(full && !got.error), got);
     clearTimeout(polling);
-    if (!got.preparing && d.local !== 'true') return say('The list is prepared from a browser on the application host. Ids can still be pasted.', true);
-    if (!got.preparing && !asked++)
-      return post(d.prepare, {}).then(r => r.json()).then(g => {
-        if (page.isConnected === false) return;
-        say(g.say || got.say); polling = setTimeout(load, 2500);
-      })
-        .catch(() => say('The list could not be started. Reload the page.', true));
+    const elsewhere = () => say('The list is prepared from a browser on the application host. Ids can still be pasted.', true);
+    if (!light && !(full && got.preparing)) return full && !got.error && d.local !== 'true' ? elsewhere() : undefined;
+    if (!got.preparing && d.local !== 'true') return elsewhere();
+    if (!got.preparing && !asked++) return prepare(got);
     polling = setTimeout(load, 2500);
   }
+  $('tasks-list-go')?.addEventListener('click', () => { $('tasks-list').hidden = true; asked++; prepare({say: ''}); });
   async function load() {
     if (page.isConnected === false) return;            // a list the builder's dialog has since replaced asks nothing more
     let got;
@@ -103,10 +120,12 @@ function mount(page, opts = {}) {
     if (!got.ok) return say(got.error || 'The list could not be read.', true);
     if (!got.ready) { $('tasks-count').textContent = ''; draw([...chosen].map(id => ({id}))); pager(); chosenLine(); return notReady(got); }
     say('');
+    $('tasks-bar').hidden = false;
     st.ready = true; st.total = got.total; st.pages = got.pages; st.page = got.page;
     facets(got.categories);
     const m = $('tasks-match');
     if (m) { m.hidden = !writable || !got.total || st.showing; m.textContent = `Select the ${got.total.toLocaleString('en-US')} that match`; }
+    if ($('tasks-pick')) $('tasks-pick').hidden = !writable || !got.total || st.showing;
     if (st.showing) return showSelected();
     draw(got.tasks);
     $('tasks-count').textContent = `${count(got.total)}` + (got.total !== got.of ? ` of ${got.of.toLocaleString('en-US')}` : '')
@@ -120,7 +139,8 @@ function mount(page, opts = {}) {
     if (page.isConnected === false) return;
     const unknown = new Set(got.unknown || []);
     draw([...got.tasks, ...[...unknown].map(id => ({id, unknown: true}))]);
-    $('tasks-count').textContent = `${count(ids.length)} chosen` + (unknown.size ? ` · ${unknown.size} not in the listing` : '');
+    $('tasks-count').textContent = `${count(ids.length)} chosen` + (unknown.size ? ` · ${unknown.size} not in the listing` : '')
+      + (picked() ? ` · picked at random with seed ${drawn.seed}` : '');
     pager(); chosenLine();
   }
 
@@ -161,11 +181,22 @@ function mount(page, opts = {}) {
     if (page.isConnected === false) return;
     if (got.ok && got.ready) { got.ids.forEach(id => chosen.add(id)); changed(); load(); }
   });
+  // Pick N at random: N of the matches, drawn on the server as set create --sample draws them; its seed is shown, and
+  // kept in the set's note while the chosen are the ones drawn
+  $('tasks-pick-go')?.addEventListener('click', async () => {
+    let got;
+    try { got = await (await nulliusFetch(query({ids: 1, sample: $('tasks-n').value.trim()}))).json(); }
+    catch { return window.nulliusNotify?.('The tasks could not be drawn. Reload the page.', {error: true}); }
+    if (!got.ok || !got.ready) return window.nulliusNotify?.(got.error || 'The list is not ready.', {error: true});
+    chosen.clear(); got.ids.forEach(id => chosen.add(id));
+    drawn = {ids: new Set(got.ids), seed: got.seed, note: got.note};
+    setShowing(true); load();
+  });
   $('tasks-clear')?.addEventListener('click', () => { chosen.clear(); changed(); load(); });
   $('tasks-paste-add')?.addEventListener('click', async () => {
     const ids = [...new Set($('tasks-paste').value.split(/[\s,]+/).map(s => s.trim()).filter(s => s && !s.startsWith('#')))];
     ids.forEach(id => chosen.add(id)); changed();
-    $('tasks-paste').value = ''; $('tasks-paste').closest('details').open = false;
+    $('tasks-paste').value = ''; $('tasks-paste-open').open = false;
     window.nulliusNotify?.(`${count(ids.length)} added.`);
     load();
   });
@@ -174,6 +205,7 @@ function mount(page, opts = {}) {
   async function save(body) {
     if (!chosen.size) return msg('Tick at least one task.', true);
     let got;
+    if (picked()) body = {...body, note: drawn.note};
     try { got = await (await post(d.save, {...body, units: [...chosen]})).json(); } catch { return msg('Not saved: the server did not answer.', true); }
     if (page.isConnected === false) return;
     if (!got.ok) return msg(got.error, true);

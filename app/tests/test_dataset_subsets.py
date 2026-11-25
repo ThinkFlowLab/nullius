@@ -1,7 +1,7 @@
 """A benchmark's list cut from another of its lists (``subset_of`` on a dataset of its definition): the field is
 optional and names another list, one cut from none, that holds at least as many units; OSWorld1 declares its three
-cuts of All tasks at each of its versions; a run still names the list it runs, so a recipe of a cut compiles as
-before. No key, no network."""
+cuts of All tasks at each of its versions, and GAIA its three levels of All levels; a run still names the list it
+runs, so a recipe of a cut compiles as before. No key, no network."""
 from __future__ import annotations
 
 import copy
@@ -55,6 +55,15 @@ class Declared(unittest.TestCase):
                 self.assertTrue(all(x["units"] <= whole["units"] for x in b["datasets"]))
                 self.assertEqual([x["subset_of"] for x in recipe._bench_page(b)["datasets"]],
                                  ["test_all" if x.get("subset_of") else "" for x in b["datasets"]])
+
+    def test_gaias_three_levels_are_cut_from_all_levels(self):
+        b = definitions.get("benchmark", "gaia")
+        self.assertEqual({x["id"]: x.get("subset_of") for x in b["datasets"]},
+                         {"gaia-validation": None, "gaia-validation-level1": "gaia-validation",
+                          "gaia-validation-level2": "gaia-validation", "gaia-validation-level3": "gaia-validation"})
+        self.assertEqual(sum(x["units"] for x in b["datasets"] if x.get("subset_of")),
+                         next(x["units"] for x in b["datasets"] if x["id"] == "gaia-validation"))
+        self.assertEqual([p for p in definitions.problems(clean(b), "benchmark") if "subset_of" in p], [])
 
     def test_a_run_still_names_the_list_it_runs(self):
         b = definitions.get("benchmark", "osworld1@044bc33")

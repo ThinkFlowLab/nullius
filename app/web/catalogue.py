@@ -166,7 +166,8 @@ def _listing_key(bench: dict, dataset: str, options: dict):
 
 def _listing_state(bench: dict, dataset: str, options=None) -> dict:
     """The state function's answer; whether a listing is being made here now, and why the last one failed; and
-    ``say``, the line the page shows while the listing is not there."""
+    ``say``, the line the page shows while the listing is not there; ``about``, what a listing the page starts on a
+    click does first; ``link``, where a licence it needs is set."""
     got = units.state(bench, dataset, options)
     with _PREPARING_LOCK:
         job = _PREPARING.get(_listing_key(bench, dataset, options or {})) or {}
@@ -174,19 +175,24 @@ def _listing_state(bench: dict, dataset: str, options=None) -> dict:
     got = dict(got, preparing=alive and got["state"] != "cached", error="" if alive else job.get("error", ""))
     nouns = (bench.get("units") or {}).get("nouns", "tasks")
     fetched = ", then ".join(f["text"] for f in got["fetch"])
+    about, link = "", None
     if got["state"] == "cached":
         say = ""
     elif got["error"]:
         say = f"The list of {nouns} could not be made: {got['error']}. Ids can still be pasted."
+    elif got.get("needs"):
+        say = f"The list of {nouns} needs {' and '.join(units.needed(n) for n in got['needs'])}. Ids can still be pasted."
+        own = any(not n["provider"] for n in got["needs"])
+        link = {"href": url_for("settings_page") + (f"#access-{bench['key']}" if own else "#data-providers"),
+                "text": "Add it in Settings → " + ("Custom keys" if own else "Data providers")}
     elif got["state"] == "refused":
         say = f"The list of {nouns} cannot be made here: {got['reason']}. Ids can still be pasted."
-    elif got["state"] == "full":
-        say = (f"The list of {nouns} needs the benchmark's own environment on this machine"
-               + (f" ({', '.join(f['text'] for f in got['fetch'])})" if got["fetch"] else "")
-               + ": run the dataset once, or list it with the units command, then reload. Ids can still be pasted.")
+    elif got["state"] == "full" and not got["preparing"]:
+        say = f"List the {nouns} to choose from, or paste their ids."
+        about = f"Listing fetches {fetched}." if fetched else "Listing starts the benchmark's driver on this machine."
     else:
         say = f"Preparing the list of {nouns}" + (f": fetching {fetched}." if fetched else ".") + " Ids can be pasted meanwhile."
-    return dict(got, say=say)
+    return dict(got, say=say, about=about, link=link)
 
 
 @app.route("/benchmarks/<key>/tasks/<dataset>")
@@ -247,7 +253,14 @@ def benchmark_tasks_listing(key, dataset):
     try:
         if request.args.get("ids"):           # every match's id, for "select the N that match"
             got = units.find(bench, dataset, options, search=request.args.get("q", ""), categories=cats, size=None, within=within, limit=limit)
-            return jsonify(ok=True, ready=True, total=got["total"], ids=[t["id"] for t in got["tasks"]])
+            ids = [t["id"] for t in got["tasks"]]
+            if "sample" not in request.args:
+                return jsonify(ok=True, ready=True, total=got["total"], ids=ids)
+            # Pick N at random: N of the matches, drawn as set create --sample draws them, its seed in the note
+            n, seed = (_whole(request.args.get(k)) for k in ("sample", "seed"))
+            ids, seed = units.draw(ids, n, seed)
+            return jsonify(ok=True, ready=True, total=got["total"], ids=ids, seed=seed,
+                           note=units.sample_note(n, seed, request.args.get("q", ""), cats))
         got = units.find(bench, dataset, options, search=request.args.get("q", ""), categories=cats,
                          page=int(page) if page.isdigit() and int(page) >= 1 else 1, within=within, limit=limit)
     except units.Refused as e:
@@ -255,10 +268,21 @@ def benchmark_tasks_listing(key, dataset):
     return jsonify(ok=True, ready=True, **got)
 
 
+def _whole(word):
+    """A number the page sent as a whole number, else the text itself, for ``units.draw`` to refuse; None for none."""
+    if word is None or word == "":
+        return None
+    try:
+        return int(word) if word.isdigit() else word
+    except ValueError:
+        return word
+
+
 @app.route("/benchmarks/<key>/tasks/<dataset>/prepare", methods=["POST"])
 def benchmark_tasks_prepare(key, dataset):
-    """Make a listing the state function calls light, out of this request: it fetches what the state named and
-    starts the light listing command. A listing that needs the driver's full environment is never started here."""
+    """Make a listing, out of this request: it fetches what the state named, then starts the light listing
+    command, or the driver from its own environment, installed first (``List questions``). One the state refuses, a
+    licence not set among the reasons, is never started."""
     shared._require_csrf()
     if not shared._local_client():
         abort(403, description="Listings are prepared from a browser on the application host only.")
@@ -266,7 +290,7 @@ def benchmark_tasks_prepare(key, dataset):
     options = _listing_options()
     identity = _listing_key(bench, dataset, options)
     st = units.state(bench, dataset, options)
-    if st["state"] != "light":
+    if st["state"] not in ("light", "full"):
         return jsonify(ok=st["state"] == "cached", **_listing_state(bench, dataset, options))
 
     def make():

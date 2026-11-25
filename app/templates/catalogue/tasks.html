@@ -55,10 +55,17 @@
   </div>
   {% endif %}
 
-  <p class="bench-blocked tasks-state" id="tasks-state" role="status" hidden></p>
+  {#- before a first listing: what to do, and the way to do it: the listing started on a click, or where a licence it
+      needs is set #}
+  <div class="bench-blocked tasks-state" id="tasks-state" role="status" hidden>
+    <span id="tasks-state-text"></span>
+    <a id="tasks-state-link" href="{{ url_for('settings_page') }}" hidden></a>
+    {% if writable %}<div class="tasks-list" id="tasks-list" hidden><button type="button" class="btn sm" id="tasks-list-go">List {{ nouns }}</button>
+      <span class="muted small" id="tasks-list-about"></span></div>{% endif %}
+  </div>
 
   <section class="bench-section tasks-browse" aria-label="{{ nouns|capitalize }}">
-    {{ tasks_list(nouns) }}
+    {{ tasks_list(nouns, pick=writable) }}
     {% if writable %}
     <div class="tasks-savebar" id="tasks-savebar">
       <b id="tasks-bar-chosen">0 chosen</b>

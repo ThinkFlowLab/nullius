@@ -95,6 +95,16 @@ def units(dataset, setup=None):
     return {"units": list(load())}
 
 
+def describe(dataset, **_):
+    """Each question's text and its level, read from the metadata its unit comes from."""
+    rows = load()
+    out = {}
+    for unit in units(dataset)["units"]:
+        text = rows[unit]["Question"]
+        out[unit] = {"title": text, "text": text, "categories": {"level": str(rows[unit]["Level"])}}
+    return {"units": out}
+
+
 def attachment(row):
     name = row.get("file_name") or ""
     path = row.get("file_path") or ""
@@ -170,7 +180,7 @@ def answer(unit, dir, setup, model, base_url, key, **_):
     return {"answer": value, "model": model}
 
 
-HANDLERS = {"units": units, "setup": setup, "score": score, "oracle": oracle, "answer": answer}
+HANDLERS = {"units": units, "describe": describe, "setup": setup, "score": score, "oracle": oracle, "answer": answer}
 
 
 def main():

@@ -212,11 +212,8 @@
       {% set cuts = std.datasets|selectattr('subset_of')|list %}{% set wholes = std.datasets|rejectattr('subset_of')|list %}
       <section class="bench-section" id="task-sets" aria-labelledby="task-sets-title">
         <div class="bench-section-head"><h2 id="task-sets-title">Task sets{% if task_sets or cuts %} <span class="bench-n">{{ task_sets|length + cuts|length }}</span>{% endif %}</h2>
-          {#- a new set is made on the page of the tasks it is cut from: one dataset's at once, else a choice of them #}
-          {% if local %}{% if wholes|length == 1 %}<a class="btn sm" href="{{ url_for('benchmark_tasks', key=b.key, dataset=wholes[0].id) }}">New task set</a>
-          {% else %}<details class="bench-newset pop"><summary class="btn sm" aria-haspopup="true">New task set</summary>
-            <div class="menu tools-menu bench-newset-menu" role="group" aria-label="The dataset it is cut from">{% for d in wholes %}<a href="{{ url_for('benchmark_tasks', key=b.key, dataset=d.id) }}">{{ d.label }}{% if d.units %}<span class="muted">{{ d.units }} {{ std.units.nouns }}</span>{% endif %}</a>{% endfor %}</div>
-          </details>{% endif %}{% endif %}
+          {#- a new set is made on the page of the tasks it is cut from: one dataset's here; of several, the buttons below #}
+          {% if local and wholes|length == 1 %}<a class="btn sm" href="{{ url_for('benchmark_tasks', key=b.key, dataset=wholes[0].id) }}">New task set</a>{% endif %}
         </div>
         {% if cuts %}
         <h3 class="bench-sets-group">From {{ b.title }}</h3>
