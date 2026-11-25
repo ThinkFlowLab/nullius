@@ -866,7 +866,7 @@ class TheBenchmarksOwnSets(Case):
         line = lambda name: re.search(r"^  const %s = .*$" % name, page, re.M).group(0) + "\n"
         program = (f"const schema={json.dumps(schema)};const C=require({json.dumps(str(folder / 'command-builder-core.js'))})(schema);\n"
                    + line("esc") + cut("  const SOURCE_SAYS =", "  // The yes to an agent") + cut("  const tile = t =>", "  // The grids drawn by the server")
-                   + cut("  // a dataset's proofs as its card shows them", "  // Specific tasks:") + body)
+                   + cut("  // a dataset's proofs as its card shows them", "  function benchLimits(") + body)
         return json.loads(subprocess.run([node, "-"], input=program, check=True, capture_output=True, text=True, timeout=10).stdout)
 
     def test_the_builder_draws_all_of_it_the_benchmarks_own_sets_then_the_users(self):
@@ -940,7 +940,7 @@ class TheDatasetStep(BuilderCase):
         page = (folder / "command-builder.js").read_text()
         cut = lambda start, end: page[page.index(start):page.index(end, page.index(start))]
         program = (f"const schema={json.dumps(schema)};const C=require({json.dumps(str(folder / 'command-builder-core.js'))})(schema);\n"
-                   + cut("  function pickTasks(", "  function standardForm(")
+                   + cut("  function pickTasks(", "  function benchLimits(")
                    + cut("  function compileRunner(", "  // the number of units"))
         program += r"""
 const assert = require('node:assert/strict'), timers = [], notices = [];
@@ -1032,7 +1032,7 @@ globalThis.nulliusTasks = (p, options) => { picked = options; };
         cut = lambda start, end: page[page.index(start):page.index(end, page.index(start))]
         line = lambda name: re.search(r"^  const %s = .*$" % name, page, re.M).group(0) + "\n"
         program = (f"const schema={json.dumps(schema)};const C=require({json.dumps(str(folder / 'command-builder-core.js'))})(schema);\n"
-                   + line("esc") + cut("  const tile = t =>", "  // The grids drawn by the server") + cut("  function taskSetChoice(", "  function standardForm(")
+                   + line("esc") + cut("  const tile = t =>", "  // The grids drawn by the server") + cut("  function taskSetChoice(", "  function benchLimits(")
                    + "const r=C.createStandard('fakebench'),b=C.standardBench(r),x=b.datasets[0],u={noun:'task',nouns:'tasks'};"
                    + "r.datasets=[x.id];const one=taskSetChoice(r,b,x,u)+startChoice(r,b,x,u);"
                    + "r.datasets=[x.id,'more'];const two=taskSetChoice(r,b,x,u)+startChoice(r,b,x,u);"

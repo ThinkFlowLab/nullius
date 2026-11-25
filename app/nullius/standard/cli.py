@@ -91,7 +91,7 @@ import tempfile
 import time
 
 from nullius.standard.runner.retries import MAX_RETRIES, RETRIES
-from nullius import constraints as limits, paths, prices as price_list, progress, providers, secrets, settings
+from nullius import constraints as limits, ondisk, paths, prices as price_list, progress, providers, secrets, settings
 # The legacy module command needs saved path overrides before install.HOME
 # and other runtime defaults are computed.
 if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
@@ -426,10 +426,7 @@ def new_version(key: str, version: str) -> str:
         # Old-version evidence is valid for both manifests; publish it first so
         # interruption cannot discard proofs while stripping their legacy fields.
         proofs.write(folder, evidence)
-        with open(path + ".part", "w") as f:
-            json.dump(d, f, indent=2)
-            f.write("\n")
-        os.replace(path + ".part", path)
+        ondisk.write_whole(path, json.dumps(d, indent=2) + "\n")
     print(f"wrote {path}: {key}@{version} beside {', '.join(v for v in d['versions'] if v != version)} (default still {old})")
     if kind == "benchmark":
         print(f"next: say what differs in it (upstream, datasets, driver, score, limits, controls, environments), then: "
