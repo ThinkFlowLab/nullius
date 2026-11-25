@@ -153,9 +153,10 @@ class Conversion(unittest.TestCase):
         write_doc(src, "a/b.json", minimal(session_id="s-nested"))
         job_dir = os.path.join(self.out, "atif__old")
         for name, data in (("result.json", {"n_total_trials": 2}),     # counted, or listed twice
-                           ("config.json", {"tasks": [{"name": "atif/a__b"}, {"name": "atif/a__b"}]})):
+                           ("config.json", {"harness": "atif", "tasks": [{"name": "atif/a__b"}, {"name": "atif/a__b"}]})):
             with self.subTest(name):
                 os.makedirs(os.path.join(job_dir, "a__b"))
+                Path(job_dir, "config.json").write_text(json.dumps({"harness": "atif"}))   # as every conversion wrote it
                 Path(job_dir, "a__b", "result.json").write_text(json.dumps(
                     {"source_document": {"path": os.path.join(src, "a", "b.json")}}))
                 Path(job_dir, name).write_text(json.dumps(data))
