@@ -350,6 +350,16 @@ class Recipe(unittest.TestCase):
         gsm = self.compiled(benchmark="gsm8k", datasets=["test"], others=["original"], provider="openai", model="m", model_choice="paper")
         self.assertTrue(gsm["errors"])
 
+    def test_a_retired_judge_refuses_like_the_paper_and_leaves_any_model(self):
+        vita = dict(benchmark="vitabench", datasets=["cross"], others=["original"], provider="openrouter", model="vendor/m")
+        said = " ".join(e["message"] for e in self.compiled(**vita, model_choice="paper")["errors"])
+        self.assertIn("Paper models unavailable", said)
+        out = self.compiled(**vita, model_choice="any", judge_model="vendor/judge")
+        self.assertEqual(out["errors"], [])
+        self.assertIn("run vitabench original --model vendor/m", out["script"])
+        o, _ = definitions.setup(definitions.get("benchmark", "vitabench"), "original", "vendor/m", "openrouter")
+        self.assertEqual((o["sent"], o["comparable"]), ("vendor/m", False))
+
     def test_like_the_leaderboard_runs_its_user_simulator_options_and_attempts(self):
         tau = dict(benchmark="tau3-bench", datasets=["airline"], others=["original"], provider="openai", model="their-model",
                    model_choice="leaderboard")

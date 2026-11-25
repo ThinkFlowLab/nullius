@@ -175,7 +175,7 @@ def _bench_page(b: dict) -> dict:
             "controls": controls,
             # One Original procedure, with separate reference-participant and paper-model metadata.
             "setups": [{"key": k, "label": definitions.setup_label(b, k), "summary": x["summary"],
-                        "reference_agent": x.get("reference_agent", ""), "turn_seconds": x.get("turn_seconds"),
+                        "reference_agent": x.get("reference_agent", ""), "turn_seconds": x.get("turn_seconds"), "gone": x.get("comparable") == [],
                         "comparable": k == "original" and b["setups"]["original"].get("comparable", True) not in (False, []), "units": (b["setups"]["original"].get("units") or b.get("units") or {}),
                         **({"models": definitions.paper_models(x), "default": x["default"], "providers": list(x["providers"]),
                             "sent": {p: {m: pre + (x.get("served_as") or {}).get(m, m) for m in definitions.paper_models(x)}
@@ -584,7 +584,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     orig = (b.get("setups") or {}).get("original") or {}
     official = {"judge": ((b.get("score") or {}).get("judge") or {}).get("model", ""), "simulator": (b.get("simulator") or {}).get("model", "")}
     fixed = {**official, **{k: lb[k] for k in ("judge", "simulator") if lb.get(k)}}
-    if model_choice == "paper" and needs_model and not orig.get("models") and not any(official.values()):
+    if model_choice == "paper" and needs_model and orig.get("comparable") == []:
+        add("model", "Paper models unavailable; choose Any of your choice.")
+    elif model_choice == "paper" and needs_model and not orig.get("models") and not any(official.values()):
         add("model", "No paper models are listed for this benchmark; choose Any of your choice.")
     elif model_choice == "paper" and needs_model and orig.get("models"):
         if recipe.get("model") not in definitions.paper_models(orig):

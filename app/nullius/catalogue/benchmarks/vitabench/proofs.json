@@ -1,0 +1,179 @@
+{
+  "schema": "nullius.proofs/v1",
+  "kind": "benchmark",
+  "key": "vitabench",
+  "versions": {
+    "": {
+      "proven": {
+        "cross": {
+          "units": {
+            "units": 100,
+            "passed": "100 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/100",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 100,
+            "options": {
+              "evaluation": "trajectory",
+              "user": "user_simulator",
+              "max_steps": "300",
+              "max_errors": "10"
+            },
+            "judge": "meta/muse-spark-1.3-contributor"
+          }
+        },
+        "delivery": {
+          "units": {
+            "units": 100,
+            "passed": "100 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/100",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 100,
+            "options": {
+              "evaluation": "trajectory",
+              "user": "user_simulator",
+              "max_steps": "300",
+              "max_errors": "10"
+            },
+            "judge": "meta/muse-spark-1.3-contributor"
+          }
+        },
+        "instore": {
+          "units": {
+            "units": 100,
+            "passed": "100 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/100",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 100,
+            "options": {
+              "evaluation": "trajectory",
+              "user": "user_simulator",
+              "max_steps": "300",
+              "max_errors": "10"
+            },
+            "judge": "meta/muse-spark-1.3-contributor"
+          }
+        },
+        "ota": {
+          "units": {
+            "units": 100,
+            "passed": "100 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/100",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 100,
+            "options": {
+              "evaluation": "trajectory",
+              "user": "user_simulator",
+              "max_steps": "300",
+              "max_errors": "10"
+            },
+            "judge": "meta/muse-spark-1.3-contributor"
+          }
+        },
+        "cross-en": {
+          "units": {
+            "units": 100,
+            "passed": "100 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/100",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 100,
+            "options": {
+              "evaluation": "trajectory",
+              "user": "user_simulator",
+              "max_steps": "300",
+              "max_errors": "10"
+            },
+            "judge": "meta/muse-spark-1.3-contributor"
+          }
+        },
+        "delivery-en": {
+          "units": {
+            "units": 100,
+            "passed": "100 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/100",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 100,
+            "options": {
+              "evaluation": "trajectory",
+              "user": "user_simulator",
+              "max_steps": "300",
+              "max_errors": "10"
+            },
+            "judge": "meta/muse-spark-1.3-contributor"
+          }
+        },
+        "instore-en": {
+          "units": {
+            "units": 100,
+            "passed": "100 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/100",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 100,
+            "options": {
+              "evaluation": "trajectory",
+              "user": "user_simulator",
+              "max_steps": "300",
+              "max_errors": "10"
+            },
+            "judge": "meta/muse-spark-1.3-contributor"
+          }
+        },
+        "ota-en": {
+          "units": {
+            "units": 100,
+            "passed": "100 ids, the same twice, unique"
+          },
+          "nop": {
+            "passed": "0/100",
+            "value": 0.0,
+            "expect": {
+              "at_most": 0.0
+            },
+            "units": 100,
+            "options": {
+              "evaluation": "trajectory",
+              "user": "user_simulator",
+              "max_steps": "300",
+              "max_errors": "10"
+            },
+            "judge": "meta/muse-spark-1.3-contributor"
+          }
+        }
+      }
+    }
+  }
+}
