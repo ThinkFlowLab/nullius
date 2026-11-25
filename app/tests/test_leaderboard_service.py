@@ -11,10 +11,39 @@ from unittest.mock import patch
 from tests.test_comparison import job, trial
 from nullius.runs import parse
 from nullius.standard.contract import definitions
+from nullius.standard.runner import job as recorded_job
 from nullius.leaderboard import board, configuration
 
 
 class RecordedIdentity(unittest.TestCase):
+    def test_new_standard_runs_record_the_resolved_source_pin(self):
+        for key in ("gaia", "osworld1"):
+            bench = definitions.get("benchmark", key)
+            expected = bench.get("_version") or bench["upstream"]["tested"]
+            recorded = recorded_job._version(bench)
+            self.assertEqual(recorded["benchmark_version"], expected)
+            identity = parse.identity_of({"standard": {"benchmark": key, **recorded}}, {}, "")
+            self.assertEqual(identity["benchmark_version"], expected)
+
+    def test_no_roots_all_scores_can_rank_a_saved_manual_catalogue_score(self):
+        from nullius.leaderboard import service
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, NULLIUS_HOME=folder):
+            agents, benches = service.catalogue()
+            doc = configuration.defaults(benches)
+            key = board.build([], agents, benches, doc)["rows"][0]["key"]
+            doc["custom"] = [{"id": "calendar", "name": "Calendar", "scores": {key: 72}}]
+            doc["axes"]["Personalization"]["entries"] = [{"custom": "calendar", "weight": 1}]
+            configuration.save(configuration.location(), doc, benches)
+            env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]))
+            for flags, expected in (([], None), (["--all-scores"], .72)):
+                result = subprocess.run([sys.executable, "-m", "nullius", "leaderboard", "--json", *flags], env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                row = next(r for r in json.loads(result.stdout)["rows"] if r["key"] == key)
+                self.assertEqual(row["overall"], expected)
+                self.assertEqual(row["rank"], 1 if flags else None)
+                self.assertFalse(row["has_runs"])
+                self.assertTrue(all(m["value"] is None for m in row["metrics"].values()))
+
     def test_real_cli_reads_gaia_and_banking_result_directories(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / "jobs"
@@ -22,7 +51,7 @@ class RecordedIdentity(unittest.TestCase):
                                                         ("bank-run", "tau3-bench", "banking_knowledge", ("pass",))):
                 path = root / name
                 path.mkdir(parents=True)
-                (path / "config.json").write_text(json.dumps({"standard": {"benchmark": benchmark, "plugged": "codex"},
+                (path / "config.json").write_text(json.dumps({"standard": {"benchmark": benchmark, "plugged": "codex", **recorded_job._version(definitions.get("benchmark", benchmark))},
                     "agents": [{"name": "codex", "model_name": "model"}], "datasets": [{"name": f"{benchmark}/{dataset}"}]}))
                 (path / "result.json").write_text(json.dumps({"started_at": "2026-11-01T10:00:00Z", "finished_at": "2026-11-01T11:00:00Z"}))
                 for i, outcome in enumerate(outcomes):
@@ -46,7 +75,7 @@ class RecordedIdentity(unittest.TestCase):
             self.assertEqual(row["axes"]["Money"]["score"], 1)
             self.assertEqual(row["company"], "OpenAI")
 
-    def test_unversioned_catalogue_and_real_parser_agree_without_a_wildcard(self):
+    def test_missing_version_is_unavailable_and_explicit_pin_matches(self):
         agents = definitions.load("agent")[0]
         benches = definitions.load("benchmark")[0]
         cfg = {"standard": {"benchmark": "gaia", "plugged": "codex"},
@@ -54,6 +83,11 @@ class RecordedIdentity(unittest.TestCase):
         run = job([trial("a"), trial("b", "agent_error")], dataset="gaia/gaia-validation", agent="codex")
         run.identity = parse.identity_of(cfg, {}, "2.2.2")
         self.assertNotIn("benchmark_version", run.identity)
+        result = board.build([run], agents, benches, configuration.defaults(benches))
+        row = next(r for r in result["rows"] if r["has_runs"])
+        self.assertIsNone(row["axes"]["Retrieval"]["score"])
+        self.assertEqual(row["axes"]["Retrieval"]["entries"][0]["reason"], "Benchmark version not recorded")
+        run.identity["benchmark_version"] = next(b for b in benches if b["key"] == "gaia")["upstream"]["tested"]
         result = board.build([run], agents, benches, configuration.defaults(benches))
         row = next(r for r in result["rows"] if r["has_runs"])
         self.assertEqual(row["axes"]["Retrieval"]["score"], .5)

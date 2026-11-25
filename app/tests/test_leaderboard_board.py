@@ -105,13 +105,36 @@ class BoardExamples(unittest.TestCase):
         self.assertIsNone(a["rank"])
         self.assertIn("Tau not run", a["reasons"])
 
+    def test_task_name_part_uses_its_distinct_union_and_excludes_other_tasks(self):
+        from tests.test_comparison import trial
+        bench = self.benchmarks[0]
+        bench["task_parts"] = [{"id": "os", "label": "OS tasks", "prefixes": ["os__"]}]
+        bench["datasets"] = [{"id": "first", "tasks": {"os__shared": "shared", "office__other": "other"}},
+                             {"id": "second", "tasks": {"os__shared": "shared", "os__unique": "unique"}}]
+        self.config["axes"]["Retrieval"]["entries"][0]["dataset"] = "os"
+        first = self.make_run("A", [])
+        first.trials = [trial("os__shared", "resolved"), trial("office__other", "resolved")]
+        second = replace(first, job_id="second", dataset="second", trials=[trial("os__shared", "agent_error"), trial("os__unique", "resolved")])
+        row = self.build([first, second])["rows"][0]
+        entry = row["axes"]["Retrieval"]["entries"][0]
+        self.assertEqual((entry["score"], entry["covered"], entry["tasks"]), (.5, 2, 2))
+        self.assertEqual(row["rank"], 1)
+
     def test_c13_missing_version_evidence_never_renormalizes_a_difference(self):
-        jobs = [self.make_run("A", ["resolved"])]
+        self.benchmarks.append({"key": "other", "label": "Other", "_version": "v1", "score": {"kind": "pass"},
+                                "datasets": [{"id": "first", "tasks": {"0": "0", "1": "1"}}]})
+        other = {"benchmark": "other", "version": "v1", "dataset": "", "metric": "Score", "weight": 1}
+        self.config["axes"]["Retrieval"]["entries"].append(other)
+        self.config["axes"]["Execution"] = {"weight": 1, "entries": [other]}
+        jobs = [self.make_run("A", ["resolved"]),
+                replace(self.make_run("A", ["resolved", "agent_error"], benchmark="other"), job_id="other-run")]
         original = self.build(jobs)
+        self.assertEqual(original["rows"][0]["axes"]["Retrieval"]["score"], .75)
         projected = board.project(jobs, self.agents, self.benchmarks, self.config, "gaia", "unrun")
         row = next(r for r in projected["rows"] if r["has_runs"])
         self.assertIsNone(row["axes"]["Retrieval"]["score"])
         self.assertIsNone(row["overall"])
+        self.assertEqual(row["axes"]["Execution"]["score"], .5)
         self.assertEqual(self.build(jobs), original)
 
 

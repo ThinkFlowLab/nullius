@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from nullius.standard.contract import definitions
 from nullius import charts
-from . import board, configuration, metrics, weights
+from . import board, configuration, metrics, weights, scopes
 
 
 def catalogue():
@@ -24,9 +24,9 @@ def revision():
 
 
 def options(benchmarks):
-    return [{"key": b["key"], "label": b["label"], "version": b.get("_version", ""),
-             "version_label": definitions.version_label(b), "metrics": ["Score", "pass^3"] if b.get("score", {}).get("kind") == "pass" else ["Score"],
-             "datasets": [{"id": d["id"], "label": d.get("label", d["id"])} for d in b.get("datasets", [])]}
+    return [{"key": b["key"], "label": b["label"], "version": definitions.version_identity(b),
+             "version_label": (definitions.version_label(b) or definitions.version_identity(b)[:7]), "metrics": ["Score", "pass^3"] if b.get("score", {}).get("kind") == "pass" else ["Score"],
+             "datasets": scopes.choices(b)}
             for b in benchmarks]
 
 
@@ -39,8 +39,8 @@ def document(jobs, *, workspace="", workspace_open=False, all_scores=False, defe
                "jobs": [(j.job_id, j.uid, str(j.finished_at), len(j.trials), j.identity, j.dir) for j in jobs]}
     result["context"] = hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
     result["warning"], result["revision"] = warning, revision()
-    result["versions"] = [{"benchmark": b["key"], "version": b.get("_version", ""),
-                            "label": b["label"] + " · " + (definitions.version_label(b) or "Official")}
+    result["versions"] = [{"benchmark": b["key"], "version": definitions.version_identity(b),
+                            "label": b["label"] + " · " + ((definitions.version_label(b) or definitions.version_identity(b)[:7]) or "Official")}
                            for b in benchmarks if any(e.get("benchmark") == b["key"] for a in settings["axes"].values() for e in a["entries"])]
     for row in result["rows"]:
         for axis in row["axes"].values():

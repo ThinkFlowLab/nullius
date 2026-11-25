@@ -76,6 +76,7 @@ class ConfigurationExamples(unittest.TestCase):
         self.assertEqual(doc, self.defaults)
         self.assertIn("defaults", warning)
         self.assertEqual(self.path.read_text(), "{")
+        configuration.save(self.path, self.defaults, self.benchmarks)
         configuration.save(self.path, self.defaults, [])
         self.assertEqual(json.loads(self.path.read_text()), self.defaults)
 

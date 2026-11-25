@@ -13,7 +13,7 @@ from . import configuration, service, weights
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="nullius leaderboard", description=__doc__,
         epilog="Configuration: scoring.json in the profile configuration directory (nullius paths). Edit it through Scoring settings or as a complete JSON document. Exit 0: read; 2: usage; 3: missing root. Unavailable measurements and invalid-settings fallback are disclosed in the output.")
-    parser.add_argument("roots", nargs="*", help="result roots in one workspace; omit for unscored catalogue rows")
+    parser.add_argument("roots", nargs="*", help="result roots in one workspace; omit for catalogue rows without recorded-run measurements; --all-scores can still include saved manual scores")
     parser.add_argument("--json", action="store_true", help="full precision scores, identity, evidence, ranks/reasons and observed metric counts")
     parser.add_argument("--all-scores", action="store_true", help="include unverified manual scores; default: verified only")
     args = parser.parse_args(argv)

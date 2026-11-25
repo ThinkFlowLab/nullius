@@ -139,7 +139,7 @@ Open **Scoring settings** from the Leaderboard head; **Leaderboard** returns to
 its table and charts. The dedicated page orders Custom benchmarks, Capabilities,
 then Domains. Read-only clients can inspect it; only local clients can write.
 
-Each entry chooses a benchmark, dataset, pinned version, supported metric and
+Each entry chooses a benchmark, dataset or declared task-name part, pinned version, supported metric and
 independent weight in that axis. Score is always offered; pass^3 is offered for
 pass/fail benchmarks. Zero weight disables an entry without removing it.
 Weight in Overall controls each axis separately, including domains.
@@ -161,7 +161,9 @@ Scoring is profile-wide in `scoring.json`, beside `settings.json` in the directo
 shown by `nullius paths`. Writes replace the complete validated document
 atomically. Malformed content uses defaults with a warning and is left intact.
 Removed catalogue references remain unavailable and can be removed without
-blocking unrelated edits. Negative or nonfinite weights, duplicate identical
+blocking unrelated edits. New mappings must name a declared dataset/part and
+version. Legacy entries with an empty version remain unavailable until a pinned
+version is selected; runs also need that recorded identity. Negative or nonfinite weights, duplicate identical
 entries, duplicate custom names, invalid scores and all-zero Overall weights
 are refused.
 

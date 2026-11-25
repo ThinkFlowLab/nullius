@@ -4,11 +4,10 @@ from __future__ import annotations
 import hashlib
 import json
 import copy
-from dataclasses import replace
 from math import isfinite
 from nullius.standard.contract import definitions
 
-from . import configuration, scoring, weights
+from . import configuration, scoring, weights, scopes
 
 
 def project(jobs, agents, benchmarks, settings, benchmark, version, *, all_scores=False):
@@ -58,10 +57,10 @@ def _entry_key(entry):
 
 def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_open=True, metric_sources=None):
     """Pure board projection. Inputs belong to a single workspace and profile."""
-    config = configuration.validate(settings, benchmarks)
+    config = configuration.validate(settings, benchmarks, allow_unavailable=True)
     agents = [a for a in agents if not a.get("example") and a["key"] not in ("nop", "oracle")]
     agents_by = {a["key"]: a for a in agents}
-    benchmarks_by = {(b["key"], b.get("_version", "")): b for b in benchmarks}
+    benchmarks_by = {(b["key"], definitions.version_identity(b)): b for b in benchmarks}
     customs = {c["id"]: c for c in config["custom"]}
     grouped, identities = {}, {}
     for job in jobs:
@@ -108,12 +107,9 @@ def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_ope
                     if bench is None:
                         evidence["reason"] = "Benchmark version unavailable"
                     else:
-                        manifests = {d["id"]: d.get("tasks") if isinstance(d.get("tasks"), dict) else None for d in bench.get("datasets", [])}
-                        # The standard writes benchmark/dataset; only remove this exact declared prefix.
-                        recorded = {f"{bench['key']}/{d}": d for d in manifests}
-                        normalized = [replace(j, dataset=recorded.get(j.dataset, j.dataset)) for j in runs]
+                        manifests, normalized, dataset = scopes.select(bench, entry["dataset"], runs)
                         got = scoring.contribution(normalized, benchmark=entry["benchmark"], version=entry["version"], datasets=manifests,
-                                                   dataset=entry["dataset"], metric=entry["metric"], graded=bench.get("score", {}).get("kind") == "score")
+                                                   dataset=dataset, metric=entry["metric"], graded=bench.get("score", {}).get("kind") == "score")
                         evidence.update(score=got.score, tasks=got.total, covered=got.covered, excluded=got.excluded,
                                         runs=list(got.run_ids), reason=got.reason, note=got.note)
                         if entry["weight"] > 0 and got.score is not None:

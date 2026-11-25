@@ -302,7 +302,13 @@ repeated runs are not pooled. Explicit merged runs replace their source shards.
 A whole-benchmark entry unions selected datasets by canonical task identity;
 an overlap uses the same run precedence and retains that task's attempts.
 Unknown identities make aggregation or full coverage unavailable rather than
-guessing aliases. A dataset entry reads only that dataset.
+guessing aliases. A dataset entry reads only that dataset. A declared task-name
+part reads only tasks matching its catalogue prefixes, across the selected
+datasets; its coverage uses the same filtered task union.
+
+An entry requires an explicitly recorded benchmark version. For an unversioned
+catalogue benchmark, new standard runs record its tested source pin. Older runs
+without that identity remain unavailable; the current default is never inferred.
 
 Score is adjusted solve rate for pass/fail tasks. Graded scores preserve recorded
 part weighting within a task, including agent crashes as zero with their part

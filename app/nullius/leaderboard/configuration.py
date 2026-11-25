@@ -7,6 +7,8 @@ import math
 from pathlib import Path
 
 from nullius import ondisk, paths
+from nullius.standard.contract import definitions
+from . import scopes
 
 DOMAINS = ("Travel", "Dining", "Shopping", "Money", "Health", "Home", "Work")
 CAPABILITIES = ("Memory", "Safety", "Consistency", "Personalization", "Proactivity", "Retrieval", "Communication", "Execution")
@@ -31,7 +33,7 @@ def location():
 
 
 def defaults(benchmarks):
-    versions = {b["key"]: b.get("_version", "") for b in benchmarks
+    versions = {b["key"]: definitions.version_identity(b) for b in benchmarks
                 if b.get("_version") == b.get("_default")}
     return {"schema": 1, "custom": [], "axes": {
         axis: {"weight": weight, "entries": [
@@ -45,7 +47,7 @@ def _number(value, label, upper=None):
         raise ValueError(f"{label}: enter a finite number between 0 and {upper}" if upper is not None else f"{label}: enter a finite nonnegative number")
 
 
-def validate(document, benchmarks):
+def validate(document, benchmarks, *, previous=None, allow_unavailable=False):
     """Validate every field before a write; preserve removed catalogue references."""
     if not isinstance(document, dict) or set(document) != {"schema", "custom", "axes"} or document["schema"] != 1:
         raise ValueError("Invalid scoring document")
@@ -67,7 +69,9 @@ def validate(document, benchmarks):
         for value in custom["scores"].values():
             if value is not None:
                 _number(value, "Custom score", 100)
-    available = {(b["key"], b.get("_version", "")): b for b in benchmarks}
+    available = {(b["key"], definitions.version_identity(b)): b for b in benchmarks}
+    preserved = {tuple(e.get(k) for k in ("benchmark", "dataset", "version", "metric"))
+                 for a in (previous or {}).get("axes", {}).values() for e in a.get("entries", []) if "benchmark" in e}
     for name, axis in doc["axes"].items():
         if not isinstance(axis, dict) or set(axis) != {"weight", "entries"} or not isinstance(axis["entries"], list):
             raise ValueError(f"{name}: invalid axis")
@@ -88,6 +92,11 @@ def validate(document, benchmarks):
                 if entry["metric"] not in ("Score", "pass^3") or (entry["metric"] == "pass^3" and bench is not None and (bench.get("score") or {}).get("kind") != "pass"):
                     raise ValueError("Choose Score or supported pass^3")
                 identity = tuple(entry[k] for k in ("benchmark", "dataset", "version", "metric"))
+                if bench is None and not allow_unavailable and identity not in preserved:
+                    raise ValueError("Choose a catalogue benchmark version")
+                if (bench is not None and entry["dataset"] and entry["dataset"] not in {c["id"] for c in scopes.choices(bench)}
+                    and not allow_unavailable and identity not in preserved):
+                    raise ValueError("Choose a declared dataset or task-name part")
             if identity in seen:
                 raise ValueError(f"{name}: duplicate entry")
             seen.add(identity)
@@ -106,7 +115,7 @@ def remove_custom(document, key):
 
 def load(path, benchmarks):
     try:
-        return validate(json.loads(Path(path).read_text()), benchmarks), ""
+        return validate(json.loads(Path(path).read_text()), benchmarks, allow_unavailable=True), ""
     except FileNotFoundError:
         return defaults(benchmarks), ""
     except (OSError, ValueError, TypeError):
@@ -114,7 +123,8 @@ def load(path, benchmarks):
 
 
 def save(path, document, benchmarks):
-    doc = validate(document, benchmarks)
+    previous, _ = load(path, benchmarks)
+    doc = validate(document, benchmarks, previous=previous)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     ondisk.write_whole(path, json.dumps(doc, ensure_ascii=False, indent=2, allow_nan=False) + "\n", mode=0o600)

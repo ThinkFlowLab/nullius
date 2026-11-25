@@ -1,4 +1,4 @@
-# The application's two suites and installable package, on every non-draft PR
+# The application's backend, route and browser suites and installable package, on every non-draft PR
 # (again when a draft is marked ready) and by hand. There are no model calls
 # or containers: the docker tier is the nightly docker-tests workflow. uv is a test tool; Flask
 # is the app's only Python dependency.
@@ -6,7 +6,7 @@
 # Nothing shared is installed, because nothing shared is imported: the backend
 # is this repository's own code under app/nullius/ and imports only the
 # standard library. The Harbor build tests invoke uv against offline fixtures;
-# only the route suite needs Flask.
+# the web suites need Flask; browser interactions also use test-only Playwright.
 name: tests
 
 on:
@@ -55,6 +55,11 @@ jobs:
       - name: route suite
         # Includes the recipe-compilation tests, which need Node.
         run: python3 app/tests/parallel.py app/ui_tests
+      - name: Leaderboard browser interactions
+        run: |
+          uv run --no-project --with-requirements app/ui_tests/browser/requirements.txt python -m playwright install --with-deps chromium
+          uv run --no-project --with-requirements app/requirements.txt --with-requirements app/ui_tests/browser/requirements.txt python app/ui_tests/browser/leaderboard.py
+          uv run --no-project --with-requirements app/requirements.txt --with-requirements app/ui_tests/browser/requirements.txt python app/ui_tests/browser/mutations.py
       - name: installed package
         # Temporary installs only; no publication or stored artifact.
         run: |

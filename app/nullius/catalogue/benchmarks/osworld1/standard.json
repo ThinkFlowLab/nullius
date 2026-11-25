@@ -367,5 +367,23 @@
         "branch": "main"
       }
     }
-  }
+  },
+  "task_parts": [
+    {
+      "id": "os",
+      "label": "OS tasks",
+      "prefixes": [
+        "os__"
+      ]
+    },
+    {
+      "id": "office",
+      "label": "Office tasks",
+      "prefixes": [
+        "libreoffice_calc__",
+        "libreoffice_impress__",
+        "libreoffice_writer__"
+      ]
+    }
+  ]
 }

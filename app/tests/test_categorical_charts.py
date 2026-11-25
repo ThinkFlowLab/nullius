@@ -116,7 +116,7 @@ class Scatter(unittest.TestCase):
 
     def test_logo_tiles_and_two_line_labels_do_not_overlap(self):
         x = c.Metric("Time", tuple(c.Value(name, value, str(value), tag=name, note="2.2.2", key=str(i))
-                                   for i, (name, value) in enumerate((("Codex", 40), ("Goose", 40), ("Terminus", 40.1)))))
+                                   for i, (name, value) in enumerate((("Alpha", 40), ("Bravo", 40), ("Charlie", 40), ("Delta", 40)))))
         p = c.scatter(x, c.Metric("Overall", tuple(c.Value(v.name, .75, "75%") for v in x.values)), tiles=True)
         tiles = [(m.x-11, m.y-11, m.x+11, m.y+11) for m in p.marks if m.shape == "tile"]
         labels = []
@@ -124,7 +124,7 @@ class Scatter(unittest.TestCase):
             width = c._TAG_W * max(map(len, t.lines))
             left = {"start": t.x, "middle": t.x-width/2, "end": t.x-width}[t.anchor]
             labels.append((left, t.y-c._TAG_H+3, left+width, t.y+3+15*(len(t.lines)-1)))
-        self.assertEqual(len(labels), 3)
+        self.assertEqual(len(labels), 4)
         for i, box in enumerate(tiles + labels):
             self.assertFalse(any(c._overlaps(box, other) for other in (tiles+labels)[i+1:]))
 

@@ -166,7 +166,7 @@ _VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,39}$")
 # What a version may say for itself; the rest of the file is shared.
 VERSIONED = ("upstream", "install", "start", "model", "env", "options", "caches", "fidelity", "proven")
 # What a benchmark's version may say for itself: its data, its driver, how it scores, who plays its user, its environments.
-BENCH_VERSIONED = ("upstream", "datasets", "files", "driver", "mcp_servers", "score", "simulator", "limits", "controls", "environments",
+BENCH_VERSIONED = ("upstream", "datasets", "task_parts", "files", "driver", "mcp_servers", "score", "simulator", "limits", "controls", "environments",
                    "options", "host", "setups", "proven", "leaderboard")
 # What a benchmark option may need: embedding and reranker models through the relay,
 # machine requirements (host), and digest-pinned auxiliary files.
@@ -248,6 +248,11 @@ def _version_upstream(d: dict, v: str) -> dict:
     if ("repository" in own or "tested" in own) and "tag" not in own:
         up.pop("tag", None)                                           # another repository or commit: the shared tag is not its
     return dict(up, **own, version=v)
+
+
+def version_identity(d: dict) -> str:
+    """The explicit release identity, or the pinned source commit of an unversioned definition."""
+    return str(d.get("_version") or (d.get("upstream") or {}).get("tested") or "")
 
 
 def version_label(d: dict) -> str:
@@ -1562,6 +1567,20 @@ def problems(d: dict, kind: str) -> List[str]:
         bad += _ports("needs", needs, d.get("family"))
         if isinstance(needs, list) and not needs:
             bad.append("needs: at least one port")
+        parts = d.get("task_parts", [])
+        seen_parts = {x.get("id") for x in (d.get("datasets") or []) if isinstance(x, dict)}
+        if not isinstance(parts, list):
+            bad.append("task_parts: a list of named task-prefix selections")
+        else:
+            for part in parts:
+                if (not isinstance(part, dict) or set(part) != {"id", "label", "prefixes"}
+                    or not isinstance(part["id"], str) or not part["id"] or part["id"] in seen_parts
+                    or not isinstance(part["label"], str) or not part["label"].strip()
+                    or not isinstance(part["prefixes"], list) or not part["prefixes"]
+                    or any(not isinstance(p, str) or not p for p in part["prefixes"])):
+                    bad.append("task_parts: unique id, label and nonempty task-name prefixes required")
+                else:
+                    seen_parts.add(part["id"])
         bad += _host(d)
         bad += _files(d)
         bad += _bench_options(d)

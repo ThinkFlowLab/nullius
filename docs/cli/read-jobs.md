@@ -79,7 +79,8 @@ nullius leaderboard ./jobs --all-scores
 ```
 
 Supply the result roots of one workspace. This reads completed jobs; it never
-launches work. Without roots, it returns unscored catalogue rows. Exit 0 means
+launches work. Without roots, catalogue rows have no recorded-run measurements. With
+`--all-scores`, saved manual scores can still contribute and rank those rows. Exit 0 means
 the document was read; an invalid root exits 3, invalid arguments 2.
 
 Verified only is the default. `--all-scores` includes saved manual scores.

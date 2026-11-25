@@ -45,7 +45,9 @@ class LeaderboardRoutes(unittest.TestCase):
 
     def test_api_and_cli_use_same_profile_scores_without_eager_trace_loads(self):
         run = job([trial("a"), trial("b", "agent_error")], dataset="gaia/gaia-validation", agent="codex")
-        run.identity = parse.identity_of({"standard": {"benchmark": "gaia", "plugged": "codex"}, "agents": [{"name": "codex", "model_name": "model"}]}, {}, "2.2.2")
+        from nullius.standard.contract import definitions
+        from nullius.standard.runner import job as recorded_job
+        run.identity = parse.identity_of({"standard": {"benchmark": "gaia", "plugged": "codex", **recorded_job._version(definitions.get("benchmark", "gaia"))}, "agents": [{"name": "codex", "model_name": "model"}]}, {}, "2.2.2")
         self.jobs.append(run)
         with patch("nullius.traces.trajectory.load") as load:
             response = self.client.get("/api/leaderboard")
@@ -61,6 +63,40 @@ class LeaderboardRoutes(unittest.TestCase):
         self.assertEqual(command["rows"], document["rows"])
         response = self.client.get("/api/leaderboard/metrics", query_string={"context": "old-workspace"})
         self.assertEqual(response.status_code, 409)
+
+    def test_new_unknown_dataset_is_rejected_but_saved_removed_part_can_be_edited(self):
+        self.client.get("/scoring")
+        with self.client.session_transaction() as session:
+            headers = {"X-CSRF-Token": session["csrf"], "Origin": "http://localhost"}
+        doc = self.client.get("/api/scoring").get_json()["settings"]
+        self.assertEqual(self.client.post("/api/scoring", json=doc, headers=headers).status_code, 200)
+        before = configuration.location().read_bytes()
+        pinned = doc["axes"]["Retrieval"]["entries"][0]["version"]
+        doc["axes"]["Retrieval"]["entries"][0]["version"] = "invented-version"
+        self.assertEqual(self.client.post("/api/scoring", json=doc, headers=headers).status_code, 400)
+        self.assertEqual(configuration.location().read_bytes(), before)
+        doc["axes"]["Retrieval"]["entries"][0]["version"] = pinned
+        doc["axes"]["Retrieval"]["entries"][0]["dataset"] = "not-a-real-dataset"
+        self.assertEqual(self.client.post("/api/scoring", json=doc, headers=headers).status_code, 400)
+        self.assertEqual(configuration.location().read_bytes(), before)
+        configuration.location().write_text(json.dumps(doc))  # a reference removed from the catalogue
+        doc["axes"]["Money"]["weight"] = 1
+        self.assertEqual(self.client.post("/api/scoring", json=doc, headers=headers).status_code, 200)
+        doc["axes"]["Retrieval"]["entries"][0]["dataset"] = "another-invention"
+        self.assertEqual(self.client.post("/api/scoring", json=doc, headers=headers).status_code, 400)
+
+    def test_osworld_default_parts_read_only_matching_task_names(self):
+        self.jobs.append(job([trial("os__one", "scored", score=1), trial("libreoffice_writer__two", "scored", score=.5),
+                              trial("chrome__three", "scored", score=0)], dataset="osworld1/test_nogdrive", agent="codex"))
+        self.jobs[0].identity = {"benchmark": "osworld1", "benchmark_version": "desktop-env-v1.0.3", "agent": "codex", "agent_version": "2.2.2"}
+        doc = self.client.get("/api/leaderboard").get_json()
+        row = next(r for r in doc["rows"] if r["has_runs"])
+        self.assertEqual(row["axes"]["Home"]["score"], 1)
+        self.assertEqual(row["axes"]["Work"]["score"], .5)
+        from nullius.leaderboard import service
+        choices = next(b for b in service.options(service.catalogue()[1]) if b["key"] == "osworld1")["datasets"]
+        self.assertIn({"id": "os", "label": "OS tasks"}, choices)
+        self.assertIn({"id": "office", "label": "Office tasks"}, choices)
 
     def test_scoring_validates_atomic_documents_and_protects_writes(self):
         self.client.get("/scoring")

@@ -40,4 +40,4 @@
 <script type="application/json" id="lb-data">{{ board|tojson }}</script>
 <script type="application/json" id="lb-marks">{% set marks={} %}{% for r in board.rows %}{% set _=marks.update({r.key: agent_mark_url(r.agent)}) %}{% endfor %}{{ marks|tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='leaderboard/board.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='leaderboard/motion.js') }}"></script><script src="{{ url_for('static', filename='leaderboard/board.js') }}"></script>{% endblock %}
