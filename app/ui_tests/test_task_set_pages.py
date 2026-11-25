@@ -208,6 +208,18 @@ class TheTasksPagesData(Case):
         self.post("/benchmarks/described/tasks/all/save", {"name": "five", "units": got["ids"], "note": got["note"]})
         self.assertEqual(sets.revision(sets.load("described", "five"))["note"], got["note"])
 
+    def test_invalid_sample_and_seed_numbers_are_refused(self):
+        units.listing(self.b, "all")
+        for field, minimum in (("sample", 1), ("seed", 0)):
+            for word in ("²", "9" * 4301):
+                with self.subTest(field=field, length=len(word)):
+                    query = {"ids": "1", "sample": "2", "seed": "7", field: word}
+                    r = self.client.get("/benchmarks/described/tasks/all/listing", query_string=query)
+                    self.addCleanup(r.close)
+                    self.assertEqual(r.status_code, 400)
+                    self.assertEqual(r.get_json(), {"ok": False,
+                        "error": f"--{field} {word}: a whole number from {minimum}"})
+
     def test_an_unknown_category_is_refused_plainly(self):
         units.listing(self.b, "all")
         r = self.client.get("/benchmarks/described/tasks/all/listing?cat=colour=red"); self.addCleanup(r.close)

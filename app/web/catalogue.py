@@ -240,7 +240,10 @@ def _whole(word):
     """A number the page sent as a whole number, else the text itself, for ``units.draw`` to refuse; None for none."""
     if word is None or word == "":
         return None
-    return int(word) if word.isdigit() else word
+    try:
+        return int(word) if word.isdigit() else word
+    except ValueError:
+        return word
 
 
 @app.route("/benchmarks/<key>/tasks/<dataset>/prepare", methods=["POST"])
