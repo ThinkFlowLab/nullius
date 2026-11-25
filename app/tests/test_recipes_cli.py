@@ -66,6 +66,16 @@ class Scripted(cli.Server):
         self.states, self.asked = {k: list(v) for k, v in states.items()}, []
 
     def send(self, method, path, body=None):
+        if (method, path) == ("GET", "/new-run"):
+            return 200, '<script id="nb-schema" type="application/json">{"local": true}</script>'
+        if (method, path) == ("POST", "/new-run/runner"):
+            return 200, '{"errors": []}'
+        if (method, path) == ("POST", "/new-run/prerequisites"):
+            return 200, '{"machines": [], "ready": true}'
+        if (method, path) == ("POST", "/run"):
+            return 200, json.dumps({"ok": True, "id": "a", "runs": [
+                {"id": rid, "host": "local", "jobs": f"jobs/{rid}", "state": "preparing"} for rid in self.states]})
+        assert method == "GET" and path.startswith("/run/"), (method, path)
         rid = path.rsplit("/", 1)[1]
         self.asked.append(rid)
         left = self.states[rid]
@@ -74,6 +84,19 @@ class Scripted(cli.Server):
 
 
 class Wait(unittest.TestCase):
+    def test_the_command_waits_and_prints_the_terminal_states_and_exit_code(self):
+        for state, code in (("done", 0), ("paused", 4), ("failed", 4), ("stopped", 4)):
+            server = Scripted({"a": ["preparing", "running", "done"], "b": ["running", state]})
+            with self.subTest(state=state), patch.object(cli, "find", return_value={"harness": "standard", "name": "saved"}), \
+                 patch.object(cli, "Server", return_value=server), patch.object(cli.time, "sleep") as sleep, \
+                 redirect_stdout(io.StringIO()) as out:
+                result = cli.main(["launch", "saved", "--wait"])
+                self.assertEqual(server.asked, ["a", "b", "a", "b", "a"])
+                self.assertEqual(sleep.call_count, 2)
+                self.assertEqual(out.getvalue().splitlines(), ["launch run:a", "run a on local: done", "  jobs jobs/a",
+                                                             f"run b on local: {state}", "  jobs jobs/b"])
+                self.assertEqual(result, code)
+
     def test_it_waits_until_no_run_is_going_and_a_pause_ends_it(self):
         server = Scripted({"a": ["preparing", "running", "done"], "b": ["running", "paused"]})
         with patch.object(cli.time, "sleep", lambda s: None):
