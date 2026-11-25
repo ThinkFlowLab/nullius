@@ -248,9 +248,18 @@ def _check_roots(ws: Workspace) -> None:
     from nullius.judge import store
     if store.moved(ws.dir) or not any(os.path.isdir(os.path.join(ws.dir, r)) for r in store.ROOTS.values()):
         return
-    unread = [r for r in ws.job_roots or ws.roots if not os.path.isdir(r)]
+    unread = [r for r in ws.job_roots or ws.roots if not _listable(r)]
     if unread:
         raise ValueError(f"{ws.label} stays: {unread[0]} cannot be read, so its judgements cannot be kept. Reconnect it or remove the root first.")
+
+
+def _listable(folder: str) -> bool:
+    """Whether *folder* can be listed: a folder without permission exists but hides its jobs."""
+    try:
+        with os.scandir(folder):
+            return True
+    except OSError:
+        return False
 
 
 def _keep_judgements(ws: Workspace) -> None:

@@ -146,6 +146,14 @@ class Adopt(unittest.TestCase):
             workspace.delete(home_dir, ws.name)
         self.assertTrue(os.path.isdir(ws.dir))
         os.rename(root + ".away", root)
+        real = os.scandir
+        def unlisted(p="."):                       # a root without permission: there, but its jobs cannot be listed
+            if isinstance(p, str) and os.path.realpath(p) == os.path.realpath(root):
+                raise PermissionError(13, "Permission denied", p)
+            return real(p)
+        with patch("os.scandir", unlisted), self.assertRaisesRegex(ValueError, "cannot be read"):
+            workspace.delete(home_dir, ws.name)
+        self.assertTrue(os.path.isdir(ws.dir))
         self.assertEqual(store.move(home_dir), [])
         self.assertTrue(store.moved(ws.dir))
         self.assertEqual(store.old_stores(home_dir), [])
