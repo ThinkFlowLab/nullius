@@ -39,18 +39,21 @@
     {
       "id": "gaia-validation-level1",
       "label": "Validation \u00b7 Level 1",
+      "subset_of": "gaia-validation",
       "units": 53,
       "environment": "data"
     },
     {
       "id": "gaia-validation-level2",
       "label": "Validation \u00b7 Level 2",
+      "subset_of": "gaia-validation",
       "units": 86,
       "environment": "data"
     },
     {
       "id": "gaia-validation-level3",
       "label": "Validation \u00b7 Level 3",
+      "subset_of": "gaia-validation",
       "units": 26,
       "environment": "data"
     }

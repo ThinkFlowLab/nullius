@@ -675,7 +675,7 @@ class TheBenchmarksOwnSets(Case):
         self.assertLess(text.index("From OSWorld1"), text.index("Yours"))
         self.assertLess(text.index("Yours"), text.index("Chrome tabs"))
         # a benchmark that declares nothing is drawn as before
-        self.assertNotIn("From ", visible(self.section("gaia")))
+        self.assertNotIn("From ", visible(self.section("open-telco")))
 
     def node_program(self, body):
         node = shutil.which("node")
@@ -714,7 +714,7 @@ class TheBenchmarksOwnSets(Case):
         self.assertEqual((got["whole"]["datasets"], got["whole"].get("task_sets")), (["test_all"], None))
 
     def test_a_benchmark_that_declares_nothing_is_drawn_as_before(self):
-        got = self.node_program("const b=C.standardBench(C.createStandard('gaia'));"
+        got = self.node_program("const b=C.standardBench(C.createStandard('open-telco'));"
                                 "process.stdout.write(JSON.stringify({nested:C.nestedDatasets(b),n:b.datasets.length}));")
         self.assertEqual(got["nested"], False)
         self.assertGreater(got["n"], 1)
