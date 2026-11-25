@@ -1277,10 +1277,10 @@ def _setups(s) -> List[str]:
             if "paper" in x and (not isinstance(x["paper"], str) or not x["paper"].strip()):
                 bad.append(f"{w}.paper: where the paper reports its numbers, in a phrase")
             c = x.get("comparable", True)
-            if not isinstance(c, bool) and (not isinstance(c, list) or not c or len(set(c)) != len(c) or any(m not in models for m in c)
-                                            or x.get("default") not in c):
+            if not isinstance(c, bool) and (not isinstance(c, list) or len(set(c)) != len(c) or any(m not in models for m in c)
+                                            or (c and x.get("default") not in c)):
                 bad.append(f"{w}.comparable: false when no served model is the paper's, so its runs compare with each other only; "
-                           "or those of its models whose runs compare with the paper's, its default among them")
+                           "or those of its models whose runs compare with the paper's, its default among them; or [] when none can be run any more")
         else:
             allowed |= {"runs_as"}
             orig = s.get("original") if isinstance(s.get("original"), dict) else None
@@ -1374,6 +1374,8 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "", agent: s
         if provider and provider not in orig["providers"]:
             return None, f"the original runs on " + " or ".join(orig["providers"])
         asked = sent = model
+    elif which == "original" and not paper_models(orig):     # none can be run any more (comparable: [])
+        return None, "Paper models unavailable" + (": choose the model setup for another" if "model" in s else "")
     elif which == "original":
         model = model or orig["default"]
         if model not in orig["models"]:

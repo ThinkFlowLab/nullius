@@ -16,14 +16,15 @@
   "upstream_limitations": [
     "The 446 adversarial questions are left out, because the published file has no answer for them. 1,540 of the 1,986 questions remain.",
     "The reader's model name must contain gpt-4 or gpt-3.5, as LoCoMo's own code requires. Any other model fails every question.",
-    "The paper's readers, gpt-4-turbo and gpt-3.5-turbo, now point to newer models. Scores can differ from the paper's for that reason.",
+    "OpenAI has retired gpt-4-turbo and gpt-3.5-turbo, so Original cannot run Like the paper. Choose Any of your choice; its scores do not compare with the paper's.",
     "The reader gets 32 tokens per answer. A reasoning model can spend them all reasoning, and that question fails.",
     "One unreadable reply stops the whole conversation, because LoCoMo's script writes its answers only at the end.",
     "Original memory runs the paper's retrieval setup and needs a CUDA GPU. It writes facts and summaries anew each run, so they differ from the authors' released ones.",
-    "Contriever, LoCoMo's default retriever, and the OpenAI retriever fail as published, so they are not offered."
+    "Contriever, LoCoMo's default retriever, and the OpenAI retriever fail as published, so they are not offered.",
+    "Claude 3 Sonnet and Gemini 1.0 Pro, also readers in the paper, are retired and not offered."
   ],
   "limitations": [
-    "The paper's other readers are not offered. Claude 3 Sonnet and Gemini Pro 1.0 are retired, and the Llama 3 and Mistral readers run only as local weights."
+    "The paper's Llama 2 70B, Llama 3 70B and Mistral 7B v0.2 readers are not offered: LoCoMo runs them as local weights, which Nullius does not serve."
   ],
   "datasets": [
     {
