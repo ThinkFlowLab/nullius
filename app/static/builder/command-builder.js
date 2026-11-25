@@ -731,51 +731,6 @@
       + (C.leaderboard(rec) ? tile({attr:'model-choice',key:'leaderboard',title:'Like the leaderboard',on:on==='leaderboard'}) : '')
       + `${tile({attr:'model-choice',key:'any',title:'Any of your choice',on:on==='any'})}</div>`;
   }
-  // A chosen dataset's tasks: all of them, or one of its task sets (its name, its number of tasks), small cards, a
-  // select past five; and the page of its tasks, where a set is made. A recipe from before sets were frozen may name
-  // one NAME@N: it is that set.
-  function taskSetChoice(rec, b, x, u) {
-    const on = (rec.task_sets || {})[x.id] || '', sets = x.sets || [], ref = s => s.name;
-    const all = 'All ' + (x.units ? x.units + ' ' : '') + u.nouns;
-    const page = `/benchmarks/${encodeURIComponent(b.key)}/tasks/${encodeURIComponent(x.id)}`;
-    const picked = sets.find(s => on === s.name || on.split('@')[0] === s.name);
-    // a set made at another version of the benchmark says which: the run refuses a task that version lacks
-    const made = s => s.version && b.version && s.version !== b.version ? ' · made at ' + s.version_label : '';
-    const choice = sets.length + 1 > 5
-      ? `<label class="nb-field">Tasks of ${esc(x.label)}<select data-std-taskset-select="${esc(x.id)}"><option value="">${esc(all)}</option>`
-        + sets.map(s => `<option value="${esc(ref(s))}" ${s === picked ? 'selected' : ''}>${esc(s.label)} · ${s.units} ${esc(u.nouns)}${esc(made(s))}</option>`).join('')
-        + (on && !picked ? `<option value="${esc(on)}" selected>${esc(on)}</option>` : '') + '</select></label>'
-      : `<div class="nb-pick-grid std-optgrid">` + [tile({attr: 'std-taskset', key: '', data: ` data-of="${esc(x.id)}"`, on: !on, title: all}),
-          ...sets.map(s => tile({attr: 'std-taskset', key: ref(s), data: ` data-of="${esc(x.id)}"`, on: s === picked, title: s.label, tip: s.description || '',
-            meta: `${s.units} ${s.units === 1 ? u.noun : u.nouns}${made(s)}`})),
-          ...(on && !picked ? [tile({attr: 'std-taskset', key: on, data: ` data-of="${esc(x.id)}"`, on: true, title: on})] : [])].join('') + '</div>';
-    // the dataset's name only where several are chosen: one chosen is the one above
-    const head = C.datasetsOf(rec).length > 1 ? esc(x.label) + ': which tasks?' : 'Which tasks?';
-    return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="btn ghost sm" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.name) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>` + choice;
-  }
-  // a dataset's proofs as its card shows them: its controls, then whether its ids are stable and nothing leaks
-  const datasetChecks = (b, x) => (x.controls || []).map(c => controlChip(c)).join('') + checkChip('stable', (x.proofs || {}).units, (x.failed || {}).units, 'the same ids twice, each unique')
-    + ((b.controls || []).some(c => c.key === 'oracle') ? checkChip('no leak', (x.proofs || {}).leak, (x.failed || {}).leak, 'nothing of the reference shows before the run') : '');
-  // Which tasks? of a benchmark whose lists are cut from one (subset_of): all of it, the benchmark's own sets (its
-  // lists cut from it), then the user's sets of any of them. A choice names the list the run runs (data-was: the
-  // one chosen before) and, for a user's set, the set
-  function familyChoice(rec, b, x, u) {
-    const whole = b.datasets.find(d => d.id === C.wholeOf(b, x.id)) || x, cuts = b.datasets.filter(d => d.subset_of === whole.id);
-    const on = (rec.task_sets || {})[x.id] || '', many = n => n + ' ' + (n === 1 ? u.noun : u.nouns), was = ` data-was="${esc(x.id)}"`;
-    const mine = [whole, ...cuts].flatMap(d => (d.sets || []).map(s => ({...s, of: d})));
-    const picked = mine.find(s => s.of.id === x.id && s.name === on.split('@')[0]);
-    const made = s => s.version && b.version && s.version !== b.version ? ' · made at ' + s.version_label : '';
-    const own = [tile({attr: 'std-family', key: whole.id, data: was, on: x.id === whole.id && !on, title: 'All of it', meta: whole.units ? many(whole.units) : ''}),
-      ...cuts.map(d => tile({attr: 'std-family', key: d.id, data: was, on: x.id === d.id && !on, title: d.label, tip: d.summary || '',
-        meta: d.units ? many(d.units) : '', foot: datasetChecks(b, d)}))];
-    const yours = [...mine.map(s => tile({attr: 'std-family-set', key: s.name, data: was + ` data-in="${esc(s.of.id)}"`, on: s === picked, title: s.label,
-        tip: s.description || '', meta: many(s.units) + made(s)})),
-      ...(on && !picked ? [tile({attr: 'std-family-set', key: on, data: was + ` data-in="${esc(x.id)}"`, on: true, title: on})] : [])];
-    const page = `/benchmarks/${encodeURIComponent(b.key)}/tasks/${encodeURIComponent(picked ? picked.of.id : whole.id)}`;
-    const head = C.datasetsOf(rec).length > 1 ? esc(whole.label) + ': which tasks?' : 'Which tasks?';
-    return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="btn ghost sm" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.label) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>`
-      + `<div class="nb-pick-grid std-optgrid">${own.join('')}</div>` + (yours.length ? `<div class="nb-pick-grid std-optgrid std-yoursets" aria-label="Your task sets">${yours.join('')}</div>` : '');
-  }
   function standardForm(rec) {
     const st = C.standard(), b = C.standardBench(rec);
     if (!b) return note('Choose a benchmark first', button('Benchmark step', `data-step="${S.benchmark}"`, 'nb-inlinebutton'));
@@ -873,6 +828,51 @@
   const KEEPS = [['whole', 'Pictures and text'], ['text', 'Text alone'], ['off', 'Nothing']];
   const exchangesKept = rec => '<div class="std-exchanges-row"><span class="ui-field-copy" title="What each trial keeps of its calls to the model, shown on its Conversation tab. The pictures take most of the room.">Model calls saved</span>'
     + `<div class="std-valgrid std-exchanges" role="radiogroup" aria-label="Model calls saved">${KEEPS.map(([v, t]) => `<button type="button" class="nb-tile std-val" data-std-exchanges="${v}" aria-pressed="${(rec.exchanges || 'whole') === v}"><strong>${t}</strong></button>`).join('')}</div></div>`;
+  // A chosen dataset's tasks: all of them, or one of its task sets (its name, its number of tasks), small cards, a
+  // select past five; and the page of its tasks, where a set is made. A recipe from before sets were frozen may name
+  // one NAME@N: it is that set.
+  function taskSetChoice(rec, b, x, u) {
+    const on = (rec.task_sets || {})[x.id] || '', sets = x.sets || [], ref = s => s.name;
+    const all = 'All ' + (x.units ? x.units + ' ' : '') + u.nouns;
+    const page = `/benchmarks/${encodeURIComponent(b.key)}/tasks/${encodeURIComponent(x.id)}`;
+    const picked = sets.find(s => on === s.name || on.split('@')[0] === s.name);
+    // a set made at another version of the benchmark says which: the run refuses a task that version lacks
+    const made = s => s.version && b.version && s.version !== b.version ? ' · made at ' + s.version_label : '';
+    const choice = sets.length + 1 > 5
+      ? `<label class="nb-field">Tasks of ${esc(x.label)}<select data-std-taskset-select="${esc(x.id)}"><option value="">${esc(all)}</option>`
+        + sets.map(s => `<option value="${esc(ref(s))}" ${s === picked ? 'selected' : ''}>${esc(s.label)} · ${s.units} ${esc(u.nouns)}${esc(made(s))}</option>`).join('')
+        + (on && !picked ? `<option value="${esc(on)}" selected>${esc(on)}</option>` : '') + '</select></label>'
+      : `<div class="nb-pick-grid std-optgrid">` + [tile({attr: 'std-taskset', key: '', data: ` data-of="${esc(x.id)}"`, on: !on, title: all}),
+          ...sets.map(s => tile({attr: 'std-taskset', key: ref(s), data: ` data-of="${esc(x.id)}"`, on: s === picked, title: s.label, tip: s.description || '',
+            meta: `${s.units} ${s.units === 1 ? u.noun : u.nouns}${made(s)}`})),
+          ...(on && !picked ? [tile({attr: 'std-taskset', key: on, data: ` data-of="${esc(x.id)}"`, on: true, title: on})] : [])].join('') + '</div>';
+    // the dataset's name only where several are chosen: one chosen is the one above
+    const head = C.datasetsOf(rec).length > 1 ? esc(x.label) + ': which tasks?' : 'Which tasks?';
+    return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="btn ghost sm" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.name) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>` + choice;
+  }
+  // a dataset's proofs as its card shows them: its controls, then whether its ids are stable and nothing leaks
+  const datasetChecks = (b, x) => (x.controls || []).map(c => controlChip(c)).join('') + checkChip('stable', (x.proofs || {}).units, (x.failed || {}).units, 'the same ids twice, each unique')
+    + ((b.controls || []).some(c => c.key === 'oracle') ? checkChip('no leak', (x.proofs || {}).leak, (x.failed || {}).leak, 'nothing of the reference shows before the run') : '');
+  // Which tasks? of a benchmark whose lists are cut from one (subset_of): all of it, the benchmark's own sets (its
+  // lists cut from it), then the user's sets of any of them. A choice names the list the run runs (data-was: the
+  // one chosen before) and, for a user's set, the set
+  function familyChoice(rec, b, x, u) {
+    const whole = b.datasets.find(d => d.id === C.wholeOf(b, x.id)) || x, cuts = b.datasets.filter(d => d.subset_of === whole.id);
+    const on = (rec.task_sets || {})[x.id] || '', many = n => n + ' ' + (n === 1 ? u.noun : u.nouns), was = ` data-was="${esc(x.id)}"`;
+    const mine = [whole, ...cuts].flatMap(d => (d.sets || []).map(s => ({...s, of: d})));
+    const picked = mine.find(s => s.of.id === x.id && s.name === on.split('@')[0]);
+    const made = s => s.version && b.version && s.version !== b.version ? ' · made at ' + s.version_label : '';
+    const own = [tile({attr: 'std-family', key: whole.id, data: was, on: x.id === whole.id && !on, title: 'All of it', meta: whole.units ? many(whole.units) : ''}),
+      ...cuts.map(d => tile({attr: 'std-family', key: d.id, data: was, on: x.id === d.id && !on, title: d.label, tip: d.summary || '',
+        meta: d.units ? many(d.units) : '', foot: datasetChecks(b, d)}))];
+    const yours = [...mine.map(s => tile({attr: 'std-family-set', key: s.name, data: was + ` data-in="${esc(s.of.id)}"`, on: s === picked, title: s.label,
+        tip: s.description || '', meta: many(s.units) + made(s)})),
+      ...(on && !picked ? [tile({attr: 'std-family-set', key: on, data: was + ` data-in="${esc(x.id)}"`, on: true, title: on})] : [])];
+    const page = `/benchmarks/${encodeURIComponent(b.key)}/tasks/${encodeURIComponent(picked ? picked.of.id : whole.id)}`;
+    const head = C.datasetsOf(rec).length > 1 ? esc(whole.label) + ': which tasks?' : 'Which tasks?';
+    return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="btn ghost sm" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.label) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>`
+      + `<div class="nb-pick-grid std-optgrid">${own.join('')}</div>` + (yours.length ? `<div class="nb-pick-grid std-optgrid std-yoursets" aria-label="Your task sets">${yours.join('')}</div>` : '');
+  }
   // The bounds the benchmark's upstream has of its own (its steps, its errors: options with ``limit``), in a section
   // of the benchmark's name after the run's scope and its time limits: those the chosen datasets and participants
   // take, each empty at its default, shown greyed - an agent's own under ``by`` (OSWorld's agents' steps).
