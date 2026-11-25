@@ -41,7 +41,8 @@ def _declared(cfg: dict):
 
 def _has_trial(job_dir: str) -> bool:
     try:
-        return any(e.is_dir() and os.path.isfile(os.path.join(e.path, "result.json")) for e in os.scandir(job_dir))
+        with os.scandir(job_dir) as entries:
+            return any(e.is_dir() and os.path.isfile(os.path.join(e.path, "result.json")) for e in entries)
     except OSError:
         return False
 
