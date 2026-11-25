@@ -501,7 +501,8 @@ class TheBuilder(task_set_pages.BuilderCase):
         dialog = re.search(r'<dialog id="nb-tasks".*?</dialog>', html, re.S).group(0)
         self.assertIn('id="nb-tasks-done"', dialog)
         template = re.search(r'<template id="nb-tasks-list">(.*?)</template>', html, re.S).group(1)
-        for part in ('data-manual="true"', 'id="tasks-q"', 'id="tasks-cats"', 'id="tasks-rows"', 'id="tasks-match"', 'id="tasks-show"'):
+        for part in ('data-manual="true"', 'id="tasks-q"', 'id="tasks-cats"', 'id="tasks-rows"', 'id="tasks-match"', 'id="tasks-show"',
+                     'id="tasks-bar"', 'id="tasks-state-text"', 'id="tasks-state-link"', 'id="tasks-list-go"', 'id="tasks-paste-open"'):
             self.assertIn(part, template)
         self.assertIn("catalogue/tasks.js", html)
 

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from '_page.html' import page_head %}
-{% from 'catalogue/_tasks_list.html' import tasks_list %}
+{% from 'catalogue/_tasks_list.html' import tasks_list, tasks_state %}
 {% block title %}{{ label if entry else ds.label or ds.id }} · {{ title }} — Nullius{% endblock %}
 {% block crumb %}/ <a href="{{ url_for('benchmarks_page') }}">benchmarks</a> / <a href="{{ url_for('benchmark_page', key=bench.key) }}#task-sets">{{ bench.key }}</a> / {{ ds.id }}{% if entry %} / {{ label }}{% endif %}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
@@ -55,14 +55,7 @@
   </div>
   {% endif %}
 
-  {#- before a first listing: what to do, and the way to do it: the listing started on a click, or where a licence it
-      needs is set #}
-  <div class="bench-blocked tasks-state" id="tasks-state" role="status" hidden>
-    <span id="tasks-state-text"></span>
-    <a id="tasks-state-link" href="{{ url_for('settings_page') }}" hidden></a>
-    {% if writable %}<div class="tasks-list" id="tasks-list" hidden><button type="button" class="btn sm" id="tasks-list-go">List {{ nouns }}</button>
-      <span class="muted small" id="tasks-list-about"></span></div>{% endif %}
-  </div>
+  {{ tasks_state(nouns, writable) }}
 
   <section class="bench-section tasks-browse" aria-label="{{ nouns|capitalize }}">
     {{ tasks_list(nouns, pick=writable) }}

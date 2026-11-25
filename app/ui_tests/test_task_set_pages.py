@@ -148,10 +148,10 @@ async function check(rows, detached, failed) {
   if (failed) { pending.reject(Error('unavailable')); await flush(); }
   else await answer(pending, 'late-a');
   assert.ok(b.element('tasks-rows').innerHTML.includes('data-id="task-b"'));
-  assert.equal(b.element('tasks-state').textContent, '');
+  assert.equal(b.element('tasks-state-text').textContent, '');
   if (detached) {
     assert.equal(a.element('tasks-rows').innerHTML, before);
-    assert.equal(a.element('tasks-state').textContent, '');
+    assert.equal(a.element('tasks-state-text').textContent, '');
   }
   const box = {checked: true, closest: () => ({dataset: {id: 'task-b'}})};
   b.element('tasks-rows').listeners.change({target: {closest: () => box}});
@@ -955,7 +955,7 @@ let nulliusFetch = async (url, args) => {
   assert.equal(JSON.parse(args.body).recipe.limit, rec.limit);
   return {json: async () => result};
 };
-const mount = {dataset: {}}, dialog = {showModal() {}}, elements = {
+const mount = {dataset: {}, querySelector: () => null}, dialog = {showModal() {}}, elements = {
   'nb-tasks': dialog, 'nb-tasks-list': {content: {firstElementChild: {cloneNode: () => mount}}},
   'nb-tasks-body': {replaceChildren: p => assert.equal(p, mount)}, 'nb-tasks-title': {},
   'nb-tasks-close': {}, 'nb-tasks-done': {}

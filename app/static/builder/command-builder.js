@@ -801,6 +801,8 @@
     Object.assign(page.dataset, {listing: base + '/listing', prepare: base + '/prepare', rows: base + '/rows', csrf: schema.csrf || '',
       local: schema.local ? 'true' : 'false', nouns: u.nouns, version: b.version || '', within: set ? set.name : '',
       limit: rec.limit || '', options: JSON.stringify({...(rec.model_choice === 'leaderboard' ? (b.leaderboard || {}).bench_options : {}), ...rec.bench_options})});
+    const go = page.querySelector('#tasks-list-go');
+    if (go) go.textContent = 'List ' + u.nouns;
     document.getElementById('nb-tasks-body').replaceChildren(page);
     document.getElementById('nb-tasks-title').textContent = 'Start with: ' + (set ? set.label : x.label);
     const was = (rec.start_with || {})[id];
