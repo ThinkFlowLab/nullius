@@ -33,9 +33,10 @@
   function chosenLine() {
     $('tasks-chosen').textContent = `${chosen.size.toLocaleString('en-US')} chosen`;
     if ($('tasks-bar-chosen')) $('tasks-bar-chosen').textContent = $('tasks-chosen').textContent;
-    // Show selected and Clear once something is chosen; Show all while the chosen are shown
+    // Show selected, Clear and the save bar once something is chosen; Show all while the chosen are shown
     $('tasks-show').hidden = !chosen.size && !st.showing;
     $('tasks-clear').hidden = !chosen.size;
+    if ($('tasks-savebar')) $('tasks-savebar').hidden = !chosen.size;
   }
   // a task on one line: its title cut to the width, the whole text in the row's tooltip and, while its box (its text
   // where the box is disabled) has the keyboard's focus, in place; its id beside it on hover or focus. A click
