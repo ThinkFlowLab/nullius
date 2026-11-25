@@ -423,16 +423,25 @@ def _mark(ws_dir: str, into: str, files, raw: Optional[dict] = None) -> None:
     ondisk.write_whole(_marker(ws_dir, into), _signature(ws_dir, files, raw))
 
 
+def unmark(ws_dir: str, to: Optional[str] = None) -> None:
+    """The workspace no longer `moved`, or, renamed to the folder `to`, still: a marker names a
+    workspace by its folder, and another made later under that name is not this one."""
+    try:
+        if to:
+            os.replace(_marker(ws_dir, home()), _marker(to, home()))
+        else:
+            os.remove(_marker(ws_dir, home()))
+    except FileNotFoundError:
+        pass
+
+
 def forget(ws_dir: str, folders) -> None:
-    """A workspace's older folders of a deleted job removed, the workspace still `moved` if it was."""
-    was = moved(ws_dir)
+    """A workspace's older folders of a deleted job removed, and the workspace read again until a
+    later `move`: a file changed meanwhile is never taken as one `move` read."""
     for d in folders:
         shutil.rmtree(d, ignore_errors=True)
-    if was:
-        try:
-            _mark(ws_dir, home(), _old_files(ws_dir))
-        except OSError:
-            pass
+    if folders:
+        unmark(ws_dir)
 
 
 def _places(ws_dir: str, job, into: str):
@@ -504,13 +513,16 @@ def single(owned: Optional[dict]) -> dict:
 
 def _old(path: str, raw: Optional[bytes] = None) -> Optional[dict]:
     """An older file's records (from `raw`, its bytes, when given); None when it cannot be read or
-    holds no JSON object."""
+    holds no JSON object, or a version in it holds no record."""
     raw = _bytes(path) if raw is None else raw
     try:
         data = json.loads(raw) if raw is not None else False
     except ValueError:
         return None
-    return {} if data is None else data if isinstance(data, dict) else None
+    if data is None:
+        return {}
+    ok = isinstance(data, dict) and all(isinstance(r, dict) for k, r in data.items() if k != ADOPTED)
+    return data if ok else None
 
 
 def overlay(ws_dir: Optional[str], job, into: Optional[str] = None, only=None) -> dict:

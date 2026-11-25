@@ -198,6 +198,30 @@ class Adopt(unittest.TestCase):
         with patch("os.scandir", unlisted):
             self.assertFalse(store.moved(ws.dir))
             self.assertEqual(store.move(home_dir), ["w (a folder cannot be read)"])
+        old = os.path.join(ws.dir, "judgements", "job-a", t0 + ".json"); kept = open(old, "rb").read()
+
+        def made_again():                                                            # its records alike, byte for byte
+            w = workspace.create(home_dir, [root], label="w")
+            os.makedirs(os.path.dirname(old)); open(old, "wb").write(kept)
+            return w
+        with self.subTest("renamed, then another made under its name"):
+            self.assertEqual(store.move(home_dir), [])
+            workspace.rename(home_dir, ws, "w2")
+            self.assertTrue(store.moved(ws.dir))
+            again = made_again()
+            self.assertFalse(store.moved(again.dir))
+        with self.subTest("deleted, then another made under its name"):
+            self.assertEqual(store.move(home_dir), [])
+            workspace.delete(home_dir, again.name)
+            self.assertFalse(store.moved(made_again().dir))
+        with self.subTest("a job's older folder forgotten"):
+            self.assertEqual(store.move(home_dir), [])
+            store.forget(ws.dir, [os.path.join(ws.dir, "judgements-llm")])
+            self.assertFalse(store.moved(ws.dir))
+        with self.subTest("a version that holds no record"):
+            open(os.path.join(ws.dir, "judgements", "job-a", t0 + ".json"), "w").write(json.dumps({Q.VERSION: [1]}))
+            self.assertIn("w2 (1 file cannot be read)", store.move(home_dir))
+            self.assertFalse(store.moved(ws.dir))
 
     def test_a_record_two_jobs_of_one_id_share_is_moved_to_neither_and_still_shown_on_both(self):
         r1, r2 = (os.path.join(self.tmp, r) for r in ("r1", "r2"))

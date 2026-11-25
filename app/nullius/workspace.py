@@ -205,6 +205,8 @@ def rename(home_dir: str, ws: Workspace, label: str) -> Workspace:
         name = _free(name, taken - {ws.name})
         new_dir = os.path.join(home_dir, name)
         os.rename(ws.dir, new_dir)
+        from nullius.judge import store
+        store.unmark(ws.dir, to=new_dir)
         ws.name, ws.dir = name, new_dir
     ws.label = label
     save(ws)
@@ -226,8 +228,10 @@ def delete(home_dir: str, name: str) -> bool:
     ws = load(home_dir, name)
     if ws is None:
         return False
+    from nullius.judge import store
     _keep_judgements(ws)
     shutil.rmtree(ws.dir, ignore_errors=True)
+    store.unmark(ws.dir)
     return True
 
 
