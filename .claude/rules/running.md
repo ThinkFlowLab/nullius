@@ -22,7 +22,7 @@ setup.
 nullius serve
 
 # or from the repository root
-uv run --no-project --with-requirements app/requirements.txt app/app.py jobs
+uv run --no-project --with-requirements app/requirements.txt app/app.py
 ```
 
 Port and host come from saved user settings or the
