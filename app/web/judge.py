@@ -114,9 +114,9 @@ def started_by_name(job) -> dict:
 
 
 def strict(trial) -> bool:
-    """Whether the trial is one try of an attempt with several, read under its attempt's name: a
-    record is then its own only by its start. A try with no start keeps its own name (`slot`)."""
-    return (bool(trial.n_retries) or trial.key != trial.trial_name) and slot(trial) == trial.key
+    """Whether the trial is one try of an attempt with several: a record is then its own only by
+    its start, wherever it is read, so a try with no start shows none."""
+    return bool(trial.n_retries) or trial.key != trial.trial_name
 
 
 def retried(job) -> set:
@@ -479,7 +479,8 @@ def pair_records(view) -> dict:
         return {}
     out, uid, old = {}, job_key(view.jobs[0]), old_of(view.jobs[0], view.selected[0].workspace)
     for task, a, b in pairs_of(view):
-        rec = store.load(store.home(), uid, store.pair_key(a.trial_name, b.trial_name), old=old)
+        rec = store.load(store.home(), uid, store.pair_key(a.trial_name, b.trial_name), old=old,
+                         strict=strict(a) or strict(b))          # a pair record names no start: none of a retried try's
         if rec and (rec.get("answers") or {}).get(LEGACY_QUESTION):
             out[task] = rec
     return out

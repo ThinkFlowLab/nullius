@@ -246,7 +246,19 @@ class JudgementsKeptBefore(unittest.TestCase):
 
 class EachTryItsOwn(unittest.TestCase):
     """A retried trial's earlier try is judged, and shown, apart from its last
-    try, even when the try recorded no start."""
+    try; a try that recorded no start is not judged, and shows no record."""
+    def test_an_older_pair_record_names_no_start_so_no_retried_try_shows_it(self):
+        tmp = Path(tempfile.mkdtemp(prefix="nullius-judge-pair-")); self.addCleanup(shutil.rmtree, tmp, True)
+        side = lambda name, retries: SimpleNamespace(trial_name=name, key=name, n_retries=retries, started_at=None, has_trajectory=True)
+        job = SimpleNamespace(uid="u", job_id="j", dir=str(tmp))
+        view = lambda a: SimpleNamespace(selected=[SimpleNamespace(workspace=None)], jobs=[job, job],
+                                         tasks=[SimpleNamespace(task="k", trials=[a, side("b", 0)])])
+        with patch.object(web.judge.store, "home", return_value=str(tmp / "data")), \
+                patch.object(web.judge, "old_of", return_value={}), patch.object(web.judge, "job_key", return_value="u"):
+            web.judge.store.save(str(tmp / "data"), "u", web.judge.store.pair_key("a", "b"), {
+                "questions": Q.EARLIER[0], "answers": {web.judge.LEGACY_QUESTION: {"choice": "A"}}})
+            self.assertEqual([bool(web.judge.pair_records(view(side("a", n)))) for n in (0, 1)], [True, False])
+
     def test_two_tries_each_show_and_keep_their_own_record(self):
         from nullius.runs import parse
         tmp = Path(tempfile.mkdtemp(prefix="nullius-judge-tries-")); self.addCleanup(shutil.rmtree, tmp, True)
@@ -265,10 +277,18 @@ class EachTryItsOwn(unittest.TestCase):
                 patch.object(web.judge, "_trial_ids_and_states", return_value={}), \
                 web.app.test_request_context("/"):
             for trial, choice in ((last, "last"), (first, "first"), (last, "last")):
-                with patch.object(web.judge.batch, "ask_states", asked(choice)):
-                    web.judge.judge_trial(job, trial, "k", calibration={})
-            shown = [web.judge.judgement_of(job, t)["answers"]["failure_cause"]["choice"] for t in (first, last)]
-        self.assertEqual(shown, ["first", "last"])
+                with patch.object(web.judge.batch, "ask_states", side_effect=asked(choice)) as ask:
+                    if trial is first:
+                        with self.assertRaises(web.judge.client.JudgeError):
+                            web.judge.judge_trial(job, trial, "k", calibration={})
+                        ask.assert_not_called()
+                    else:
+                        web.judge.judge_trial(job, trial, "k", calibration={})
+            web.judge.store.save(str(tmp / "data"), job.uid, first.trial_name, {"questions": Q.VERSION, "answers": {
+                "failure_cause": {"choice": "first"}}})                                  # under its own name, as before
+            shown = [(web.judge.judgement_of(job, t) or {}).get("answers", {}).get("failure_cause", {}).get("choice")
+                     for t in (first, last)]
+        self.assertEqual(shown, [None, "last"])
 
     def test_a_try_judged_while_it_was_the_last_keeps_its_record_once_moved_aside(self):
         from nullius.runs import parse

@@ -252,6 +252,19 @@ class Versions(unittest.TestCase):
         # a stamped record stays found by its start under an older, newer, unstamped one
         old = {store._paths(d, "job", "t")[0]: [{questions.VERSION: dict(self.record(questions.VERSION, q={"choice": "y"}), asked_at="2099-01-01T00:00:00Z")}]}
         self.assertEqual(sorted(store.load(d, "job", "t", started=retry, old=old, strict=True)["answers"]), ["failure_cause"])
+        # of two revisions of the try before, the newer is shown, kept beside the older; saves keep every one
+        path = store._paths(d, "job", "t")[0]
+        newer = dict(self.record(questions.VERSION, q={"choice": "newer"}), trial_started_at=first, asked_at="2099-01-01T00:00:00Z")
+        store._merge_into(path, [{questions.VERSION: newer}])
+        self.assertEqual(store.load(d, "job", "t", started=first, strict=True)["answers"], {"q": {"choice": "newer"}})
+        third = "2026-11-17T12:00:00+00:00"
+        for i, at in enumerate((third, first, third)):                       # each set aside where another is kept
+            store.save(d, "job", "t", dict(self.record(questions.VERSION, x={"choice": at}), asked_at=f"2100-01-0{i + 1}"),
+                       started=at, strict=True)
+        self.assertEqual(store.load(d, "job", "t", started=first, strict=True)["answers"]["q"], {"choice": "newer"})
+        with open(path) as fh:
+            kept = [r for r in json.load(fh).values() if isinstance(r, dict) and r.get("trial_started_at") == first]
+        self.assertEqual(len(kept), 2)
 
 
 class Batch(unittest.TestCase):

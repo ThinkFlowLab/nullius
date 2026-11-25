@@ -108,10 +108,12 @@ def ask_and_store(base: str, job_id: str, trial_name: str, states: dict, key, po
     the judge's own lane unless named (`store.TASKS`). `old`: the job's
     older records (`store.overlay`), the file's copied in by the save. `job_dir`: the
     job's folder, nothing saved once it is deleted (`store.Gone`). `strict`: an
-    attempt with several tries (`store.save`). A job with no identity yet (pending) is refused
-    before the judge is asked: its record could not be kept."""
+    attempt with several tries (`store.save`). A job with no identity yet (pending), or such a try
+    with no start, is refused before the judge is asked: its record could not be kept, or shown."""
     if not job_id:
         raise client.JudgeError(0, "this job has no identity until its result is written, so it is not judged yet")
+    if strict and not started:
+        raise client.JudgeError(0, "this try has no start, so its judgement could not be told from another try's")
     if calibration is None:
         calibration = store.calibration(base, [job_id])
     rec = ask_states(states, key, post=post, calibration=calibration)

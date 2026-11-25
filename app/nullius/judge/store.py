@@ -163,12 +163,33 @@ def _try(version: str, started: str) -> str:
     return f"{version}@{started}"
 
 
+def _newest(data: dict, version: str, started: Optional[str], strict: bool = False) -> Optional[str]:
+    """The key of the newest record (`asked_at`) of the try `started` under `version`: its own,
+    or one kept beside it (`_try`, and a revision of it beside that, ``~<digest>``)."""
+    at = started and _try(version, started)
+    keys = [k for k in data if k == version or at and (k == at or k.startswith(at + "~"))]
+    keys = [k for k in sorted(keys, key=lambda k: k != version) if isinstance(data[k], dict) and data[k]
+            and _of(data[k], started, strict)]
+    return max(keys, key=lambda k: str(data[k].get("asked_at") or ""), default=None)
+
+
 def _pick(data: dict, version: Optional[str], started: Optional[str] = None, strict: bool = False) -> Optional[dict]:
     for v in _versions(version):
-        for rec in (data.get(v), started and data.get(_try(v, started))):
-            if rec and _of(rec, started, strict):
-                return rec
+        k = _newest(data, v, started, strict)
+        if k:
+            return data[k]
     return None
+
+
+def _aside(data: dict, key: str) -> None:
+    """The record under `key` kept beside under its start (`_try`), or with none under
+    ``<key>~<its digest>``, in a slot no other record holds."""
+    rec = data.pop(key)
+    at = rec.get("trial_started_at")
+    slot = _try(key, at) if at else f"{key}~{_digest(rec)}"
+    if data.get(slot, rec) != rec:
+        slot = f"{slot}~{_digest(rec)}"
+    data[slot] = rec
 
 
 def load(base: str, job_id: str, trial_name: str, version: Optional[str] = None, lane: str = "decision",
@@ -213,11 +234,10 @@ def save(base: str, job_id: str, trial_name: str, record: dict, lane: str = "dec
         _still(path, job_dir)
         data = _with(_read(found, strict=True), _olds(old, found))
         version = record.get("questions", Q.VERSION)
-        earlier = data.get(version) or {}
-        if not _of(earlier, started, strict):        # another try's: kept beside, and none of its answers are this one's
-            at = earlier.get("trial_started_at")
-            data[_try(version, at) if at else f"{version}~{_digest(earlier)}"] = earlier     # unstamped: whose is unknown
-            earlier = data.pop(_try(version, started), None) or {}
+        mine = _newest(data, version, started, strict)       # this try's newest record, wherever it is kept
+        if data.get(version) and mine != version:    # another try's, or an older revision: kept beside, and none
+            _aside(data, version)                    # of its answers are this one's
+        earlier = data.pop(mine) if mine and mine != version else data.get(version) or {}
         merged = dict(record, **({"trial_started_at": started} if started else {}))
         merged["answers"] = {**(earlier.get("answers") or {}), **(record.get("answers") or {})}
         if "hygiene" in earlier or "hygiene" in record:
@@ -349,10 +369,9 @@ def _merged(cur: dict, data: dict) -> dict:
             tries = bool(a and b and a != b)
             newer = str(b) > str(a) if tries else str(rec.get("asked_at") or "") > str(now.get("asked_at") or "")
             shown, other = (rec, now) if newer else (now, rec)
-            slot = _try(k, other["trial_started_at"]) if other.get("trial_started_at") else f"{k}~{_digest(other)}"
-            if slot in cur:
-                slot = f"{slot}~{_digest(other)}"
-            cur[k], cur[slot] = shown, other
+            cur[k] = other
+            _aside(cur, k)
+            cur[k] = shown
         have |= {_digest(r) for r in cur.values() if isinstance(r, dict)}
     if adopted:
         cur[ADOPTED] = sorted(adopted)
