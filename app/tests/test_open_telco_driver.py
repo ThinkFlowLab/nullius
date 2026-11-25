@@ -159,6 +159,14 @@ class OpenTelcoDriver(unittest.TestCase):
         self.assertIn(("teleqna", str(self.snap), {"subject": "Research overview"}), self.up.built)   # as the data write it
         everything = self.load("teleqna-lite", subject="all")
         self.assertEqual(len(everything.units("teleqna-lite")["units"]), 12)
+        # describe: the units' questions and, for a task that filters by one, the sample's value as its category
+        said = driver.describe("teleqna-lite")["units"]
+        self.assertEqual(list(said), driver.units("teleqna-lite")["units"])
+        self.assertEqual(said["04"], {"title": "q4", "text": "q4", "categories": {"subject": "Research overview"}})
+        self.assertEqual(everything.describe("teleqna-lite")["units"]["01"]["categories"], {"subject": "Lexicon"})
+        self.assertEqual(self.load("teletables-lite").describe("teletables-lite")["units"]["t_9_def456"],
+                         {"title": "t2", "text": "t2", "categories": {}})
+        self.assertIs(json.loads((FOLDER / "standard.json").read_text())["driver"]["describe"], True)
 
     def test_the_prompt_is_what_the_task_asks_its_model_and_nothing_is_written(self):
         driver = self.load("telemath-lite")

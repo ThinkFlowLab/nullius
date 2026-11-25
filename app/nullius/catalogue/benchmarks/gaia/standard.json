@@ -16,6 +16,7 @@
     "tested_date": "2026-11-06"
   },
   "driver": {
+    "describe": true,
     "command": [
       "{install}/.venv/bin/python",
       "{here}/driver.py"

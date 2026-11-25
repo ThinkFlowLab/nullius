@@ -15,6 +15,7 @@
     "license": "MIT"
   },
   "driver": {
+    "describe": true,
     "command": [
       "{install}/.venv/bin/python",
       "{here}/driver.py"

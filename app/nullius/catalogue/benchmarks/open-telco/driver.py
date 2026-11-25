@@ -10,6 +10,8 @@ units  - the task's samples by the id Inspect gives them: TeleTables' own ids,
          else the sample's place in the file (1, 2, ...), zero-padded. A filter
          option (TeleQnA's subject, ORANBench's difficulty, 6G-Bench's task)
          runs the task with that argument; its samples keep their numbers
+describe - each unit's question as the sample holds it, and the value of each
+         filter its task takes, from the sample's metadata, as its category
 setup  - the task on the unit with a model that replies nothing: what the
          solver asks it (TeleMath's system prompt, then the question; the
          multiple-choice template with its lettered choices) is the prompt
@@ -184,6 +186,25 @@ def units(dataset, setup=None):
     return {"units": out}
 
 
+def text_of(s):
+    """A sample's question: its input, or the text of its input's messages."""
+    if isinstance(s.input, str):
+        return s.input
+    return "\n\n".join(str(getattr(m, "text", "") or "") for m in s.input or [])
+
+
+def describe(dataset, **_):
+    every = numbered()
+    out = {}
+    for unit in units(dataset)["units"]:
+        s = every[unit]
+        meta = s.metadata or {}
+        text = text_of(s)
+        out[unit] = {"title": text, "text": text,
+                     "categories": {n: str(meta[n]) for n in FILTERS if n in PARAMS and meta.get(n) not in (None, "")}}
+    return {"units": out}
+
+
 def sample_id(unit):
     return unit if isinstance(numbered()[unit].id, str) else int(unit)
 
@@ -238,7 +259,7 @@ def oracle(unit, dir):
     return {"answer": f"ANSWER: {s.target}" if s.choices else FORMATS[NAME] % s.target}
 
 
-HANDLERS = {"units": units, "setup": setup, "answer": answer, "score": score, "oracle": oracle}
+HANDLERS = {"units": units, "describe": describe, "setup": setup, "answer": answer, "score": score, "oracle": oracle}
 
 
 def main():
