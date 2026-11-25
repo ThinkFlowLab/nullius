@@ -1,0 +1,80 @@
+name: pr-labels
+
+# Keeps three labels true on every open pull request: "merge conflict", "ci
+# failing" and "stacked". Each run checks them all: a push to main can make any
+# of them conflict, and a push to one changes those stacked on it.
+#
+# pull_request_target, so the token can label a fork's pull request. Safe
+# because nothing is checked out: never add a checkout here.
+
+on:
+  push:
+    branches: [main]
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+  workflow_run:
+    workflows: [tests]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: read          # which workflow a check belongs to
+  checks: read
+  contents: read
+  pull-requests: write   # the labels
+  statuses: read
+
+jobs:
+  label:
+    # An edit matters only when it changes the base.
+    if: ${{ github.event.action != 'edited' || github.event.changes.base }}
+    # On the job, so a skipped edit cancels nothing.
+    concurrency:
+      group: ${{ github.workflow }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh label create "merge conflict" --color b60205 --force \
+            --description "Conflicts with its base: merge or rebase it"
+          gh label create "ci failing" --color d93f0b --force \
+            --description "A check failed on its latest commit"
+          gh label create "stacked" --color c5def5 --force \
+            --description "Based on another branch than main"
+          # GitHub computes mergeability after being asked: UNKNOWN until then,
+          # and a pull request still UNKNOWN keeps the label it has.
+          for attempt in 1 2 3 4 5 6; do
+            sleep 10
+            prs=$(gh pr list --state open --limit 200 \
+              --json number,mergeable,baseRefName,labels,statusCheckRollup)
+            jq -e 'any(.[]; .mergeable == "UNKNOWN")' <<< "$prs" > /dev/null || break
+          done
+          # One line per label to change. A check that ran twice on a commit
+          # counts by its latest run; a cancelled one says nothing.
+          jq -r '
+            def failing:
+              [.statusCheckRollup[]?
+                | select((.conclusion // .state) | IN("SKIPPED", "CANCELLED") | not)]
+              | group_by([.workflowName, .name // .context])
+              | any(.[]; max_by(.startedAt) | (.conclusion // .state)
+                  | IN("FAILURE", "ERROR", "TIMED_OUT", "STARTUP_FAILURE"));
+            .[] | .number as $number | [.labels[].name] as $has
+            | [["merge conflict", (if .mergeable == "UNKNOWN" then null else .mergeable == "CONFLICTING" end)],
+               ["ci failing", failing],
+               ["stacked", .baseRefName != "main"]][]
+            | select(.[1] != null and .[1] != (.[0] | IN($has[])))
+            | [$number, (if .[1] then "add" else "remove" end), .[0]] | @tsv' <<< "$prs" |
+          while IFS=$'\t' read -r number change label; do
+            echo "#$number: $change $label"
+            if [ "$change" = add ]; then
+              gh api "repos/$GH_REPO/issues/$number/labels" -f "labels[]=$label" --silent
+            else
+              gh api -X DELETE "repos/$GH_REPO/issues/$number/labels/${label// /%20}" --silent
+            fi
+          done
