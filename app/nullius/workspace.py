@@ -224,7 +224,7 @@ def delete(home_dir: str, name: str) -> bool:
     imports. The job roots it pointed at are not touched, nor the
     judgements of their jobs (`_keep_judgements`). True when something was
     removed; ValueError, nothing removed, while it holds judgements kept
-    before and one of its roots cannot be read."""
+    before or failure analyses of its imports and one of its roots cannot be read."""
     ws = load(home_dir, name)
     if ws is None:
         return False
@@ -239,16 +239,17 @@ def check_deletable(home_dir: str, name: str) -> None:
     """Raise as `delete` would refuse the workspace *name*, removing nothing."""
     ws = load(home_dir, name)
     if ws is not None:
-        _check_roots(ws)
+        _check_roots(ws, _analyses(ws))
 
 
-def _check_roots(ws: Workspace) -> None:
-    """ValueError while *ws* holds judgements kept before by job id, not yet copied into the
-    user's store, and one of its roots cannot be read: its jobs, and so their records, are unknown."""
+def _check_roots(ws: Workspace, made) -> None:
+    """ValueError while *ws* holds records its delete could lose - judgements kept before by job
+    id, or the failure analyses *made* of its imports - and one of its roots, as registered or as
+    converted, cannot be read: its jobs, and so their records, are unknown."""
     from nullius.judge import store
-    if store.moved(ws.dir) or not any(os.path.isdir(os.path.join(ws.dir, r)) for r in store.ROOTS.values()):
+    if not made and not any(os.path.isdir(os.path.join(ws.dir, r)) for r in store.ROOTS.values()):
         return
-    unread = [r for r in ws.job_roots or ws.roots if not _listable(r)]
+    unread = [r for r in dict.fromkeys([*ws.roots, *ws.job_roots]) if not _listable(r)]
     if unread:
         raise ValueError(f"{ws.label} stays: {unread[0]} cannot be read, so its judgements cannot be kept. Reconnect it or remove the root first.")
 
@@ -262,6 +263,18 @@ def _listable(folder: str) -> bool:
         return False
 
 
+def _analyses(ws: Workspace) -> list:
+    """The User judge's failure analyses of the workspace's converted imports; ValueError when a
+    folder of its imports cannot be listed."""
+    from nullius.judge import store
+    from nullius.runs import failure_analysis
+    try:
+        return [os.path.join(d, n) for d, _, names in os.walk(ws.imports_dir, onerror=store._raise)
+                for n in names if n.startswith(failure_analysis.FILE)] if os.path.isdir(ws.imports_dir) else []
+    except OSError as e:
+        raise ValueError(f"{ws.label} stays: {e.filename or ws.imports_dir} cannot be read, so its failure analyses cannot be kept. Try again.")
+
+
 def _keep_judgements(ws: Workspace) -> None:
     """The judgements a workspace kept before they were kept by job
     (``<workspace>/judgements{,-llm}/``): copied into the user's store under
@@ -271,16 +284,11 @@ def _keep_judgements(ws: Workspace) -> None:
     ``imported/`` by their job folder's path. Refused while a root, or a folder
     of its imports, cannot be read, since its jobs' records could not be kept."""
     from nullius.judge import store
-    from nullius.runs import failure_analysis
     old = [d for r in store.ROOTS.values() if os.path.isdir(d := os.path.join(ws.dir, r))]
-    try:
-        made = [os.path.join(d, n) for d, _, names in os.walk(ws.imports_dir, onerror=store._raise)
-                for n in names if n.startswith(failure_analysis.FILE)] if os.path.isdir(ws.imports_dir) else []
-    except OSError as e:
-        raise ValueError(f"{ws.label} stays: {e.filename or ws.imports_dir} cannot be read, so its failure analyses cannot be kept. Try again.")
+    made = _analyses(ws)
     if not old and not made:
         return
-    _check_roots(ws)
+    _check_roots(ws, made)
     if old and not store.moved(ws.dir):
         store.adopt_owned(ws)                # a record several jobs may own is not copied: it is kept below, whole
     keep = os.path.join(store.home(), "judgements-of-deleted-workspaces", f"{ws.name}~{datetime.now(timezone.utc):%Y%m%dT%H%M%S%fZ}")

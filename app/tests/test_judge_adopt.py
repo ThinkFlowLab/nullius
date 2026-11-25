@@ -285,12 +285,29 @@ class Adopt(unittest.TestCase):
     def test_deleting_a_workspace_keeps_the_failure_analyses_of_its_imports(self):
         from nullius.runs import failure_analysis as fa
         home_dir = os.path.join(self.tmp, "ws")
-        ws = workspace.create(home_dir, [], label="w")
+        root = os.path.join(self.tmp, "atif")                                       # not there: unmounted
+        ws = workspace.create(home_dir, [root], label="w")
         j = _job_dir(ws.imports_dir, "atif__x")
         fa.update(j, lambda a: a.set_label("t0", "agent", by="me"))
+        for check in (workspace.check_deletable, workspace.delete):
+            with self.assertRaisesRegex(ValueError, "cannot be read"):
+                check(home_dir, ws.name)
+        os.makedirs(root)
         workspace.delete(home_dir, ws.name)
         [kept] = os.listdir(os.path.join(self.home, "judgements-of-deleted-workspaces"))
         self.assertTrue(os.path.isfile(os.path.join(self.home, "judgements-of-deleted-workspaces", kept, "imported", "atif__x", fa.FILE)))
+
+    def test_a_moved_workspace_is_not_deleted_while_a_root_cannot_be_read(self):
+        root = os.path.join(self.tmp, "r1")
+        _job_dir(root, "job-x")
+        home_dir = os.path.join(self.tmp, "ws")
+        ws = workspace.create(home_dir, [root], label="w")
+        store.save(ws.dir, "job-x", workspace.load_jobs(ws, ws.roots)[0].trials[0].trial_name, rec("2026-01-01T00:00:00Z"))
+        self.assertEqual(store.move(home_dir), [])
+        os.rename(root, root + "-away")
+        with self.assertRaisesRegex(ValueError, "cannot be read"):
+            workspace.delete(home_dir, ws.name)
+        self.assertTrue(os.path.isdir(ws.dir))
 
     def test_a_workspace_whose_imports_cannot_all_be_listed_is_not_deleted(self):
         from nullius.runs import failure_analysis as fa
