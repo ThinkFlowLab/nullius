@@ -22,6 +22,8 @@ The trial must have saved its [exchange record](run.md#the-exchange-record).
 | `--dry-run` | What would be sent, its estimate and its booking; sends and writes nothing. |
 | Refused | A call cut or saved as text, no price, no output limit, a stored conversation. |
 
+The prompt booking uses the dearest input rate, including cache reads and writes.
+
 ## Changes
 
 Applied in this order. A `TEXT`, `OLD` or `NEW` that starts with `@` is that file's text.

@@ -23,7 +23,7 @@ from pathlib import Path
 from unittest import mock
 
 from nullius.standard import cli as standard_cli
-from nullius.standard.calls import exchanges, relay
+from nullius.standard.calls import exchanges, ledger, relay
 from nullius.standard.runner import replay
 
 APP = Path(__file__).resolve().parents[1]
@@ -189,6 +189,44 @@ class Keyless(KeylessCase):
         self.assertEqual((row["body"], row["served_by"], row["label"]), (self.body.decode(), "localhost", "localhost"))
         self.assertEqual((out / "request.json").read_bytes(), self.prep.raw)
         self.assertEqual(self.post.call_args.args[0].base, self.env["MODEL_API_URL"])
+
+
+class Bookings(unittest.TestCase):
+    def test_cached_input_rates_bound_recorded_and_estimated_prompts(self):
+        req = {"model": "m", "max_tokens": 1, "messages": [{"role": "user", "content": "x" * 3000}]}
+        raw = json.dumps(req).encode()
+        estimated = (len(raw) + 2) // 3
+        for recorded in (None, 2000):
+            for rates in ({"input": 1.0, "cached": 10.0}, {"input": 0.0, "cached": 10.0},
+                          {"input": 1.0, "cached": 10.0, "cache_write": 20.0, "cache_write_1h": 30.0}):
+                with self.subTest(recorded=recorded, rates=rates):
+                    cost, output = replay.most(req, raw, dict(rates, output=2.0), "/chat/completions", recorded_input=recorded)
+                    self.assertEqual(output, 1)
+                    self.assertAlmostEqual(cost, (max(estimated, recorded or 0) * max(rates.values()) + 2) / 1e6)
+
+    def test_normal_relay_bookings_keep_the_run_estimate(self):
+        req = {"model": "m", "max_tokens": 8192, "messages": [{"role": "user", "content": "ok"}]}
+        raw = json.dumps(req).encode()
+        row = {"input": 1.0, "output": 2.0, "cached": 10.0}
+        with tempfile.TemporaryDirectory() as tmp:
+            for cap in (0.0001, 0.001, 1.0):
+                with self.subTest(cap=cap):
+                    folder = Path(tmp, str(cap))
+                    led = ledger.Ledger.create(str(folder / "ledger.json"), cap)
+                    r = relay.Relay("http://localhost:8000/v1", "", str(folder / "relay"), prices={"m": row}, ledger=led.path)
+                    self.addCleanup(r.stop)
+                    booking, amount, why, by = r._book(req, raw, "/chat/completions", "u0001")
+                    self.assertTrue(booking)
+                    self.assertEqual((why, by), (None, None))
+                    self.assertEqual(amount, min(cap, ledger.bound(req, raw, row, "/chat/completions")))
+                    led.settle(booking, 0.0001, "m", 10)
+                    booking, amount, why, by = r._book(req, raw, "/chat/completions", "u0001")
+                    self.assertEqual(bool(booking), cap > 0.0001)
+                    if booking:
+                        self.assertEqual(amount, ledger.bound(req, raw, row, "/chat/completions", seen=10))
+                        led.settle(booking, 0.0001, "m", 10)
+                    else:
+                        self.assertEqual(by, "cap")
 
 
 class Rebuilt(ReplayCase):
@@ -404,6 +442,18 @@ class Changes(ReplayCase):
 
 
 class Sends(ReplayCase):
+    def test_a_dearer_cached_rate_refuses_a_send_above_the_cap(self):
+        Upstream.body = {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+                         "usage": {"prompt_tokens": 1000, "completion_tokens": 1,
+                                   "prompt_tokens_details": {"cached_tokens": 1000}}}
+        self.record_trial("cached__u0002", 1, path="/chat/completions", req={
+            "model": "m", "max_tokens": 1, "messages": [{"role": "user", "content": "ok"}]})
+        prep = self.prepared(trial="cached__u0002", call=1, prices={"m": {"input": 1.0, "output": 2.0, "cached": 10.0}})
+        Upstream.seen = []
+        with self.assertRaisesRegex(replay.Refused, "may cost up to"):
+            self.send(prep, times=1, max_usd=0.002)
+        self.assertEqual(Upstream.seen, [])
+
     def test_whole_replies_survive_the_exchange_store_limit(self):
         from nullius.standard.runner import study
         original = exchanges.Store.__init__

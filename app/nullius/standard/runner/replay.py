@@ -699,8 +699,8 @@ def most(req: dict, raw: bytes, row: dict, path: str, model_limit: Optional[int]
     if not limits:
         return None, None
     tokens = min(limits) * (req["n"] if _whole_number(req.get("n")) else 1)
-    rate = max(row["input"], row.get("cache_write") or 0, row.get("cache_write_1h") or 0)
-    prompt = max(ledgers.bound(req, raw, row, path, output=False),
+    rate = max(row["input"], row.get("cached") or 0, row.get("cache_write") or 0, row.get("cache_write_1h") or 0)
+    prompt = max(ledgers.bound(req, raw, dict(row, input=rate), path, output=False),
                  (recorded_input if _whole_number(recorded_input) else 0) * rate / 1e6)
     return prompt + tokens * row["output"] / 1e6, tokens
 
