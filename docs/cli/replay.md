@@ -18,8 +18,8 @@ The trial must have saved its [exchange record](run.md#the-exchange-record).
 | `--list` | The trial's recorded calls, and whether each request rebuilds to its recorded hash. |
 | Where it goes | The job's provider, model, pin and price, through a relay of the replay's own. |
 | The key | The provider's key from the environment or the saved settings, never written. |
-| `--max-usd` | Required. Each send is booked at its prompt and output limit; one that does not fit is refused. |
-| `--dry-run` | What would be sent, its estimated cost and its booking; sends and writes nothing. |
+| `--max-usd` | Required: a send goes out only if the most it can cost fits under it. |
+| `--dry-run` | What would be sent, its estimate and its booking; sends and writes nothing. |
 | Refused | A call cut or saved as text, no price, no output limit, a stored conversation. |
 
 ## Changes
@@ -70,5 +70,5 @@ nullius standard recount <dir> [--read CMD] [--yes REGEX] [--compare A B] [--jso
 | Arms | `recorded` first, then each `--arm NAME=CHANGES`, a JSON list such as `[["drop_last", 1]]`. |
 | Yes or no | An answer reads yes when its label is the recorded one's, or matches `--yes`. |
 | The result | Each arm's yes by target, and an exact sign test between two arms. |
-| Goes on | The same command again sends only what was not answered, under its cap or a new one above the spend. |
+| Goes on | Run again, it sends only the unanswered, under its cap or one above the spend. |
 | `recount` | A kept study or replay read again by another rule, with no send. |
