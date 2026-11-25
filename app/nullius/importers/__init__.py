@@ -28,6 +28,15 @@ the directories under a root the app opened that are one `convert` each.
 Without it a claimed root is one tree, which is how the CLI reads it. The
 picker uses the same boundaries so both surfaces produce the same jobs.
 
+**One source, one job folder.** A tree is a source, known by its real
+path. Its first conversion gives it an id of its own (:func:`place`), derived
+from the format and that path so every workspace importing it agrees, written
+in the job's ``config.json`` as ``nullius.source`` and read back on every
+reconversion, so the folder and the identity stay its own: a second source of
+one basename gets a folder of its own, and a job name that names a folder not
+shown to be this source's is refused. A folder converted before the id is
+kept as it is, without one, when its format and recorded source are this one's.
+
 **Refusing a tree** is `convert` raising ``SystemExit`` with a message
 that names the file and what is wrong with it — never a job with no trials or a traceback. The message is what a person sees, on the picker or from
 the CLI, so it is redacted at construction: a tree is arbitrary bytes from
@@ -39,12 +48,14 @@ discovery rather than a table here. Nothing outside a harness module mentions th
 """
 from __future__ import annotations
 
+import contextlib
 import importlib
 import json
 import os
 import pkgutil
 import shutil
 import tempfile
+import uuid
 from collections import Counter
 from types import ModuleType
 
@@ -243,6 +254,104 @@ def mark_changed(job_dir: str, summaries: list) -> None:
     an ended job's cached parse is checked by that file, not trial by trial."""
     if any(s["changed"] for s in summaries):
         os.utime(os.path.join(job_dir, "result.json"))
+
+
+def _config(job_dir: str) -> dict:
+    try:
+        with open(os.path.join(job_dir, "config.json"), encoding="utf-8") as fh:
+            cfg = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _source(cfg: dict) -> tuple:
+    """``(id, path)`` a conversion recorded in ``nullius``, or ``(None, None)``."""
+    own = cfg.get("nullius") if isinstance(cfg.get("nullius"), dict) else {}
+    try:
+        return str(uuid.UUID(str(own["source"]))), own.get("source_path")
+    except (KeyError, ValueError, TypeError):
+        return None, None
+
+
+#: fixed for good: changing it changes every import's identity
+NS_SOURCE = uuid.UUID("3b1d7e44-9a0c-4f62-8e15-2c7a9f4d6b08")
+
+
+def source_id(fmt: str, root: str) -> str:
+    """A source's id: a ``uuid5`` over its format and real path, ``"v": 1``; a moved tree is a new source."""
+    facts = {"v": 1, "format": fmt, "path": os.path.realpath(root)}
+    return str(uuid.uuid5(NS_SOURCE, json.dumps(facts, sort_keys=True, separators=(",", ":"))))
+
+
+def place(out_root: str, root: str, default: str, job_name: str = "", fmt: str = "") -> tuple:
+    """``(job_name, source id)``: the folder under *out_root* the tree at *root*
+    is converted into, and its id, None for a folder converted before ids.
+
+    The folder that already records this source's id is its own. Otherwise *default*,
+    then ``<default>-2``, ``-3``…, skipping a folder that holds anything not
+    shown to be this source's: another id, or an older conversion :func:`_verified`
+    does not tie to it. A named *job_name* is used as it is, and refused when
+    it is not shown to be this source's. Call it under :func:`locked`, through
+    the write, so two conversions never pick one folder.
+    """
+    src, new = os.path.realpath(root), source_id(fmt, root)
+    names = sorted(os.listdir(out_root)) if not job_name and os.path.isdir(out_root) else []
+    for name in names:
+        if _source(_config(os.path.join(out_root, name)))[0] == new:
+            return name, new
+    n = 1
+    while True:
+        name = job_name or (default if n == 1 else f"{default}-{n}")
+        job_dir = os.path.join(out_root, name)
+        if not os.path.isdir(job_dir) or not os.listdir(job_dir):
+            return name, new
+        cfg = _config(job_dir)
+        sid = _source(cfg)[0]
+        if sid == new:
+            return name, sid
+        if not sid and _verified(job_dir, cfg, fmt, src):
+            return name, None
+        if job_name:
+            raise SystemExit(redact(f"{job_dir} holds an import not shown to be this source's; "
+                                    "choose another job name"))
+        n += 1
+
+
+def _verified(job_dir: str, cfg: dict, fmt: str, src: str) -> bool:
+    """A folder converted before ids is the source at real path *src* only when it
+    stored the format *fmt* and names *src*: by the absolute path it recorded,
+    else as the one tree its trials are named from (where each says its document
+    was read) that ends with the relative path it recorded."""
+    if not cfg or cfg.get("harness") != fmt:
+        return False
+    old = recorded(cfg)
+    if isinstance(old, str) and os.path.isabs(old):
+        return os.path.realpath(old) == src
+    module = get(fmt)
+    roots = module._trial_roots(job_dir) if hasattr(module, "_trial_roots") else []
+    if isinstance(old, str):
+        roots = [r for r in roots if os.path.normpath(old) == "." or r.endswith(os.sep + os.path.normpath(old))]
+    return roots == [src]
+
+
+@contextlib.contextmanager
+def locked(out_root: str):
+    """One conversion at a time into *out_root*, from :func:`place` through the write."""
+    os.makedirs(out_root, exist_ok=True)
+    with ondisk.locked(os.path.join(out_root, ".nullius-import.lock")):
+        yield
+
+
+def recorded(cfg: dict):
+    """The source path an import from before ids recorded in its ``config.json``, or None."""
+    module = get(str(cfg.get("harness") or ""))
+    return module._recorded(cfg) if module and hasattr(module, "_recorded") else None
+
+
+def recorded_as(sid, root: str) -> dict:
+    """What a job's ``config.json`` carries of its source: nothing for a folder converted before ids."""
+    return {"nullius": {"source": sid, "source_path": os.path.realpath(root)}} if sid else {}
 
 
 def labels() -> str:

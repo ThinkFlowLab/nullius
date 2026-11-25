@@ -222,7 +222,7 @@ def _trace_id_in(trial_dir: str):
 
 
 def _write_job(documents: list, out_root: str, job_name: str, command: str,
-               root: str, skipped: list) -> str:
+               root: str, skipped: list, sid=None) -> str:
     job_dir = os.path.join(out_root, job_name)
     ids = [str(doc.get("session_id") or "") for doc in documents]
     existing = importers.existing_trials(job_dir, _trace_id_in)
@@ -258,10 +258,13 @@ def _write_job(documents: list, out_root: str, job_name: str, command: str,
         "command": command,
         "agents": [{"name": agents[0], "model_name": models[0] if len(models) == 1 else "",
                     "kwargs": {}}],
-        "datasets": [{"name": NAME, "path": root, "n_tasks": len(summaries)}],
+        # a folder converted before ids keeps the path its identity was derived from
+        "datasets": [{"name": NAME, "path": _recorded(importers._config(job_dir)) if sid is None else root,
+                      "n_tasks": len(summaries)}],
         "import": {"format": reader.FORMAT, "conventions": reader.CONVENTIONS,
                    "skipped": skipped},
         "trial_documents": importers.reservations(job_dir, zip(names, ids), *existing),
+        **importers.recorded_as(sid, root),
     })
     return job_dir
 
@@ -274,6 +277,17 @@ def convert(root: str, out_root: str, job_name: str = "",
     are listed in the job's ``config.json`` under ``import.skipped`` with their
     redacted reasons; when nothing reads, that list is the error.
     """
+    default = f"{NAME}__{os.path.basename(os.path.abspath(root)) or 'export'}"
+    root = os.path.realpath(root)                    # one spelling of the source, whatever the caller's cwd or links
+    _read(root)                                      # a refused tree is refused before even the lock is written
+    with importers.locked(out_root):
+        documents, skipped = _read(root)             # read under the lock: a newer conversion is never undone
+        name, sid = importers.place(out_root, root, default, job_name, NAME)
+        return [_write_job(documents, out_root, name, command, root, skipped, sid)]
+
+
+def _read(root: str) -> tuple:
+    """``(documents, refused files)`` of the exports under *root*, or a SystemExit."""
     paths = find_exports(root)
     skipped = refused(root)
     if not paths:
@@ -286,5 +300,11 @@ def convert(root: str, out_root: str, job_name: str = "",
         raise SystemExit(str(exc)) from None
     if not documents:
         raise SystemExit(redact(f"the OTLP/JSON exports in {root} carry no spans"))
-    name = job_name or f"{NAME}__{os.path.basename(os.path.abspath(root)) or 'export'}"
-    return [_write_job(documents, out_root, name, command, root, skipped)]
+    return documents, skipped
+
+
+def _recorded(cfg: dict):
+    """The export a conversion from before ids was made from."""
+    datasets = cfg.get("datasets")
+    first = datasets[0] if isinstance(datasets, list) and datasets and isinstance(datasets[0], dict) else {}
+    return first.get("path") if isinstance(first.get("path"), str) else None
