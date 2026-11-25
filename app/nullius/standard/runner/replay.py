@@ -6,8 +6,8 @@ A run that saves its exchange record (``exchanges``) holds each call of its agen
   against its recorded sha256, with the job's provider, its pin and its price;
 - :func:`prepare` applies named changes (:func:`replace_text`, :func:`system_text`, :func:`tool_description`,
   :func:`tools`, :func:`drop_last`, :func:`set_field`, :func:`model`, :func:`served_by`, :func:`provider`,
-  :func:`through`), each recorded with the request's sha256 before and after, and says what would be sent and
-  what it is likely to cost; it sends nothing, so it is the dry run;
+  :func:`through`), each recorded with the request's sha256 before and after, and says what would be sent, what
+  it is likely to cost and the most it can cost (:func:`most`); it sends nothing, so it is the dry run;
 - :func:`send` posts the prepared request K times to a relay of its own (``relay.Relay``): the key from the
   environment, the model it forces, the pin, the spending cap (``ledger``), the cost and the record are the
   code a run uses. Each answer is read by a rule (:func:`first_tool_call` by default, or a command,
@@ -30,6 +30,7 @@ import datetime
 import hashlib
 import http.client
 import json
+import math
 import os
 import re
 import subprocess
@@ -617,11 +618,20 @@ class Prepared:
     key_header: str
     serving: Dict[str, List[str]]
     price: dict
-    estimate_usd: float                          # one call, as the ledger books it
+    estimate_usd: float                          # one call, as a run's ledger would book it
+    most_usd: Optional[float] = None             # what a send is booked at: the most it can cost; None, unbounded
+    most_output: Optional[int] = None            # the output tokens that bound it
+
+    def unbounded(self, change: str = "--set {}=N") -> str:
+        """Why the most a send can cost is unknown, and what bounds it: ``change``, the request's own limit set
+        (``{}`` its field), or the model's output limit in the price list."""
+        return (f"nothing bounds the length of an answer to {self.model}, so the most a send can cost is unknown: "
+                f"{change.format(LIMIT_FIELD[protocol(self.source.path)])} bounds it, or the model's output limit in the "
+                f"price list (nullius prices set {self.model} INPUT OUTPUT --max-output N)")
 
     def per_call_usd(self) -> float:
-        """One call's estimate, no upper bound: the ledger's booking and, for a request sent unchanged, at least
-        what the recorded call cost."""
+        """One call's estimate, no upper bound: as a run's ledger would book it and, for a request sent unchanged,
+        at least what the recorded call cost."""
         cost = self.source.record.get("cost_usd")
         if self.sha256 == self.source.sent_sha256 and isinstance(cost, (int, float)) and not isinstance(cost, bool):
             return max(self.estimate_usd, float(cost))
@@ -643,7 +653,38 @@ class Prepared:
                             "key_header": self.key_header, "fields": relay.request_fields(self.request)},
                 "price": self.price, "times": times, "max_usd": max_usd,
                 "estimate_usd": {"per_call": per, "all": per * times, "recorded_call": recorded_cost, "upper_bound": False},
-                "fits": None if max_usd is None else per * times <= max_usd}
+                "fits": None if max_usd is None else per * times <= max_usd,
+                "booked_usd": {"per_call": self.most_usd, "output_tokens": self.most_output}}
+
+
+LIMIT_FIELD = {"messages": "max_tokens", "chat": "max_tokens", "responses": "max_output_tokens"}
+
+
+def _whole_number(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and v > 0
+
+
+def most(req: dict, raw: bytes, row: dict, path: str, model_limit: Optional[int] = None,
+         recorded_input: Optional[int] = None) -> tuple:
+    """(the most a call can cost in USD, the output tokens that bound it), or (None, None) when nothing bounds its
+    answer. The prompt: as the ledger counts it (``ledger.bound``), or ``recorded_input`` tokens where more, at the
+    dearest input rate. The answer: the request's limit, else ``model_limit`` (the price list's), the smaller of the
+    two, once for each choice it asks for (``n``), at the output rate."""
+    named = next((req[k] for k in ledgers._LIMITS if _whole_number(req.get(k))), None)
+    limits = [x for x in (named, model_limit) if _whole_number(x)]
+    if not limits:
+        return None, None
+    tokens = min(limits) * (req["n"] if _whole_number(req.get("n")) else 1)
+    rate = max(row["input"], row.get("cache_write") or 0, row.get("cache_write_1h") or 0)
+    prompt = max(ledgers.bound(req, raw, row, path, output=False),
+                 (recorded_input if _whole_number(recorded_input) else 0) * rate / 1e6)
+    return prompt + tokens * row["output"] / 1e6, tokens
+
+
+def at_least(v: float) -> str:
+    """An amount as :func:`ledger.usd` prints it, rounded up: a cap given as printed holds it."""
+    places = ledgers._places(v)
+    return ledgers.usd(math.ceil(v * 10 ** places) / 10 ** places, places)
 
 
 def _relay_fields(req: dict, path: str) -> None:
@@ -696,8 +737,9 @@ def prepare(src: Source, changes: List[Change] = (), *, prices: Optional[Dict[st
     if problem:
         raise Refused(f"endpoint: {problem}")
     row = (prices or {}).get(name) or src.prices.get(name)
+    listed = price_list.table().get(name) or {}
     if not row:
-        row = price_list.table().get(name)
+        row = listed or None
     if not row:
         raise Refused(f"no price for the model {name!r}: a replay is capped, and sends no call it cannot price: "
                       f"--price {name}=INPUT,OUTPUT, or nullius prices set")
@@ -709,9 +751,11 @@ def prepare(src: Source, changes: List[Change] = (), *, prices: Optional[Dict[st
     raw = _dumps(req)
     usage = ((src.record.get("reply") or {}).get("usage") or {}) if isinstance(src.record.get("reply"), dict) else {}
     seen = usage.get("output") if isinstance(usage.get("output"), int) and usage.get("output") > 0 else None
+    cost, tokens = most(req, raw, row, src.path, row.get("max_output") or listed.get("max_output"), usage.get("input"))
     return Prepared(source=src, request=req, raw=raw, sha256=_sha(raw), changes=done, model=name, provider=chosen,
                     endpoint=base, key_setting=rec["key"], key_header=providers.PROTOCOLS[proto]["auth"],
-                    serving=serving, price=row, estimate_usd=ledgers.bound(req, raw, row, src.path, seen))
+                    serving=serving, price=row, estimate_usd=ledgers.bound(req, raw, row, src.path, seen),
+                    most_usd=cost, most_output=tokens)
 
 
 # -- sending -------------------------------------------------------------------------------------------------
@@ -774,9 +818,10 @@ def send(prep: Prepared, times: int, max_usd: float, out: str, *, rule: Optional
     """``prep`` sent ``times`` times under a spending cap of ``max_usd``, through a relay of its own, its answers
     read by ``rule`` (:func:`first_tool_call` by default) and counted; everything kept in the folder ``out``
     (outside the run's tree, new or empty). ``concurrency``: sends in flight at once. The key is read from
-    ``env`` (the process environment by default) by the provider's setting name. The sends stop at the first
-    one the cap refuses, or that the provider refuses for its key. Returns the document written to
-    ``replay.json``."""
+    ``env`` (the process environment by default) by the provider's setting name. Each send is booked at the most
+    it can cost (``prep.most_usd``) until its answer: one that does not fit the cap is refused unsent, and when
+    one alone does not, nothing is sent. The sends stop at the first one the cap refuses, or that the provider
+    refuses for its key. Returns the document written to ``replay.json``."""
     from nullius.standard.runner import run as runs                # its key and endpoint checks, as a run makes them
     env = os.environ if env is None else env
     if isinstance(times, bool) or not isinstance(times, int) or not 1 <= times <= MAX_TIMES:
@@ -787,6 +832,11 @@ def send(prep: Prepared, times: int, max_usd: float, out: str, *, rule: Optional
         cap = 0.0
     if not 0 < cap < float("inf"):
         raise Refused(f"max_usd {max_usd!r}: the replay's spending cap in USD, above zero")
+    if prep.most_usd is None:
+        raise Refused(prep.unbounded())
+    if prep.most_usd > cap:
+        raise Refused(f"one send may cost up to {at_least(prep.most_usd)} USD (its prompt and {prep.most_output} output "
+                      f"tokens), past the cap of {ledgers.usd(cap)} USD: --max-usd {at_least(prep.most_usd)} or more lets one go out")
     concurrency = max(1, min(int(concurrency or 1), times))
     rule = rule or first_tool_call
     try:
@@ -806,7 +856,8 @@ def send(prep: Prepared, times: int, max_usd: float, out: str, *, rule: Optional
     _write_json(os.path.join(out, "replay.json"), doc)  # the rule is kept before the first send
     led = ledgers.Ledger.create(os.path.join(out, "ledger", "ledger.json"), cap)
     rl = relay.Relay(prep.endpoint, key, os.path.join(out, "relay"), prices={prep.model: prep.price}, model=prep.model,
-                     key_header=prep.key_header, ledger=led.path, serving=prep.serving or None, exchanges="whole").start()
+                     key_header=prep.key_header, ledger=led.path, serving=prep.serving or None, exchanges="whole",
+                     booking=lambda raw: prep.most_usd if _sha(raw) == prep.sha256 else None).start()
     width = max(3, len(str(times)))
     stop, why, lock = threading.Event(), [], threading.Lock()
 

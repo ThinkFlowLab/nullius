@@ -240,18 +240,21 @@ class Studies(StudyCase):
         self.assertEqual(len(Model.frozen), 6)
 
     def test_one_cap_for_the_whole_study_counted_from_its_ledger_when_it_goes_on(self):
-        """The cap holds over every target and arm, and over a start that goes on: the first send that does not
-        fit is refused and nothing after it is sent."""
-        Upstream.cost = 0.1
-        doc = self.run_study(max_usd=0.25)
-        self.assertEqual((len(Upstream.seen), doc["state"], doc["left"]), (3, "stopped", 9))
+        """The cap holds over every target and arm and over a start that goes on, each send booked at the most it
+        can cost: the first that does not fit is refused, nothing after it is sent. Started again, the study says
+        the cap its next send needs; another cap is refused."""
+        Upstream.cost = 0.1                      # 1,000 output tokens at most, at 100 USD a million: 0.1 and the prompt
+        prices = {"m": {"input": 1.0, "output": 100.0}}
+        doc = self.run_study(max_usd=0.25, prices=prices)
+        self.assertEqual((len(Upstream.seen), doc["state"], doc["left"]), (2, "stopped", 10))
         self.assertIn("refused (cap)", doc["starts"][0]["stopped"])
-        self.assertAlmostEqual(doc["spend"]["spent_usd"], 0.3)
-        doc = self.run_study(max_usd=0.25)
-        self.assertEqual((len(Upstream.seen), doc["starts"][1]["sent"], doc["starts"][1]["refused"]), (3, 0, 1))
-        self.assertAlmostEqual(doc["spend"]["spent_usd"], 0.3)
+        self.assertAlmostEqual(doc["spend"]["spent_usd"], 0.2)
+        with self.assertRaisesRegex(study.Refused, r"the next send, t2 recorded, may cost up to 0\.10\d* USD, and 0\.05 USD "
+                                                   r"of the cap of 0\.25 is left: --max-usd 0\.30\d* or more lets it go out"):
+            self.run_study(max_usd=0.25, prices=prices)
+        self.assertEqual(len(Upstream.seen), 2)
         with self.assertRaisesRegex(study.Refused, "has a cap of 0.25 USD"):
-            self.run_study(max_usd=0.5)
+            self.run_study(max_usd=0.5, prices=prices)
 
     def test_a_stopped_study_goes_on_and_no_call_is_sent_twice(self):
         """Stopped after 5 sends, started again: the 7 not answered are sent, each slot once in all."""

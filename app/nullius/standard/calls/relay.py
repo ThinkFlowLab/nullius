@@ -65,7 +65,7 @@ import threading
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from nullius.redact import redact
 from nullius.standard.calls import exchanges as exchange_store, ledger as ledgers
@@ -702,7 +702,8 @@ class Relay:
                  model: Optional[str] = None, side_models=(), key_header: str = "authorization", fields: bool = False,
                  ledger: Optional[str] = None, unit_caps: bool = True, serving: Optional[Dict[str, List[str]]] = None,
                  facts: Optional[bool] = None, timeout: float = TIMEOUT, max_calls: Optional[int] = None,
-                 exchanges: str = "off", exchanges_max_mb: int = exchange_store.MAX_MB):
+                 exchanges: str = "off", exchanges_max_mb: int = exchange_store.MAX_MB,
+                 booking: Optional[Callable[[bytes], Optional[float]]] = None):
         """``base``: the provider's endpoint (``https://api.openai.com/v1``).
         ``model``: when given, every call is sent as this model, whatever the
         caller named - the run's model is the recipe's, not the agent's. A
@@ -729,8 +730,12 @@ class Relay:
         ``exchanges``: ``whole`` or ``text`` keeps each call of an agent's
         route whole in ``<record_dir>/exchanges`` (``exchanges``), bounded at
         ``exchanges_max_mb``, and numbers its calls in the record (``n``);
-        ``off``, the default, keeps the call record alone."""
+        ``off``, the default, keeps the call record alone. ``booking``: what a
+        capped call is booked at, by the bytes it sends, in place of the
+        ledger's estimate (:func:`ledgers.bound`): the most it can cost, held
+        whole until its reply; None, a call it cannot bound, refused unsent."""
         self.fields = fields
+        self.booking = booking
         self.max_calls = max_calls
         if exchanges not in exchange_store.MODES:
             raise ValueError(f"exchanges {exchanges!r}: one of {', '.join(exchange_store.MODES)}")
@@ -1051,11 +1056,14 @@ class Relay:
         row = self.prices.get(req.get("model"))
         if not row:
             return None, None, f"no price for the model {req.get('model')!r}: a run with a spending cap sends no call it cannot price", "price"
+        most = self.booking(raw) if self.booking is not None else None
+        if self.booking is not None and most is None:
+            return None, None, "nothing bounds what this call can cost: a capped call is booked at its most", "price"
         try:
             deadline = time.time() + ledgers.WAIT
-            least = ledgers.bound(req, raw, row, rest, output=False)
+            least = None if most is not None else ledgers.bound(req, raw, row, rest, output=False)
             while True:
-                booking, seen = self.ledger.reserve(lambda usual: ledgers.bound(req, raw, row, rest, usual),
+                booking, seen = self.ledger.reserve(most if most is not None else lambda usual: ledgers.bound(req, raw, row, rest, usual),
                                                     ledgers.unit_of(tag) if self.unit_caps and tag else None, req.get("model"),
                                                     wait=time.time() < deadline, least=least)
                 if booking or seen["by"] != "wait":

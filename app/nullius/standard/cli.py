@@ -797,7 +797,8 @@ examples:
 exit codes:
   0  done: every send made under the cap, or the dry run or the list printed
   1  unexpected error (a traceback: report it)
-  2  usage, or refused: a change that does not apply, a stored conversation, no price, no key, a folder in use
+  2  usage, or refused: a change that does not apply, a stored conversation, no price, no key, a folder in use,
+     a send whose most cost has no bound or passes the cap
   3  input not found: no such job, trial, exchange record or call
   4  the operation could not be completed: a request that is not whole in the record, or no send answered
 With --json, stdout is exactly one JSON document; everything else goes to stderr.
@@ -871,6 +872,9 @@ def _said_replay(doc: dict, dry: bool) -> None:
     print(f"  estimate {usd(e['per_call'])} USD a call, {usd(e['all'])} USD for {doc['times']} (no upper bound), cap {usd(doc['max_usd'])} USD"
           + ("" if doc.get("fits") is None else ": fits" if doc["fits"] else ": over the cap, the last sends would be refused")
           + (f"; the recorded call cost {usd(e['recorded_call'])} USD" if isinstance(e.get("recorded_call"), (int, float)) else ""))
+    b = doc["booked_usd"]
+    print(f"  booked {usd(b['per_call'])} USD a send until its answer, the most it can cost ({b['output_tokens']} output tokens)"
+          if b["per_call"] is not None else "  no bound on an answer's length: a send is refused until one is set")
     if dry:
         return
     n, sp = doc["sends"], doc["spend"]
@@ -948,7 +952,8 @@ examples:
 exit codes:
   0  done: every send answered, or stopped as --stop-after asked, or the dry run printed
   1  unexpected error (a traceback: report it)
-  2  usage, or refused: a change that does not apply, a plan unlike the study's, no price, no key, a folder in use
+  2  usage, or refused: a change that does not apply, a plan unlike the study's, no price, no key, a folder in use,
+     a send whose most cost has no bound or does not fit what is left
   3  input not found: no such job, trial, exchange record, call, targets file or study
   4  the operation could not be completed: a request not whole in the record, or the study stopped before its end
 With --json, stdout is exactly one JSON document; everything else goes to stderr.
@@ -1010,7 +1015,9 @@ def _said_study(doc: dict) -> None:
             cost = t.get("recorded_cost_usd")
             print(f"  {t['target']} {t['trial']} call {t['call']}: {t['bytes']} bytes"
                   + (f", the recorded call cost {usd(cost)} USD" if isinstance(cost, (int, float)) else "") + "; "
-                  + ", ".join(f"{a['arm']} {usd(a['estimate_usd'])} USD a call" + ("" if a["unchanged"] else " (changed)") for a in t["arms"]))
+                  + ", ".join(f"{a['arm']} {usd(a['estimate_usd'])} USD a call" + ("" if a["unchanged"] else " (changed)")
+                              + (f", booked at {usd(a['booked_usd'])}" if a["booked_usd"] is not None else ", no bound on its answer")
+                              for a in t["arms"]))
         print(f"  estimate {usd(doc['estimate_usd'])} USD for {s['to_send']} (an estimate, no upper bound), cap {usd(doc['max_usd'])} USD, "
               f"spent {usd(doc['spent_usd'])}" + (": fits" if doc["fits"] else ": over the cap, the last sends would be refused"))
         return
@@ -1250,7 +1257,8 @@ def main(argv=None):
                     help="list the trial's recorded calls instead: number, status, size, and whether the request is whole")
     rp.add_argument("--call", type=int, metavar="N", help="the call to send again, as the call record numbers it (n)")
     rp.add_argument("--times", type=int, metavar="K", help="how many times to send it")
-    rp.add_argument("--max-usd", type=float, metavar="USD", help="the replay's spending cap: no send goes out past it")
+    rp.add_argument("--max-usd", type=float, metavar="USD",
+                    help="the replay's spending cap: each send is booked at the most it can cost, and none ends past it")
     rp.add_argument("--through", metavar="CMD",
                     help="a command that reads the request's JSON on stdin and prints the request to send (run without a key)")
     rp.add_argument("--system", metavar="FILE", help="the system text replaced by this file's text")
@@ -1273,7 +1281,7 @@ def main(argv=None):
                     help="the reading rule: a command that reads one reply's body on stdin and prints its label "
                          "(default: the first tool call's name and arguments; run without a key)")
     rp.add_argument("-j", "--concurrency", type=int, default=1, metavar="N", help="sends in flight at once (default 1)")
-    rp.add_argument("--dry-run", action="store_true", help="print what would be sent and its estimated cost; send nothing")
+    rp.add_argument("--dry-run", action="store_true", help="print what would be sent, its estimated cost and its booking; send nothing")
     rp.add_argument("--out", metavar="DIR",
                     help="the replay's folder, new or empty, outside the job (default replays/<job>/<trial>/call-<N>__<time>)")
     rp.add_argument("--json", action="store_true", help="one JSON document on stdout")
@@ -1292,7 +1300,8 @@ def main(argv=None):
     st.add_argument("--arm", action="append", metavar="NAME=CHANGES",
                     help="an arm after the call as recorded: its changes as a JSON list of [NAME, ARG...], or @FILE (repeatable)")
     st.add_argument("--times", type=int, metavar="K", help="sends of each target under each arm")
-    st.add_argument("--max-usd", type=float, metavar="USD", help="the study's spending cap, over all its starts: no send goes out past it")
+    st.add_argument("--max-usd", type=float, metavar="USD",
+                    help="the study's spending cap, over all its starts, each send booked at the most it can cost")
     st.add_argument("--price", action="append", metavar="MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]",
                     help="a price in USD per million tokens, over the job's and your price list (repeatable)")
     st.add_argument("--read", metavar="CMD",

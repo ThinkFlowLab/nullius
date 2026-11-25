@@ -52,14 +52,15 @@ def reply_of(x) -> dict:
             "content": [{"type": "thinking", "thinking": "look", "signature": "s"},
                         {"type": "tool_use", "id": "t", "name": "click", "input": {"x": x}}] if x is not None else
                        [{"type": "text", "text": "done"}],
-            "usage": {"input_tokens": 50, "output_tokens": 10, "cost": Upstream.cost}}
+            "usage": {"input_tokens": 50, "output_tokens": Upstream.output, "cost": Upstream.cost}}
 
 
 class Upstream(BaseHTTPRequestHandler):
     """A model: each request kept as it arrived; the answers are ``plan``'s x in turn (None: no tool call)."""
     seen = []                                    # (path, headers, body)
     plan = [3]
-    cost = 0.001
+    cost = 0.001                                 # the cost the reply reports; None, none: the relay prices its tokens
+    output = 10
     status = 200
 
     def log_message(self, *a):
@@ -106,7 +107,7 @@ class ReplayCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="nullius-replay-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        Upstream.seen, Upstream.plan, Upstream.cost, Upstream.status = [], [3], 0.001, 200
+        Upstream.seen, Upstream.plan, Upstream.cost, Upstream.output, Upstream.status = [], [3], 0.001, 10, 200
         self.job = os.path.join(self.tmp, "jobs", "2026-11-18__05-58-04__bench__agent")
         self.env = {"OPENROUTER_API_KEY": KEY, "PATH": os.environ.get("PATH", "")}
         self.record_trial("task-a__u0001", calls=3)
@@ -276,7 +277,7 @@ class Changes(ReplayCase):
 
     def test_stream_usage_is_in_the_prepared_bytes_and_change_hash(self):
         self.record_trial("chat__u0002", 1, path="/chat/completions", req={
-            "model": "m", "messages": [{"role": "user", "content": "Open settings."}]})
+            "model": "m", "max_tokens": 100, "messages": [{"role": "user", "content": "Open settings."}]})
         prep = self.prepared(replay.set_field("stream", True), trial="chat__u0002", call=1)
         self.assertEqual(prep.request["stream_options"], {"include_usage": True})
         self.assertChain(prep, ["set_field"])
@@ -461,14 +462,16 @@ class Sends(ReplayCase):
         self.assertEqual(sorted(p.name for p in out.iterdir()), ["answers.jsonl", "ledger", "relay", "replay.json", "request.json"])
 
     def test_the_cap_stops_the_sends(self):
-        """The cap stops the sends: the first that does not fit is refused and nothing after it is sent."""
-        Upstream.cost = 0.1
-        doc = self.send(self.prepared(), times=5, max_usd=0.25)
-        self.assertEqual(doc["sends"], {"sent": 3, "answered": 3, "failed": 0, "refused": 1, "not_sent": 1})
-        self.assertEqual(len(Upstream.seen), 3)
+        """Each send is booked at the most it can cost, three in flight at once: the first that does not fit is
+        refused, nothing after it is sent, and the spend stays under the cap."""
+        Upstream.cost = 0.1                      # 1,000 output tokens at most, at 100 USD a million: 0.1 and the prompt
+        prep = self.prepared(prices={"m": {"input": 1.0, "output": 100.0}})
+        self.assertGreater(prep.most_usd, 0.1)
+        doc = self.send(prep, times=5, max_usd=0.25, concurrency=3)
+        self.assertEqual((doc["sends"]["sent"], doc["sends"]["answered"], len(Upstream.seen)), (2, 2, 2))
         self.assertEqual(doc["state"], "stopped")
         self.assertIn("refused (cap)", doc["stopped"])
-        self.assertAlmostEqual(doc["spend"]["spent_usd"], 0.3)
+        self.assertAlmostEqual(doc["spend"]["spent_usd"], 0.2)
         self.assertEqual(doc["spend"]["max_usd"], 0.25)
 
     def test_a_refused_key_stops_the_sends_and_a_failure_is_its_error(self):
@@ -528,10 +531,13 @@ class CommandLine(ReplayCase):
                          (8, doc["source"]["sent_sha256"], "m", ["prov-a"]))
         self.assertAlmostEqual(doc["estimate_usd"]["all"], 8 * doc["estimate_usd"]["per_call"])
         self.assertGreater(doc["estimate_usd"]["per_call"], 0)
+        self.assertEqual(doc["booked_usd"]["output_tokens"], 1000)             # the request's max_tokens, at 2 USD a million
+        self.assertGreater(doc["booked_usd"]["per_call"], 1000 * 2.0 / 1e6)
         self.assertEqual(Upstream.seen, [])
         self.assertEqual(tree(self.tmp), before)
         code, out, _ = self.main(self.job, "task-a__u0001", "--call", 2, "--times", 8, "--max-usd", 0.5, "--dry-run")
         self.assertIn("dry run, nothing sent: call 2 of task-a__u0001", out)
+        self.assertRegex(out, r"booked [0-9.]+ USD a send until its answer, the most it can cost \(1000 output tokens\)")
         self.assertIn("(the recorded one)", out)
 
     def test_a_send_from_the_command_line_and_the_list(self):
@@ -547,6 +553,30 @@ class CommandLine(ReplayCase):
         self.assertEqual((code, [c["n"] for c in json.loads(out)]), (0, [1, 2, 3]))
         code, out, _ = self.main(self.job, "task-a__u0001", "--list")
         self.assertRegex(out, r"(?m)^   2     200 +\d+  yes    m$")
+
+    def test_a_send_whose_most_cost_passes_the_cap_is_not_made(self):
+        """``--times 1 --max-usd 0.001`` with an answer of 5,000 tokens: refused before any send, with the cap one
+        send needs; an answer with no bound is refused with what bounds it."""
+        Upstream.cost, Upstream.output = None, 5000
+        self.record_trial("chat__u0002", 1, path="/chat/completions", req={
+            "model": "m", "max_tokens": 8192, "messages": [{"role": "user", "content": "Natalia sold 48 clips."}]})
+        self.record_trial("open__u0003", 1, path="/chat/completions", req={
+            "model": "m", "messages": [{"role": "user", "content": "Natalia sold 48 clips."}]})
+        Upstream.seen = []
+        out = os.path.join(self.tmp, "r1")
+        env = {"MODEL_API_URL": self.base, "MODEL_API_KEY": KEY}
+        for trial, said in (("chat__u0002", r"refused: one send may cost up to (0\.0165) USD \(its prompt and 8192 output "
+                                             r"tokens\), past the cap of 0\.001 USD: --max-usd \1 or more lets one go out"),
+                            ("open__u0003", r"refused: nothing bounds the length of an answer to m, .*--set max_tokens=N bounds it")):
+            with self.subTest(trial=trial):
+                code, got, err = self.main(self.job, trial, "--call", 1, "--times", 1, "--max-usd", 0.001,
+                                                  "--provider", "custom", "--out", out, env=env)
+                self.assertEqual((code, got, Upstream.seen), (2, "", []))
+                self.assertRegex(err, "^" + said)
+                self.assertEqual(len(err.strip().splitlines()), 1)
+                self.assertFalse(os.path.exists(out))
+        doc = self.send(self.prepared(trial="chat__u0002", call=1), times=1, max_usd=0.0165)
+        self.assertEqual((doc["sends"]["answered"], doc["spend"]["spent_usd"]), (1, (50 + 5000 * 2.0) / 1e6))
 
     def test_help_and_refusals_follow_the_command_line_contract(self):
         """Help and refusals: usage, examples and exit codes; a refusal is one line on stderr, stdout left empty."""

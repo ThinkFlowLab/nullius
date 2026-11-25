@@ -7,9 +7,9 @@ one spending cap, read by one rule written down before the first send, and compa
   recorded, each other a named list of changes (``replay.replace_text`` and the rest; :func:`changes_of` reads
   them from JSON). It writes the plan (the targets, the arms, the requests' sha256 and models, K, the rule, the
   yes or no reading, the two arms compared) to ``study.json`` before the first send, then sends what is not
-  answered yet through relays of its own, booked in one ledger for the whole study. Started again on the same
-  folder it goes on: only what was not answered is sent, under the same cap counted from the ledger; a plan
-  that differs from the kept one is refused. ``dry_run`` sends nothing and writes nothing.
+  answered yet through relays of its own, booked in one ledger for the whole study, each send at the most it can
+  cost. Started again on the same folder it goes on: only what was not answered is sent, under the same cap counted
+  from the ledger; a plan that differs from the kept one is refused. ``dry_run`` sends nothing and writes nothing.
 - The result: for each target and arm the count of each answer; the table of targets by arms (the answers
   read yes of those answered); between two arms the targets whose share of yes went up, went down or tied,
   and an exact two-sided sign test (:func:`sign_test`).
@@ -328,9 +328,11 @@ def study(out: str, targets: Sequence[Target], arms: Sequence[Arm] = (), times: 
     (``replay.first_tool_call`` by default); ``yes``, a regular expression a label must match to read yes (by
     default: the label is the recorded answer's); ``compare``, the two arms of the sign test (the first two by
     default). ``stop_after``: at most this many sends in this start. ``dry_run``: what would be sent and its
-    estimate, nothing sent or written. On a folder that holds the study already, it goes on: only what was not
-    answered is sent; another plan or cap is refused. Returns the document written to ``study.json``, with
-    ``out``; the dry run, its own. ``same_rule`` confirms an uncheckable function is unchanged on a restart."""
+    estimate, nothing sent or written. Each send is booked at the most it can cost (``replay.most``): when the next
+    one does not fit what is left, or one has no bound, nothing is sent. On a folder that holds the study already,
+    it goes on: only what was not answered is sent; another plan or cap is refused. Returns the document written to
+    ``study.json``, with ``out``; the dry run, its own. ``same_rule`` confirms an uncheckable function is unchanged
+    on a restart."""
     from nullius.standard.runner import run as runs                # its key and endpoint checks, as a run makes them
     env = os.environ if env is None else env
     targets, arms = list(targets), [Arm(RECORDED, [])] + list(arms)
@@ -399,12 +401,21 @@ def study(out: str, targets: Sequence[Target], arms: Sequence[Arm] = (), times: 
                                  recorded_cost_usd=row[0].source.record.get("cost_usd"),
                                  arms=[{"arm": a.name, "sha256": p.sha256, "bytes": len(p.raw), "unchanged": p.sha256 == p.source.sent_sha256,
                                         "model": p.model, "provider": p.provider, "served_by": p.serving.get(p.model),
-                                        "estimate_usd": p.per_call_usd()} for a, p in zip(arms, row)])
+                                        "estimate_usd": p.per_call_usd(), "booked_usd": p.most_usd} for a, p in zip(arms, row)])
                             for i, row in enumerate(preps)],
                 "arms": plan["arms"], "times": times, "rule": plan["rule"], "yes": plan["yes"], "compare": compare,
                 "sends": {"all": len(targets) * len(arms) * times, "answered": len(answered), "to_send": len(todo)},
                 "estimate_usd": estimate, "upper_bound": False, "max_usd": cap, "spent_usd": (spent or {}).get("spent_usd", 0.0),
                 "fits": estimate <= cap - (spent or {}).get("spent_usd", 0.0) - (spent or {}).get("unsettled_usd", 0.0)}
+    for i, j, _ in todo:
+        if preps[i - 1][j].most_usd is None:
+            raise Refused(f"t{i} {names[j]}: " + preps[i - 1][j].unbounded('["set_field", "{}", N] in an arm'))
+    used = sum((spent or {}).get(k, 0.0) for k in ("spent_usd", "unsettled_usd", "held_usd"))
+    if todo and preps[todo[0][0] - 1][todo[0][1]].most_usd > cap - used:
+        i, j, _ = todo[0]
+        m = preps[i - 1][j].most_usd
+        raise Refused(f"the next send, t{i} {names[j]}, may cost up to {rp.at_least(m)} USD, and {ledgers.usd(max(0.0, cap - used))} "
+                      f"USD of the cap of {ledgers.usd(cap)} is left: --max-usd {rp.at_least(used + m)} or more lets it go out")
     keys = {}
     for row in preps:
         for p in row:
@@ -457,15 +468,17 @@ def _send(out, doc, preps, names, todo, keys, led, times, rule, concurrency, sto
     doc["state"] = "sending"
     _write(out, doc)
     groups: Dict[tuple, relay.Relay] = {}
-    group_of = {}
+    group_of, most = {}, {}                      # most: by group, what each request it sends is booked at
     for i, j, _ in todo:
         p = preps[i - 1][j]
         g = (p.provider, p.endpoint, p.key_header, p.model, tuple(p.serving.get(p.model) or ()))
         if g not in groups:
             name = f"s{start}-g{len(groups) + 1}"
+            most[g] = {}
             groups[g] = relay.Relay(p.endpoint, keys[p.provider], os.path.join(out, "relay", name), prices={p.model: p.price},
                                     model=p.model, key_header=p.key_header, ledger=led.path, serving=p.serving or None,
-                                    exchanges="whole")
+                                    exchanges="whole", booking=lambda raw, own=most[g]: own.get(rp._sha(raw)))
+        most[g][p.sha256] = p.most_usd
         group_of[(i, j)] = groups[g]
     wi, wk = len(str(len(preps))), len(str(times))
     stop, why, lock, begun = threading.Event(), [], threading.Lock(), [0]
