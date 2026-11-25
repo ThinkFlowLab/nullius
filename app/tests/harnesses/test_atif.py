@@ -147,6 +147,18 @@ class Conversion(unittest.TestCase):
                         for t in job.trials}
                 self.assertEqual(held["a__b"], "s-first")
 
+    def test_a_refresh_replaces_the_config_whole(self):
+        src = tempfile.mkdtemp()
+        write_doc(src, "a.json", minimal())
+        job_dir, _ = self.convert(src)
+        with open(os.path.join(job_dir, "config.json"), encoding="utf-8") as held:    # a reader mid-refresh
+            before = held.read()
+            write_doc(src, "b.json", minimal())
+            self.convert(src)
+            held.seek(0)
+            self.assertEqual(held.read(), before)
+        self.assertIn("atif/b", Path(job_dir, "config.json").read_text())
+
     def test_a_folder_an_older_conversion_wrote_two_documents_into_is_split(self):
         src = tempfile.mkdtemp()
         write_doc(src, "a__b.json", minimal(session_id="s-flat"))

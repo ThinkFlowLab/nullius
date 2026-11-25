@@ -48,6 +48,7 @@ import tempfile
 from collections import Counter
 from types import ModuleType
 
+from nullius import ondisk
 from nullius.redact import redact
 
 # A module must expose all three to count. A half-written one is skipped
@@ -129,7 +130,8 @@ def problem(path: str) -> str | None:
 
 def write_if_changed(path: str, data: bytes) -> bool:
     """Write *data* to *path* unless the file already holds it; True when
-    written. A conversion runs at each open of a workspace; an unchanged one
+    written, whole, renamed over the old file: a refresh cut short leaves the
+    old one. A conversion runs at each open of a workspace; an unchanged one
     keeps its mtimes, and with them the parse cache that keys on them."""
     try:
         with open(path, "rb") as fh:
@@ -137,8 +139,7 @@ def write_if_changed(path: str, data: bytes) -> bool:
                 return False
     except OSError:
         pass
-    with open(path, "wb") as fh:
-        fh.write(data)
+    ondisk.write_whole(path, data)
     return True
 
 
