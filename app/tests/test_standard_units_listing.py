@@ -389,6 +389,16 @@ class Licences(Scratch):
         self.assertEqual((code, out), (2, ""))
         self.assertIn("ended without replying (\ufffd failed for [REDACTED])\n", err)
 
+    def test_a_secret_is_redacted_as_a_json_string_or_a_url_holds_it(self):
+        self.b = gated(self.b)
+        Path(self.b["_here"], "driver.py").write_text("import json, os, sys, urllib.parse as u\nsys.stdin.readline()\n"
+            "t = os.environ['HF_TOKEN']\n"
+            "print(json.dumps([t]), json.dumps([t], ensure_ascii=False), u.quote(t, safe=''), u.quote_plus(t), file=sys.stderr)\n")
+        with mock.patch.dict(os.environ, {"HF_TOKEN": 'made/up "key" \u00e9+1'}):
+            code, out, err = self.cli("units", "described", "--dataset", "all")
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn('(["[REDACTED]"] ["[REDACTED]"] [REDACTED] [REDACTED])\n', err)
+
     def given(self):
         path = Path(self.b["_here"], "given")
         return path.read_text() if path.exists() else None

@@ -38,6 +38,7 @@ import subprocess
 import tempfile
 import threading
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import quote, quote_plus
 
 from nullius import ondisk, paths
 from nullius.redact import redact
@@ -190,7 +191,10 @@ class _ListingProc(jsonl.Proc):
 
     def __init__(self, cmd, cwd, env, log, credentials):
         super().__init__(cmd, cwd, env, log)
-        self.secrets = sorted(set(credentials.values()) - {""}, key=len, reverse=True)
+        # each value as it is, as a JSON string holds it and as a URL holds it
+        forms = {f for v in credentials.values() if v for f in (v, json.dumps(v)[1:-1],
+                 json.dumps(v, ensure_ascii=False)[1:-1], quote(v, safe=""), quote_plus(v))}
+        self.secrets = sorted(forms, key=len, reverse=True)
 
     def _clean(self, value):
         if isinstance(value, dict):
