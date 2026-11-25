@@ -35,12 +35,14 @@ def project(jobs, agents, benchmarks, settings, benchmark, version, *, all_score
 
 def row_identity(job):
     identity = job.identity
+    # a run names its agent as the user chose it: "codex", or "codex@2.2.2" for a version of it
+    agent, version = definitions.split(identity.get("agent", job.agent_name))
     limits = {k: v for k, v in identity.get("limits", {}).items()
               if k not in ("repeat", "n_tasks", "task_names", "sample", "seed")}
-    return {"agent": identity.get("agent", job.agent_name), "version": identity.get("agent_version", job.agent_version),
+    return {"agent": agent, "version": version or identity.get("agent_version", job.agent_version),
             "model": identity.get("model", job.model_name), "effort": job.reasoning_effort,
             "provider": identity.get("provider"), "options": identity.get("agent_options"),
-            "backend": job.launch.get("environment"), "limits": limits}
+            "backend": identity.get("backend") or job.launch.get("environment"), "limits": limits}
 
 
 def key_for(identity):

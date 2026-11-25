@@ -20,7 +20,7 @@ def main(argv=None):
     if any(not os.path.isdir(root) for root in args.roots):
         print("A result root does not exist or is not a directory.", file=sys.stderr)
         return 3
-    result = service.document(parse.load_all(args.roots), workspace_open=bool(args.roots), all_scores=args.all_scores, deferred=True)
+    result = service.document(service.qualified(parse.load_all(args.roots)), workspace_open=bool(args.roots), all_scores=args.all_scores, deferred=True)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
     else:

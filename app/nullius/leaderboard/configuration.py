@@ -22,7 +22,6 @@ DEFAULT_ENTRIES = {
     "Travel": [("tau3-bench", "airline", "Score")],
     "Shopping": [("tau3-bench", "retail", "Score")],
     "Money": [("tau3-bench", "banking_knowledge", "Score")],
-    "Home": [("tau3-bench", "telecom", "Score"), ("osworld1", "os", "Score")],
     "Work": [("osworld1", "office", "Score"), ("swe-bench-verified", "", "Score"),
              ("terminal-bench", "", "Score"), ("open-telco", "teleqna-lite", "Score")],
 }

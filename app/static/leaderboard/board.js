@@ -48,7 +48,7 @@
     if (!rank) return document.createTextNode('');
     if (rank > 4) return document.createTextNode(String(rank));
     const names=['gold','silver','bronze','chocolate'];
-    const span=element('span',null,{class:`lb-medal lb-medal-${rank}`,'aria-label':`Rank ${rank}, ${names[rank-1]}`});
+    const span=element('span',null,{class:`lb-medal lb-medal-${rank}`,role:'img','aria-label':`Rank ${rank}, ${names[rank-1]}`});
     const icon=svg('svg',{'aria-hidden':'true',viewBox:'0 0 24 24'});icon.append(svg('use',{href:rank===4?'#i-medal-bitten':'#i-medal'}));span.append(icon,element('span',rank));return span;
   }
   function updateTable() {

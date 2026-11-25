@@ -126,7 +126,9 @@ class Scatter(unittest.TestCase):
             labels.append((left, t.y-c._TAG_H+3, left+width, t.y+3+15*(len(t.lines)-1)))
         self.assertEqual(len(labels), 4)
         for i, box in enumerate(tiles + labels):
-            self.assertFalse(any(c._overlaps(box, other) for other in (tiles+labels)[i+1:]))
+            for other in (tiles + labels)[i+1:]:    # measured here, not by the placement's own predicate
+                wide, high = (min(box[k+2], other[k+2]) - max(box[k], other[k]) for k in (0, 1))
+                self.assertFalse(wide > 0 and high > 0, (box, other))
 
     def test_tags_stay_inside_the_plot_and_clear_of_each_other(self):
         values = [(0.40 + k * 0.002, 1 + k * 0.01) for k in range(7)]           # a tight cluster

@@ -187,6 +187,44 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertEqual(configuration.load(configuration.location(), service.catalogue()[1])[0]['axes']['Retrieval']['entries'][0]['weight'], 6)
         self.assertFalse(self.errors)
 
+    def test_medals_for_the_first_four_ranks_then_plain_numbers(self):
+        settings, _ = configuration.load(configuration.location(), service.catalogue()[1])
+        rows = service.document(self.jobs)["rows"]
+        scores = (90, 90, 80, 70, 60, 50)                # a tie for 1st, then 3, 4, 5, 6
+        settings["custom"] = [{"id": "c", "name": "C", "scores": {r["key"]: v for r, v in zip([r for r in rows if not r["has_runs"]], scores)}}]
+        for axis in settings["axes"].values():
+            axis["entries"] = []
+        settings["axes"]["Personalization"]["entries"] = [{"custom": "c", "weight": 1}]
+        configuration.save(configuration.location(), settings, service.catalogue()[1])
+        self.open('/leaderboard')
+        self.choose('#lb-mode', 1)
+        ranked = self.page.locator('tbody tr[data-sort-group="0"]')
+        expect(ranked).to_have_count(6)
+        cells = ranked.locator('[data-col="rank"]')
+        self.assertEqual([t.strip() for t in cells.all_inner_texts()], ["1", "1", "3", "4", "5", "6"])
+        medals = cells.locator('.lb-medal')
+        self.assertEqual(medals.evaluate_all("e=>e.map(m=>m.getAttribute('aria-label'))"),
+                         ["Rank 1, gold", "Rank 1, gold", "Rank 3, bronze", "Rank 4, chocolate"])
+        self.assertEqual(self.page.get_by_role('img', name='Rank 4, chocolate').count(), 1)
+        self.assertEqual(medals.locator('use').evaluate_all("e=>e.map(u=>u.getAttribute('href'))"), ["#i-medal"] * 3 + ["#i-medal-bitten"])
+        self.assertTrue(self.page.evaluate("['i-medal','i-medal-bitten'].every(id=>document.getElementById(id))"))
+        names = ('gold', 'silver', 'bronze', 'chocolate')
+        tokens = {}
+        for theme in ('dark', 'light'):
+            self.page.evaluate("t=>document.documentElement.dataset.theme=t", theme)
+            tokens[theme] = self.page.evaluate("n=>n.map(k=>getComputedStyle(document.documentElement).getPropertyValue('--lb-medal-'+k).trim())", names)
+            self.assertEqual(len(set(filter(None, tokens[theme]))), 4)
+            gold, bronze, chocolate = (medals.nth(i).evaluate("e=>getComputedStyle(e).color") for i in (0, 2, 3))
+            self.assertEqual(len({gold, bronze, chocolate}), 3)
+        self.assertNotEqual(tokens['dark'], tokens['light'])
+        swings = "e=>getComputedStyle(e).animationName"
+        self.assertEqual(medals.first.evaluate(swings), 'none')
+        ranked.first.locator('[data-name]').hover()
+        self.assertEqual(medals.first.evaluate(swings), 'lb-swing')
+        self.page.emulate_media(reduced_motion='reduce')
+        self.assertEqual(medals.first.evaluate(swings), 'none')
+        self.assertFalse(self.errors)
+
 
 if __name__ == '__main__':
     unittest.main()

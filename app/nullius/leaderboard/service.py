@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict
+import os
+from collections import Counter
+from dataclasses import asdict, replace
 from urllib.parse import quote
 
 from nullius.standard.contract import definitions
@@ -21,6 +23,14 @@ def revision():
     except FileNotFoundError:
         raw = b""
     return hashlib.sha256(raw).hexdigest()
+
+
+def qualified(jobs):
+    """The jobs of several roots, those that share a name told apart by the folder that holds each."""
+    names = Counter(j.job_id for j in jobs)
+    def under(job, name):
+        return os.path.join(os.path.dirname(os.path.abspath(job.dir)), name) if names[name] > 1 else name
+    return [replace(j, job_id=under(j, j.job_id), merged_from=[under(j, s) for s in j.merged_from]) for j in jobs]
 
 
 def options(benchmarks):

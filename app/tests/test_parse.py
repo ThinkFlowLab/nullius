@@ -754,7 +754,7 @@ FACTS = dict(model="m-1", provider="openrouter", concurrency=3, bench_options={"
              retries=2, timeouts={"agent": 600.0}, max_turns=30, max_calls=100, served_by=PIN)
 # what the reader gives of a job written with FACTS and no cap
 IDENTITY = {"benchmark": "fakebench", "benchmark_version": "2", "benchmark_options": {"temperature": "0.2"},
-            "agent": "fake@1.2", "agent_version": "1.2",
+            "agent": "fake@1.2", "agent_version": "1.2", "backend": "local",
             "agent_options": {"reasoning_effort": "high", "max_tokens": 4096, "api_key": "[REDACTED]", "note": "from [REDACTED]"},
             "model": "m-1", "provider": "openrouter", "served_by": PIN,
             "limits": {"timeouts": {"agent": 600.0}, "max_turns": 30, "max_calls": 100, "retries": 2, "concurrency": 3}}
@@ -848,11 +848,11 @@ class RunIdentity(unittest.TestCase):
         _write_json(os.path.join(d, "result.json"), {"n_total_trials": 1, "stats": {}})
         _write_json(os.path.join(d, "t-0__u0000", "result.json"), {"task_name": "fakebench/t-0", "trial_name": "t-0__u0000"})
         older = parse.parse_job(d)
-        self.assertEqual(older.identity, {"benchmark": "fakebench", "agent": "fake", "model": "m-1", "provider": "openai"})
+        self.assertEqual(older.identity, {"benchmark": "fakebench", "agent": "fake", "backend": "local", "model": "m-1", "provider": "openai"})
         # a control asks no model: no model, no options, no provider, no record of who served
         control = parse.parse_job(standard_job(self.tmp, "nop", [0.0, 0.0], other=NOP, model="", options={}, served_by=None))
         self.assertTrue(control.is_control)
-        self.assertEqual(set(control.identity), {"benchmark", "benchmark_version", "benchmark_options", "agent", "limits"})
+        self.assertEqual(set(control.identity), {"benchmark", "benchmark_version", "benchmark_options", "agent", "backend", "limits"})
         self.assertEqual(control.identity["agent"], "nop")
         # Harbor's job, and a runner's, are not the standard's: nothing
         harbor = os.path.join(self.tmp, "harbor")

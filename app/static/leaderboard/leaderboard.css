@@ -35,7 +35,7 @@
 .lb-medal svg { width: 100%; height: 100%; stroke: currentColor; fill: color-mix(in srgb, currentColor 20%, var(--bg)); }
 .lb-medal span { position: absolute; inset: 12px 0 0; text-align: center; color: var(--text); }
 .lb-medal-2 { color: var(--lb-medal-silver); }.lb-medal-3 { color: var(--lb-medal-bronze); }.lb-medal-4 { color: var(--lb-medal-chocolate); }
-.lb-medal:hover { animation: lb-swing .55s ease-in-out; transform-origin: top; }
+tr:hover .lb-medal { animation: lb-swing .55s ease-in-out; transform-origin: top; }
 @keyframes lb-swing { 25% { transform: rotate(-14deg); } 75% { transform: rotate(12deg); } }
 :root { --lb-medal-gold: #e8c85a; --lb-medal-silver: #c0c5cf; --lb-medal-bronze: #dca475; --lb-medal-chocolate: #b88568; }
 :root[data-theme="light"] { --lb-medal-gold: #906500; --lb-medal-silver: #687282; --lb-medal-bronze: #975525; --lb-medal-chocolate: #633f2d; }

@@ -85,15 +85,21 @@ class LeaderboardRoutes(unittest.TestCase):
         doc["axes"]["Retrieval"]["entries"][0]["dataset"] = "another-invention"
         self.assertEqual(self.client.post("/api/scoring", json=doc, headers=headers).status_code, 400)
 
-    def test_osworld_default_parts_read_only_matching_task_names(self):
+    def test_osworld_parts_read_only_matching_task_names(self):
         self.jobs.append(job([trial("os__one", "scored", score=1), trial("libreoffice_writer__two", "scored", score=.5),
                               trial("chrome__three", "scored", score=0)], dataset="osworld1/test_nogdrive", agent="codex"))
         self.jobs[0].identity = {"benchmark": "osworld1", "benchmark_version": "desktop-env-v1.0.3", "agent": "codex", "agent_version": "2.2.2"}
+        from nullius.leaderboard import service
+        benchmarks = service.catalogue()[1]
+        settings = configuration.defaults(benchmarks)
+        self.assertEqual(settings["axes"]["Home"]["entries"], [])          # starts with no benchmark
+        office = next(e for e in settings["axes"]["Work"]["entries"] if e["dataset"] == "office")
+        settings["axes"]["Home"]["entries"] = [dict(office, dataset="os")]
+        configuration.save(configuration.location(), settings, benchmarks)
         doc = self.client.get("/api/leaderboard").get_json()
         row = next(r for r in doc["rows"] if r["has_runs"])
         self.assertEqual(row["axes"]["Home"]["score"], 1)
         self.assertEqual(row["axes"]["Work"]["score"], .5)
-        from nullius.leaderboard import service
         choices = next(b for b in service.options(service.catalogue()[1]) if b["key"] == "osworld1")["datasets"]
         self.assertIn({"id": "os", "label": "OS tasks"}, choices)
         self.assertIn({"id": "office", "label": "Office tasks"}, choices)

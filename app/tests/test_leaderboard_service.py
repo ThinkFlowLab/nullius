@@ -97,6 +97,75 @@ class RecordedIdentity(unittest.TestCase):
         self.assertIsNone(next(r for r in result["rows"] if r["has_runs"])["axes"]["Retrieval"]["score"])
 
 
+def _write_run(root, name, benchmark, dataset, agent="codex", backend="local", outcomes=("pass",), cost=None):
+    """A finished run whose config is the standard runner's own."""
+    path = Path(root) / name
+    path.mkdir(parents=True)
+    recorded_job.write_config(str(path), job=name, bench=definitions.get("benchmark", benchmark), other=definitions.get("agent", agent),
+                              model="model", provider="openrouter", dataset=dataset, units=[str(i) for i in range(len(outcomes))],
+                              concurrency=1, granted=True, backend=backend)
+    (path / "result.json").write_text(json.dumps({"started_at": "2026-11-01T10:00:00Z", "finished_at": "2026-11-01T11:00:00Z"}))
+    for i, outcome in enumerate(outcomes):
+        folder = path / str(i)
+        folder.mkdir()
+        value = {"task_name": str(i), "trial_name": str(i), "source": benchmark, "agent_info": {"name": agent, "version": "adapter 9.9"}}
+        if cost is not None:
+            value["agent_result"] = {"cost_usd": cost}
+        if outcome == "pass":
+            value["verifier_result"] = {"rewards": {"reward": 1}}
+            (folder / "verifier").mkdir()
+            (folder / "verifier" / "reward.txt").write_text("1")
+        else:
+            value["exception_info"] = {"exception_type": "AgentTimeoutError", "exception_message": "fixture"}
+        (folder / "result.json").write_text(json.dumps(value))
+
+
+class RecordedRuns(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.folder = Path(folder.name)
+
+    def rows(self, *roots):
+        env = dict(os.environ, NULLIUS_HOME=str(self.folder / "profile"), PYTHONPATH=str(Path(__file__).resolve().parents[1]))
+        result = subprocess.run([sys.executable, "-m", "nullius", "leaderboard", "--json", *map(str, roots)], env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return [r for r in json.loads(result.stdout)["rows"] if r["has_runs"]]
+
+    def test_a_run_naming_its_agent_s_version_counts_for_that_agent_and_version(self):
+        codex = definitions.get("agent", "codex")
+        self.assertIn("@", codex["_ref"])
+        _write_run(self.folder / "jobs", "run", "gaia", "gaia-validation")
+        row, = self.rows(self.folder / "jobs")
+        self.assertEqual((row["agent"], row["version"], row["version_label"]), ("codex", codex["_version"], definitions.version_label(codex)))
+        self.assertEqual(row["axes"]["Retrieval"]["score"], 1)
+
+    def test_runs_on_two_backends_are_two_rows(self):
+        _write_run(self.folder / "jobs", "a", "gaia", "gaia-validation", "goose", "local")
+        _write_run(self.folder / "jobs", "b", "gaia", "gaia-validation", "goose", "docker", ("crash",))
+        rows = self.rows(self.folder / "jobs")
+        self.assertEqual({r["identity"]["backend"]: r["axes"]["Retrieval"]["score"] for r in rows}, {"local": 1, "docker": 0})
+
+    def test_runs_of_one_name_under_two_roots_stay_apart(self):
+        _write_run(self.folder / "one", "same", "gaia", "gaia-validation", cost=1)
+        _write_run(self.folder / "two", "same", "tau3-bench", "banking_knowledge", cost=3)
+        row, = self.rows(self.folder / "one", self.folder / "two")
+        runs = [e["runs"] for e in row["axes"]["Retrieval"]["entries"]]
+        self.assertTrue(all(len(r) == 1 for r in runs))
+        self.assertNotEqual(runs[0], runs[1])
+        self.assertEqual(row["metrics"]["cost"], {"value": 2, "count": 2})
+
+    def test_a_merged_run_still_replaces_its_own_shards_when_names_repeat(self):
+        from dataclasses import replace
+        from nullius.leaderboard import service
+        here, there = (replace(job([trial("a")], job_id=n), dir=f"/{root}/{n}", merged_from=m)
+                       for root, n, m in (("one", "shard", []), ("two", "shard", [])))
+        whole = replace(job([trial("a")], job_id="whole"), dir="/one/whole", merged_from=["shard"])
+        got = service.qualified([here, there, whole])
+        self.assertEqual([j.job_id for j in got], ["/one/shard", "/two/shard", "whole"])
+        self.assertEqual(got[2].merged_from, ["/one/shard"])
+
+
 class DeferredMetrics(unittest.TestCase):
     def test_content_cache_reparses_only_changed_files_and_isolates_failures(self):
         from nullius.leaderboard import metrics
