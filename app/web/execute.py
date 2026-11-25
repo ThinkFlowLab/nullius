@@ -200,6 +200,11 @@ def begin(plans: list, into: str = "") -> tuple:
     """Start ``plans``, each checked before any starts: (the runs, "", 200), or
     ([], why not, its status) and nothing started. ``into``: the workspace
     their jobs go into, the open one when empty (``shared.adopt_runs``)."""
+    if into:
+        dest = os.path.join(shared.WS_HOME, into)
+        home = os.path.realpath(shared.WS_HOME)
+        if os.path.islink(dest) or os.path.commonpath([home, os.path.realpath(dest)]) != home:
+            return [], "A launch workspace must be inside the workspaces folder and cannot be a symbolic link.", 400
     for plan in plans:
         problem = plan.check()
         if problem:

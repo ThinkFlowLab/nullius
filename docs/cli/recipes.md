@@ -27,6 +27,7 @@ nullius recipes launch recipe.json --wait --json
 | --- | --- |
 | The server | `launch` needs `nullius serve` running here; `nullius standard run` runs without it ([Run a benchmark](run.md)) |
 | Refused | An error of the compile, a machine missing a prerequisite, the question without `--yes`, a Harbor recipe: nothing starts |
+| Workspace path | Launch refuses a symbolic link or a destination outside the workspaces folder before starting |
 | The name | The recipe's name and the second, as each Run names a new job |
 | What it prints | `launch run:<id>`, the launch's key; per run its machine, its state, its jobs folder and its job pages |
 | The result | `nullius runs show <jobs folder> <job id>`: [Read jobs](read-jobs.md) |

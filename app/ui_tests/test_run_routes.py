@@ -173,6 +173,32 @@ class RunRoutes(unittest.TestCase):
         self.assertEqual((dict(execution.EXECUTIONS), self.adopted), ({}, []))                   # nothing started, the free name included
         self.assertFalse((self.tmp / "runs" / "fresh").exists())
 
+    def test_a_launch_refuses_a_linked_workspace_before_starting(self):
+        home = self.tmp / "workspaces"
+        home.mkdir()
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        inside = home / "inside"
+        inside.mkdir()
+        linked = home / "trials"
+        run = SimpleNamespace(jobs=str(self.tmp / "runs" / "launch" / "jobs"), summary=lambda: {"id": "launch"})
+        with patch.object(web.shared, "WS_HOME", str(home)), patch.object(execution, "start", return_value=run) as start:
+            for target in (outside, inside, self.tmp / "absent"):
+                with self.subTest(target=target):
+                    linked.symlink_to(target, target_is_directory=True)
+                    try:
+                        r = self.post({"name": "launch", "script": "true", "workspace": "trials"})
+                        self.assertEqual(r.status_code, 400)
+                        self.assertIn("symbolic link", r.json["error"])
+                        start.assert_not_called()
+                        self.assertFalse((target / "workspace.json").exists())
+                    finally:
+                        linked.unlink()
+            runs, problem, status = web.execute.begin([], "../outside")
+            self.assertEqual((runs, status), ([], 400))
+            self.assertIn("inside the workspaces folder", problem)
+            start.assert_not_called()
+
     def test_a_single_run_opens_its_job_page_before_harbor_writes_the_job(self):
         r = self.post({"name": "tau3-x3", "script": "true", "where": "local", "jobs": [{"name": "tau3-x3", "agent": "oracle", "dataset": "tau3-x3"}]})
         self.assertEqual(r.status_code, 200, r.get_data(as_text=True)); self.assertEqual(r.json["open"], "/job/tau3-x3")
