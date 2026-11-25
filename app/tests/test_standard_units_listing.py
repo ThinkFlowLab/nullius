@@ -284,15 +284,18 @@ class SetFromAFilter(Scratch):
 
     def test_a_sample_is_n_of_the_listed_tasks_the_same_for_the_same_seed_and_its_seed_in_the_note(self):
         listed = self.ids(units.find(self.b, "all", size=None))
-        for name in ("one", "two"):
-            code, out, err = self.cli("set", "create", "described", name, "--dataset", "all", "--sample", "5", "--seed", "7")
+        for name, seed in (("one", "7"), ("two", "7"), ("three", "8")):
+            code, out, err = self.cli("set", "create", "described", name, "--dataset", "all", "--sample", "5", "--seed", seed)
             self.assertEqual(code, 0, err)
-        one, two = (sets.revision(sets.load("described", n)) for n in ("one", "two"))
+        one, two, three = (sets.revision(sets.load("described", n)) for n in ("one", "two", "three"))
         self.assertEqual(one["units"], two["units"])
+        self.assertEqual(one["units"], ["t038", "t082", "t101", "t166", "t242"])
+        self.assertEqual(three["units"], ["t032", "t058", "t094", "t096", "t246"])
+        self.assertNotEqual(one["units"], three["units"])
         self.assertEqual(len(one["units"]), 5)
         self.assertEqual(one["units"], [u for u in listed if u in one["units"]])          # in the listing's order
         self.assertEqual(one["note"], "drawn by --sample 5 --seed 7")
-        self.assertIn("drawn with --seed 7", out)
+        self.assertIn("drawn with --seed 8", out)
         # of the tasks a filter matches; with no seed, one is drawn, shown and kept
         code, out, err = self.cli("set", "create", "described", "gammas", "--dataset", "all", "--category", "kind=gamma",
                                   "--sample", "3")
@@ -312,7 +315,7 @@ class SetFromAFilter(Scratch):
                 self.assertEqual((code, out), (2, ""))
                 self.assertEqual(err, said or "refused: set create: --units FILE, --from-job JOB_DIR, or --search, "
                                               "--category and --sample\n")
-        self.assertEqual(sorted(e["name"] for e in sets.entries("described")[0]), ["gammas", "one", "two"])
+        self.assertEqual(sorted(e["name"] for e in sets.entries("described")[0]), ["gammas", "one", "three", "two"])
 
     def test_a_filter_that_matches_nothing_or_beside_another_source_is_refused(self):
         for args, said in ((["--search", "wombat"], "no task of all matches --search \"wombat\""),
