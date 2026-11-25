@@ -194,6 +194,20 @@ class TheTasksPagesData(Case):
         self.assertEqual(self.listing(ids=1, cat=["kind=alpha"])["ids"], [t["id"] for t in units.find(self.b, "all", categories={"kind": ["alpha"]}, size=None)["tasks"]])
         self.assertEqual(self.starts(), before)             # every answer from the cache: no driver started
 
+    def test_pick_at_random_draws_as_set_create_sample_does_and_the_set_keeps_its_seed(self):
+        units.listing(self.b, "all")
+        alpha = [t["id"] for t in units.find(self.b, "all", categories={"kind": ["alpha"]}, size=None)["tasks"]]
+        got = self.listing(ids=1, sample=5, seed=7, cat=["kind=alpha"])
+        self.assertEqual((got["ids"], got["seed"]), (units.draw(alpha, 5, 7)[0], 7))
+        self.assertEqual(got["note"], "matched by --category kind=alpha; drawn by --sample 5 --seed 7")
+        drawn = self.listing(ids=1, sample=5)                 # no seed: one drawn, and given
+        self.assertEqual(drawn["ids"], units.draw([f"t{i:03d}" for i in range(250)], 5, drawn["seed"])[0])
+        for sample, said in (("251", "--sample 251: the list holds 250"), ("x", "--sample x: a whole number from 1")):
+            r = self.client.get(f"/benchmarks/described/tasks/all/listing?ids=1&sample={sample}"); self.addCleanup(r.close)
+            self.assertEqual((r.status_code, r.get_json()["error"]), (400, said))
+        self.post("/benchmarks/described/tasks/all/save", {"name": "five", "units": got["ids"], "note": got["note"]})
+        self.assertEqual(sets.revision(sets.load("described", "five"))["note"], got["note"])
+
     def test_an_unknown_category_is_refused_plainly(self):
         units.listing(self.b, "all")
         r = self.client.get("/benchmarks/described/tasks/all/listing?cat=colour=red"); self.addCleanup(r.close)

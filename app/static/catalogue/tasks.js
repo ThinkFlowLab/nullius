@@ -11,6 +11,9 @@
   const chosen = new Set(JSON.parse(($('tasks-chosen-ids') || {}).textContent || '[]'));
   // opened from a set: its members first; Show all browses the dataset
   const st = {q: '', cats: {}, page: 1, showing: !!d.set && chosen.size > 0, ready: false, total: 0, pages: 1};
+  // the last draw of Pick at random ({ids, seed, note}), while the chosen are the ones it drew
+  let drawn = null;
+  const picked = () => !!drawn && drawn.ids.size === chosen.size && [...chosen].every(id => drawn.ids.has(id));
   const label = field => field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   // the listing at the version the page shows (data-version, empty for the benchmark's default)
@@ -106,6 +109,7 @@
     facets(got.categories);
     const m = $('tasks-match');
     if (m) { m.hidden = !writable || !got.total || st.showing; m.textContent = `Select the ${got.total.toLocaleString('en-US')} that match`; }
+    if ($('tasks-pick')) $('tasks-pick').hidden = !writable || !got.total || st.showing;
     if (st.showing) return showSelected();
     draw(got.tasks);
     $('tasks-count').textContent = `${count(got.total)}` + (got.total !== got.of ? ` of ${got.of.toLocaleString('en-US')}` : '')
@@ -118,7 +122,8 @@
     try { got = await (await post(d.rows, {units: ids})).json(); } catch { /* the ids alone */ }
     const unknown = new Set(got.unknown || []);
     draw([...got.tasks, ...[...unknown].map(id => ({id, unknown: true}))]);
-    $('tasks-count').textContent = `${count(ids.length)} chosen` + (unknown.size ? ` · ${unknown.size} not in the listing` : '');
+    $('tasks-count').textContent = `${count(ids.length)} chosen` + (unknown.size ? ` · ${unknown.size} not in the listing` : '')
+      + (picked() ? ` · picked at random with seed ${drawn.seed}` : '');
     pager(); chosenLine();
   }
 
@@ -158,6 +163,17 @@
     const got = await (await nulliusFetch(query({ids: 1}))).json();
     if (got.ok && got.ready) { got.ids.forEach(id => chosen.add(id)); load(); }
   });
+  // Pick N at random: N of the matches, drawn on the server as set create --sample draws them; its seed is shown, and
+  // kept in the set's note while the chosen are the ones drawn
+  $('tasks-pick-go')?.addEventListener('click', async () => {
+    let got;
+    try { got = await (await nulliusFetch(query({ids: 1, sample: $('tasks-n').value.trim()}))).json(); }
+    catch { return window.nulliusNotify?.('The tasks could not be drawn. Reload the page.', {error: true}); }
+    if (!got.ok || !got.ready) return window.nulliusNotify?.(got.error || 'The list is not ready.', {error: true});
+    chosen.clear(); got.ids.forEach(id => chosen.add(id));
+    drawn = {ids: new Set(got.ids), seed: got.seed, note: got.note};
+    setShowing(true); load();
+  });
   $('tasks-clear')?.addEventListener('click', () => { chosen.clear(); load(); });
   $('tasks-paste-add')?.addEventListener('click', async () => {
     const ids = [...new Set($('tasks-paste').value.split(/[\s,]+/).map(s => s.trim()).filter(s => s && !s.startsWith('#')))];
@@ -171,6 +187,7 @@
   async function save(body) {
     if (!chosen.size) return msg('Tick at least one task.', true);
     let got;
+    if (picked()) body = {...body, note: drawn.note};
     try { got = await (await post(d.save, {...body, units: [...chosen]})).json(); } catch { return msg('Not saved: the server did not answer.', true); }
     if (!got.ok) return msg(got.error, true);
     location.href = got.open;

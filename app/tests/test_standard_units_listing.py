@@ -5,9 +5,9 @@ its ids; the listing cached by its options; ``set create --search`` and ``--cate
 listing gives and the filter in its note; OSWorld1's ``describe`` from its task files. A definition's
 ``driver.list_command`` listing with no driver environment, OSWorld1's giving the driver's ids in its order;
 ``state`` giving each of its answers and starting nothing; the command's one line before a first listing that
-fetches; a licence the driver needs, given to it as a run gives it, and refused first when none is held. No
-key, no network: each driver is a script of the test's own, the fake benchmark's or OSWorld1's on task files of
-the test's own."""
+fetches; a licence the driver needs, given to it as a run gives it, and refused first when none is held;
+``--sample`` drawing N of the listed tasks by a seed. No key, no network: each driver is a script of the test's
+own, the fake benchmark's or OSWorld1's on task files of the test's own."""
 from __future__ import annotations
 
 import contextlib
@@ -275,6 +275,38 @@ class SetFromAFilter(Scratch):
         code, out, err = self.cli("set", "create", "described", "by-kind", "--dataset", "all", "--category", "kind=gamma")
         self.assertEqual(code, 0, err)
         self.assertEqual(len(sets.revision(sets.load("described", "by-kind"))["units"]), 83)
+
+    def test_a_sample_is_n_of_the_listed_tasks_the_same_for_the_same_seed_and_its_seed_in_the_note(self):
+        listed = self.ids(units.find(self.b, "all", size=None))
+        for name in ("one", "two"):
+            code, out, err = self.cli("set", "create", "described", name, "--dataset", "all", "--sample", "5", "--seed", "7")
+            self.assertEqual(code, 0, err)
+        one, two = (sets.revision(sets.load("described", n)) for n in ("one", "two"))
+        self.assertEqual(one["units"], two["units"])
+        self.assertEqual(len(one["units"]), 5)
+        self.assertEqual(one["units"], [u for u in listed if u in one["units"]])          # in the listing's order
+        self.assertEqual(one["note"], "drawn by --sample 5 --seed 7")
+        self.assertIn("drawn with --seed 7", out)
+        # of the tasks a filter matches; with no seed, one is drawn, shown and kept
+        code, out, err = self.cli("set", "create", "described", "gammas", "--dataset", "all", "--category", "kind=gamma",
+                                  "--sample", "3")
+        self.assertEqual(code, 0, err)
+        got = sets.revision(sets.load("described", "gammas"))
+        seed = int(out.rsplit("--seed ", 1)[1])
+        self.assertEqual(got["note"], f"matched by --category kind=gamma; drawn by --sample 3 --seed {seed}")
+        gammas = self.ids(units.find(self.b, "all", categories={"kind": ["gamma"]}, size=None))
+        self.assertEqual(got["units"], units.draw(gammas, 3, seed)[0])
+        self.assertTrue(set(got["units"]) <= set(gammas))
+        for args, said in ((["--sample", "251"], "refused: --sample 251: the list holds 250\n"),
+                           (["--sample", "0"], "refused: --sample 0: a whole number from 1\n"),
+                           (["--seed", "3"], "refused: --seed draws --sample's tasks: give it with --sample\n"),
+                           (["--sample", "2", "--units", os.path.join(self.tmp, "x.txt")], None)):
+            with self.subTest(args=args):
+                code, out, err = self.cli("set", "create", "described", "too-many", "--dataset", "all", *args)
+                self.assertEqual((code, out), (2, ""))
+                self.assertEqual(err, said or "refused: set create: --units FILE, --from-job JOB_DIR, or --search, "
+                                              "--category and --sample\n")
+        self.assertEqual(sorted(e["name"] for e in sets.entries("described")[0]), ["gammas", "one", "two"])
 
     def test_a_filter_that_matches_nothing_or_beside_another_source_is_refused(self):
         for args, said in ((["--search", "wombat"], "no task of all matches --search \"wombat\""),

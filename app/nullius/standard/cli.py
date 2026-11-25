@@ -765,6 +765,7 @@ examples:
   nullius standard set create humaneval "first ten" --dataset humaneval --units ten.txt --description "a quick look"
   nullius standard set create humaneval misses --from-job jobs_standard/JOB --outcome failed,infra
   nullius standard set create osworld1@044bc33 "chrome tabs" --dataset test_nogdrive --search tab --category domain=chrome
+  nullius standard set create gaia "twenty" --dataset gaia-validation --sample 20 --seed 7
   nullius standard set show humaneval first-ten --json
   nullius standard set rename humaneval misses "misses of June"
   nullius standard set delete humaneval misses-of-june
@@ -774,7 +775,7 @@ exit codes:
   0  done
   1  unexpected error (a traceback: report it)
   2  usage, or refused: a name not allowed, a list the set cannot hold, an import that conflicts,
-     an entry of the earlier format
+     an entry of the earlier format, a --sample larger than the list
   3  not found: no such benchmark, set, file or job
 """
 
@@ -811,23 +812,33 @@ def cmd_set_create(a):
     if b is None:
         raise sets.NotFound(f"no benchmark {a.benchmark!r}")
     filtered = a.search is not None or bool(a.category)
-    if sum((a.units is not None, a.from_job is not None, filtered)) != 1:
-        raise sets.Refused("set create: --units FILE, --from-job JOB_DIR, or --search and --category")
+    listed = filtered or a.sample is not None
+    if a.seed is not None and a.sample is None:
+        raise sets.Refused("--seed draws --sample's tasks: give it with --sample")
+    if sum((a.units is not None, a.from_job is not None, listed)) != 1:
+        raise sets.Refused("set create: --units FILE, --from-job JOB_DIR, or --search, --category and --sample")
     if a.from_job is None and (a.outcome or a.unit):
         raise sets.Refused("--outcome and --unit choose a job's trials: give them with --from-job")
+    seed = None
     if a.units is not None:
         dataset = sets._dataset(b, a.dataset)
         got = {"dataset": dataset, "units": _listed_units(a.units), "note": f"from {os.path.basename(a.units)}"}
-    elif filtered:
-        # the ids the listing matches today, under the benchmark's default options; the note keeps the filter
+    elif listed:
+        # the ids the listing matches today, under the benchmark's default options, or --sample of them drawn at
+        # random; the note keeps the filter and the seed
         dataset = sets._dataset(b, a.dataset)
         chosen = unit_list.categories_of(a.category)
         found = unit_list.find(b, dataset, search=a.search or "", categories=chosen, size=None,
                                licences=run.Licences(b, environ=os.environ))
         if not found["total"]:
             raise sets.Refused(f"no task of {dataset} matches {unit_list.filter_text(a.search or '', chosen)}")
-        got = {"dataset": dataset, "units": [t["id"] for t in found["tasks"]],
-               "note": f"matched by {unit_list.filter_text(a.search or '', chosen)}"}
+        ids = [t["id"] for t in found["tasks"]]
+        if a.sample is not None:
+            ids, seed = unit_list.draw(ids, a.sample, a.seed)
+            note = unit_list.sample_note(a.sample, seed, a.search or "", chosen)
+        else:
+            note = f"matched by {unit_list.filter_text(a.search or '', chosen)}"
+        got = {"dataset": dataset, "units": ids, "note": note}
     else:
         got = sets.from_job(b, a.from_job, a.outcome, a.unit)
         if a.dataset and a.dataset != got["dataset"]:
@@ -835,7 +846,8 @@ def cmd_set_create(a):
     entry = sets.create(b, a.label, dataset=got["dataset"], units=got["units"], description=a.description, note=got["note"])
     print(f"wrote {sets.path_of(entry['benchmark'], entry['name'])}: {_named(entry)}, "
           f"{len(got['units'])} {b['units']['nouns'] if len(got['units']) != 1 else b['units']['noun']} of {entry['dataset']}"
-          + (f" at {sets.version_label(b, entry['version'])}" if entry.get("version") else ""))
+          + (f" at {sets.version_label(b, entry['version'])}" if entry.get("version") else "")
+          + (f", drawn with --seed {seed}" if seed is not None else ""))
     return 0
 
 
@@ -1160,6 +1172,11 @@ def main(argv=None):
                     help="the tasks whose id, title or text hold each word (nullius standard units): those matched today")
     sc.add_argument("--category", action="append", metavar="FIELD=VALUE",
                     help="the tasks of this category's value (repeatable: values of one field widen, fields narrow)")
+    sc.add_argument("--sample", type=int, metavar="N",
+                    help="N of the listed tasks (of those --search and --category match) drawn at random")
+    sc.add_argument("--seed", type=int, metavar="S",
+                    help="with --sample: the draw's seed; the same seed and listing give the same set "
+                         "(default: one drawn, and shown)")
     sc.add_argument("--description", default="")
     sl = ss.add_parser("list", help="the task sets, of one benchmark or all",
                        epilog=SET_EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)

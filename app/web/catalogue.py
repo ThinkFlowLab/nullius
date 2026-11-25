@@ -221,12 +221,26 @@ def benchmark_tasks_listing(key, dataset):
     try:
         if request.args.get("ids"):           # every match's id, for "select the N that match"
             got = units.find(bench, dataset, search=request.args.get("q", ""), categories=cats, size=None)
-            return jsonify(ok=True, ready=True, total=got["total"], ids=[t["id"] for t in got["tasks"]])
+            ids = [t["id"] for t in got["tasks"]]
+            if "sample" not in request.args:
+                return jsonify(ok=True, ready=True, total=got["total"], ids=ids)
+            # Pick N at random: N of the matches, drawn as set create --sample draws them, its seed in the note
+            n, seed = (_whole(request.args.get(k)) for k in ("sample", "seed"))
+            ids, seed = units.draw(ids, n, seed)
+            return jsonify(ok=True, ready=True, total=got["total"], ids=ids, seed=seed,
+                           note=units.sample_note(n, seed, request.args.get("q", ""), cats))
         got = units.find(bench, dataset, search=request.args.get("q", ""), categories=cats,
                          page=int(page) if page.isdigit() and int(page) >= 1 else 1)
     except units.Refused as e:
         return jsonify(ok=False, error=str(e)), 400
     return jsonify(ok=True, ready=True, **got)
+
+
+def _whole(word):
+    """A number the page sent as a whole number, else the text itself, for ``units.draw`` to refuse; None for none."""
+    if word is None or word == "":
+        return None
+    return int(word) if word.isdigit() else word
 
 
 @app.route("/benchmarks/<key>/tasks/<dataset>/prepare", methods=["POST"])

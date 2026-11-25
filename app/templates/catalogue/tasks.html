@@ -71,6 +71,7 @@
     <div class="tasks-sel" role="group" aria-label="Chosen {{ nouns }}">
       <b id="tasks-chosen">0 chosen</b>
       <button type="button" class="btn ghost sm" id="tasks-match" hidden>Select the matches</button>
+      {% if writable %}<span class="tasks-pick" id="tasks-pick" hidden><input type="text" id="tasks-n" inputmode="numeric" value="10" autocomplete="off" aria-label="How many {{ nouns }} to pick"><button type="button" class="btn ghost sm" id="tasks-pick-go">Pick at random</button></span>{% endif %}
       <button type="button" class="btn ghost sm" id="tasks-show" aria-pressed="false" hidden>Show selected</button>
       <details class="tasks-paste" id="tasks-paste-open"><summary class="btn ghost sm" aria-controls="tasks-paste-box">Paste ids</summary></details>
       <button type="button" class="btn ghost sm" id="tasks-clear" hidden>Clear</button>

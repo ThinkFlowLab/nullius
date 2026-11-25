@@ -457,6 +457,8 @@ a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underli
 .tasks-sel:has(.tasks-paste[open]) + .tasks-paste-box { display: flex; }
 .tasks-paste-box textarea { width: 100%; box-sizing: border-box; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
 .tasks-list { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.tasks-pick { display: inline-flex; align-items: center; gap: 6px; }
+.tasks-pick input { flex: none; width: 4.5rem; height: 32px; padding: 0 .6rem; box-sizing: border-box; }
 .tasks-count { margin: 14px 0 6px; }
 .tasks-count:empty, .tasks-msg:empty { display: none; }
 .tasks-scroll { overflow-x: auto; }

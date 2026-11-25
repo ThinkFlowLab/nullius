@@ -23,15 +23,19 @@ A search is words: a task matches when each word is in its id, its title or its 
 category filter is FIELD=VALUE: values of one field widen the match (either), fields narrow it (both). Each
 field's values are counted over the tasks the search and the other fields' filters match, so a value chosen
 leaves its field's other values counted.
+
+A sample (``draw``) is N of the listed tasks, or of those a filter matches, at random: the same seed and the
+same tasks give the same N, kept in the listing's order; without a seed one is drawn, and the set's note keeps it.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import random
 import shutil
 import tempfile
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from nullius import ondisk, paths
 from nullius.standard.contract import definitions
@@ -88,6 +92,30 @@ def filter_text(search: str = "", categories: Optional[Dict[str, List[str]]] = N
     words = ([f"--search {json.dumps(search, ensure_ascii=False)}"] if search else [])
     words += [f"--category {f}={v}" for f, values in (categories or {}).items() for v in values]
     return " ".join(words)
+
+
+SEEDS = 1_000_000                # a seed drawn when none is given is below this
+
+
+def draw(ids: List[str], n, seed=None) -> Tuple[List[str], int]:
+    """``n`` of ``ids`` at random, in their order, and the seed that drew them; one is drawn when ``seed`` is None.
+    More than ``ids`` holds, or a count or a seed that is not a whole number, is refused."""
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise Refused(f"--sample {n}: a whole number from 1")
+    if n > len(ids):
+        raise Refused(f"--sample {n}: the list holds {len(ids)}")
+    if seed is None:
+        seed = random.SystemRandom().randrange(SEEDS)
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise Refused(f"--seed {seed}: a whole number from 0")
+    picked = set(random.Random(seed).sample(range(len(ids)), n))
+    return [u for i, u in enumerate(ids) if i in picked], seed
+
+
+def sample_note(n: int, seed: int, search: str = "", categories: Optional[Dict[str, List[str]]] = None) -> str:
+    """A drawn set's note: ``drawn by --sample N --seed S``, after the filter it was drawn from."""
+    words = filter_text(search, categories)
+    return (f"matched by {words}; " if words else "") + f"drawn by --sample {n} --seed {seed}"
 
 
 def _light(bench: dict) -> Optional[List[str]]:
