@@ -22,23 +22,23 @@
     form.querySelectorAll('input').forEach(n=>{n.setAttribute('aria-invalid',String(!n.checkValidity()));});
     return ok&&form.checkValidity();
   }
-  /* each section opens on an overview: every benchmark's share of each axis, and the other family's axes it feeds */
+  /* each section opens on an overview: every benchmark's share of each of its axes */
   const names=section=>[...section.querySelectorAll('[data-scoring-axis]')].map(n=>n.dataset.scoringAxis);
   const keyOf=e=>e.custom?'custom:'+e.custom:e.benchmark;
   const labelOf=key=>key.startsWith('custom:')?(draft.custom.find(c=>'custom:'+c.id===key)?.name||'Custom benchmark'):(data.options.find(o=>o.key===key)?.label||key);
   const shareIn=(axis,key)=>{const a=draft.axes[axis],total=a.entries.reduce((n,e)=>n+(number(e.weight)?e.weight:0),0);return total?a.entries.filter(e=>keyOf(e)===key).reduce((n,e)=>n+(number(e.weight)?e.weight:0),0)/total:0;};
   function overview() {
     form.querySelectorAll('[data-overview]').forEach(table=>{
-      const section=table.closest('section'), mine=names(section), others=Object.keys(draft.axes).filter(a=>!mine.includes(a));
+      const mine=names(table.closest('section'));
       const keys=[...new Set(mine.flatMap(a=>draft.axes[a].entries.map(keyOf)))];
-      const head=el('tr');head.append(el('th','Benchmark'),...mine.map(a=>el('th',a,{class:'lb-ov-num'})),el('th',table.dataset.overview));
+      const head=el('tr');head.append(el('th','Benchmark'),...mine.map(a=>el('th',a,{class:'lb-ov-num'})));
       const body=el('tbody');
       keys.forEach(key=>{
         const tr=el('tr');tr.append(el('td',labelOf(key)));
         mine.forEach(a=>{const v=shareIn(a,key),td=el('td',null,{class:'lb-ov-num'});if(v>0){const chip=el('span',v.toFixed(2),{class:'lb-ov-chip'});chip.style.setProperty('--v',v.toFixed(3));td.append(chip);}else td.append(el('span','·',{class:'lb-ov-none'}));tr.append(td);});
-        const fed=others.filter(a=>shareIn(a,key)>0);tr.append(el('td',fed.join(', ')||'–',{class:'lb-ov-other'}));body.append(tr);
+        body.append(tr);
       });
-      if(!keys.length){const tr=el('tr');tr.append(el('td','No benchmark',{colspan:mine.length+2,class:'lb-ov-other'}));body.append(tr);}
+      if(!keys.length){const tr=el('tr');tr.append(el('td','No benchmark',{colspan:mine.length+1,class:'lb-ov-none'}));body.append(tr);}
       const thead=el('thead');thead.append(head);table.replaceChildren(thead,body);
     });
   }

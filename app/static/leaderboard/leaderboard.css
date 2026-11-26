@@ -127,7 +127,9 @@
 .lb-ring { fill: none; stroke: var(--border-soft); }
 .lb-axis-label { cursor: help; outline: none; }
 .lb-axis-label:focus-visible { text-decoration: underline; }
-.lb-pill { fill: color-mix(in oklab, var(--accent) 16%, transparent); stroke: color-mix(in oklab, var(--accent) 28%, transparent); opacity: 0; pointer-events: none; transition: opacity 150ms; }
+.lb-chart-pair svg text.lb-axis-label { font-size: 13.5px; }
+.lb-chart-pair svg .lb-axis-label .lb-me { font-size: 15px; }
+.lb-pill { fill: color-mix(in oklab, var(--accent) 16%, transparent); stroke: color-mix(in oklab, var(--accent) 28%, transparent); opacity: 0; cursor: help; transition: opacity 150ms; }
 .lb-label:is(:hover, :focus-within) .lb-pill { opacity: 1; }
 .lb-chart-pair svg .lb-label:is(:hover, :focus-within) text { fill: var(--accent); }
 .lb-chart-pair svg .lb-label:is(:hover, :focus-within) .lb-me { fill: var(--accent); }
@@ -190,9 +192,10 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
 .lb-input[aria-invalid="true"] { border-color: var(--bad); box-shadow: inset 0 0 0 1px var(--bad); }
 .lb-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; flex: none; }
 .lb-icon .ic { width: 16px; height: 16px; }
-/* every select keeps room for its name on one line; an axis's weight in Overall sits under its name, leaving the row to the selects */
-.lb-axis { --lb-entry: minmax(112px, 1.2fr) minmax(132px, 1.3fr) minmax(132px, 1.2fr) minmax(96px, 1fr) 56px 34px;
-  display: grid; grid-template-columns: 156px minmax(0, 1fr); grid-template-areas: 'name entries' 'weight entries'; grid-template-rows: min-content 1fr; row-gap: 6px; gap: 16px; align-items: start; padding: 14px 0; border-top: 1px solid var(--border-soft); }
+/* every select keeps room for its name on one line; an axis's weight in Overall sits beside its name, folded or not, and its
+   benchmarks open below it: nothing moves when a row folds */
+.lb-axis { --lb-entry: minmax(112px, 1.2fr) minmax(132px, 1.3fr) minmax(132px, 1.2fr) minmax(96px, 1fr) 72px 34px;
+  display: grid; grid-template-columns: 156px minmax(0, 1fr); grid-template-areas: 'name weight' '. entries'; gap: 0 16px; align-items: start; padding: 14px 0; border-top: 1px solid var(--border-soft); }
 .lb-axis h3 { text-transform: none; letter-spacing: normal; margin: 0; font-size: .88rem; font-weight: 600; color: var(--text); }
 .lb-fold { display: inline-flex; align-items: center; min-height: 34px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
 .lb-fold:hover { color: var(--accent-strong); }
@@ -209,18 +212,16 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
 .lb-ov .lb-ov-num { text-align: center; }
 .lb-ov-chip { display: inline-block; min-width: 40px; padding: 3px 6px; border-radius: 6px; font: 600 .74rem var(--mono); font-variant-numeric: tabular-nums;
   background: color-mix(in oklab, var(--accent) calc(16% + var(--v, 0) * 30%), transparent); color: var(--text); }
-.lb-ov-none, .lb-ov-other { color: var(--text-faint); }
-.lb-ov-other { font-size: .76rem; }
+.lb-ov-none { color: var(--text-faint); }
 .lb-axis > h3 { grid-area: name; }
 .lb-axis > .lb-entries { grid-area: entries; }
 .lb-weight { grid-area: weight; align-self: start; }
-/* folded, an axis is one line: its weight in Overall moves beside its name while its benchmarks slide away below */
-.lb-axis:has(> h3 > .lb-fold[aria-expanded="false"]) { grid-template-areas: 'name weight'; grid-template-rows: auto; }
-.lb-axis:has(> h3 > .lb-fold[aria-expanded="false"]) > .lb-entries { grid-area: auto; grid-column: 2; grid-row: 2; }
 .lb-weight-name { color: var(--text-faint); font-size: .75rem; }
 .lb-axis-head .lb-fold { display: none; }
 .lb-axis-head { padding: 0 0 8px; border-top: 0; color: var(--text-faint); font-size: .75rem; }
 .lb-entries { display: grid; gap: 8px; justify-items: start; min-width: 0; }
+/* the space above a row's benchmarks is inside what slides, never padding the slide's height would leave behind */
+.lb-entries::before { content: ''; height: 2px; }
 .lb-entries > [data-entries] { display: grid; gap: 8px; width: 100%; }
 .lb-entries > [data-entries]:empty { display: none; }
 .lb-entry { display: grid; grid-template-columns: var(--lb-entry); gap: 8px; align-items: center; min-width: 0; }
@@ -251,10 +252,8 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
   .lb-picks select, .lb-picks .ui-select-trigger { flex: 1; width: auto; }
   .lb-picks > .muted { display: none; }
   .lb-srow { grid-template-columns: 96px minmax(0, 1fr) 40px; }
-  .lb-axis { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'name' 'weight' 'entries'; gap: 10px; }
+  .lb-axis { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'name weight' 'entries entries'; gap: 0 10px; }
   .lb-axis-head { display: none; }
-  .lb-axis:has(> h3 > .lb-fold[aria-expanded="false"]) { grid-template-columns: minmax(0, 1fr) auto; }
-  .lb-axis:has(> h3 > .lb-fold[aria-expanded="false"]) > .lb-entries { grid-column: 1 / -1; }
   .lb-entry { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding-bottom: 8px; border-bottom: 1px dashed var(--border-soft); }
   .lb-entry > .lb-none { display: none; }
   .lb-entry > :first-child { grid-column: 1 / -1; }
