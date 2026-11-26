@@ -92,7 +92,8 @@ class Stored(unittest.TestCase):
         seen = sorted((j, t, v) for j, t, v, _ in store.all_records(self.d))
         self.assertEqual(seen, [("job-a", "t1", "judgement.questions.v1"), ("job-a", "t1", "judgement.questions.v2"), ("job-b", store.key("t/2"), "judgement.questions.v2")])
         self.assertEqual([t for _, t, _, _ in store.all_records(self.d, "job-b")], [store.key("t/2")])
-        self.assertEqual(store.calibration(self.d), {"chars_per_token": 3.25, "n": 2, "low": 2.5, "high": 3.5, "n_large": 0})   # small samples only: the band widened to the default
+        self.assertEqual(store.calibration(self.d, ["job-a", "job-b"]), {"chars_per_token": 3.25, "n": 2, "low": 2.5, "high": 3.5, "n_large": 0})   # small samples only: the band widened to the default
+        self.assertEqual(store.calibration(self.d, ["job-a"])["n"], 1)               # the jobs asked for, never every record
 
     def test_truncation_is_counted_per_state_kind_so_the_cut_state_can_be_named(self):
         limit = state.LIMIT
@@ -122,7 +123,7 @@ class Stored(unittest.TestCase):
         self.assertTrue(all(v["request_chars"] > v["chars"] and v["input_tokens"] == v["request_chars"] // 4 for v in rec["states"].values()))
         rep = store.truncation_report(self.d, "job")
         self.assertEqual((rep["kinds"]["final"]["truncated"], rep["kinds"]["trial"]["truncated"], rep["untyped"]), (1, 0, 0))
-        cal = store.calibration(self.d)
+        cal = store.calibration(self.d, ["job"])
         self.assertEqual((round(cal["chars_per_token"]), cal["n"], cal["n_large"]), (4, 2, 0))                     # read over the request, not the state alone
         self.assertEqual((cal["low"], cal["high"]), (2.5, round(cal["chars_per_token"], 3)))                        # small samples: the pooled ratio widened to the default band
         self.assertNotIn(KEY, json.dumps(rec))

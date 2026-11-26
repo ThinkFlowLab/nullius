@@ -415,11 +415,11 @@ class Routes(unittest.TestCase):
             html = self.get_ok("/job/liveboard-oracle-x4").get_data(as_text=True)
         hero = re.search(r'id="run-hero".*?</dl>', html, re.S).group(0)
         self.assertIn('<div class="lab">oracle · passed</div>', hero); self.assertIn('<div class="hero">4<small>/4</small></div>', hero)
-        self.assertRegex(html, r'data-o="resolved" href="\?outcome=resolved"\s+data-tip="[^"]*"><i class="sw"></i><b>4</b><span>Resolved')
+        self.assertRegex(html, r'data-o="resolved" href="[^"]*\?outcome=resolved"\s+data-tip="[^"]*"><i class="sw"></i><b>4</b><span>Resolved')
         self.assertNotIn('data-o="unknown"', html)
         # the mix bar's legend is the outcome rows right under it, and each segment is the same filter
         bar = re.search(r'<div class="mix run-mix".*?</div>\s*</div>\s*<div class="run-outcome-filters"', html, re.S)
-        self.assertIsNotNone(bar); self.assertRegex(bar.group(0), r'<a class="mseg fx hl oc-resolved" style="flex:4" data-o="resolved" href="\?outcome=resolved"')
+        self.assertIsNotNone(bar); self.assertRegex(bar.group(0), r'<a class="mseg fx hl oc-resolved" style="flex:4" data-o="resolved" href="[^"]*\?outcome=resolved"')
         self.assertNotIn('id="judgement"', html)                                                        # a control has nothing to reconcile: no lanes
         kit = next(t for t in job.trials if t.task_base.startswith("reward-kit-example"))
         self.assertEqual((kit.outcome, kit.reward), ("resolved", 1.0))
@@ -456,7 +456,7 @@ class Routes(unittest.TestCase):
         with patch.object(web.shared, "_jobs_for_request", return_value=[job]):
             page = self.get_ok("/job/crash-run").get_data(as_text=True)
             self.assertIn('<b>1/2</b>', re.search(r'<div class="meter".*?</div>', page, re.S).group(0))       # solved over the trials that ran
-            self.assertRegex(page, r'data-o="unknown" href="\?outcome=unknown"\s+data-tip="[^"]*"><i class="sw"></i><b>1</b><span>Unknown')
+            self.assertRegex(page, r'data-o="unknown" href="[^"]*\?outcome=unknown"\s+data-tip="[^"]*"><i class="sw"></i><b>1</b><span>Unknown')
             self.assertIn('<span class="oc-word">Unknown</span></span><details class="exd"><summary><span class="tw"></span>SomethingNobodyHasWrittenYetError</summary><code>the reader fell over</code>', page)
             trial_page = self.get_ok("/trial/crash-run/task-crash").get_data(as_text=True)
         head = trial_page.split("<div class=\"trial-head\">", 1)[0]

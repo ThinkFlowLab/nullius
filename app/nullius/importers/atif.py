@@ -345,13 +345,6 @@ def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str
 
     summaries = [convert_document(path, doc, data, name, job_dir)
                  for (path, doc, data), name in zip(docs, names)]
-    # Derived output this importer wholly owns: a trial the tree no longer
-    # holds is stale and would keep being counted.
-    produced = {s["trial_dir"] for s in summaries}
-    for name in os.listdir(job_dir):
-        sub = os.path.join(job_dir, name)
-        if os.path.isdir(sub) and name not in produced:
-            shutil.rmtree(sub)
 
     # ordered as instants, not as text: one stamp with a zone and one without sort apart as strings
     starts = sorted((s["started_at"] for s in summaries if s["started_at"]), key=_instant)
@@ -383,6 +376,14 @@ def _write_job(docs: list, root: str, out_root: str, job_name: str, command: str
             job_dir, ((name, os.path.realpath(path)) for (path, _doc, _data), name in zip(docs, names)), *existing),
         **importers.recorded_as(sid, root),
     })
+    # Derived output this importer wholly owns: a trial the tree no longer
+    # holds is stale and would keep being counted. Pruned once
+    # config.json reserves its name: a refresh cut short before then keeps the folder.
+    produced = {s["trial_dir"] for s in summaries}
+    for name in os.listdir(job_dir):
+        sub = os.path.join(job_dir, name)
+        if os.path.isdir(sub) and name not in produced:
+            shutil.rmtree(sub)
     return job_dir
 
 

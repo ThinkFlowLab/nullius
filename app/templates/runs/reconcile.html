@@ -38,7 +38,7 @@
   <div><span class="fk">Below threshold</span><span data-count="gated">{{ c.gated }}</span></div>
   <div><span class="fk">Not comparable</span><span data-count="not_comparable">{{ c.not_comparable }}</span></div>
   <div><span class="fk">Confidence threshold</span>
-    <form method="get" class="rec-threshold" id="reconcile-threshold"><input type="number" name="threshold" min="0" max="1" step="0.05" value="{{ '%.2f'|format(view.threshold) }}" aria-label="Confidence threshold"><button class="btn sm ghost" type="submit">Apply</button>{% if view.threshold != default_threshold %}<a class="small faint" href="{{ url_for('reconcile_page', job_id=job.job_id) }}">default {{ '%.2f'|format(default_threshold) }}</a>{% endif %}</form>
+    <form method="get" class="rec-threshold" id="reconcile-threshold">{% if request.args.get('workspace') %}<input type="hidden" name="workspace" value="{{ request.args.get('workspace') }}">{% endif %}<input type="number" name="threshold" min="0" max="1" step="0.05" value="{{ '%.2f'|format(view.threshold) }}" aria-label="Confidence threshold"><button class="btn sm ghost" type="submit">Apply</button>{% if view.threshold != default_threshold %}<a class="small faint" href="{{ url_for('reconcile_page', job_id=job.job_id) }}">default {{ '%.2f'|format(default_threshold) }}</a>{% endif %}</form>
     <span class="faint small">the judge's own confidence on the pick; a disagreement below it is listed as noise, not as a finding</span></div>
 </div>
 

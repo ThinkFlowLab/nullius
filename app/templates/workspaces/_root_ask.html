@@ -4,7 +4,7 @@
 <form method="post" action="{{ url_for('workspace_root_delete', name=ws.name) }}">
   <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="root" value="{{ root }}">
   <p class="mono">{{ run.dir }}</p>
-  <p>{{ n_runs }} run{{ '' if n_runs == 1 else 's' }}{% if n_checks %} · {{ n_checks }} check{{ '' if n_checks == 1 else 's' }}{% endif %} · {{ gone.bytes|filesizeformat }}{% if gone.judgements %} · {{ gone.judgements }} judgement{{ '' if gone.judgements == 1 else 's' }}{% endif %}</p>
+  <p>{{ n_runs }} run{{ '' if n_runs == 1 else 's' }}{% if n_checks %} · {{ n_checks }} check{{ '' if n_checks == 1 else 's' }}{% endif %} · {{ gone.bytes|filesizeformat }}{% if gone.judgements %} · up to {{ gone.judgements }} judgement{{ '' if gone.judgements == 1 else 's' }}{% endif %}</p>
   {% if others %}<p>Also removed from {{ others|join(', ') }}.</p>{% endif %}
   {% for h, c in gone.hosts.items() %}<label><input type="checkbox" name="host" value="{{ h }}" checked> Its copy on <b>{{ h }}</b></label>{% endfor %}
   <div class="launch-delete-acts"><button type="button" class="btn ghost" data-back autofocus>Keep it</button><button type="submit" class="btn danger">Delete folder</button></div>

@@ -30,9 +30,9 @@ EXIT_NOT_FOUND = 3
 
 EPILOG = """\
 examples:
-  PYTHONPATH=app python3 -m nullius.workspace_cli list
-  WORKSPACES_DIR=/srv/nullius/workspaces PYTHONPATH=app python3 -m nullius.workspace_cli list --json
-  PYTHONPATH=app python3 -m nullius.workspace_cli list --home /tmp/ws
+  nullius workspace list
+  WORKSPACES_DIR=/srv/nullius/workspaces nullius workspace list --json
+  nullius workspace list --home /tmp/ws
 
 exit codes:
   0  done
@@ -95,7 +95,7 @@ def _list(args) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        prog="python3 -m nullius.workspace_cli", description=__doc__.splitlines()[0],
+        prog="nullius workspace", description=__doc__.splitlines()[0],
         epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="command", metavar="COMMAND")
     ls = sub.add_parser("list", help="the workspaces under the home directory, most recently opened first",

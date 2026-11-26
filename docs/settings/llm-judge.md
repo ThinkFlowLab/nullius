@@ -13,7 +13,7 @@ The same questions as Decision, answered as JSON by a chat model.
 | --- | --- |
 | Answers | What the model states; no confidence value |
 | Out of range | An answer outside its question's options or range is left out |
-| Records | `judgements-llm/` in the workspace, its own trial tab |
+| Records | `judgements-llm/` below the user data directory, its own trial tab |
 
 ## Configure
 

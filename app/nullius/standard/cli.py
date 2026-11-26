@@ -790,7 +790,7 @@ def _exit_on_term():
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="nullius.standard.cli", description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(prog="nullius standard", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list", help="every definition, and which pairs fit")
     c = sub.add_parser("check", help="check the definitions, or one file")
