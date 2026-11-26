@@ -26,12 +26,12 @@
     </ul>
   {% endcall %}
 
-  {#- A card's fields (web/catalogue.py `_card`); the filters are the category's pills, the origin and what runs it dropdowns and columns, never card tags. #}
+  {#- A card's fields (web/catalogue.py `_card`); the filters are the category's pills, the origin, what runs it and what it needs dropdowns and columns, never on the card. #}
   {% set cols = [dict(key='icon', label='Mark', card='icon', table=false, class='bench-mark'), dict(key='title', label='Name', card='title'),
                  dict(key='category', label='Category', card='badge', class='cat-tag', filter='pills'), dict(key='origin', label='Origin', class='origin-tag', filter='dropdown', filter_icon='origin'),
-                 dict(key='domain', label='Domain', card='text', off=true), dict(key='runs', label='Runs with', class='run-tag', filter='dropdown', filter_icon='runner'),
+                 dict(key='domain', label='Domain', card='text', class='std-clamp', off=true), dict(key='runs', label='Runs with', class='run-tag', filter='dropdown', filter_icon='runner'),
                  dict(key='tasks', label='Tasks', card='stat', type='num'), dict(key='datasets', label='Datasets', card='stat', type='num'),
-                 dict(key='scoring', label='Scored by', card='stat', class='word'), dict(key='needs', label='Needs', card='note', icon='wrench', off=true),
+                 dict(key='scoring', label='Scored by', card='stat', class='word'), dict(key='needs', label='Needs', filter='dropdown', filter_icon='wrench', off=true),
                  dict(key='blocker', label='Blocker', card='alert')] %}
   {% set sort = ['title', 'tasks', 'datasets'] %}
   {% call cards('benchmarks', cols, items, search='Name, category, dataset', choices=choices, sort=sort, empty='No benchmark matches.', noun='benchmarks', layout='table' if request.args.get('view') == 'table' else 'cards', default='cards') %}

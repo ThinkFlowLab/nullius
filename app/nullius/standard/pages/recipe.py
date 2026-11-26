@@ -122,7 +122,7 @@ def _capability_kind(b: dict) -> str:
 def benchmarks(cat) -> List[dict]:
     """The benchmarks the Benchmarks page and the builder's Benchmark step list: each of the catalogue's listed
     entries (``Catalog.listed_benchmarks``, whichever runner runs it) as ``b``, with its ``datasets``, its ``tasks``
-    and their ``unit`` (``Catalog.tasks_of``), what some of its options need of a machine (``host``, by label, None for nothing),
+    and their ``unit`` (``Catalog.tasks_of``), what some of its options need of a machine (``host``, each name's label, None for nothing),
     what it is run with: ``family`` agent or capability (a benchmark only Harbor runs runs agents) and, for a
     capability, its ``kind``; ``versions``, another version's tasks and unit by version; and ``origins``, its versions'
     origins, each once, the default version's first."""
@@ -132,7 +132,7 @@ def benchmarks(cat) -> List[dict]:
         d = defs.get(b.key) or {}
         tasks, unit = cat.tasks_of(b)
         out.append({"b": b, "datasets": cat.datasets_of(b), "tasks": tasks, "unit": unit,
-                    "host": [hostreq.label(d, n) for n in sorted(d["host"])] if d.get("host") else None,
+                    "host": {n: hostreq.label(d, n) for n in sorted(d["host"])} if d.get("host") else None,
                     "family": d.get("family") or "agent", "kind": _capability_kind(d),
                     "origins": origins(d) if d else [b.origin],
                     # another version's tasks, when its datasets count differently (``Catalog.in_version``)

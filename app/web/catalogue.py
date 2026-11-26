@@ -45,10 +45,19 @@ def benchmark_cards(cat) -> list:
             for row in standard_recipe.benchmarks(cat)]
 
 
+NEEDS_NOTHING = ("none", "Nothing")   # the Needs filter's value for a benchmark that needs nothing of a machine
+
+
 def benchmark_choices(cat) -> dict:
-    """The values the benchmarks' cards are filtered by: their category, what runs them, their origin, what they run."""
+    """The values the benchmarks' cards are filtered by: their category, what runs them, their origin, what they run,
+    what they need of a machine (each requirement once, by its shortest label; nothing first)."""
+    needs = {}
+    for row in standard_recipe.benchmarks(cat):
+        for n, label in (row["host"] or {}).items():
+            needs[n] = min(needs.get(n, label), label, key=len)
     return {"category": [(c, c) for c in cat.categories], "runs": [(way, label) for way, (label, _) in RUNS_WITH.items()],
-            "origin": [(o, o.capitalize()) for o in catalog.ORIGINS], "evaluates": list(FAMILIES.items())}
+            "origin": [(o, o.capitalize()) for o in catalog.ORIGINS], "evaluates": list(FAMILIES.items()),
+            "needs": [NEEDS_NOTHING, *sorted(needs.items(), key=lambda x: x[1])]}
 
 
 def _card(row, sheet) -> dict:
@@ -61,8 +70,7 @@ def _card(row, sheet) -> dict:
             "icon": sheet and f"{sheet}#bm-{b.key}", "title": b.title, "domain": b.domain,
             "runs": [{"text": label, "class": "rt-" + way, "title": "Runs with " + name, "value": way}
                      for way, (label, name) in RUNS_WITH.items() if way in b.harness],
-            "needs": needs and {"text": "needs " + ", ".join(needs),
-                                "title": f"Some of its options need {', '.join(needs)} installed on the machine it runs on: see its page"},
+            "needs": [{"text": label, "value": n} for n, label in needs.items()] if needs else [dict(zip(("value", "text"), NEEDS_NOTHING))],
             "tasks": {"text": tasks, "label": unit.capitalize(), "value": tasks.replace(",", "").split("–")[-1]},
             "versions": {v: {"text": n, "label": u.capitalize()} for v, (n, u) in row["versions"].items()},
             "datasets": {"text": len(ds), "label": "Datasets" if len(ds) != 1 else "Dataset"},
