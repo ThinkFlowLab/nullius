@@ -135,9 +135,9 @@ Set `NULLIUS_HOME` before both commands to migrate into a separate profile.
 
 ## Scoring settings
 
-Open **Scoring settings** from the Leaderboard head; **Leaderboard** returns to
-its table and charts. The dedicated page orders Custom benchmarks, Capabilities,
-then Domains. Read-only clients can inspect it; only local clients can write.
+**Scoring settings** in the Leaderboard head switches the page in place (`/scoring`);
+**Leaderboard** switches back, with saved changes applied. Order: Custom benchmarks,
+Capabilities, Domains. Read-only clients can inspect it; only local clients can write.
 
 Each entry chooses a benchmark, dataset or declared task-name part, pinned version, supported metric and
 independent weight in that axis. Score is always offered; pass^3 is offered for

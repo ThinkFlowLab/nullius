@@ -1,0 +1,13 @@
+{#- Scoring settings: the Leaderboard's other view, switched to in place. One header names each card's columns. #}
+{% macro columns(first) %}<div class="lb-axis lb-axis-head" aria-hidden="true"><span>{{ first }}</span><div class="lb-entry"><span>Benchmark</span><span>Dataset</span><span>Version</span><span>Metric</span><span>Weight</span><span></span><span></span></div><span>Weight in Overall</span></div>{% endmacro %}
+<form id="scoring-form" class="lb-settings" data-writable="{{ 'true' if writable else 'false' }}"{{ ' hidden' if view != 'scoring' }}><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<fieldset{{ ' disabled' if not writable }}>
+<section class="lb-panel"><div class="lb-head"><h2>Custom benchmarks</h2><button class="btn ghost sm" type="button" id="custom-add">Add a custom benchmark</button></div><div id="scoring-custom"></div></section>
+{% for title, first, names in [('Capabilities','Capability',capabilities),('Domains','Domain',domains)] %}<section class="lb-panel lb-axes"><h2>{{ title }}</h2>{{ columns(first) }}
+{% for name in names %}<div class="lb-axis" data-scoring-axis="{{ name }}" role="group" aria-labelledby="lb-axis-{{ loop.index }}-{{ first }}"><h3 id="lb-axis-{{ loop.index }}-{{ first }}">{{ name }}</h3><div class="lb-entries"><div data-entries></div><button class="btn ghost sm lb-icon" type="button" data-add-entry aria-label="Add a benchmark to {{ name }}" title="Add a benchmark"><svg class="ic"><use href="#i-plus"/></svg></button></div><span class="lb-weight"><input type="number" min="0" step="any" class="lb-input" data-overall="{{ name }}" value="{{ settings.axes[name].weight }}" required aria-label="{{ name }}: weight in Overall"><output data-overall-share="{{ name }}"></output></span></div>{% endfor %}</section>{% endfor %}
+<div class="lb-reset"><button class="btn ghost" type="button" id="reset-ask">Reset to defaults</button><span id="reset-confirm" hidden><span>Reset mappings and weights, and remove every custom benchmark?</span><button type="button" class="btn danger" id="reset-yes">Reset</button><button type="button" class="btn ghost" id="reset-no">Cancel</button></span></div>
+</fieldset>
+<div class="lb-savebar" hidden role="status"><span data-changes></span><button type="button" class="btn ghost sm" data-settings-retry>Retry</button></div>
+</form>
+<template id="scoring-marks">{% for r in board.rows %}<span class="lb-mark" data-key="{{ r.key }}">{{ agent_mark('agent',r.agent,r.name) }}</span>{% endfor %}</template>
+<script type="application/json" id="scoring-data">{{ dict(settings=settings, options=options, revision=revision)|tojson }}</script>

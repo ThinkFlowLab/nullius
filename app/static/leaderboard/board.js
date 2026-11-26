@@ -90,14 +90,15 @@
   }
   /* a score's chip: one blue whose perceived lightness moves in even steps from 50% to 100%, so every point of
      score is the same step of shade; at or below 50% it is the darkest */
-  const heat = v => Math.max(0,Math.min(1,(v-.5)/.5));
+  /* one colour per rate: below 60% a navy that deepens with the rate, from 60% one strong colour */
+  const heat = v => Math.max(0,Math.min(1,v/.6));
   function chip(cell, value, unverified, axis) {
     cell.replaceChildren();
     if (value == null) { cell.append(element('span','–',{class:'lb-none'})); return; }
     /* lightness runs .30 to .80 in the dark theme and .90 to .42 in the light one; past .62 dark text reads best */
-    const t=heat(value), ink=`${.30+.50*t>.62?' lb-ink-dark':''}${.90-.48*t<.62?' lb-ink-light':''}`;
+    const t=heat(value), ink=value>=.6?' lb-top':'';
     const span=element('span',whole(value),{class:`lb-chip${ink}${unverified?' lb-unverified':''}`,tabindex:'0','data-axis':axis});
-    span.style.setProperty('--lb-t',t.toFixed(3));cell.append(span);
+    span.style.setProperty('--lb-t',t.toFixed(3));span.style.setProperty('--lb-t2',Math.max(0,(value-.6)/.4).toFixed(3));cell.append(span);
   }
   function overall(cell, r) {
     cell.replaceChildren();
@@ -382,7 +383,12 @@
   document.querySelectorAll('[data-vs-select]').forEach(s=>{data.versions.forEach(v=>s.append(element('option',`Same agent: ${v.label}`,{value:'version:'+JSON.stringify([v.benchmark,v.version])})));s.onchange=()=>{versus=s.value;document.querySelectorAll('[data-vs-select]').forEach(v=>setSelect(v,versus));compareChoice().catch(()=>{});};});
   document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{metric=b.dataset.metric;press('lb-metric','data-metric',metric);drawScatter();});
   async function deferred(turn) { const response=await nulliusFetch(`/api/leaderboard/metrics?all_scores=${data.all_scores?1:0}&context=${encodeURIComponent(data.context)}`);if(!response.ok)return;const result=await response.json();if(turn!==generation||result.context!==data.context)return;result.rows.forEach(r=>{const existing=row(r.key);if(existing)existing.metrics=r.metrics;});updateTable();card();drawScatter(); }
-  document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=async()=>{press('lb-mode','data-mode',b.dataset.mode);const turn=++generation;const response=await nulliusFetch(`/api/leaderboard?all_scores=${b.dataset.mode}`);if(!response.ok)return;const next=await response.json();if(turn!==generation)return;const kept=new Map(data.rows.map(r=>[r.key,r.metrics]));next.rows.forEach(r=>{const m=kept.get(r.key);if(!m)return;r.metrics={...m,...Object.fromEntries(Object.entries(r.metrics||{}).filter(([,v])=>v?.value!=null))};});data=next;if(!row(selected))selected=data.selected;updateTable();compareChoice().catch(()=>{});draw();deferred(turn).catch(()=>{});});
+  async function reload(mode){const turn=++generation;const response=await nulliusFetch(`/api/leaderboard?all_scores=${mode}`);if(!response.ok)return;const next=await response.json();if(turn!==generation)return;const kept=new Map(data.rows.map(r=>[r.key,r.metrics]));next.rows.forEach(r=>{const m=kept.get(r.key);if(!m)return;r.metrics={...m,...Object.fromEntries(Object.entries(r.metrics||{}).filter(([,v])=>v?.value!=null))};});data=next;if(!row(selected))selected=data.selected;updateTable();compareChoice().catch(()=>{});draw();deferred(turn).catch(()=>{});}
+  document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{press('lb-mode','data-mode',b.dataset.mode);reload(b.dataset.mode).catch(()=>{});});
+  /* scores saved in Scoring settings reach the board when it is shown again */
+  let rescored=false;
+  document.addEventListener('leaderboard:rescored',()=>{rescored=true;});
+  document.addEventListener('leaderboard:view',e=>{if(e.detail.view==='board'&&rescored){rescored=false;reload(data.all_scores?'1':'0').catch(()=>{});}});
   document.getElementById(`${table.id}-tools`)?.addEventListener('change',e=>{
     const box=e.target;if(!box.matches('input[data-col]')||passing)return;
     if(!box.checked){e.stopPropagation();shrink(box);}

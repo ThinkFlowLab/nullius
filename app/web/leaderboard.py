@@ -15,9 +15,19 @@ def _document(deferred=False):
                             all_scores=request.args.get("all_scores") == "1", deferred=deferred)
 
 
+def _page(view):
+    """The Leaderboard and its Scoring settings are one page: either view opens it, the other is a switch away."""
+    _, benchmarks = service.catalogue()
+    settings, _ = configuration.load(configuration.location(), benchmarks)
+    return render_template("leaderboard/board.html", board=_document(), percent=weights.percent, view=view,
+                           settings=settings, options=service.options(benchmarks),
+                           capabilities=configuration.CAPABILITIES, domains=configuration.DOMAINS,
+                           writable=shared._local_client(), revision=service.revision())
+
+
 @app.get("/leaderboard")
 def leaderboard():
-    return render_template("leaderboard/board.html", board=_document(), percent=weights.percent)
+    return _page("board")
 
 
 @app.get("/api/leaderboard")
@@ -52,11 +62,7 @@ def scoring_alias():
 
 @app.get("/scoring")
 def scoring_page():
-    _, benchmarks = service.catalogue()
-    settings, warning = configuration.load(configuration.location(), benchmarks)
-    return render_template("leaderboard/scoring.html", settings=settings, warning=warning, options=service.options(benchmarks),
-                           rows=_document()["rows"], axes=configuration.AXES, capabilities=configuration.CAPABILITIES,
-                           domains=configuration.DOMAINS, writable=shared._local_client(), revision=service.revision())
+    return _page("scoring")
 
 
 @app.route("/api/scoring", methods=["GET", "POST"])

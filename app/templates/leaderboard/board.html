@@ -1,13 +1,14 @@
 {% extends 'base.html' %}
 {% from '_page.html' import page_head %}
 {% import '_tables.html' as tables %}
-{% block title %}Leaderboard · Nullius{% endblock %}
+{% block title %}{{ 'Scoring settings' if view == 'scoring' else 'Leaderboard' }} · Nullius{% endblock %}
 {% block head %}<script src="{{ url_for('static', filename='tables.js') }}"></script><link rel="stylesheet" href="{{ url_for('static', filename='leaderboard/leaderboard.css') }}">{% endblock %}
 {% macro picks() %}<span class="lb-picks"><span class="lb-pick"><svg class="lb-swatch" viewBox="0 0 22 14" aria-hidden="true" data-swatch="0"></svg><select data-agent-select aria-label="Agent">{% for r in board.rows if r.overall is not none %}<option value="{{ r.key }}">{{ r.name }}</option>{% endfor %}</select></span><span class="muted">vs</span><span class="lb-pick"><svg class="lb-swatch" viewBox="0 0 22 14" aria-hidden="true" data-swatch="1"></svg><select data-vs-select aria-label="Compared with"><option value="average">Average</option>{% for r in board.rows if r.overall is not none %}<option value="{{ r.key }}">{{ r.name }}</option>{% endfor %}</select></span></span>{% endmacro %}
 {% block body %}
-{% set actions %}<a class="btn ghost lb-head-link" href="{{ url_for('scoring_page') }}">Scoring settings</a>{% endset %}
-{{ page_head('Leaderboard', actions=actions) }}
+{% set actions %}<a class="btn ghost lb-head-link" id="lb-switch" href="{{ url_for('leaderboard') if view == 'scoring' else url_for('scoring_page') }}">{{ 'Leaderboard' if view == 'scoring' else 'Scoring settings' }}</a>{% endset %}
+{{ page_head('Scoring settings' if view == 'scoring' else 'Leaderboard', actions=actions, id='lb-title') }}
 {% if board.warning %}<p role="alert">{{ board.warning }}</p>{% endif %}
+<div id="lb-board-view"{{ ' hidden' if view == 'scoring' }}>
 {% if board.empty %}<p id="lb-empty">{{ board.empty }}</p>{% endif %}
 <section class="lb-panel" id="leaderboard-board">
 <div class="lb-head">
@@ -41,8 +42,10 @@
 </section>
 <section id="leaderboard-strips" class="lb-panel"><div class="lb-head"><h2>Resolved rate by domain and capability</h2>{{ picks() }}</div><div class="lb-chart-pair"><div><h3>By domain</h3><div data-chart="strips-domains"></div></div><div><h3>By capability</h3><div data-chart="strips-capabilities"></div></div></div></section>
 <section id="leaderboard-radars" class="lb-panel"><div class="lb-head"><h2>Resolved rate profiles</h2>{{ picks() }}</div><div class="lb-chart-pair"><div><h3>By domain</h3><div data-chart="radars-domains"></div></div><div><h3>By capability</h3><div data-chart="radars-capabilities"></div></div></div></section>
+</div>
+{% include 'leaderboard/_scoring.html' %}
 <div id="lb-evidence" class="lb-evidence" role="dialog" aria-label="Score evidence" hidden></div>
 <script type="application/json" id="lb-data">{{ board|tojson }}</script>
 <script type="application/json" id="lb-marks">{% set marks={} %}{% for r in board.rows %}{% set _=marks.update({r.key: agent_mark_url(r.agent)}) %}{% endfor %}{{ marks|tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='leaderboard/motion.js') }}"></script><script src="{{ url_for('static', filename='leaderboard/board.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='leaderboard/motion.js') }}"></script><script src="{{ url_for('static', filename='leaderboard/board.js') }}"></script><script src="{{ url_for('static', filename='leaderboard/scoring.js') }}"></script>{% endblock %}
