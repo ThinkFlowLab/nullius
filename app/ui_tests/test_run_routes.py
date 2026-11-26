@@ -562,16 +562,18 @@ class ResumeIntoWorkspace(unittest.TestCase):
 
     def test_a_run_posted_with_a_workspace_goes_into_it_and_the_open_one_stays_open(self):
         """``workspace``: the run's jobs go into that workspace, made under that name when there is none; the open
-        one keeps its roots and stays open; the record names it for a restart. A name that is not one starts nothing."""
+        one keeps its roots and stays open; the record names it for a restart, and the answer's job address names it.
+        A name that is not one starts nothing."""
         def post(name, into):
             r = self.client.post("/run", data=json.dumps({"name": name, "script": "", "where": "local", "workspace": into,
-                                                          "parts": [{"id": "a", "label": "a", "script": "echo a"}]}),
+                                                          "jobs": [{"name": name}], "parts": [{"id": "a", "label": "a", "script": "echo a"}]}),
                                  content_type="application/json", headers={"Origin": "http://localhost", "X-CSRF-Token": self.csrf}); self.addCleanup(r.close)
             if r.status_code == 200:
                 execution.EXECUTIONS[r.json["id"]].thread.join(10)
             return r
         first, second = (str(self.tmp / "runs" / n / "jobs") for n in ("q1", "q2"))
-        self.assertEqual(post("q1", "trials").status_code, 200)
+        r = post("q1", "trials")
+        self.assertEqual((r.status_code, r.json["open"]), (200, "/job/q1?workspace=trials"))     # not the open workspace's
         made = workspace.load(self.home, "trials")
         self.assertEqual((made.label, made.roots), ("trials", [first]))
         self.assertEqual(web.shared.STATE["workspace"].name, self.ws.name)
