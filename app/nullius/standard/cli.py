@@ -668,8 +668,8 @@ def _boat_units(a, b, other) -> int:
             words += ["--" + field.replace("_", "-"), value]
     # Saved price overrides belong to the launching profile, not the fresh VM.
     needs = definitions.option_needs(b, vals)
-    models = [a.model, other.get("sent"), a.judge_model or providers.served_as((b.get("score", {}).get("judge") or {}).get("model", ""), a.provider),
-              a.simulator_model or providers.served_as((b.get("simulator") or {}).get("model", ""), a.provider),
+    models = [a.model, other.get("sent"), a.judge_model or providers.official_as((b.get("score", {}).get("judge") or {"model": ""}), a.provider),
+              a.simulator_model or providers.official_as((b.get("simulator") or {"model": ""}), a.provider),
               *[providers.served_as(m, a.provider) for m in needs["embeddings"] + needs["reranker"]]]
     explicit = prices(a.price)
     for model, row in price_list.given(models, price_list.table()).items():

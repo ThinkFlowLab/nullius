@@ -1658,12 +1658,14 @@ def problems(d: dict, kind: str) -> List[str]:
             bad.append("score.judge: {model: the official judge, as the provider names it; says: what it is asked}")
         elif j is not None and not isinstance(j.get("retired", False), bool):
             bad.append("score.judge.retired: true when the official judge can no longer be called")
+        bad += _served_as("score.judge", j)
         sim = d.get("simulator")
         if sim is not None:
             if not isinstance(sim, dict) or not _MODEL_NAME.match(str(sim.get("model", ""))) or not sim.get("says"):
                 bad.append("simulator: {model: the official simulated user's model, as the provider names it; says: whom it plays}")
             elif "agent.conversation/v1" not in (needs if isinstance(needs, list) else []):
                 bad.append("simulator: only a benchmark that needs agent.conversation/v1 has a user to simulate")
+            bad += _served_as("simulator", sim)
         bad += _controls(d.get("controls"))
         bad += _leaderboard(d)
         bad += _setups(d.get("setups"))
@@ -1900,6 +1902,18 @@ def skills_shown(port: str, record: Optional[dict]) -> List[str]:
         return [s for s, r in record["skills"].items() if isinstance(r, dict) and r.get("ok")]
     return list(port_skills(port)) if on_current_kit(port, record) else []
 
+
+
+def _served_as(w: str, spec) -> List[str]:
+    """An official judge's or simulated user's ``served_as``: {provider: the name that provider serves it as}."""
+    sa = spec.get("served_as") if isinstance(spec, dict) else None
+    if sa is None:
+        return []
+    from nullius.providers import PROVIDERS
+    if not isinstance(sa, dict) or not sa or any(p not in PROVIDERS or not _MODEL_NAME.match(str(m))
+                                                  for p, m in sa.items()):
+        return [f"{w}.served_as: {{provider: the name it serves the model as}}"]
+    return []
 
 def _skills(d: dict) -> List[str]:
     """A kit's ``basic`` and ``skills``, a benchmark's ``needs_skills``."""

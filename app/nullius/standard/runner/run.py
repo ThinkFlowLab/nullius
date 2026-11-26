@@ -879,11 +879,11 @@ class Run:
         j = (bench.get("score") or {}).get("judge")
         if j and j.get("retired") and not judge_model:
             raise Refused(f"{bench.get('label') or bench['key']}'s official judge, {j['model']}, is retired: name another with --judge-model")
-        self.judge_model = (judge_model or providers.served_as(j["model"], provider)) if j else None
+        self.judge_model = (judge_model or providers.official_as(j, provider)) if j else None
         # A benchmark whose user a model plays: its driver's turns ask that model the same way, on <tag>-simulator.
         # A control holds no conversation, so it never asks it.
         sim = bench.get("simulator")
-        self.simulator_model = (simulator_model or providers.served_as(sim["model"], provider)) if sim else None
+        self.simulator_model = (simulator_model or providers.official_as(sim, provider)) if sim else None
         # A control (definitions.control) calls no model: its run needs a key only for the benchmark's judge.
         ds = [d for d in bench["datasets"] if dataset in (None, d["id"])]
         if not ds:

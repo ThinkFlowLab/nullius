@@ -312,6 +312,13 @@ def served_as(model: str, provider: str) -> str:
     return model
 
 
+def official_as(spec: dict, provider: str) -> str:
+    """A benchmark's official judge or simulated user ({model, served_as?}) as ``provider`` serves it:
+    its own name there when the definition gives one (OpenRouter serves gpt-4.1-2025-04-14 as
+    openai/gpt-4.1), else ``served_as``."""
+    return (spec.get("served_as") or {}).get(provider) or served_as(spec["model"], provider)
+
+
 def available(env=os.environ) -> List[str]:
     """The choices whose setting is set (``needs``), in the order the builder
     prefers them: OpenRouter, OpenAI, Anthropic, then each custom provider."""

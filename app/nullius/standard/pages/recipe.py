@@ -625,10 +625,12 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     sim_model = str(recipe.get("simulator_model") or "").strip()
     judge_model = str(recipe.get("judge_model") or "").strip()
     like = {"paper": "Like the paper", "leaderboard": "Like the leaderboard"}.get(model_choice)
+    spec = {"judge": (b.get("score") or {}).get("judge"), "simulator": b.get("simulator")}
     for what, role, m in (("the user simulator's", "simulator", sim_model), ("the judge's", "judge", judge_model)):
         if m and not _MODEL.match(m):
             add("model", f"Enter {what} model as the provider lists it, or leave it empty for its official one.")
-        elif m and like and m not in (fixed[role], providers.served_as(fixed[role], provider_)):
+        elif m and like and m not in (fixed[role], providers.served_as(fixed[role], provider_),
+                                      providers.official_as({"model": fixed[role], **({} if lb.get(role) else spec[role] or {})}, provider_)):
             add("model", f"{like} uses {what} model {fixed[role]}: choose Any of your choice for {m}.")
     if ((b.get("score") or {}).get("judge") or {}).get("retired") and not judge_model and not like:
         add("model", f"{b['label']}'s official judge, {official['judge']}, is retired: enter a model for the judge.")
@@ -760,8 +762,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         judge, sim = (b.get("score") or {}).get("judge"), b.get("simulator")
         called = [m for x in dss for p in picks for m in ledger.models(
             p["o"], None if p["control"] else (p["o"].get("sent") or p.get("model")) if p.get("setup") else model,
-            (judge_model or providers.served_as(judge["model"], provider)) if judge else None,
-            (sim_model or providers.served_as(sim["model"], provider)) if sim else None,
+            (judge_model or providers.official_as(judge, provider)) if judge else None,
+            (sim_model or providers.official_as(sim, provider)) if sim else None,
             providers.served_as((definitions.option_needs(b, per_ds[x["id"]])["embeddings"] or [""])[0], provider), control=p["control"])]
         called += [providers.served_as(m, provider) for m in needs["reranker"]]
         missing = unpriced([m for m in dict.fromkeys(called) if isinstance(m, str) and m])
@@ -777,8 +779,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     def sent_of(p: dict) -> Dict[str, Optional[str]]:
         """Each model field's model as job ``p`` sends it; None where it has none (a control has no model of its own)."""
         return {"model": None if p["control"] else (p["o"].get("sent") or p.get("model")) if p.get("setup") else model,
-                "judge": (judge_model or providers.served_as(judge_def["model"], provider)) if judge_def else None,
-                "simulator": (sim_model or providers.served_as(sim_def["model"], provider)) if sim_def else None}
+                "judge": (judge_model or providers.official_as(judge_def, provider)) if judge_def else None,
+                "simulator": (sim_model or providers.official_as(sim_def, provider)) if sim_def else None}
 
     def called_of(p: dict) -> List[str]:
         s = sent_of(p)

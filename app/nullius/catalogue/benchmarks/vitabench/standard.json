@@ -100,6 +100,7 @@
   },
   "simulator": {
     "model": "gpt-4.1-2025-04-14",
+    "served_as": {"openrouter": "openai/gpt-4.1"},
     "says": "the user: the upstream's own user simulator, with the paper's model, at temperature 0"
   },
   "controls": {

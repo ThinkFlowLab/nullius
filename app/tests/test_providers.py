@@ -48,6 +48,13 @@ class Providers(unittest.TestCase):
                                 ("openai/gpt-4o", "openrouter"), ("some-local-model", "openrouter")):
             self.assertEqual(providers.served_as(model, provider), model)
 
+    def test_an_official_model_openrouter_serves_under_another_name(self):
+        """OpenRouter lists gpt-4.1-2025-04-14 only as openai/gpt-4.1: the definition names it there."""
+        sim = {"model": "gpt-4.1-2025-04-14", "served_as": {"openrouter": "openai/gpt-4.1"}}
+        self.assertEqual(providers.official_as(sim, "openrouter"), "openai/gpt-4.1")
+        self.assertEqual(providers.official_as(sim, "openai"), "gpt-4.1-2025-04-14")
+        self.assertEqual(providers.official_as({"model": "gpt-4o-2024-08-06"}, "openrouter"), "openai/gpt-4o-2024-08-06")
+
 
 class Runners(unittest.TestCase):
     def test_the_builder_offers_harbor_and_nullius_and_says_why_another_is_gone(self):
