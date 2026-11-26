@@ -42,7 +42,7 @@ body.onb-open .shell { margin-right: 310px; }
 .onb-cat.now .onb-ring { border-color: var(--accent); color: var(--accent); }
 .onb-name { font-weight: 500; font-size: .86rem; display: block; }
 .onb-where { font-size: .73rem; color: var(--text-faint); }
-.onb-cnt { font-family: var(--mono, ui-monospace, monospace); font-size: .75rem; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.onb-cnt { font-family: var(--mono); font-size: .75rem; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .onb-subs { list-style: none; margin: 0; padding: 0 .75rem .6rem 2.75rem; display: grid; gap: 1px; }
 .onb-subs button { border: 0; background: none; color: inherit; cursor: pointer; padding: .2rem 0; text-align: left; font: inherit; font-size: .82rem;
   display: flex; gap: .5rem; align-items: baseline; width: 100%; }
