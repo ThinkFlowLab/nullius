@@ -17,18 +17,22 @@
 
 /* the table */
 .lb-table { table-layout: fixed; width: 100%; font-size: .82rem; }
-.lb-table th { white-space: nowrap; text-align: center; overflow: hidden; transition: width .28s cubic-bezier(.2,.7,.2,1), padding .28s cubic-bezier(.2,.7,.2,1); }
+.lb-table th { white-space: nowrap; text-align: center; overflow: hidden; transition: width .28s cubic-bezier(.2,.7,.2,1), padding .28s cubic-bezier(.2,.7,.2,1), color .15s ease; }
 .lb-table { transition: min-width .28s cubic-bezier(.2,.7,.2,1); }
 .lb-table td { overflow: hidden; }
 .lb-table .lb-closing { padding-left: 0; padding-right: 0; transition: width .28s cubic-bezier(.2,.7,.2,1), padding .28s cubic-bezier(.2,.7,.2,1); }
 .lb-table.lb-instant, .lb-table .lb-instant { transition: none; }
+/* switching families: the changing columns' contents fade, their cells and the row's colour stay */
+.lb-table :is(th, td) > * { transition: opacity .15s ease; }
+.lb-table.lb-swap :is(th, td):not([data-col="rank"], [data-col="agent"], [data-col="overall"]) { color: transparent; }
+.lb-table.lb-swap :is(th, td):not([data-col="rank"], [data-col="agent"], [data-col="overall"]) > * { opacity: 0; }
 /* the sideways scrollbar's track is always there, so a wider table never pushes the page down */
 #leaderboard-board .table-wrap { overflow-x: scroll; }
 .lb-table [data-col="rank"] { width: 48px; text-align: center; }
 .lb-table [data-col="agent"] { width: 238px; text-align: left; }
 .lb-table [data-col="overall"] { width: 104px; }
 .lb-table [data-col="steps"] { width: 66px; } .lb-table [data-col="time"] { width: 84px; } .lb-table [data-col="calls"] { width: 92px; } .lb-table [data-col="cost"] { width: 72px; }
-.lb-table td { text-align: center; white-space: nowrap; color: var(--text-dim); font-variant-numeric: tabular-nums; padding-top: 9px; padding-bottom: 9px; transition: background-color .2s, padding .28s cubic-bezier(.2,.7,.2,1); }
+.lb-table td { text-align: center; white-space: nowrap; color: var(--text-dim); font-variant-numeric: tabular-nums; padding-top: 9px; padding-bottom: 9px; transition: background-color .2s, padding .28s cubic-bezier(.2,.7,.2,1), color .15s ease; }
 /* the board sits on a card, so its pinned cells take the card's colour, and the row's when hovered or chosen */
 #leaderboard-board .table-wrap .grid .sticky-col, #leaderboard-board .table-wrap .grid thead th { background: var(--surface); }
 #leaderboard-board .table-wrap .grid tbody tr:hover td { background: var(--surface-2); }
@@ -68,7 +72,7 @@
 .lb-dot.lb-current .lb-edge { stroke: var(--accent); stroke-width: 2.5; }
 .lb-dot:is(:hover, :focus-visible) .lb-edge { stroke: var(--text); }
 .lb-dot .lb-logo { transform-box: fill-box; transform-origin: center; transition: transform .18s ease-out; }
-.lb-dot:is(:hover, :focus-visible) .lb-logo { transform: scale(1.06); }
+.lb-dot:is(:hover, :focus-visible) .lb-logo { transform: scale(1.25); }
 
 /* the agent card */
 .lb-who-big { display: flex; gap: 12px; align-items: center; }

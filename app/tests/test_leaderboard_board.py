@@ -29,8 +29,8 @@ class BoardExamples(unittest.TestCase):
 
     def test_c6_partial_perfection_follows_complete_sixty_percent(self):
         rows = self.build([self.make_run("A", ["resolved"]), self.make_run("B", ["resolved"] * 60 + ["agent_error"] * 40)])["rows"]
-        self.assertEqual([(r["name"], r["overall"], r["rank"]) for r in rows], [("B", .6, 1), ("A", 1, None), ("C", None, None)])
-        self.assertIn("GAIA 1 of 100 tasks", rows[1]["reasons"])
+        self.assertEqual([(r["name"], r["overall"], r["rank"]) for r in rows], [("A", 1, 1), ("B", .6, 2), ("C", None, None)])
+        self.assertIn("GAIA 1 of 100 tasks", rows[0]["reasons"])            # partial coverage is a note beside the rank
 
     def test_c21_verified_all_custom_exemption_and_average(self):
         jobs = [self.make_run("A", ["resolved"] * 50 + ["agent_error"] * 50), self.make_run("B", ["resolved"] * 60 + ["agent_error"] * 40)]
@@ -78,10 +78,10 @@ class BoardExamples(unittest.TestCase):
         self.benchmarks[0]["datasets"].append({"id": "second", "tasks": {"0": "travel-0", "1": "travel-1"}})
         complete = self.make_run("A", ["resolved"] * 100)
         partial = replace(self.make_run("A", ["resolved"]), job_id="travel", dataset="second")
-        self.assertEqual(self.build([complete, partial])["rows"][0]["rank"], 1)
+        self.assertNotIn("GAIA · second 1 of 2 tasks", self.build([complete, partial])["rows"][0]["reasons"])
         self.config["axes"]["Travel"]["weight"] = 1
         row = self.build([complete, partial])["rows"][0]
-        self.assertIsNone(row["rank"])
+        self.assertEqual(row["rank"], 1)
         self.assertIn("GAIA · second 1 of 2 tasks", row["reasons"])
         self.benchmarks[0]["datasets"][1]["label"] = "GAIA"           # a dataset named as its benchmark is not repeated
         self.assertIn("GAIA 1 of 2 tasks", self.build([complete, partial])["rows"][0]["reasons"])
@@ -89,7 +89,6 @@ class BoardExamples(unittest.TestCase):
     def test_c6_whole_entry_requires_full_union_not_a_full_small_dataset(self):
         self.benchmarks[0]["datasets"].append({"id": "second", "tasks": {"0": "extra"}})
         row = self.build([self.make_run("A", ["resolved"] * 100)])["rows"][0]
-        self.assertIsNone(row["rank"])
         self.assertIn("GAIA 100 of 101 tasks", row["reasons"])
 
     def test_c21_custom_only_rows_rank_without_verified_requirements(self):
@@ -108,7 +107,6 @@ class BoardExamples(unittest.TestCase):
         short = self.make_run("B", ["resolved"], benchmark="tau3-bench")
         rows = self.build(jobs + [short])["rows"]
         a = next(r for r in rows if r["name"] == "A")
-        self.assertIsNone(a["rank"])
         self.assertIn("Tau · pass^3 not run", a["reasons"])
         b = next(r for r in rows if r["name"] == "B")           # ran, one attempt: says why there is no pass^3
         self.assertIn("Tau · pass^3: Three recorded attempts per eligible task required", b["reasons"])

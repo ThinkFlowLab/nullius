@@ -32,8 +32,8 @@ class WeightExamples(unittest.TestCase):
                                             ("none", None, [])]]
         result = weights.rank(rows)
         self.assertEqual([(r["key"], r["rank"]) for r in result],
-                         [("a", 1), ("b", 1), ("c", 3), ("partial", None), ("none", None)])
-        self.assertEqual(weights.rank(rows, sort="name", descending=True)[0]["key"], "c")
+                         [("partial", 1), ("a", 2), ("b", 2), ("c", 4), ("none", None)])
+        self.assertEqual(weights.rank(rows, sort="name", descending=True)[0]["key"], "partial")
 
 
 class ConfigurationExamples(unittest.TestCase):

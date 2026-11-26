@@ -326,12 +326,11 @@ zero. Evidence gives effective shares, configured weights, benchmark versions,
 task coverage and links to each selected run. An all-zero entry column is
 unavailable. All-zero Overall weights are invalid.
 
-Rank requires Overall and complete known coverage of the required verified
-entries across counted axes, including positive-weight domains. Unknown full
-coverage prevents ranking. Removed entries and zero weights do not gate rank.
-Manual sources cannot replace required verified evidence, and their absence
-does not disqualify another row. Exact Overall ties share competition rank;
-scored unranked rows follow ranked rows and retain their score bars.
+Every row with an Overall is ranked by it; exact ties share competition rank.
+Incomplete or unknown coverage of the required verified entries across counted
+axes, positive-weight domains included, is listed beside the rank as a note.
+Removed entries and zero weights add no note. Manual sources cannot replace
+required verified evidence.
 
 Verified only excludes custom scores everywhere. All scores includes them with
 the configured weights; affected values identify unverified influence and name

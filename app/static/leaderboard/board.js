@@ -25,7 +25,7 @@
     const axisName = target.dataset.axis; if (!axisName) return;
     pop.replaceChildren(element('strong', axisName));
     if (axisName === 'Overall') {
-      current.reasons.forEach(reason => pop.append(element('p', `Not ranked: ${reason}`)));
+      current.reasons.forEach(reason => pop.append(element('p', `Partial: ${reason}`)));
       pop.append(element('p',[current.identity.model,current.identity.effort].filter(Boolean).join(' · ')));
       data.axes.map(name=>[name,current.axes[name]]).filter(([,a]) => a.weight > 0).forEach(([name,a]) => {
         const names = a.entries.filter(e => e.unverified && e.share > 0).map(e => e.name);
@@ -132,16 +132,16 @@
     const cells=[th,...cellsOf(col)];
     cells.forEach(c=>c.classList.add('lb-instant','lb-closing'));th.style.width='0px';table.classList.add('lb-instant');table.offsetWidth;
     cells.forEach(c=>c.classList.remove('lb-instant','lb-closing'));table.classList.remove('lb-instant');size();
-    cellsOf(col).forEach(c=>c.animate([{opacity:0},{opacity:1}],{duration:280,easing:'ease-out'}));
+    cellsOf(col).forEach(c=>motion.contents(c,true,280));
   }
   function shrink(box) {
     const col=box.dataset.col,th=heads().find(h=>h.dataset.col===col);
     const pass=()=>{passing=true;box.dispatchEvent(new Event('change',{bubbles:true}));passing=false;size();};
     if(!th||th.hidden||motion.reduced.matches){pass();return;}
     const cells=[th,...cellsOf(col)];
-    cells.forEach(c=>{c.classList.add('lb-closing');c.animate([{opacity:1},{opacity:0}],{duration:200,easing:'ease-in',fill:'forwards'});});
+    const fades=cells.flatMap(c=>{c.classList.add('lb-closing');return motion.contents(c,false,200);});
     size(col);
-    setTimeout(()=>{pass();cells.forEach(c=>{c.classList.remove('lb-closing');c.getAnimations().forEach(a=>a.cancel());});},290);
+    setTimeout(()=>{pass();cells.forEach(c=>c.classList.remove('lb-closing'));fades.forEach(a=>a.cancel());},290);
   }
   /* a select changed from here: its selected attribute moves too, which the page's own select button watches */
   function setSelect(s,value) { if(![...s.options].some(o=>o.value===value))return; [...s.options].forEach(o=>o.toggleAttribute('selected',o.value===value)); s.value=value; }
@@ -300,7 +300,7 @@
     /* a difference reads green above the reference and red below it */
     const change=d=>element('span',signed(d),{class:d>0?'lb-up':d<0?'lb-down':''});
     const named=v=>v?[`${v.name} `,change(v.d)]:['–'];
-    if(!current.rank&&current.reasons.length)lines.push(['Not ranked',[current.reasons.length>1?`${current.reasons[0]} and ${current.reasons.length-1} more`:current.reasons[0]],current.reasons.join('\n')]);
+    if(current.reasons.length)lines.push(['Partial',[current.reasons.length>1?`${current.reasons[0]} and ${current.reasons.length-1} more`:current.reasons[0]],current.reasons.join('\n')]);
     if(baseline!=null&&current.overall!=null)lines.push([`Overall against ${against}`,[change(current.overall-baseline)]]);
     lines.push([`Best against ${against}`,named(differences[0])],[`Weakest against ${against}`,named(differences.at(-1))]);
     lines.push(['Time per task',[measure('time',current.metrics?.time?.value)]],['Cost per task',[measure('cost',current.metrics?.cost?.value)]]);
@@ -312,17 +312,15 @@
     swatches();card();drawScatter();for(const group of ['domains','capabilities']){strips(group);radar(group);}
   }
   function press(group,attr,value){document.querySelectorAll(`#${group} [${attr}]`).forEach(b=>b.setAttribute('aria-pressed',String(b.getAttribute(attr)===value)));}
-  /* switching families fades the columns after the agent out, swaps them, and fades them back in, so nothing jumps sideways */
-  let switching=null;
+  /* switching families fades what the changing columns hold, never the cells, so a row's colour and Overall stay put */
+  let swapping=0;
   document.querySelectorAll('[data-family]').forEach(b=>b.onclick=()=>{
     if(b.dataset.family===family)return; family=b.dataset.family;
     document.querySelectorAll('[data-family]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.family===family)));
-    const moving=()=>[...table.querySelectorAll('th[data-col],td[data-col]')].filter(c=>!['rank','agent'].includes(c.dataset.col));
-    switching?.forEach(a=>a.cancel());
+    clearTimeout(swapping);
     if(motion.reduced.matches){applyFamily();return;}
-    switching=moving().map(c=>c.animate([{opacity:1},{opacity:0}],{duration:120,easing:'ease-in',fill:'forwards'}));
-    const out=switching;
-    Promise.all(out.map(a=>a.finished)).then(()=>{if(switching!==out)return;applyFamily();out.forEach(a=>a.cancel());switching=null;moving().forEach(c=>c.animate([{opacity:0},{opacity:1}],{duration:200,easing:'ease-out'}));},()=>{});
+    table.classList.add('lb-swap');
+    swapping=setTimeout(()=>{applyFamily();table.offsetWidth;table.classList.remove('lb-swap');},150);
   });
   document.querySelectorAll('[data-agent-select]').forEach(s=>s.onchange=()=>choose(s.value));
   async function compareChoice() { const turn=++comparisonGeneration;projection=null;if(versus.startsWith('version:')) {const [benchmark,version]=JSON.parse(versus.slice(8));const response=await nulliusFetch('/api/leaderboard/comparison?'+new URLSearchParams({benchmark,version,all_scores:data.all_scores?'1':'0'}));if(response.ok){const result=await response.json();if(turn!==comparisonGeneration)return;projection=result;}}draw();}

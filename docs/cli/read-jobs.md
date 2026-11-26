@@ -87,7 +87,7 @@ Verified only is the default. `--all-scores` includes saved manual scores.
 The page and command use the same profile's [Scoring settings](../settings/README.md#scoring-settings).
 JSON includes agent/company/version and execution identity, benchmark entry
 versions, all capability and domain weights, effective shares, ranks and
-not-ranked reasons, task evidence and selected run IDs. Scores are fractions;
+coverage notes, task evidence and selected run IDs. Scores are fractions;
 text percentages use one decimal when needed.
 
 Time and cost include observed counts. The command also reads selected

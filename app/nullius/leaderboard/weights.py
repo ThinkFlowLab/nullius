@@ -16,17 +16,16 @@ def percent(value):
 
 
 def rank(rows, sort="overall", descending=True):
-    """Assign ranks from full precision, then sort within eligibility groups."""
+    """Rank every row with an Overall from full precision; incomplete coverage stays a note, never a gate."""
     rows = [dict(row, rank=None) for row in rows]
-    eligible = sorted((r for r in rows if r["overall"] is not None and not r["reasons"]),
+    eligible = sorted((r for r in rows if r["overall"] is not None),
                       key=lambda r: (-r["overall"], r["name"], r["key"]))
     previous, assigned = None, None
     for i, row in enumerate(eligible, 1):
         if row["overall"] != previous:
             assigned = i
         row["rank"], previous = assigned, row["overall"]
-    groups = [eligible, [r for r in rows if r["overall"] is not None and r["reasons"]],
-              [r for r in rows if r["overall"] is None]]
+    groups = [eligible, [r for r in rows if r["overall"] is None]]
     result = []
     for group in groups:
         group.sort(key=lambda r: (r["name"], r["key"]))

@@ -10,6 +10,13 @@ window.LeaderboardMotion = (() => {
     const controller={cancel:()=>animation.cancel()};active.set(node,controller);
     animation.finished.then(()=>{if(active.get(node)===controller)active.delete(node);},()=>{});
   }
+  /* a table cell's contents fade, never the cell: its background is the row's colour */
+  function contents(cell, show=true, duration=240) {
+    if(reduced.matches)return [];
+    const options={duration,easing:show?'ease-out':'ease-in',fill:show?'none':'forwards'};
+    return [cell.animate(show?[{color:'transparent'},{}]:[{},{color:'transparent'}],options),
+            ...[...cell.children].map(child=>child.animate(show?[{opacity:0},{opacity:1}]:[{opacity:1},{opacity:0}],options))];
+  }
   function geometry(node, from, to, delay=0) {
     cancel(node);const keys=Object.keys(to).filter(k=>from[k]!=null && from[k]!==to[k]);
     const set=values=>Object.entries(values).forEach(([k,v])=>node.setAttribute(k,v));
@@ -84,14 +91,13 @@ window.LeaderboardMotion = (() => {
     const update=()=>{
       cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{
         const next=measure();
-        /* a row slides whole to its new place; a cell is never moved on its own, since a table re-lays its columns
-           at once and cells pulled apart from their row draw blank in some engines: a cell that appears or changes fades in */
+        /* nothing in a table is moved by a transform, which some engines draw blank: a row that moved, a cell that
+           appears or one whose text changed fades in where it now is */
         next.forEach(({rect,text},node)=>{
           const old=previous.get(node);if(!old||!rect.width||!rect.height)return;
           const appeared=!old.rect.width||!old.rect.height;
-          if(node.tagName==='TR'){const dy=old.rect.y-rect.y;if(!appeared&&Math.abs(dy)>.5)fade(node,[{transform:`translateY(${dy}px)`},{transform:'translateY(0)'}]);return;}
-          if(appeared)fade(node,[{opacity:0},{opacity:1}],240);
-          else if(old.text!==text)fade(node,[{opacity:.25},{opacity:1}]);
+          if(node.tagName==='TR'){if(!appeared&&Math.abs(old.rect.y-rect.y)>.5)[...node.cells].forEach(cell=>contents(cell,true,260));return;}
+          if(appeared||old.text!==text)contents(node);
         });previous=next;
       });
     };
@@ -102,5 +108,5 @@ window.LeaderboardMotion = (() => {
     return {capture};
   }
   reduced.addEventListener('change',()=>{if(reduced.matches)[...active.keys()].forEach(n=>cancel(n,true));});
-  return {morph,reveal,table,fade,reduced};
+  return {morph,reveal,table,fade,contents,reduced};
 })();

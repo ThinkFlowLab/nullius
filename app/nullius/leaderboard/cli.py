@@ -14,7 +14,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="nullius leaderboard", description=__doc__,
         epilog="Configuration: scoring.json in the profile configuration directory (nullius paths). Edit it through Scoring settings or as a complete JSON document. Exit 0: read; 2: usage; 3: missing root. Unavailable measurements and invalid-settings fallback are disclosed in the output.")
     parser.add_argument("roots", nargs="*", help="result roots in one workspace; omit for catalogue rows without recorded-run measurements; --all-scores can still include saved manual scores")
-    parser.add_argument("--json", action="store_true", help="full precision scores, identity, evidence, ranks/reasons and observed metric counts")
+    parser.add_argument("--json", action="store_true", help="full precision scores, identity, evidence, ranks/coverage notes and observed metric counts")
     parser.add_argument("--all-scores", action="store_true", help="include unverified manual scores; default: verified only")
     args = parser.parse_args(argv)
     if any(not os.path.isdir(root) for root in args.roots):
@@ -44,7 +44,7 @@ def main(argv=None):
                     runs = " · runs " + ", ".join(entry["runs"]) if entry["runs"] else ""
                     print(f"    {entry['name']}{version} · {reading}{trust} · weight {entry['weight']:g} · share {weights.percent(entry['share'])}{tasks}{runs}")
             for reason in row["reasons"]:
-                print(f"  Not ranked: {reason}")
+                print(f"  Partial: {reason}")
             for metric, data in row["metrics"].items():
                 print(f"  {metric}: {data['value'] if data['value'] is not None else 'unavailable'} ({data['count']} observed)")
     return 0
