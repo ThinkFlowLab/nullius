@@ -354,6 +354,8 @@ class Recipe(unittest.TestCase):
         vita = dict(benchmark="vitabench", datasets=["cross"], others=["original"], provider="openrouter", model="vendor/m")
         said = " ".join(e["message"] for e in self.compiled(**vita, model_choice="paper")["errors"])
         self.assertIn("Paper models unavailable", said)
+        said = " ".join(e["message"] for e in self.compiled(**vita, model_choice="any")["errors"])
+        self.assertIn("claude-3.7-sonnet, is retired: enter a model for the judge", said)
         out = self.compiled(**vita, model_choice="any", judge_model="vendor/judge")
         self.assertEqual(out["errors"], [])
         self.assertIn("run vitabench original --model vendor/m", out["script"])

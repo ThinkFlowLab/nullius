@@ -877,6 +877,8 @@ class Run:
         # on a route of their own (<tag>-judge), recorded beside the unit's and never counted as the agent's.
         # The official one is written as its maker spells it; the run's provider may spell it otherwise.
         j = (bench.get("score") or {}).get("judge")
+        if j and j.get("retired") and not judge_model:
+            raise Refused(f"{bench.get('label') or bench['key']}'s official judge, {j['model']}, is retired: name another with --judge-model")
         self.judge_model = (judge_model or providers.served_as(j["model"], provider)) if j else None
         # A benchmark whose user a model plays: its driver's turns ask that model the same way, on <tag>-simulator.
         # A control holds no conversation, so it never asks it.

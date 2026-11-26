@@ -783,8 +783,8 @@
         // unless named; like the paper, the official one; like the leaderboard, its own and the options it fixes
         + (b.simulator ? (paper ? fixed('Model for the user simulator', lb && lb.simulator || b.simulator, lb && lb.simulator ? 'leaderboard' : 'official') : field('Model for the user simulator', 'simulator_model', rec.simulator_model || '', {list: 'nb-models', placeholder: b.simulator + ' (official)',
             hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator') : '')
-        + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)',
-            hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
+        + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge_retired ? 'Search or enter a model ID' : b.judge + ' (official)',
+            hint: b.judge_retired ? 'Grades the answers.' : 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
         + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, ((b.options[k] || {}).names || {})[v] || v, 'leaderboard')).join('') : '')
         + keyLine(rec);
     }

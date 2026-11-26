@@ -169,6 +169,16 @@ class ControlRun(unittest.TestCase):
         with self.assertRaises(run.Refused):
             run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env={})
 
+    def test_a_retired_judge_is_never_the_default(self):
+        b = kit("agent-task-v1", os.path.join(self.tmp, "kits"))
+        b["score"] = dict(b["score"], judge={"model": "judge-1", "says": "x", "retired": True})
+        env = {"OPENAI_API_KEY": "k"}
+        with self.assertRaises(run.Refused) as e:
+            run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env=env)
+        self.assertIn("judge-1, is retired: name another with --judge-model", str(e.exception))
+        self.assertEqual(run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env=env,
+                                 judge_model="judge-2").judge_model, "judge-2")
+
     def test_a_standard_job_named_oracle_without_the_record_is_no_control(self):
         j = parse.parse_job(self.go("agent-task-v1", "oracle"))
         with open(os.path.join(j.dir, "config.json")) as f:

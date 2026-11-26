@@ -184,6 +184,7 @@ def _bench_page(b: dict) -> dict:
                        for k, x in (b.get("setups") or {}).items() if k == "original"],
             # its own options (a search, a mode): each value with its line and what it needs; and the host requirements
             "simulator": (b.get("simulator") or {}).get("model", ""), "judge": ((b.get("score") or {}).get("judge") or {}).get("model", ""),
+            "judge_retired": bool(((b.get("score") or {}).get("judge") or {}).get("retired")),
             # what the upstream's leaderboard fixes besides the ranked model (Like the leaderboard)
             "leaderboard": b.get("leaderboard") or None,
             "attempts": (b.get("limits") or {}).get("attempts", ""),
@@ -629,6 +630,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             add("model", f"Enter {what} model as the provider lists it, or leave it empty for its official one.")
         elif m and like and m not in (fixed[role], providers.served_as(fixed[role], provider_)):
             add("model", f"{like} uses {what} model {fixed[role]}: choose Any of your choice for {m}.")
+    if ((b.get("score") or {}).get("judge") or {}).get("retired") and not judge_model and not like:
+        add("model", f"{b['label']}'s official judge, {official['judge']}, is retired: enter a model for the judge.")
     # the leaderboard's own models, as the run's provider spells them; the official ones stay the run's default
     sim_model = providers.served_as(lb["simulator"], provider_) if lb.get("simulator") else sim_model
     judge_model = providers.served_as(lb["judge"], provider_) if lb.get("judge") else judge_model

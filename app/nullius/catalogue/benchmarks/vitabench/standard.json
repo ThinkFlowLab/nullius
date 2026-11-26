@@ -113,6 +113,7 @@
     "says": "the upstream's evaluator: the judge reads the conversation in sliding windows of 10 messages, 2 of them overlapping, and marks each rubric; the task passes when every rubric is met. A conversation that reaches the step or error limit, or ends on an empty agent message, scores 0 without the judge.",
     "judge": {
       "model": "claude-3.7-sonnet",
+      "retired": true,
       "says": "the paper's evaluator, at temperature 0 and without thinking; the updated leaderboard does not name its evaluator"
     }
   },

@@ -1656,6 +1656,8 @@ def problems(d: dict, kind: str) -> List[str]:
         j = s.get("judge")
         if j is not None and (not isinstance(j, dict) or not _MODEL_NAME.match(str(j.get("model", ""))) or not j.get("says")):
             bad.append("score.judge: {model: the official judge, as the provider names it; says: what it is asked}")
+        elif j is not None and not isinstance(j.get("retired", False), bool):
+            bad.append("score.judge.retired: true when the official judge can no longer be called")
         sim = d.get("simulator")
         if sim is not None:
             if not isinstance(sim, dict) or not _MODEL_NAME.match(str(sim.get("model", ""))) or not sim.get("says"):
