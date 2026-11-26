@@ -391,7 +391,8 @@ def side_of(job, trial, d) -> dict | None:
     """One side's score as the compare page shows it, from the trial's own
     current record in its column's store `d`: the expectation, the level it rounds to, the judge's
     confidence, the provenance. None until scored under the current vocabulary."""
-    rec = store.load(d, job.job_id, trial.trial_name, started=started_of(trial)) if d else None
+    # trial.job_id, not job's: a run folded from its shards (`launches.fold`) is its first shard's job
+    rec = store.load(d, trial.job_id, trial.trial_name, started=started_of(trial)) if d else None
     if not rec or not store.is_current(rec):
         return None
     a = (rec.get("answers") or {}).get(SIDE_QUESTION)
@@ -451,7 +452,7 @@ def judge_side(job, trial, d, api_key: str, post=None, calibration=None) -> dict
     when it has them all."""
     if not trial.has_trajectory:
         raise client.JudgeError(0, "this trial has no trajectory to judge")
-    rec = store.load(d, job.job_id, trial.trial_name, started=started_of(trial))
+    rec = store.load(d, trial.job_id, trial.trial_name, started=started_of(trial))      # its shard's, as in side_of
     have = (rec.get("answers") or {}) if store.is_current(rec) else {}
     ids = [q for q in side_ids(trial) if q not in have]
     if not ids:
@@ -459,7 +460,7 @@ def judge_side(job, trial, d, api_key: str, post=None, calibration=None) -> dict
     traj = trajectory.load(trial.trajectory_path)
     if traj.error:
         raise client.JudgeError(0, "the trajectory could not be read: " + traj.error)
-    return batch.ask_and_store(d, job.job_id, trial.trial_name, _states_for(trial, traj, ids), api_key, post=post,
+    return batch.ask_and_store(d, trial.job_id, trial.trial_name, _states_for(trial, traj, ids), api_key, post=post,
                                calibration=calibration, started=started_of(trial))
 
 
