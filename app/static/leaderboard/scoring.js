@@ -109,7 +109,6 @@
     title.textContent=view==='scoring'?'Scoring settings':'Leaderboard';document.title=`${title.textContent} · Nullius`;
     link.textContent=view==='scoring'?'Leaderboard':'Scoring settings';link.href=paths[other];
     if(push)history.pushState({view},'',paths[view]);
-    window.scrollTo({top:0});
     document.dispatchEvent(new CustomEvent('leaderboard:view',{detail:{view}}));
   }
   link.addEventListener('click',e=>{if(e.metaKey||e.ctrlKey||e.shiftKey||e.button)return;e.preventDefault();show(views.scoring.hidden?'scoring':'board',true);});
