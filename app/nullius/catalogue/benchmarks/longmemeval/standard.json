@@ -459,7 +459,7 @@
   },
   "setups": {
     "original": {
-      "summary": "LongMemEval's long-context reader as the paper ran it: its own src/generation/run_generation.py on one question, as run_generation.sh runs it - the history in the prompt (or what the paper's BM25 retrieval ranks), cut to the reader's 128k window, its prompts, temperature 0 and answer length - scored by its own src/evaluation/evaluate_qa.py with its judge, gpt-4o.",
+      "summary": "LongMemEval runs its own src/generation/run_generation.py on one question, as run_generation.sh runs the paper's long-context reader.\n\nThe prompt contains the history (or what the paper's BM25 retrieval ranks), cut to the reader's 128k window, with its prompts, temperature 0 and answer length.\n\nIts own src/evaluation/evaluate_qa.py scores the answer with its gpt-4o judge.",
       "models": [
         "gpt-4o",
         "gpt-4o-mini"

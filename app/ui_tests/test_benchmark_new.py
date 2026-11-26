@@ -73,7 +73,7 @@ class AddBenchmark(unittest.TestCase):
     def test_the_list_offers_the_form_and_the_form_its_choices(self):
         self.assertIn('href="/benchmarks/new"', self.get("/benchmarks").get_data(as_text=True))
         html = self.get("/benchmarks/new").get_data(as_text=True)
-        for name, value in (("source", "hub"), ("source", "registry"), ("origin", "official"), ("origin", "community"),
+        for name, value in (("source", "hub"), ("source", "registry"), ("origin", "official"), ("origin", "experiment"),
                             ("harness", "harbor")):
             self.assertIn(f'name="{name}" value="{value}"', html)
         self.assertIn('name="origin" value="official" checked', html)
@@ -263,10 +263,7 @@ class AddBenchmark(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.root, "benchmarks", "code-bench")))   # no second entry
         cards = self.get("/benchmarks").get_data(as_text=True)
         self.assertEqual(cards.count('<a class="card-link" href="/benchmarks/longmemeval"'), 1)
-        self.assertIn('data-f-runs="standard&#10;harbor&#10;"', cards)
-        card = cards[cards.index('data-keys="longmemeval '):]
-        card = card[:card.index("</article>")]
-        self.assertEqual([x for x in ("rt-harbor", "rt-standard", "rt-runner") if x in card], ["rt-harbor", "rt-standard"])
+        self.assertIn('data-f-runs="standard&#10;harbor&#10;"', cards)                          # filtered by both runners
         node = shutil.which("node")
         if node:                                                                                   # its Harbor dataset opens a Harbor recipe, its own the standard's
             import json, subprocess

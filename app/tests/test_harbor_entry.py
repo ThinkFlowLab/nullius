@@ -138,9 +138,9 @@ class Edit(Entry):
         self.assertEqual(h.entry_of("swe-bench-verified", self.root)["title"], "SWE-bench Verified (edited)")
         self.assertEqual(catalog.validate(catalog.load(self.root)), [])
 
-    def test_legacy_experiments_save_as_official_and_community_is_preserved(self):
-        for extra, expected in (({"experiment": True}, "official"),
-                                ({"origin": "experiment"}, "official"), ({"origin": "community"}, "community")):
+    def test_older_words_for_an_experiment_save_as_experiment(self):
+        for extra, expected in (({"experiment": True}, "experiment"),
+                                ({"origin": "experiment"}, "experiment"), ({"origin": "community"}, "experiment")):
             with self.subTest(extra=extra):
                 old = {**h.build(form()), **extra}
                 folder = os.path.join(self.root, "benchmarks", "code-bench")

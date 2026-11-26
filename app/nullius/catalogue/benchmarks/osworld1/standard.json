@@ -90,7 +90,7 @@
   },
   "setups": {
     "original": {
-      "summary": "OSWorld's own agents as published: the agent option's script (scripts/python/run_*.py) on the task, with its own prompts, parser, history and step limit, asking one of the models it is published with, on the docker provider's VM, scored by DesktopEnv.evaluate.",
+      "summary": "OSWorld runs the selected agent's own script (scripts/python/run_*.py) on the task, with its published prompts, parser, history and step limit.\n\nThe agent uses one of the models it is published with, on the Docker provider's VM.\n\nDesktopEnv.evaluate scores the result.",
       "models": [
         "MiniMax-M3",
         "gpt-4o",
@@ -314,7 +314,7 @@
       },
       "setups": {
         "original": {
-          "summary": "OSWorld's own agents as published: the agent option's script (scripts/python/run_*.py) on the task, with its own prompts, parser, history and step limit, asking one of the models it is published with, on the docker provider's VM, scored by DesktopEnv.evaluate. At OSWorld's desktop-env 1.0.3 release: its evaluator fixes change the score of some tasks and one task is retired, so its runs compare with each other only, not with the paper's or the earlier pin's.",
+          "summary": "OSWorld runs the selected agent's own script (scripts/python/run_*.py) on the task, with its published prompts, parser, history and step limit.\n\nThe agent uses one of the models it is published with, on the Docker provider's VM.\n\nDesktopEnv.evaluate scores the result. At OSWorld's desktop-env 1.0.3 release, evaluator fixes change some task scores and one task is retired. Runs of this version compare only with each other, not with the paper or the earlier pin.",
           "models": [
             "MiniMax-M3",
             "gpt-4o",

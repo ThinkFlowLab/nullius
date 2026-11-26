@@ -45,24 +45,32 @@ def benchmark_cards(cat) -> list:
             for row in standard_recipe.benchmarks(cat)]
 
 
+NEEDS_NOTHING = ("none", "Nothing")   # the Needs filter's value for a benchmark that needs nothing of a machine
+
+
 def benchmark_choices(cat) -> dict:
-    """The values the benchmarks' cards are filtered by: their category, what runs them, their origin, what they run."""
+    """The values the benchmarks' cards are filtered by: their category, what runs them, their origin, what they run,
+    what they need of a machine (each requirement once, by its shortest label; nothing first)."""
+    needs = {}
+    for row in standard_recipe.benchmarks(cat):
+        for n, label in (row["host"] or {}).items():
+            needs[n] = min(needs.get(n, label), label, key=len)
     return {"category": [(c, c) for c in cat.categories], "runs": [(way, label) for way, (label, _) in RUNS_WITH.items()],
-            "origin": [(o, o.capitalize()) for o in catalog.ORIGINS], "evaluates": list(FAMILIES.items())}
+            "origin": [(o, o.capitalize()) for o in catalog.ORIGINS], "evaluates": list(FAMILIES.items()),
+            "needs": [NEEDS_NOTHING, *sorted(needs.items(), key=lambda x: x[1])]}
 
 
 def _card(row, sheet) -> dict:
     """A benchmark's card on the list (templates/_cards.html), from a row of ``recipe.benchmarks``: ``sheet`` the
     sprite holding its own mark, none when it has none."""
     b, ds, tasks, unit, needs = row["b"], row["datasets"], row["tasks"], row["unit"], row["host"]
-    return {"key": b.key, "href": url_for("benchmark_page", key=b.key), "shelf": b.origin, "keys": " ".join([b.key, *b.datasets]),
+    return {"key": b.key, "href": url_for("benchmark_page", key=b.key), "keys": " ".join([b.key, *b.datasets]),
             "search": " ".join([b.title, b.category, b.key, *(d.title for d in ds), *b.datasets]),
-            "category": b.category, "origin": {"text": b.label, "class": b.origin, "value": b.origin},
+            "category": b.category, "origin": [{"text": o.capitalize(), "class": o, "value": o} for o in row["origins"]],
             "icon": sheet and f"{sheet}#bm-{b.key}", "title": b.title, "domain": b.domain,
             "runs": [{"text": label, "class": "rt-" + way, "title": "Runs with " + name, "value": way}
                      for way, (label, name) in RUNS_WITH.items() if way in b.harness],
-            "needs": needs and {"text": "needs " + ", ".join(needs),
-                                "title": f"Some of its options need {', '.join(needs)} installed on the machine it runs on: see its page"},
+            "needs": [{"text": label, "value": n} for n, label in needs.items()] if needs else [dict(zip(("value", "text"), NEEDS_NOTHING))],
             "tasks": {"text": tasks, "label": unit.capitalize(), "value": tasks.replace(",", "").split("–")[-1]},
             "versions": {v: {"text": n, "label": u.capitalize()} for v, (n, u) in row["versions"].items()},
             "datasets": {"text": len(ds), "label": "Datasets" if len(ds) != 1 else "Dataset"},
@@ -101,7 +109,8 @@ def benchmark_page(key):
         vb, vds = cat.in_version(b, x["version"]) if x["version"] and not x["default"] else (b, cat.datasets_of(b))
         # where each dataset's data comes from, one row per way it runs - each fetched by its harness, never by hand
         std_def = standard_definitions.find(every, x["ref"]) if std else None
-        views.append(dict(x, std=page, b=vb, ds=vds, tasks=cat.tasks_of(vb, vds),
+        views.append(dict(x, std=page, b=vb, origin=standard_definitions.origin_of(std_def) if std_def else b.origin, ds=vds,
+                          changes=[standard_definitions.fix_parts(f) for f in (std_def or {}).get("upstream", {}).get("fixes") or []], tasks=cat.tasks_of(vb, vds),
                           data={d.key: sources.of(d, b.harness, std_def, only=len(vds) == 1) for d in vds},
                           current=(x["version"] == v) if v else x["default"], **(_proven(page) if page else {})))
     shown = next(x for x in views if x["current"])

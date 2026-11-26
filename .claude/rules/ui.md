@@ -57,7 +57,7 @@ also supports `--only KEY` for a focused benchmark check.
 - **A delete that lists or selects** asks in a dialog. A delete that is one
   line of yes or no asks in place.
 - **One step, one question; a setting sits with what it changes.** Dataset:
-  which tasks. Agent (Memory): who runs it - the benchmark's own setups, the
+  which tasks. Agent (Memory): who runs it - the selected version's procedure by default, the
   agents or capabilities that fit, the checks - and their settings. Where:
   machines, local or container, the yes to running unsandboxed.
 - **Fair by construction**: a setting one agent offers, every agent whose
@@ -65,14 +65,13 @@ also supports `--only KEY` for a focused benchmark check.
 - No em dashes, no invented numbers, no proof dates or models on a page, no
   private links.
 
-- Benchmark setup rows keep model and comparison scope visible, with full methods
-  in an expandable detail. Group simple option values inline; retain descriptions
+- Benchmark overviews show the procedure directly. Group simple option values inline; retain descriptions
   and prerequisites for complex values. A single dataset is a fixed value, not a
   selector with two equivalent choices.
 
 - Shared participant settings appear once and apply to Original too. Keep only
   participant-specific settings in its tab; never label custom-only settings “Every”.
-- New recipes select the benchmark's Original/reference participant when available.
+- New recipes use the selected version's procedure, or its first upstream agent, when available.
   Explicit participant choices and saved drafts keep their selections.
 
 - Collapsible content uses the shared thin chevron and sliding transition in

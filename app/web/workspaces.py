@@ -10,7 +10,6 @@ from markupsafe import Markup, escape
 from nullius.runs import parse
 from nullius import execution, workspace
 from nullius.catalogue import catalog
-from nullius.judge import store
 
 from .core import app
 from . import shared
@@ -100,7 +99,7 @@ def workspaces_page():
     held = [w.name for _, _, holders in launched[0] for w in holders]
     recs, cat = tuple((e.id, e.state) for e in execution.EXECUTIONS.values()), catalog.signature()
     return render_template("workspaces/workspaces.html", workspaces=wss, csrf=shared._csrf_token(),
-                           counts={ws.name: _counts(ws, recs, cat) for ws in wss}, n_judged={ws.name: store.count(ws.dir) for ws in wss}, n_launches={ws.name: held.count(ws.name) for ws in wss})
+                           counts={ws.name: _counts(ws, recs, cat) for ws in wss}, n_launches={ws.name: held.count(ws.name) for ws in wss})
 
 
 @app.route("/workspaces/open/<name>", methods=["POST"])
@@ -164,12 +163,22 @@ def workspace_rename():
 @app.route("/workspaces/delete/<name>", methods=["POST"])
 def workspace_delete(name):
     """Remove a workspace - its cache and imports, never the job roots it
-    read. The open one closes first. Takes the form token."""
+    read. The open one closes once it is removed. Takes the form token."""
     shared._require_csrf()
     ws = shared.STATE["workspace"]
-    if ws is not None and ws.name == name:
-        shared.close_workspace()
-    if workspace.delete(shared.WS_HOME, name):
+    try:
+        workspace.check_deletable(shared.WS_HOME, name)
+    except ValueError as e:
+        flash(str(e), "error")
+        return redirect(url_for("workspaces_page"))
+    try:
+        removed = workspace.delete(shared.WS_HOME, name)
+    except ValueError as e:                # a folder of it could not be read meanwhile: nothing removed, still open
+        flash(str(e), "error")
+        return redirect(url_for("workspaces_page"))
+    if removed and ws is not None and ws.name == name:
+        shared.close_workspace(save=False)          # its folder is gone: nothing to save into
+    if removed:
         flash(Markup(f'Removed workspace <span class="mono">{escape(name)}</span>; its job roots are untouched.'), "")
     else:
         flash(Markup(f'No workspace called <span class="mono">{escape(name)}</span>.'), "error")

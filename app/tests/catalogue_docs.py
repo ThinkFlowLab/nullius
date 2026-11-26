@@ -400,7 +400,7 @@ def render_feature_page(versions: list) -> str:
 
 
 def _origin(entry) -> str:
-    """Official or Community, linked to the benchmark's own repository."""
+    """Official or Experiment, linked to the benchmark's own repository."""
     url = (entry.citation_source or "").strip()
     return f'<a href="{url}">{entry.label}</a>' if url.startswith("http") else entry.label
 
@@ -463,7 +463,7 @@ def _setups(v: dict) -> str:
     original = setups.get("original")
     if not original:
         return "none"
-    fixed = original.get("models") or v.get("simulator") or (v.get("score") or {}).get("judge")
+    fixed = definitions.paper_models(original) or v.get("simulator") or (v.get("score") or {}).get("judge")
     model_choice = ", ".join((["Like the paper"] if fixed else []) + (["Like the leaderboard"] if v.get("leaderboard") else []) + ["Any of your choice"])
     model_choice = " or ".join(model_choice.rsplit(", ", 1))
     participant = original.get("reference_agent") or ("its own agents" if definitions.own_agents(v)
@@ -562,6 +562,11 @@ def render_benchmark_page(entry, cat, by_key: dict, versions: list) -> str:
     if entry.published:
         out += ["## As published", "",
                 _table(["Harbor agent, among the builder's", "Model", "What it is"], [[f"`{entry.published['agent']}`", "any", entry.published["says"]]]), ""]
+    fixes = [(v["_ref"], f) for v in (versions if d else []) for f in (v.get("upstream") or {}).get("fixes") or []]
+    if fixes:
+        out += ["## Changes from official", ""]
+        out += [f"- `{ref}`: {_cell(t + (f'[{w}]({u})' if u else '') + rest)}" for ref, f in fixes
+                for t, w, u, rest in [definitions.fix_parts(f)]] + [""]
     if entry.good_to_know:
         out += ["## Good to know", ""]
         out += [f"- {_cell(note)}" for note in entry.good_to_know] + [""]

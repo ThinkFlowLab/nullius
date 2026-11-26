@@ -529,10 +529,11 @@ An agent or a capability may keep several versions in its one file: an older rel
 | Rule | Detail |
 | --- | --- |
 | `versions` | Each version's `upstream`, `install`, and when it must, `start`, `model` or `env`; `default` names the one offered |
-| Naming | `codex@2.2.2` wherever a key is taken; a bare `codex` is its default |
+| Naming | `codex@2.2.2` wherever a key is taken; a bare `codex` is its default; `locomo@main`, the name pages show, when one version has it |
 | `cli new version KEY VERSION` | Adds one from the default's block, nothing proven; a file without `versions` is turned into one first, proofs kept |
 | Proof per version | A version runs nothing until `cli conform KEY@VERSION` passes; without `versions`, a proof on another `upstream.version` does not count |
 | In jobs | In the job name (`…__codex-2.2.2`) and the trial's `agent_info` |
+| `upstream.origin` | `official` (default) or `experiment`, another source or someone's fixes; unsaid, a version with `upstream.fixes`, or another `repository` than the shared one, is an experiment, and a benchmark's takes its `benchmark.json` `origin` |
 | `upstream.core` | Which core an adapter runs; pin it in `install` when the adapter names a range (Codex 2.2.2 pins `@openai/codex@0.160.1`) |
 | Schema | Stays `nullius.agent/v1` (`nullius.capability/v1`): a file without `versions` is one version |
 
@@ -632,7 +633,7 @@ already accepts arbitrary models needs only the `original` method.
 | `model` driver method | The upstream is told `runs_as` (its window, batching and token budget) while the relay sends the model chosen. A model that reasons by default can spend that budget thinking: a last reply with neither text nor a tool call is `OutputLengthExceededError`. A last Responses reply that `failed` is an API error. A runner that fails after the unit is asked to stop is `CancelledError` |
 | `units` | A setup may count its own units; `units` is sent `setup` |
 | `answer` | Runs the upstream's answerer through the unit's relay; `score` is sent `setup` too. Local processes or the Original setup driver container |
-| `comparable` | `false` when no model of `models` is the paper's, so its runs compare with each other only; or the list of those models whose runs compare with the paper's (`paper`), when the setup runs several agents and only some are the paper's: the builder offers those alone as Like the paper, the others as Any of your choice |
+| `comparable` | `false` when no model of `models` is the paper's, so its runs compare with each other only; or the list of those models whose runs compare with the paper's (`paper`), when the setup runs several agents and only some are the paper's: the builder offers those alone as Like the paper, the others as Any of your choice; or `[]` when none can be run any more: Like the paper is greyed out, and `run BENCHMARK original` refused |
 | Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper`, and the benchmark's own agent that ran (`agent`), whose key is also the job's agent (`agent_info.name`) |
 | Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries [`pass_hat_k`](field-guide.md#attempts) |
 | Retries | `cli run --retries N` runs a failed attempt again: [which failures](cli/run.md#retries) |

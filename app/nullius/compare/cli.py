@@ -34,9 +34,9 @@ EXIT_FAILED = 4
 
 EPILOG = """\
 examples:
-  PYTHONPATH=app python3 -m nullius.compare.cli jobs 2026-09-12__22-53-55 2026-09-13__09-10-11
-  PYTHONPATH=app python3 -m nullius.compare.cli jobs 2026-09-12__22-53-55 2026-09-13__09-10-11 --matched
-  PYTHONPATH=app python3 -m nullius.compare.cli jobs 2026-09-12__22-53-55 2026-09-13__09-10-11 --json
+  nullius compare jobs 2026-09-12__22-53-55 2026-09-13__09-10-11
+  nullius compare jobs 2026-09-12__22-53-55 2026-09-13__09-10-11 --matched
+  nullius compare jobs 2026-09-12__22-53-55 2026-09-13__09-10-11 --json
 
 exit codes:
   0  done
@@ -212,7 +212,7 @@ def _emit(doc) -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        prog="python3 -m nullius.compare.cli", description=__doc__.splitlines()[0],
+        prog="nullius compare", description=__doc__.splitlines()[0],
         epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("root", metavar="ROOT", help="the root the jobs are under")
     ap.add_argument("job_ids", metavar="JOB_ID", nargs="+",

@@ -16,6 +16,19 @@ class StandardBenchmarkSwitch(CompilerCase):
         for key, others, own in out:
             self.assertEqual(others, [own or "original"], key)              # a benchmark with agents of its own: its first
 
+    def test_the_procedure_runs_beside_an_alternative_and_comes_back_when_none_is_left(self):
+        out = self.js('const r=C.createStandard("gsm8k"), states=[];'
+                      'const a=C.standardOthers(r).find(o=>!o.setup&&!o.control&&!o.why.length).key;'
+                      'for(const k of [a,"nop","original",a,"nop"]) {C.toggleParticipant(r,k);states.push([...r.others]);}'
+                      'process.stdout.write(JSON.stringify({a,states}));')
+        a = out["a"]
+        self.assertEqual(out["states"], [["original", a], ["original", a, "nop"], [a, "nop"], ["nop"], ["original"]])
+
+    def test_version_switch_keeps_the_implicit_procedure_and_names_that_version(self):
+        out = self.js('const r=C.createStandard("locomo");C.setStandardBenchmark(r,"locomo@full");'
+                      'process.stdout.write(JSON.stringify([r.others,C.standardBench(r).procedure,C.standardBench(r).origin]));')
+        self.assertEqual(out, [["original"], "LoCoMo · full", "experiment"])
+
     def test_a_benchmarks_own_agents_are_its_agents_and_greyed_elsewhere(self):
         out = self.js('const os=C.standardOthers(C.createStandard("osworld1")),g=C.standardOthers(C.createStandard("gsm8k"));'
                       'const cua=g.find(o=>o.key==="osworld1:openai-cua");'
@@ -83,9 +96,9 @@ class StandardBenchmarkSwitch(CompilerCase):
                                "standard", "harbor", "standard", "harbor"])
 
     def test_like_the_paper_is_offered_when_the_paper_fixes_a_model(self):
-        out = self.js('process.stdout.write(JSON.stringify(["locomo","tau3-bench","gsm8k"].map(k=>{const r=C.createStandard(k);'
+        out = self.js('process.stdout.write(JSON.stringify(["longmemeval","tau3-bench","gsm8k","locomo"].map(k=>{const r=C.createStandard(k);'
                       'return [C.paperOffered(r),C.paperListed(r)];})));')
-        self.assertEqual(out, [[True, True], [True, False], [False, False]])
+        self.assertEqual(out, [[True, True], [True, False], [False, False], [False, False]])
 
     def test_like_the_leaderboard_sets_its_options_and_attempts_and_leaving_it_gives_them_back(self):
         out = self.js('const r=C.createStandard("tau3-bench");r.repeat=2;r.simulator_model="x";'

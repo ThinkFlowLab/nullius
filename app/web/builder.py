@@ -30,6 +30,7 @@ AGENT_NEEDS = {"cursor-cli": ["CURSOR_API_KEY"], "copilot-cli": ["COPILOT_GITHUB
 from . import shared
 from . import execute
 from . import catalogue
+from .agents import ORIGINS, origin_tag
 
 
 @app.route("/new-run")
@@ -70,14 +71,12 @@ def new_run_benchmarks():
     (``catalogue.benchmark_cards``) as single-choice pick cards (templates/builder/benchmarks.html), or rows with
     ?view=table."""
     cat = shared._catalog_cached()
-    # a community benchmark says so
     # a benchmark with versions carries each one's Tasks (the default's under ""), for the builder to show the chosen one's
     items = [dict(i, pick={"value": i["key"], "one": True}, id="pick-bench-" + i["key"], title={"text": i["title"], "title": i["domain"]},
-                  origin=i["origin"] if i["shelf"] != "official" else None,
                   data={"tasks": json.dumps({"": i["tasks"], **i["versions"]})} if i["versions"] else None)
              for i in catalogue.benchmark_cards(cat)]
     every = catalogue.benchmark_choices(cat)
-    choices = {k: [(v, t) for v, t in every[k] if any(v in _values(i[k]) for i in items)] for k in ("category", "evaluates", "runs")}
+    choices = {k: [(v, t) for v, t in every[k] if any(v in _values(i[k]) for i in items)] for k in ("category", "evaluates", "runs", "origin")}
     return render_template("builder/benchmarks.html", items=items, choices={k: v for k, v in choices.items() if len(v) > 1},
                            layout="table" if request.args.get("view") == "table" else "cards")
 
@@ -96,37 +95,34 @@ def new_run_agents():
     b = definitions.find(benches, request.args.get("benchmark", ""))
     if b is None:
         abort(404)
+    procedure = standard_recipe.procedure_label(b)
     name, b = b["label"], dict(b, label=definitions.title(b))     # its own agents keep its plain name, whatever its version
     kind = b["family"]
     found = [e for e in standard_recipe.entries(kind, benches=[b], every=True, own=True)["entries"] if not e["d"].get("example")]
     found.sort(key=lambda e: 0 if e["d"].get("benchmark") == b["key"] else 2 if e["d"].get("benchmark") else 1)   # its own, the catalogue's, others' own
-    # a benchmark with agents of its own runs them as its Original setup; another offers that setup as one more card
+    # a benchmark with agents of its own runs them as its procedure; another offers its procedure as one more card
     setups = [] if any(e["d"].get("benchmark") == b["key"] for e in found) else [k for k in (b.get("setups") or {}) if k == "original"]
-    items = [_setup_card(b, k) for k in setups] + [_pick_card(b, e) for e in found]
+    items = [_setup_card(b, k, procedure) for k in setups] + [_pick_card(b, e) for e in found]
     names = dict(definitions.FROM, benchmark=f"{name}'s own", elsewhere="Other benchmarks' agents")
     choices = {"protocol": [(p, p) for p in ("ACP", "A command", "Its own script", "JSON lines")
                             if any(i["protocol"] and i["protocol"]["value"] == p for i in items)],
                "fit": [(v, t) for v, t in (("fit", "Can run it"), ("unfit", "Cannot")) if any(i["fit"]["value"] == v for i in items)],
                "from": [(k, v) for k, v in names.items() if any(i["from"]["value"] == k for i in items)],
+               "origin": [(o, t) for o, t in ORIGINS.items() if any(i["origin"]["value"] == o for i in items)],
                "proves": [(p, s.get("label") or p) for p, s in ports.PORTS.items() if any(x["value"] == p for i in items for x in i["proves"])]}
     # a filter only where its cards differ
     return render_template("builder/agents.html", items=items, kind=kind, choices={k: v for k, v in choices.items() if len(v) > 1},
                            layout="table" if request.args.get("view") == "table" else "cards")
 
 
-def _setup_card(b: dict, key: str) -> dict:
-    """The benchmark as published, run by its own code: a pick card beside the agents or capabilities."""
+def _setup_card(b: dict, key: str, procedure: str) -> dict:
+    """The selected version's own procedure, run by its own code: a pick card beside the agents or capabilities, named
+    as its settings tab is."""
     x = b["setups"][key]
-    title = x.get("reference_agent") or ("No agent · Original" if b["family"] == "agent" else "Original " + _kind_of(b))
-    return {"pick": {"value": key}, "id": "pick-" + key, "icon": "#i-origin", "title": {"text": title, "title": x.get("summary", "")},
-            "search": " ".join([title, b["label"], "as published"]), "published": "As published", "protocol": "",
+    return {"pick": {"value": key}, "id": "pick-" + key, "icon": "#i-origin", "title": {"text": procedure, "title": x.get("summary", "")},
+            "search": " ".join([procedure, b["label"], "its own procedure"]), "origin": origin_tag("benchmark"), "protocol": "",
             "fit": {"text": "Can run it", "value": "fit"}, "from": {"text": b["label"], "value": "benchmark"},
             "proves": [], "ticks": [], "alert": None}
-
-
-def _kind_of(b: dict) -> str:
-    kinds = sorted({p.split(".", 1)[1].split("/")[0] for p in b.get("needs") or []})
-    return kinds[0] if kinds else "capability"
 
 
 def _pick_card(b: dict, e: dict) -> dict:
@@ -150,7 +146,8 @@ def _pick_card(b: dict, e: dict) -> dict:
     return {"pick": {"value": d["_ref"], "disabled": bool(why)}, "id": "pick-" + d["_ref"].replace(":", "-").replace("@", "-"),
             "icon": agent_mark_url(d["key"]) if b["family"] == "agent" else "", "title": {"text": title, "title": d.get("summary", "")},
             "search": " ".join([title, d["key"], version, e["protocol"], d.get("summary", "")]),
-            "protocol": {"text": e["protocol"], "value": e["protocol"]}, "published": "",
+            "protocol": {"text": e["protocol"], "value": e["protocol"]},
+            "origin": origin_tag("benchmark" if d.get("benchmark") else definitions.origin_of(d)),
             "fit": {"text": "Cannot" if why else "Can run it", "value": "unfit" if why else "fit"}, "from": there,
             "proves": [{"text": r["label"], "value": r["port"]} for r in rows.values()],
             "ticks": ticks,

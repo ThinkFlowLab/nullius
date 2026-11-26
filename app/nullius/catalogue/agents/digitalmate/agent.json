@@ -98,6 +98,7 @@
       "upstream": {
         "repository": "https://github.com/aitianshi/DigitalMate",
         "branch": "nullius/v0.1.13",
+        "origin": "experiment",
         "tested": "5a2a3b9fb539978accc4e37fc5e6e81d824c58f7",
         "license": "Apache-2.0",
         "core": "Bundled WorkSwarm 0d6857507236d1299276caf0f6fe09e5baaa4c23 and agent-core 8f9f112698d5580b749158b21b1a89a54e16a8f9, verified and installed by the release installer",

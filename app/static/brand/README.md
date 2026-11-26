@@ -2,9 +2,9 @@
 
 The outlined circle-and-slash mark and Instrument Serif wordmark are supplied production assets. Theme names describe the background. Keep their proportions and internal clear space; horizontal lockups need at least 120px width, marks 16px. CSS masks use the supplied outlines in the current text colour.
 
-`tokens.json` records surface, text and action roles. DM Sans regular/medium carries interface and documentation text; IBM Plex Mono regular/medium carries code and identifiers. Instrument Serif regular/italic is reserved for major brand headings. Local WOFF2 files are in `../fonts/`.
+`tokens.json` records surface, text and action roles. Which font carries which text: `../fonts/README.md`.
 
-Wordmark lettering is outlined from Instrument Serif. Source licensing is in the repository’s root `LICENSE`; the three font OFLs remain beside the fonts in `../fonts/`.
+Wordmark lettering is outlined from Instrument Serif. Source licensing is in the repository’s root `LICENSE`; the font OFLs remain beside the fonts in `../fonts/`.
 
 ## Provider marks
 

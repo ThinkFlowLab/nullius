@@ -12,6 +12,7 @@
   {% set tags %}
     {% if kind == 'capability' %}<span class="cat-tag">{{ d.kind }}</span>{% endif %}
     <span class="std-tag">{{ e.protocol }}</span>
+    {% if kind == 'agent' %}<span class="origin-tag {{ origin }}">{{ origin|capitalize }}</span>{% endif %}
     {% if d.example %}<span class="std-tag" title="Nullius's own, to read or copy - not an agent to compare">example</span>{% endif %}
     {% if versions %}<span class="std-tag">{{ 'default version' if d._version == d._default else 'not the default version' }}</span>{% endif %}
   {% endset %}
@@ -24,7 +25,7 @@
     {# Each version has its own pins and its own proofs: a new release is offered only once it has proven its ports. #}
     <nav class="std-versions" aria-label="Versions">
       <span>Versions</span>
-      {% for x in versions %}<a href="{{ url_for('agent_page' if kind == 'agent' else 'feature_page', key=d.key, v=x.v) }}"{% if x.current %} aria-current="page"{% endif %}><b>{{ x.v }}</b><small>{{ x.proven }}/{{ x.ports }} proven{{ ' · default' if x.default else '' }}</small></a>{% endfor %}
+      {% for x in versions %}<a href="{{ url_for('agent_page' if kind == 'agent' else 'feature_page', key=d.key, v=x.v) }}"{% if x.current %} aria-current="page"{% endif %}><b>{{ x.v }}</b><small>{{ x.proven }}/{{ x.ports }} proven{{ ' · default' if x.default else '' }}{% if x.origin %} <span class="origin-tag {{ x.origin }}">{{ x.origin|capitalize }}</span>{% endif %}</small></a>{% endfor %}
     </nav>
     {% endif %}
     {% set upstream = d.get('upstream', {}) %}

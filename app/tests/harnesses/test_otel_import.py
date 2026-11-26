@@ -10,11 +10,21 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 APP = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(APP))
 
 from nullius.importers import otel as importer
+
+
+def cut_at_config(dump):
+    """*dump*, failing on the job's ``config.json``: a refresh cut short before it publishes."""
+    def cut(path, data):
+        if os.path.basename(path) == "config.json":
+            raise OSError("cut short")
+        return dump(path, data)
+    return cut
 
 
 class Detect(unittest.TestCase):
@@ -108,18 +118,29 @@ class Convert(unittest.TestCase):
         def trials():
             return sorted(n for n in os.listdir(job_dir) if os.path.isdir(os.path.join(job_dir, n)))
 
-        export("a.json", gone)
-        export("x.json", other, "other")
-        job_dir = importer.convert(src, self.out)[0]
-        os.remove(os.path.join(src, "a.json"))
-        importer.convert(src, self.out)                     # its folder is pruned, its name kept
-        self.assertEqual(trials(), ["other__1234567"])
-        export("b.json", newcomer)
-        importer.convert(src, self.out)
-        self.assertEqual(trials(), ["agent_run__" + newcomer, "other__1234567"])
-        export("a.json", gone)                              # back: its own name again
-        importer.convert(src, self.out)
-        self.assertEqual(trials(), ["agent_run__abcdef1", "agent_run__" + newcomer, "other__1234567"])
+        for cut in (False, True):
+            with self.subTest(cut_before_config=cut):
+                for name in os.listdir(src):
+                    os.remove(os.path.join(src, name))
+                export("a.json", gone)
+                export("x.json", other, "other")
+                job_dir = importer.convert(src, self.out, job_name=f"cut-{cut}")[0]
+                os.remove(os.path.join(src, "a.json"))
+                if cut:                                     # a job without reservations, its first refresh cut short
+                    config = json.loads(Path(job_dir, "config.json").read_text())
+                    del config["trial_documents"]
+                    Path(job_dir, "config.json").write_text(json.dumps(config))
+                    with mock.patch.object(importer, "_dump", cut_at_config(importer._dump)), \
+                            self.assertRaises(OSError):
+                        importer.convert(src, self.out, job_name=f"cut-{cut}")
+                importer.convert(src, self.out, job_name=f"cut-{cut}")    # its folder is pruned, its name kept
+                self.assertEqual(trials(), ["other__1234567"])
+                export("b.json", newcomer)
+                importer.convert(src, self.out, job_name=f"cut-{cut}")
+                self.assertEqual(trials(), ["agent_run__" + newcomer, "other__1234567"])
+                export("a.json", gone)                      # back: its own name again
+                importer.convert(src, self.out, job_name=f"cut-{cut}")
+                self.assertEqual(trials(), ["agent_run__abcdef1", "agent_run__" + newcomer, "other__1234567"])
 
     def test_a_refused_file_deeper_down_is_named_by_its_path_under_the_root_once(self):
         src = tempfile.mkdtemp()

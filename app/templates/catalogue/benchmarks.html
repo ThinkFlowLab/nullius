@@ -26,27 +26,16 @@
     </ul>
   {% endcall %}
 
-  {#- A card's fields (web/catalogue.py `_card`); the filters are the category's pills, and the origin and what runs it as dropdowns. #}
+  {#- A card's fields (web/catalogue.py `_card`); the filters are the category's pills, the origin, what runs it and what it needs dropdowns and columns, never on the card. #}
   {% set cols = [dict(key='icon', label='Mark', card='icon', table=false, class='bench-mark'), dict(key='title', label='Name', card='title'),
-                 dict(key='category', label='Category', card='tag', class='cat-tag', filter='pills'), dict(key='origin', label='Origin', card='tag', class='origin-tag', filter='dropdown', filter_icon='origin'),
-                 dict(key='domain', label='Domain', card='text', off=true), dict(key='runs', label='Runs with', card='badge', class='run-tag', filter='dropdown', filter_icon='runner'),
+                 dict(key='category', label='Category', card='badge', class='cat-tag', filter='pills'), dict(key='origin', label='Origin', class='origin-tag', filter='dropdown', filter_icon='origin'),
+                 dict(key='domain', label='Domain', card='text', class='std-clamp', off=true), dict(key='runs', label='Runs with', class='run-tag', filter='dropdown', filter_icon='runner'),
                  dict(key='tasks', label='Tasks', card='stat', type='num'), dict(key='datasets', label='Datasets', card='stat', type='num'),
-                 dict(key='scoring', label='Scored by', card='stat', class='word'), dict(key='needs', label='Needs', card='note', icon='wrench', off=true),
+                 dict(key='scoring', label='Scored by', card='stat', class='word'), dict(key='needs', label='Needs', filter='dropdown', filter_icon='wrench', off=true),
                  dict(key='blocker', label='Blocker', card='alert')] %}
-  {#- Two shelves: the official benchmarks, then the community benchmarks; the table is one table in that order, its
-      Origin the shelf. #}
-  {% set sort = ['title', 'tasks', 'datasets'] %}{% set shelves = [('official', 'Official'), ('community', 'Community')] %}
-  {% set rows = [] %}{% for state, _ in shelves %}{% set _ = rows.extend(items|selectattr('shelf', 'equalto', state)) %}{% endfor %}
-  {% call cards('benchmarks', cols, rows, search='Name, category, dataset', choices=choices, sort=sort, empty='No benchmark matches.', noun='benchmarks', layout='table' if request.args.get('view') == 'table' else 'cards', default='cards') %}
-  {% for state, heading in shelves %}
-  {% set shelf = items|selectattr('shelf', 'equalto', state)|list %}
-  {% if shelf %}
-  <section class="bench-shelf st-{{ state }}" data-shelf="{{ state }}" data-group aria-labelledby="shelf-{{ state }}">
-    <h2 id="shelf-{{ state }}"><span class="shelf-dot" aria-hidden="true"></span>{{ heading }} <span class="shelf-n" data-group-n>{{ shelf|length }}</span></h2>
-    {{ grid(cols, shelf, every=items, choices=choices, sort=sort) }}
-  </section>
-  {% endif %}
-  {% endfor %}
+  {% set sort = ['title', 'tasks', 'datasets'] %}
+  {% call cards('benchmarks', cols, items, search='Name, category, dataset', choices=choices, sort=sort, empty='No benchmark matches.', noun='benchmarks', layout='table' if request.args.get('view') == 'table' else 'cards', default='cards') %}
+  {{ grid(cols, items, every=items, choices=choices, sort=sort) }}
   {% endcall %}
 </div>
 {% endblock %}

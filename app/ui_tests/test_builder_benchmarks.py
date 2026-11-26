@@ -38,7 +38,8 @@ class BenchmarkGrid(unittest.TestCase):
         self.assertIn('<span class="std-tag">Agents</span>', cards["swe-bench-verified"])         # Harbor runs agents
         self.assertIn('<dt>Tasks</dt><dd>1,319</dd>', cards["gsm8k"])
         self.assertIn('<span class="cat-tag">Math</span>', cards["gsm8k"])
-        self.assertNotIn("Official", html)                                                          # only a community one says so
+        self.assertIn('data-f-origin="official&#10;experiment&#10;"', cards["locomo"])              # a filter, not a tag
+        self.assertNotIn('origin-tag', cards["locomo"])
         self.assertIn('title="Real-world questions', cards["gaia"])                                 # its domain, as its tooltip
 
         html = self.get("/new-run/benchmarks?view=table")

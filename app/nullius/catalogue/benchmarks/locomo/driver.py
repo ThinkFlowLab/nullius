@@ -7,8 +7,10 @@ own code at the tested commit ($NULLIUS_UPSTREAM), imported, not copied: its
 modules import torch, bert_score and the vendors' clients, so the driver runs
 in the environment of its own that standard.json declares (driver.install).
 
-units    - every question of categories 1 to 4, as <sample_id>:<n> (the
-           adversarial category 5 has no reference answer in the file)
+units    - every question of categories 1 to 4, as <sample_id>:<n>: the
+           published code cannot ask or score the adversarial category 5, whose
+           records have no "answer". The version "full", whose
+           upstream reads their "adversarial_answer", has them too
 setup    - the question's conversation, a session at a time, for ``add``;
            the question, for ``recall``
 produce  - LoCoMo's reader prompt over what the memory recalled, as its RAG
@@ -27,14 +29,19 @@ produce  - LoCoMo's reader prompt over what the memory recalled, as its RAG
            connection and unavailable errors without end (a rate limit with
            no wait), and a reply with no text fails the question. The run's
            turn_seconds bounds it: past them the question is the reader's
-           error and the driver is started again for the next
+           error and the driver is started again for the next. A category-5
+           question is a choice between its false answer and "Not mentioned in
+           the conversation", in get_gpt_answers' words and QA_PROMPT_CAT_5, its
+           reply read by get_cat_5_answer; which comes first is drawn from the
+           unit's id, so every memory is asked the same
 score    - LoCoMo's own eval_question_answering (task_eval/evaluation.py) on
            the one question: token F1 with its normalisation and Porter
            stemming, category 1 by comma-separated parts, category 3 against
-           the reference's part before the first ";"
+           the reference's part before the first ";", category 5 whether it
+           says the conversation does not mention it
 answer   - a setup's (original, model): LoCoMo's own task_eval/evaluate_qa.py,
-           run as published on the one conversation - its questions of
-           categories 1 to 4, as its scripts feed it - with --model
+           run as published on the one conversation - the version's
+           questions, as its scripts feed it - with --model
            the model the setup asks as and --batch-size as the paper's
            scripts give it (20 for gpt-4-turbo, 10 for the gpt-3.5-turbo
            windows); its openai 0.28 client pointed at the relay through
@@ -53,13 +60,15 @@ oracle   - the reference control: the question's own "answer" field as that
            scorer reads it - for category 3, its first part (``gold``): there
            the field can carry the authors' reasoning after a ";", which
            LoCoMo's evaluation cuts off before scoring, so the whole field
-           would lose F1 on its own words
+           would lose F1 on its own words; for category 5, "Not mentioned in
+           the conversation", the choice the scorer looks for
 """
 import ast
 import contextlib
 import inspect
 import json
 import os
+import random
 import subprocess
 import sys
 import textwrap
@@ -70,6 +79,7 @@ with contextlib.redirect_stdout(sys.stderr):    # stdout is the protocol's: the 
 import openai                                    # noqa: E402  0.28, the client run_chatgpt is written for
 
 DATA = {}
+CATEGORIES = (1, 2, 3, 4, 5) if os.environ.get("NULLIUS_VERSION") == "full" else (1, 2, 3, 4)
 
 
 def load():
@@ -90,7 +100,7 @@ def units(dataset, setup=None):
         return {"units": list(load())}
     out = []
     for sid, conv in load().items():
-        out += [f"{sid}:{i}" for i, q in enumerate(conv["qa"]) if q.get("category") in (1, 2, 3, 4)]
+        out += [f"{sid}:{i}" for i, q in enumerate(conv["qa"]) if q.get("category") in CATEGORIES]
     return {"units": out}
 
 
@@ -126,27 +136,39 @@ def setup(unit, dir):
     return {"memory": {"add": sessions(conv), "recall": [{"id": unit, "question": q["question"]}]}}
 
 
-def date_hint():
-    """The words LoCoMo's reader adds to a category-2 question. They have no
-    name of their own in the upstream: they are read from get_gpt_answers'
-    source, through the imported module, at the tested commit."""
+def reader_words(category):
+    """The words LoCoMo's reader adds to a question of ``category``, and, for 5,
+    the choice it offers beside the false answer. They have no name of their own
+    in the upstream: they are read from get_gpt_answers' source, through the
+    imported module, at the tested commit."""
     tree = ast.parse(textwrap.dedent(inspect.getsource(gpt_utils.get_gpt_answers)))
     for node in ast.walk(tree):
-        if isinstance(node, ast.If) and ast.unparse(node.test).replace('"', "'") == "qa['category'] == 2":
-            for sub in ast.walk(node.body[0]):
-                if isinstance(sub, ast.BinOp) and isinstance(sub.right, ast.Constant) and isinstance(sub.right.value, str):
-                    return sub.right.value
-    raise RuntimeError("LoCoMo's get_gpt_answers no longer adds a date hint to a category-2 question")
+        if isinstance(node, ast.If) and ast.unparse(node.test).replace('"', "'") == f"qa['category'] == {category}":
+            found = list(ast.walk(ast.Module(node.body, [])))
+            added = [n.right.value for n in found if isinstance(n, ast.BinOp) and isinstance(n.right, ast.Constant)
+                     and isinstance(n.right.value, str)]
+            offered = [x.value for n in found if isinstance(n, ast.Call) and ast.unparse(n.func) == "question.format"
+                       for x in n.args if isinstance(x, ast.Constant)]
+            if added and (category != 5 or offered):
+                return added[0], next(iter(offered), "")
+    raise RuntimeError(f"LoCoMo's get_gpt_answers no longer words a category-{category} question as it did")
 
 
-HINT = date_hint()
+HINT, _ = reader_words(2)
+CHOICE, UNMENTIONED = reader_words(5) if 5 in CATEGORIES else ("", "")
 
 
 def produce(unit, dir, recalled, model, base_url, key):
     _, q = question(unit)
     memory = recalled[0]["memory"] if recalled else ""
     asked = q["question"] + (HINT if q["category"] == 2 else "")
-    query = (memory or "(nothing recalled)") + "\n\n" + gpt_utils.QA_PROMPT.format(asked)
+    prompt, choices = gpt_utils.QA_PROMPT, {}
+    if q["category"] == 5:
+        pair = [UNMENTIONED, q["adversarial_answer"]]
+        if random.Random(unit).random() >= 0.5:
+            pair.reverse()
+        prompt, choices, asked = gpt_utils.QA_PROMPT_CAT_5, dict(zip("ab", pair)), q["question"] + CHOICE.format(*pair)
+    query = (memory or "(nothing recalled)") + "\n\n" + prompt.format(asked)
     openai.api_base, openai.api_key = base_url, key
     with contextlib.redirect_stdout(sys.stderr):
         # get_gpt_answers' own call for one question (batch size 1, as its RAG mode asks)
@@ -154,13 +176,20 @@ def produce(unit, dir, recalled, model, base_url, key):
                                        model='chatgpt' if 'gpt-3.5' in model else model,
                                        use_16k=True if any([k in model for k in ['16k', '12k', '8k', '4k']]) else False,
                                        temperature=0, wait_time=2)
+    if choices:
+        answer = gpt_utils.get_cat_5_answer(answer, choices)
     return {"answer": answer.strip()}
+
+
+def reference(q):
+    """The question's reference, as its record shows it."""
+    return UNMENTIONED if q["category"] == 5 else q["answer"]
 
 
 def gold(q):
     """The reference as LoCoMo's evaluation scores against it: the answer
     field, for category 3 only its part before the first ";"."""
-    ref = str(q["answer"])
+    ref = str(reference(q))
     return ref.split(";")[0].strip() if q["category"] == 3 else ref
 
 
@@ -200,7 +229,7 @@ def upstream(script, argv, dir, env):
 
 def answer(unit, dir, setup, model, base_url, key):
     conv = load()[unit]
-    fed = dict(conv, qa=[q for q in conv["qa"] if q.get("category") in (1, 2, 3, 4)])
+    fed = dict(conv, qa=[q for q in conv["qa"] if q.get("category") in CATEGORIES])
     asked = os.path.join(dir, ASKED)
     with open(asked, "w") as f:
         json.dump([fed], f)
@@ -243,14 +272,14 @@ def score(unit, dir, transcript, answer, setup=None, **_):
                            for i, q in enumerate(qa) if isinstance(q.get(f"{k}_f1"), (int, float))]}
         return {"reward": sum(got) / len(got) if got else 0.0, **({"parts": parts} if got else {}),
                 "detail": dict({"questions": len(qa), "scored": len(got), "model": model,
-                                "per_question": [dict({"question": q["question"], "reference": q["answer"], "category": q["category"],
+                                "per_question": [dict({"question": q["question"], "reference": reference(q), "category": q["category"],
                                                        "answer": q.get(f"{k}_prediction"), "f1": q.get(f"{k}_f1")},
                                                       **({"retrieved": q.get(f"{k}_prediction_context"), "recall": q.get(f"{k}_recall")} if rag else {}))
                                                  for q in qa]}, **rag)}
     _, q = question(unit)
     with contextlib.redirect_stdout(sys.stderr):
         values, _, _ = evaluation.eval_question_answering([dict(q, prediction=answer or "")], "prediction")
-    return {"reward": float(values[0]), "detail": {"question": q["question"], "reference": q["answer"], "category": q["category"],
+    return {"reward": float(values[0]), "detail": {"question": q["question"], "reference": reference(q), "category": q["category"],
                                                   "answer": answer, "evidence": q.get("evidence")}}
 
 

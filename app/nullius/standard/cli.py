@@ -193,7 +193,8 @@ def cmd_list(a):
         print(definitions.KINDS[kind]["dir"] + ":")
         for d in got[kind]:
             side = d.get("needs") if kind == "benchmark" else d.get("offers")
-            print(f"  {d.get('_ref') or d['key']:<18} {('needs ' if kind == 'benchmark' else 'offers ') + ', '.join(side or []) or 'nothing proven yet'}")
+            print(f"  {d.get('_ref') or d['key']:<18} {('needs ' if kind == 'benchmark' else 'offers ') + ', '.join(side or []) or 'nothing proven yet'}"
+                  + (f" · {definitions.origin_of(d).capitalize()}" if kind != "capability" else ""))
             up = d.get("upstream") or {}
             if up.get("repository"):
                 print(f"  {'':<18}   upstream {up['repository'].removeprefix('https://')} @ "
@@ -223,8 +224,11 @@ def catalogue_problems(benches) -> list:
             bad.append(f"benchmark {b['key']}: no benchmark.json beside standard.json (the catalogue's entry)")
             continue
         with open(entry) as f:
-            if "standard" not in (json.load(f).get("harness") or []):
-                bad.append(f"benchmark {b['key']}: benchmark.json does not name 'standard' in harness")
+            said = json.load(f)
+        if "standard" not in (said.get("harness") or []):
+            bad.append(f"benchmark {b['key']}: benchmark.json does not name 'standard' in harness")
+        if b.get("_version") == b.get("_default") and catalog.origin_of(said) != definitions.origin_of(b):
+            bad.append(f"benchmark {b['key']}: benchmark.json says origin {catalog.origin_of(said)}, its default version is {definitions.origin_of(b)}")
     # each benchmark's settings inventory, against every version of it (definitions.settings_problems)
     every = definitions.load("benchmark", every=True)[0]
     for key in dict.fromkeys(b["key"] for b in benches):
@@ -414,6 +418,8 @@ def new_version(key: str, version: str) -> str:
         proofs.write(folder, evidence)
         ondisk.write_whole(path, json.dumps(d, indent=2) + "\n")
     print(f"wrote {path}: {key}@{version} beside {', '.join(v for v in d['versions'] if v != version)} (default still {old})")
+    if kind != "capability":
+        print('a fork, or someone\'s fixes: say "origin": "experiment" in its upstream')
     if kind == "benchmark":
         print(f"next: say what differs in it (upstream, datasets, driver, score, limits, controls, environments), then: "
               f"cli check, and cli prove {key}@{version} --limit 3; make it the default by setting \"default\": \"{version}\"")
@@ -460,6 +466,8 @@ def cmd_new(a):
         then = f"cli run {key} reference --model gpt-5-mini --limit 2 --unsandboxed"
     else:
         then = f"cli conform {key} --model gpt-5-mini" + (" --unsandboxed" if kind == "agent" else "")
+    if kind != "capability":
+        print("recommended: an official version first (a tag, branch or commit of the official source), an experiment after it")
     print(f"next: fill in the CAPITALS{', add benchmark.json beside it (the catalogue entry)' if kind == 'benchmark' else ''}, "
           f"then: cli check, and {then}")
     return 0
@@ -782,7 +790,7 @@ def _exit_on_term():
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="nullius.standard.cli", description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(prog="nullius standard", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list", help="every definition, and which pairs fit")
     c = sub.add_parser("check", help="check the definitions, or one file")

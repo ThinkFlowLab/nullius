@@ -28,5 +28,5 @@
 .start-primary { background: var(--accent); color: var(--btn-fg); border-color: transparent; }
 .start-primary:hover { background: var(--accent-strong); }
 .start-signature { display: flex; align-items: center; justify-content: center; color: var(--text-dim); user-select: none; pointer-events: none; }
-.start-ascii { flex: 0 0 auto; width: clamp(320px, 32vw, 560px); max-width: 100%; height: auto; aspect-ratio: 1; opacity: .75; font: 8px monospace; }
+.start-ascii { flex: 0 0 auto; width: clamp(320px, 32vw, 560px); max-width: 100%; height: auto; aspect-ratio: 1; opacity: .75; font: 8px var(--mono); }
 @media (max-width: 520px) { .start-card { min-height: 236px; } }

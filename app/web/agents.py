@@ -20,7 +20,7 @@ from pathlib import Path
 
 from flask import abort, flash, redirect, render_template, request, url_for
 from nullius import execution, paths, providers
-from nullius.catalogue import storage
+from nullius.catalogue import catalog, storage
 from nullius.standard.contract import definitions, ports
 from nullius.standard.pages import howto
 from nullius.standard.proofs import conform
@@ -49,13 +49,29 @@ def _choices(kind: str, entries: list) -> dict:
         return {"runs_on": runs_on} if runs_on else {}
     proven = {p["port"] for e in entries for p in e["ports"] if p["state"] == "proven"}
     have = {e["d"].get("from") for e in entries}
+    origins = {o["value"] for e in entries for o in origin_tags(e["d"])}
+    came = [(k, v) for k, v in definitions.FROM.items() if k in have and k != "benchmark"]     # a benchmark's own is an origin
     return {"protocol": [(x, x) for x in dict.fromkeys(e["protocol"] for e in entries)],
             "proves": [(p, spec.get("label") or p) for p, spec in ports.PORTS.items() if p in proven],
-            "from": [(k, v) for k, v in definitions.FROM.items() if k in have], "runs_on": runs_on}
+            **({"from": came} if len(came) > 1 else {}), "runs_on": runs_on,
+            **({"origin": [(k, v) for k, v in ORIGINS.items() if k in origins]} if len(origins) > 1 else {})}
 
 
-# The From filter's default: the catalogue's own agents; benchmark-owned agents also show when Runs on selects their benchmark.
-ONLY = {"agent": {"from": ["bundled", "yours"]}}
+# An agent's origins, as its tag and the Origin filter name them.
+ORIGINS = {**{o: o.capitalize() for o in catalog.ORIGINS}, "benchmark": definitions.FROM["benchmark"]}
+
+
+def origin_tag(o: str) -> dict:
+    return {"text": ORIGINS[o], "class": o, "value": o}
+
+
+def origin_tags(d: dict) -> list:
+    """An agent's origins, its default version's first; a benchmark's own agent has that one."""
+    return [origin_tag(o) for o in (["benchmark"] if d.get("benchmark") else standard_recipe.origins(d))]
+
+
+# The Origin filter's default: the catalogue's own agents; benchmark-owned agents also show when Runs on selects their benchmark.
+ONLY = {"agent": {"origin": list(catalog.ORIGINS)}}
 
 
 def _runs_on(e: dict) -> list:
@@ -72,14 +88,15 @@ def _card(kind: str, e: dict) -> dict:
                        if b["key"] == d["benchmark"] for p in b.get("needs") or [])
         return {"href": url_for("benchmark_page", key=d["benchmark"]), "id": d["_ref"].replace(":", "-"),
                 "search": " ".join([d["label"], d["key"], d["benchmark_label"], e["protocol"], d.get("summary", "")]),
-                "protocol": e["protocol"], "icon": agent_mark_url(d["key"]), "title": d["label"], "summary": d.get("summary"),
-                "from": {"text": d["benchmark_label"], "value": "benchmark"},
+                "protocol": e["protocol"], "origin": origin_tags(d), "icon": agent_mark_url(d["key"]), "title": d["label"], "summary": d.get("summary"),
+                "from": {"text": d["benchmark_label"], "value": "benchmark"}, "benchmark": d["benchmark_label"],
                 "uses": "Computer use" if computer else None, "models": ", ".join(d.get("models") or []),
-                "runs_on": _runs_on(e), "unless": {"from": "runs_on"}, "hide": ["ports", "runs", "installs"]}
+                "runs_on": _runs_on(e), "unless": {"origin": "runs_on"}, "hide": ["ports", "runs", "installs"]}
     version, n = (d.get("upstream") or {}).get("version"), len(d.get("_versions") or ())
     return {"href": url_for("agent_page" if kind == "agent" else "feature_page", key=d["key"]), "id": d["key"],
             "search": " ".join([d["label"], d["key"], d.get("kind", ""), e["protocol"], d.get("summary", "")]),
             "kind": d.get("kind") if kind == "capability" else None, "protocol": e["protocol"],
+            "origin": origin_tags(d) if kind == "agent" else None,
             "example": {"text": "example", "title": "Nullius's own, to read or copy - not an agent to compare"} if d.get("example") else None,
             "version": ("v" + str(version) if version else "") + (f" · {n} versions" if n > 1 else ""),
             "icon": agent_mark_url(d["key"]) if kind == "agent" else None, "title": {"text": d["label"], "after": str(version or "")},
@@ -98,10 +115,10 @@ def _entry(kind: str, key: str):
         next((x for x in mine if x["d"]["_version"] == x["d"]["_default"]), None)
     if e is None:
         abort(404)
-    versions = [{"v": x["d"]["_version"], "default": x["d"]["_version"] == x["d"]["_default"], "current": x is e,
+    versions = [{"v": x["d"]["_version"], "origin": definitions.origin_of(x["d"]) if kind == "agent" else "", "default": x["d"]["_version"] == x["d"]["_default"], "current": x is e,
                  "proven": sum(1 for r in x["ports"] if r["state"] == "proven"), "ports": len(x["ports"])} for x in mine]
     have = providers.available(os.environ)
-    return render_template("agents/entry.html", kind=kind, e=e, versions=versions if len(mine) > 1 else [],
+    return render_template("agents/entry.html", kind=kind, e=e, origin=definitions.origin_of(e["d"]), versions=versions if len(mine) > 1 else [],
                            restore_bundle=storage.can_restore(definitions.KINDS[kind]["dir"], key, definitions.CATALOGUE),
                            title=definitions.title(e["d"]), providers=[(p, providers.label(p)) for p in have],
                            local=shared._local_client(), csrf=shared._csrf_token())
