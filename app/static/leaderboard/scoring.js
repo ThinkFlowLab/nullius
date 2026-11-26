@@ -86,10 +86,13 @@
         line.append(cell(input(entry.weight,v=>entry.weight=v,{required:'','aria-label':`${name}, weight ${n}`})),el('output','',{'data-share':'',class:'lb-share'}),remove(`Remove benchmark ${n} from ${name}`,()=>{axis.entries.splice(index,1);render();edited();}));
         container.append(line);
       });
+      section.querySelector('[data-count]').textContent=axis.entries.length||'';
       const weight=section.querySelector('[data-overall]');weight.value=axis.weight;weight.oninput=()=>{axis.weight=weight.value===''?null:Number(weight.value);edited();};
       section.querySelector('[data-add-entry]').onclick=()=>{const b=data.options[0];if(!b)return;axis.entries.push({benchmark:b.key,dataset:'',version:b.version,metric:'Score',weight:1});render();edited();};
     });shares();
   }
+  /* each axis folds its benchmarks away; open by default */
+  form.querySelectorAll('.lb-fold').forEach(b=>b.onclick=()=>{const open=b.getAttribute('aria-expanded')!=='true';b.setAttribute('aria-expanded',String(open));window.NulliusDisclosure.setHidden(document.getElementById(b.getAttribute('aria-controls')),open);});
   document.getElementById('custom-add').onclick=()=>{const c={id:crypto.randomUUID(),name:'',scores:{}};draft.custom.push(c);render();edited();form.querySelector(`[data-custom-name="${c.id}"]`)?.focus();};
   document.getElementById('reset-ask').onclick=()=>{document.getElementById('reset-confirm').hidden=false;document.getElementById('reset-ask').hidden=true;document.getElementById('reset-no').focus();};
   document.getElementById('reset-no').onclick=()=>{resetting=false;document.getElementById('reset-confirm').hidden=true;document.getElementById('reset-ask').hidden=false;document.getElementById('reset-ask').focus();};

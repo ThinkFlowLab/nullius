@@ -28,25 +28,42 @@
   function evidence(target) {
     const current = row(target.closest('tr')?.dataset.key || selected); if (!current) return;
     const axisName = target.dataset.axis; if (!axisName) return;
-    pop.replaceChildren(element('strong', axisName));
+    /* a score's evidence: what it is made of, each part's share, score and what it adds, and the total */
+    const shareOf=v=>v==null?'–':v.toFixed(2), adds=(score,share)=>score==null||!share?'–':(score*share*100).toFixed(1);
+    const scoreCell=(score,reason)=>{const td=element('td',null,{class:'lb-ev-score'});if(score==null){td.append(element('span',reason||'not run',{class:'muted'}));return td;}const bar=element('span',null,{class:'lb-ev-bar'}),fill=element('i');fill.style.width=`${score*100}%`;bar.append(fill);td.append(bar,element('span',whole(score)));return td;};
+    const table=element('table',null,{class:'lb-ev-table'}), head=element('tr'), body=element('tbody');
+    ['Benchmark · dataset','Weight','Score','Adds'].forEach(t=>head.append(element('th',t)));
+    const thead=element('thead');thead.append(head);table.append(thead,body);
+    const line=(label,sub,share,score,reason)=>{const tr=element('tr'),name=element('td');name.append(...label);if(sub.length){const small=element('small');small.append(...sub);name.append(small);}tr.append(name,element('td',shareOf(share),{class:'lb-ev-num'}),scoreCell(score,reason),element('td',adds(score,share),{class:'lb-ev-num'}));body.append(tr);};
+    const total=(label,score,share)=>{const foot=element('tfoot'),tr=element('tr');tr.append(element('td',label),element('td',shareOf(share),{class:'lb-ev-num'}),element('td',score==null?'–':percent(score),{class:'lb-ev-num'}),element('td'));foot.append(tr);table.append(foot);};
+    const field=axisName==='Overall'?null:fieldAverage(axisName);
+    pop.replaceChildren(element('strong', `${axisName} · ${current.name}`));
     if (axisName === 'Overall') {
+      pop.append(element('p','Overall is the weighted mean of the capabilities measured'));
       current.reasons.forEach(reason => pop.append(element('p', `Partial: ${reason}`)));
-      pop.append(element('p',[current.identity.model,current.identity.effort].filter(Boolean).join(' · ')));
-      data.axes.map(name=>[name,current.axes[name]]).filter(([,a]) => a.weight > 0).forEach(([name,a]) => {
-        const names = a.entries.filter(e => e.unverified && e.share > 0).map(e => e.name);
-        pop.append(element('p', `${name} · ${percent(a.score)} · weight ${a.weight} · share ${percent(a.share)}${names.length ? ' · '+names.join(', ')+' · not verified' : ''}`));
-      });
+      const parts=data.axes.map(name=>[name,current.axes[name]]).filter(([,a]) => a.weight > 0);
+      parts.forEach(([name,a]) => line([name],a.entries.some(e=>e.unverified&&e.share>0)?[element('span','Not verified',{class:'lb-tag'})]:[],a.share,a.score,'not measured'));
+      total('Overall',current.overall,parts.reduce((n,[,a])=>n+(a.share||0),0));
     } else {
       const axis = current.axes[axisName];
+      pop.append(element('p',`${axisName} is the weighted mean of its benchmarks run${field!=null?` · field average ${whole(field)}`:''}`));
       if (!axis.entries.length) pop.append(element('p','No benchmark'));
-      axis.entries.forEach(e => {
-        const line = element('p', `${e.name}${e.version ? ' · '+(e.version_label || e.version) : ''} · ${e.score == null ? e.reason || 'not run' : percent(e.score)}${e.unverified ? ' · not verified' : ''} · ${innerWidth <= 700 ? 'x' : 'weight'} ${e.weight} · share ${percent(e.share)}`);
-        if (!e.custom && e.tasks != null) line.append(element('span', ` · ${e.covered}/${e.tasks} tasks`, {class:e.covered === e.tasks ? 'lb-complete-count' : ''}));
-        (e.links || []).forEach(link => { line.append(document.createTextNode(' · '),element('a',link.id,{href:link.url})); });
-        if (e.note) line.append(document.createTextNode(` · ${e.note}`));
-        pop.append(line);
-      });
+      else {
+        axis.entries.forEach(e => {
+          const [bench,...slice]=e.name.split(' · '), label=[bench];if(slice.length)label.push(element('span',` · ${slice.join(' · ')}${e.metric&&e.metric!=='Score'?' · '+e.metric:''}`,{class:'muted'}));
+          const sub=[];
+          if(e.version)sub.push(e.version_label||e.version);
+          if(!e.custom&&e.tasks!=null)sub.push(`${e.covered} of ${e.tasks} tasks`);
+          const small=[sub.join(' · ')];
+          (e.links||[]).forEach(link=>small.push(' · ',element('a',link.id,{href:link.url})));
+          if(e.note)small.push(` · ${e.note}`);
+          if(e.unverified)small.push(' ',element('span','Not verified',{class:'lb-tag'}));
+          line(label,small,e.share,e.score,e.reason);
+        });
+        total(axisName,axis.score,axis.entries.reduce((n,e)=>n+(e.share||0),0));
+      }
     }
+    if(body.children.length)pop.append(table);
     focusBefore = target; pop.hidden = false;
     const box = target.getBoundingClientRect();
     pop.style.left = `${Math.max(12,Math.min(box.left,innerWidth-pop.offsetWidth-12))}px`;
