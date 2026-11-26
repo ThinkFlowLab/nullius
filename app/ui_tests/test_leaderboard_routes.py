@@ -36,6 +36,12 @@ class LeaderboardRoutes(unittest.TestCase):
             self.assertIn(name, html)
         positions = [html.index(f'id="{key}"') for key in ("leaderboard-table", "leaderboard-efficiency", "leaderboard-strips", "leaderboard-radars")]
         self.assertEqual(positions, sorted(positions))
+        # the Leaderboard offers its own page sizes; every other table keeps the shared ones
+        import re
+        sizes = lambda markup: re.findall(r"<option[^>]*>(\w+)</option>", re.search(r"<select data-per>(.*?)</select>", markup, re.S).group(1))
+        self.assertEqual(sizes(html), ["5", "10", "25", "50", "All"])
+        with web.app.test_request_context():
+            self.assertEqual(sizes(str(web.app.jinja_env.get_template("_tables.html").module.pager("any"))), ["10", "25", "100", "All"])
         self.assertIn("OpenAI", html)
         self.assertIn("2.2.2", html)
         for route in ("/scoring", "/settings/scoring"):

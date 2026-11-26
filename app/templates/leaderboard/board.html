@@ -34,7 +34,7 @@
 {% for name in board.axes %}<td data-col="{{ name }}" data-sort="{{ r.axes[name].score if r.axes[name].score is not none else '' }}"></td>{% endfor %}
 {% for key in ['steps','time','calls','cost'] %}<td data-col="{{ key }}">–</td>{% endfor %}
 </tr>{% endfor %}</tbody></table></div>
-{{ tables.pager('leaderboard-table', 'No matching agents.', 'agents') }}
+{{ tables.pager('leaderboard-table', 'No matching agents.', 'agents', sizes=(5, 10, 25, 50)) }}
 </section>
 <section id="leaderboard-efficiency" class="lb-two">
   <div class="lb-panel"><div class="lb-head"><h2>Efficiency and cost</h2><div class="seg-toggle" id="lb-metric" aria-label="Measure"><button type="button" data-metric="time" aria-pressed="true">Time</button><button type="button" data-metric="cost" aria-pressed="false">Cost</button></div></div><div class="lb-scroll"><svg id="lb-scatter" class="lb-scatter" viewBox="0 0 640 426" role="group" aria-label="Overall against time or cost per task"></svg></div></div>

@@ -160,12 +160,12 @@
 {% macro check_cell(label, value) %}<td class="pick-col"><input type="checkbox" data-check value="{{ value }}" aria-label="{{ label }}"></td>{% endmacro %}
 
 {# The pages of the table whose id is `table` (static/tables.js `pager`): how many rows a page shows, 25 at first,
-   and the page before and after; `empty` shows when no row passes. After a change, what is shown is read out once
-   typing pauses, counted in `noun`. #}
-{% macro pager(table, empty='No rows match.', noun='rows') %}
+   of `sizes` or all, and the page before and after; `empty` shows when no row passes. After a change, what is shown
+   is read out once typing pauses, counted in `noun`. #}
+{% macro pager(table, empty='No rows match.', noun='rows', sizes=(10, 25, 100)) %}
 {{ empty_note(table, empty) }}
 <div class="table-tools table-pager" data-pager="{{ table }}">
-  <label class="table-note">Show <select data-per><option>5</option><option>10</option><option selected>25</option><option>50</option><option value="0">All</option></select></label>
+  <label class="table-note">Show <select data-per>{% for n in sizes %}<option{{ ' selected' if n == 25 }}>{{ n }}</option>{% endfor %}<option value="0">All</option></select></label>
   <span class="header-spacer"></span>
   <button type="button" class="btn sm ghost" data-prev aria-label="Previous page"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
   <span class="table-note" data-note></span>
