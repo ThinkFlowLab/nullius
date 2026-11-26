@@ -50,6 +50,9 @@ class ConfigurationExamples(unittest.TestCase):
         # only GAIA is in this catalogue: the capabilities without a benchmark weigh nothing
         self.assertEqual([axes[k]["weight"] for k in configuration.CAPABILITIES], [0, 0, 0, 0, 0, .10, 0, .20])
         self.assertEqual(configuration.defaults([])["axes"]["Memory"]["weight"], .12)
+        weighted = copy.deepcopy(self.defaults)
+        weighted["axes"]["Memory"]["weight"] = .5                     # a row with no benchmark weighs nothing, whatever was saved
+        self.assertEqual(configuration.validate(weighted, self.benchmarks)["axes"]["Memory"]["weight"], 0)
         self.assertEqual({axes[k]["weight"] for k in configuration.DOMAINS}, {.14})   # no domain has a benchmark here: equal weights stay
         self.assertEqual([(e["dataset"], e["version"], e["weight"]) for e in axes["Retrieval"]["entries"]], [("gaia-validation", "v1", 1)])
         self.assertEqual([(e["dataset"], e["weight"]) for e in axes["Execution"]["entries"]], [("gaia-validation", .5)])

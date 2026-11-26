@@ -131,6 +131,8 @@ def validate(document, benchmarks, *, previous=None, allow_unavailable=False):
             if identity in seen:
                 raise ValueError(f"{name}: duplicate entry")
             seen.add(identity)
+    for names in FAMILIES.values():
+        _zero_empty(doc["axes"], names)                                # a row with no benchmark weighs nothing
     if not any(axis["weight"] > 0 for axis in doc["axes"].values()):
         raise ValueError("At least one Weight in Overall must be positive")
     return doc

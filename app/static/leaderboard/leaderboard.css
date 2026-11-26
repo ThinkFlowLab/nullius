@@ -182,6 +182,7 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
 .lb-input:hover { border-color: var(--text-faint); }
 .lb-input:focus { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .lb-input::placeholder { color: var(--text-faint); }
+.lb-settings .lb-input:disabled { opacity: .5; cursor: not-allowed; }
 .lb-input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .lb-input::-webkit-inner-spin-button, .lb-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .lb-input[aria-invalid="true"] { border-color: var(--bad); box-shadow: inset 0 0 0 1px var(--bad); }

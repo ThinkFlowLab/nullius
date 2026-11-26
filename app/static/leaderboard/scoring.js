@@ -70,7 +70,7 @@
         container.append(line);
       });
       section.querySelector('[data-count]').textContent=axis.entries.length;
-      const weight=section.querySelector('[data-overall]');if(weight){weight.value=axis.weight;weight.oninput=()=>{axis.weight=weight.value===''?null:Number(weight.value);edited();};}
+      const weight=section.querySelector('[data-overall]');if(weight){weight.value=axis.weight;weight.disabled=!axis.entries.length;weight.title=axis.entries.length?'':'Add a benchmark first';weight.oninput=()=>{axis.weight=weight.value===''?null:Number(weight.value);edited();};}
       section.querySelector('[data-add-entry]').onclick=()=>{const b=data.options[0];if(!b)return;
         /* an empty axis weighs 0 in Overall; its first benchmark brings back the axis's standard weight */
         if(!axis.entries.length&&!axis.weight)axis.weight=data.overall?.[name]||0;
