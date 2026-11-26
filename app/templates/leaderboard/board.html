@@ -3,39 +3,44 @@
 {% import '_tables.html' as tables %}
 {% block title %}Leaderboard · Nullius{% endblock %}
 {% block head %}<script src="{{ url_for('static', filename='tables.js') }}"></script><link rel="stylesheet" href="{{ url_for('static', filename='leaderboard/leaderboard.css') }}">{% endblock %}
+{% macro picks() %}<span class="lb-picks"><span class="lb-pick"><svg class="lb-swatch" viewBox="0 0 22 14" aria-hidden="true" data-swatch="0"></svg><select data-agent-select aria-label="Agent">{% for r in board.rows if r.overall is not none %}<option value="{{ r.key }}">{{ r.name }}</option>{% endfor %}</select></span><span class="muted">vs</span><span class="lb-pick"><svg class="lb-swatch" viewBox="0 0 22 14" aria-hidden="true" data-swatch="1"></svg><select data-vs-select aria-label="Compared with"><option value="average">Average</option>{% for r in board.rows if r.overall is not none %}<option value="{{ r.key }}">{{ r.name }}</option>{% endfor %}</select></span></span>{% endmacro %}
 {% block body %}
 {% set actions %}<a class="btn ghost lb-head-link" href="{{ url_for('scoring_page') }}">Scoring settings</a>{% endset %}
 {{ page_head('Leaderboard', actions=actions) }}
 {% if board.warning %}<p role="alert">{{ board.warning }}</p>{% endif %}
-<p id="lb-empty">{{ board.empty }}</p>
-<div class="lb-controls">
+{% if board.empty %}<p id="lb-empty">{{ board.empty }}</p>{% endif %}
+<section class="lb-panel" id="leaderboard-board">
+<div class="lb-head">
   <div class="seg-toggle" aria-label="Axes"><button type="button" data-family="capabilities" aria-pressed="true">Capabilities</button><button type="button" data-family="domains" aria-pressed="false">Domains</button></div>
-  <div class="lb-mode"><span id="lb-trust-key" class="small lb-unverified" hidden>Includes a score not verified</span><label>Scores <select id="lb-mode"><option value="0">Verified only</option><option value="1"{{ ' selected' if board.all_scores }}>All scores</option></select></label></div>
+  <span id="lb-trust-key" class="muted lb-key" hidden><i></i>Includes a score not verified</span>
+  <div class="seg-toggle lb-trust" id="lb-mode" aria-label="Scores"><button type="button" data-mode="0" aria-pressed="{{ 'false' if board.all_scores else 'true' }}">Verified only</button><button type="button" data-mode="1" aria-pressed="{{ 'true' if board.all_scores else 'false' }}">All scores</button></div>
 </div>
-{% set cols = [dict(key='rank', label='Rank', type='num', fixed=true, sticky=true), dict(key='agent', label='Agent', fixed=true, sticky=true), dict(key='overall', label='Overall', type='num', fixed=true)] %}
+{% set cols = [dict(key='rank', label='#', type='num', fixed=true, sticky=true), dict(key='agent', label='Agent', fixed=true, sticky=true), dict(key='overall', label='Overall', type='num', fixed=true)] %}
 {% for name in board.axes %}{% set _ = cols.append(dict(key=name, label=name, type='num', off=board.averages[name].score is none)) %}{% endfor %}
-{% set _ = cols.append(dict(key='_room', label='', blank=true, menu=false)) %}
 {% for key, label in [('steps','Steps'),('time','Time'),('calls','Tool calls'),('cost','Cost')] %}{% set _ = cols.append(dict(key=key, label=label, type='num')) %}{% endfor %}
 {% set _ = cols.append(dict(key='company', label='Company', table=false)) %}
 {% set _ = cols.append(dict(key='status', label='Status', table=false)) %}
-{% set choices = dict(agent=board.rows|map(attribute='agent')|unique|list, company=board.rows|map(attribute='company')|unique|list) %}
 {% set filters = dict(agent=[],company=[],status=[('ranked','Ranked'),('not-ranked','Not ranked'),('no-run','No run')]) %}
 {% for r in board.rows %}{% if (r.agent,r.name) not in filters.agent %}{% set _=filters.agent.append((r.agent,r.name)) %}{% endif %}{% if r.company and (r.company,r.company) not in filters.company %}{% set _=filters.company.append((r.company,r.company)) %}{% endif %}{% endfor %}
-{{ tables.controls('leaderboard-table', cols, search='Search agents', columns=true, choices=filters) }}
+{{ tables.controls('leaderboard-table', cols, search='Search by agent or company', columns=true, choices=filters) }}
 <div class="table-wrap"><table class="grid sortable tools lb-table" id="leaderboard-table" data-table>
 <thead><tr>{{ tables.heads(cols|rejectattr('table','sameas',false)|list) }}</tr></thead>
 <tbody>{% for r in board.rows %}
 <tr data-key="{{ r.key }}" data-search="{{ r.name }} {{ r.company }} {{ r.version_label }}" data-sort-group="{{ 0 if r.rank else 1 if r.overall is not none else 2 }}" data-f-agent="{{ r.agent }}" data-f-company="{{ r.company }}" data-f-status="{{ 'ranked' if r.rank else 'not-ranked' }}{{ '\nno-run' if not r.has_runs }}">
 <td data-col="rank" class="sticky-col" data-sort="{{ r.rank or '' }}"></td>
-<td data-col="agent" class="sticky-col sticky-edge" data-sort="{{ r.name }}"><button type="button" class="linkish lb-agent" data-select="{{ r.key }}"><span class="lb-mark">{{ agent_mark('agent',r.agent,r.name) }}</span><span><span data-name>{{ r.name }}</span><span class="muted small lb-subtitle"><span class="lb-company">{{ r.company }}{{ ' · ' if r.company }}</span>{{ r.version_label }}</span></span></button></td>
-<td data-col="overall" data-axis="Overall" tabindex="0" data-sort="{{ r.overall if r.overall is not none else '' }}">{{ percent(r.overall) }}</td>
-{% for name in board.axes %}<td data-col="{{ name }}" data-axis="{{ name }}" tabindex="0" data-sort="{{ r.axes[name].score if r.axes[name].score is not none else '' }}">{{ percent(r.axes[name].score) }}</td>{% endfor %}
-<td data-col="_room"></td>
-{% for key in ['steps','time','calls','cost'] %}<td data-col="{{ key }}">—</td>{% endfor %}
+<td data-col="agent" class="sticky-col sticky-edge" data-sort="{{ r.name }}"><button type="button" class="lb-agent" data-select="{{ r.key }}"><span class="lb-mark">{{ agent_mark('agent',r.agent,r.name) }}</span><span class="lb-who"><b data-name>{{ r.name }}</b><small><span class="lb-company">{{ r.company }}{{ ' · ' if r.company }}</span>{{ r.version_label }}</small></span></button></td>
+<td data-col="overall" data-sort="{{ r.overall if r.overall is not none else '' }}"></td>
+{% for name in board.axes %}<td data-col="{{ name }}" data-sort="{{ r.axes[name].score if r.axes[name].score is not none else '' }}"></td>{% endfor %}
+{% for key in ['steps','time','calls','cost'] %}<td data-col="{{ key }}">–</td>{% endfor %}
 </tr>{% endfor %}</tbody></table></div>
 {{ tables.pager('leaderboard-table', 'No matching agents.', 'agents') }}
-<section id="leaderboard-efficiency" class="lb-efficiency"><div><div class="lb-controls"><h2>Efficiency</h2><label>Measure <select id="lb-metric"><option value="time">Time</option><option value="cost">Cost</option></select></label></div><svg id="lb-scatter" class="fig-svg" role="group" aria-label="Efficiency scatter"></svg></div><article id="lb-card"></article></section>
-{% for block in ['strips','radars'] %}<section id="leaderboard-{{ block }}"><div class="lb-controls"><h2>{{ 'Domains and capabilities' if block == 'strips' else 'Profile' }}</h2><div class="lb-controls"><span class="lb-series-solid" aria-label="Selected series"></span><label>Agent <select data-agent-select>{% for r in board.rows %}<option value="{{ r.key }}">{{ r.name }} {{ r.version_label }} {{ r.identity.get('model') or '' }} {{ r.identity.get('effort') or '' }}</option>{% endfor %}</select></label><span class="lb-series-dashed" aria-label="Comparison series"></span><label>vs <select data-vs-select><option value="average">Average</option>{% for r in board.rows %}<option value="{{ r.key }}">{{ r.name }} {{ r.version_label }} {{ r.identity.get('model') or '' }}</option>{% endfor %}</select></label></div></div><div class="lb-chart-pair"><div data-chart="{{ block }}-domains"></div><div data-chart="{{ block }}-capabilities"></div></div></section>{% endfor %}
+</section>
+<section id="leaderboard-efficiency" class="lb-two">
+  <div class="lb-panel"><div class="lb-head"><h2>Efficiency and cost</h2><div class="seg-toggle" id="lb-metric" aria-label="Measure"><button type="button" data-metric="time" aria-pressed="true">Time</button><button type="button" data-metric="cost" aria-pressed="false">Cost</button></div></div><div class="lb-scroll"><svg id="lb-scatter" class="lb-scatter" viewBox="0 0 640 426" role="group" aria-label="Overall against time or cost per task"></svg></div></div>
+  <article id="lb-card" class="lb-panel lb-card"></article>
+</section>
+<section id="leaderboard-strips" class="lb-panel"><div class="lb-head"><h2>Resolved rate by domain and capability</h2>{{ picks() }}</div><div class="lb-chart-pair"><div><h3>By domain</h3><div data-chart="strips-domains"></div></div><div><h3>By capability</h3><div data-chart="strips-capabilities"></div></div></div></section>
+<section id="leaderboard-radars" class="lb-panel"><div class="lb-head"><h2>Resolved rate profiles</h2>{{ picks() }}</div><div class="lb-chart-pair"><div><h3>By domain</h3><div data-chart="radars-domains"></div></div><div><h3>By capability</h3><div data-chart="radars-capabilities"></div></div></div></section>
 <div id="lb-evidence" class="lb-evidence" role="dialog" aria-label="Score evidence" hidden></div>
 <script type="application/json" id="lb-data">{{ board|tojson }}</script>
 <script type="application/json" id="lb-marks">{% set marks={} %}{% for r in board.rows %}{% set _=marks.update({r.key: agent_mark_url(r.agent)}) %}{% endfor %}{{ marks|tojson }}</script>

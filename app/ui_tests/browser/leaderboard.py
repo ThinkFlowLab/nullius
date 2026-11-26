@@ -114,7 +114,7 @@ class LeaderboardBrowser(unittest.TestCase):
         expect(self.page.locator('#lb-evidence')).to_be_hidden()
         expect(cell).to_be_focused()
         # Returning normally to the trigger still opens it.
-        self.page.locator('#lb-mode').locator('xpath=following-sibling::button[1]').focus()
+        self.page.locator('#lb-mode [data-mode="0"]').focus()
         cell.focus()
         expect(self.page.locator('#lb-evidence')).to_be_visible()
         self.assertFalse(self.errors)
@@ -124,7 +124,7 @@ class LeaderboardBrowser(unittest.TestCase):
         self.page.locator('[data-chart="radars-capabilities"]').scroll_into_view_if_needed()
         self.page.wait_for_timeout(700)  # settle the first visibility animation
         self.page.evaluate("window.oldRadar=document.querySelector('[data-chart=\"radars-capabilities\"] svg')")
-        point = self.page.locator('#lb-scatter g[data-select]').nth(1)
+        point = self.page.locator('#lb-scatter g[data-select][aria-label="Goose"]')
         point.focus()
         self.page.evaluate("window.oldPoint=document.activeElement")
         self.page.keyboard.press("Enter")
@@ -205,7 +205,7 @@ class LeaderboardBrowser(unittest.TestCase):
         settings["axes"]["Personalization"]["entries"] = [{"custom": "c", "weight": 1}]
         configuration.save(configuration.location(), settings, service.catalogue()[1])
         self.open('/leaderboard')
-        self.choose('#lb-mode', 1)
+        self.page.locator('#lb-mode [data-mode="1"]').click()
         ranked = self.page.locator('tbody tr[data-sort-group="0"]')
         expect(ranked).to_have_count(6)
         cells = ranked.locator('[data-col="rank"]')

@@ -5,11 +5,10 @@ import hashlib
 import json
 import os
 from collections import Counter
-from dataclasses import asdict, replace
+from dataclasses import replace
 from urllib.parse import quote
 
 from nullius.standard.contract import definitions
-from nullius import charts
 from . import board, configuration, metrics, weights, scopes
 
 
@@ -63,11 +62,4 @@ def document(jobs, *, workspace="", workspace_open=False, all_scores=False, defe
                 entry["links"] = [{"id": id, "url": "/job/" + quote(id, safe="") + ("?workspace=" + quote(workspace, safe="") if workspace else "")} for id in entry["runs"]]
     if deferred:
         metrics.CACHE.complete(result, sources)
-    result["scatter"] = {}
-    for field, label in (("time", "Time (seconds)"), ("cost", "Cost (USD)")):
-        x = charts.Metric(label, tuple(charts.Value(r["name"], r["metrics"][field]["value"], str(r["metrics"][field]["value"]),
-                                                  note=r["version_label"], tag=r["name"], key=r["key"]) for r in result["rows"]), bounds=(0, None))
-        y = charts.Metric("Overall", tuple(charts.Value(r["name"], r["overall"], weights.percent(r["overall"])) for r in result["rows"]),
-                          fmt=lambda v, step, top: weights.percent(v), bounds=(0, 1))
-        result["scatter"][field] = asdict(charts.scatter(x, y, tiles=True))
     return result

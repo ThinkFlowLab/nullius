@@ -71,7 +71,7 @@ window.LeaderboardMotion = (() => {
         if(kind==='strips')fade(node,[{transform:'translateX(-24px)',opacity:0},{transform:'translateX(0)',opacity:1}]);
         else {
           const from={},to={};
-          for(const k of ['cx','cy','x1','y1','x2','y2'])if(node.hasAttribute(k)){to[k]=node.getAttribute(k);from[k]=k.startsWith('x')||k==='cx'?180:155;}
+          for(const k of ['cx','cy','x1','y1','x2','y2'])if(node.hasAttribute(k)){to[k]=node.getAttribute(k);from[k]=k.startsWith('x')||k==='cx'?Number(plot.dataset.cx??180):Number(plot.dataset.cy??155);}
           geometry(node,from,to,Number(node.dataset.reveal)*35);
         }
       });
