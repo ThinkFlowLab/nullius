@@ -39,11 +39,11 @@ Food delivery, in-store and travel requests from a simulated user, with up to 66
 |---|---|---|---|
 | `agent_max_tokens` | e.g. `8192`, default `default` | The longest reply of the benchmark's own agent model. The default sends no limit. | `original` |
 | `agent_reasoning_effort` | **`default`**, `minimal`, `low`, `medium`, `high`, `xhigh` | How much reasoning the benchmark's own agent model uses. | `original` |
-| `agent_temperature` | e.g. `0.7`, default `0.0` | The temperature of the benchmark's own agent model, the paper's 0 by default. | `original` |
+| `agent_temperature` | default `0.0` | The temperature of the benchmark's own agent model, the paper's 0 by default. | `original` |
 | `enable_think` | **`off` (Off)**, `on` (On) | Whether the benchmark's own agent model thinks (the upstream's --enable-think). | `original` |
 | `evaluation` | **`trajectory` (Sliding window, rubrics)**, `trajectory_full_traj_rubric` (Whole conversation, rubrics), `trajectory_sliding_wo_rubric` (Sliding window, no rubrics), `trajectory_full_traj_wo_rubric` (Whole conversation, no rubrics) | How the judge reads the conversation. | `original`, `yours` |
-| `max_errors` | e.g. `5`, default `10` | The most tool calls that fail before a conversation ends. | `original`, `yours` |
-| `max_steps` | e.g. `100`, default `300` | The most messages and tool rounds of a conversation. | `original`, `yours` |
+| `max_errors` | default `10` | The most tool calls that fail before a conversation ends. | `original`, `yours` |
+| `max_steps` | default `300` | The most messages and tool rounds of a conversation. | `original`, `yours` |
 | `upstream_agent` | **`llm_agent` (Conversation)**, `llm_solo_agent` (Solo) | Whether the benchmark's own agent talks with the user or works alone. | `original` |
 | `user` | **`user_simulator` (Step by step)**, `dummy_user` (All at once) | How the simulated user tells what it wants. | `original`, `yours` |
 
@@ -51,7 +51,7 @@ Food delivery, in-store and travel requests from a simulated user, with up to 66
 
 - The paper's judge, Claude 3.7 Sonnet, is retired, so Like the paper cannot run: choose Any of your choice and a judge model. Scores compare only between runs with the same judge, never with the paper's.
 - Scores depend on the judge's and the simulated user's models: keep both fixed when comparing.
-- The leaderboard's main result is Cross-scenario, in Chinese, with 4 attempts per task.
+- The leaderboard's main result is Cross-scenario (Chinese), with 4 attempts per task.
 - A task passes only when every rubric is met.
 
 ## Upstream limitations
@@ -61,13 +61,13 @@ Food delivery, in-store and travel requests from a simulated user, with up to 66
 - A failed model call makes the upstream start the conversation again, up to 3 times, and each costs its calls.
 - The updated leaderboard does not name its judge model.
 - Its dependencies are not locked to versions.
+- It publishes no reference conversations, so there is no reference control.
 
 ## Nullius limitations
 
-- Another agent replaces the upstream's agent. It gets the upstream's prompt, plus lines from Nullius: where its tools are, and that its last message in a turn goes to the user.
+- Another agent gets the upstream's prompt plus two lines from Nullius: where its tools are, and that its last message in a turn goes to the user.
 - With another agent, a judge that fails is the task's error: the upstream's restart of the conversation is not followed.
 - With another agent, one empty final message ends the conversation. The upstream asks its own agent 3 times.
-- There is no reference control: the upstream publishes no reference conversations.
 
 ## Cite
 

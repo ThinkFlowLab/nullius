@@ -39,28 +39,28 @@
   "datasets": [
     {
       "id": "cross",
-      "label": "Cross-scenario",
+      "label": "Cross-scenario (Chinese)",
       "path": "data/vita/domains/cross_domain/tasks.json",
       "sha256": "a7e782785f40667511a54562d613e2122de645a36b8661a5658c1740d34a5815",
       "units": 100
     },
     {
       "id": "delivery",
-      "label": "Delivery",
+      "label": "Delivery (Chinese)",
       "path": "data/vita/domains/delivery/tasks.json",
       "sha256": "22746ae23eb6dbed2ee6a5e3a0f476af60e8a43bab0ea2d3ead54f0ef3829f94",
       "units": 100
     },
     {
       "id": "instore",
-      "label": "In-store",
+      "label": "In-store (Chinese)",
       "path": "data/vita/domains/instore/tasks.json",
       "sha256": "f92b9313e5476499d51b73a929cc901b7d87cd7c3315df56942d62c83aa34407",
       "units": 100
     },
     {
       "id": "ota",
-      "label": "OTA",
+      "label": "OTA (Chinese)",
       "path": "data/vita/domains/ota/tasks.json",
       "sha256": "c9208c25accef24f4798bbd3f38403da081fdf48f3c7100dfc702aa7b379559e",
       "units": 100
@@ -243,8 +243,8 @@
         "on"
       ],
       "about": {
-        "off": "The upstream's default: no reasoning effort sent, Claude's thinking disabled.",
-        "on": "Sends the reasoning effort below; Claude and DeepSeek replies keep their reasoning."
+        "off": "The upstream's default: no reasoning effort sent. On a Claude model, thinking is turned off.",
+        "on": "Sends the reasoning effort below. On Claude and DeepSeek models, earlier reasoning is sent back."
       }
     },
     "agent_reasoning_effort": {
@@ -267,7 +267,7 @@
         ]
       },
       "about": {
-        "default": "None sent: the provider's own."
+        "default": "None sent: the model's own default."
       }
     },
     "agent_temperature": {
