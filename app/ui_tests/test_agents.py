@@ -333,10 +333,10 @@ class Tabs(unittest.TestCase):
         self.assertIn("v1.0 · 2 versions", self.get("/agents?view=table").get_data(as_text=True))
         html = self.get("/agents/fake").get_data(as_text=True)                          # the default
         self.assertIn('<nav class="std-versions"', html)
-        self.assertIn('href="/agents/fake?v=1.0" aria-current="page"><b>1.0</b><small>2/7 proven · default · Official</small>', html)
+        self.assertIn('href="/agents/fake?v=1.0" aria-current="page"><b>1.0</b><small>2/7 proven · default <span class="origin-tag official">Official</span></small>', html)
         self.assertIn('href="/new-run?standard=fakebench&amp;other=fake@1.0"', html)
         html = self.get("/agents/fake?v=2.0").get_data(as_text=True)
-        self.assertIn('aria-current="page"><b>2.0</b><small>0/7 proven · Experiment</small>', html)
+        self.assertIn('aria-current="page"><b>2.0</b><small>0/7 proven <span class="origin-tag experiment">Experiment</span></small>', html)
         self.assertIn("which Fake agent 2.0 does not offer", html)                       # its own proofs, none yet
         self.assertIn('<input type="hidden" name="version" value="2.0">', html)
         self.assertEqual(self.get("/agents/fake?v=9").status_code, 404)

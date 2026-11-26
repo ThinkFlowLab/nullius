@@ -36,7 +36,7 @@
       {#- Each version is the whole page once: its pin, proofs, overview, options, tasks and limitations. A click swaps them in place. -#}
       <nav class="std-versions" aria-label="Versions">
         <span>Versions</span>
-        {% for x in versions %}<a href="{{ url_for('benchmark_page', key=b.key, v=x.version) }}"{% if x.current %} aria-current="page"{% endif %} data-ref="{{ x.ref }}"><b>{{ x.label or x.version }}</b><small>{{ x.proven }}/{{ x.checks }} proven{{ ' · default' if x.default else '' }} · {{ x.origin|capitalize }}</small></a>{% endfor %}
+        {% for x in versions %}<a href="{{ url_for('benchmark_page', key=b.key, v=x.version) }}"{% if x.current %} aria-current="page"{% endif %} data-ref="{{ x.ref }}">{% set name = x.choice_label or x.label or x.version %}<b{% if (x.label or x.version) != name %} title="{{ x.label }}"{% endif %}>{{ name }}</b><small>{{ x.proven }}/{{ x.checks }} proven{{ ' · default' if x.default else '' }} <span class="origin-tag {{ x.origin }}">{{ x.origin|capitalize }}</span></small></a>{% endfor %}
       </nav>
       {% endif %}
       {%- macro vattr(y, cls='') %} class="{{ (cls ~ ' std-version')|trim }}"{% if y.version %} data-version="{{ y.version }}"{% endif %}{% if not y.current %} hidden{% endif %}{% endmacro %}

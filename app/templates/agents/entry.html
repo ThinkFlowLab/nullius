@@ -25,7 +25,7 @@
     {# Each version has its own pins and its own proofs: a new release is offered only once it has proven its ports. #}
     <nav class="std-versions" aria-label="Versions">
       <span>Versions</span>
-      {% for x in versions %}<a href="{{ url_for('agent_page' if kind == 'agent' else 'feature_page', key=d.key, v=x.v) }}"{% if x.current %} aria-current="page"{% endif %}><b>{{ x.v }}</b><small>{{ x.proven }}/{{ x.ports }} proven{{ ' · default' if x.default else '' }}{{ ' · ' ~ x.origin|capitalize if x.origin }}</small></a>{% endfor %}
+      {% for x in versions %}<a href="{{ url_for('agent_page' if kind == 'agent' else 'feature_page', key=d.key, v=x.v) }}"{% if x.current %} aria-current="page"{% endif %}><b>{{ x.v }}</b><small>{{ x.proven }}/{{ x.ports }} proven{{ ' · default' if x.default else '' }}{% if x.origin %} <span class="origin-tag {{ x.origin }}">{{ x.origin|capitalize }}</span>{% endif %}</small></a>{% endfor %}
     </nav>
     {% endif %}
     {% set upstream = d.get('upstream', {}) %}

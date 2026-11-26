@@ -195,7 +195,7 @@ class BenchmarkPage(PageCase):
         self.assertIn('aria-current="page" data-ref="osworld1"><b>desktop-env-v1.0.3</b>', nav)   # the release is the default
         self.assertIn('data-ref="osworld1@044bc33"', nav)
         self.assertIn('data-build-run href="/new-run?standard=osworld1"', html)                # Build a run opens the version shown
-        self.assertIn("<b>main (044bc33)</b>", nav)                                          # an untagged pin: its branch
+        self.assertIn('<b title="main (044bc33)">main</b>', nav)                            # an untagged pin: its branch, its commit a tooltip
         page = shown(html)
         self.assertIn("xlang-ai/OSWorld @ desktop-env-v1.0.3 · 9d6f711", page)
         self.assertNotIn("xlang-ai/OSWorld @ main · 044bc33", page)
