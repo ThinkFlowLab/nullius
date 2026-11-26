@@ -2,6 +2,7 @@
 <section class="lb" id="live-board" aria-label="Live board" data-state="{{ live_board.initial.state if live_board and live_board.initial else 'unknown' }}"
          data-endpoint="{{ url_for('job_live', job_id=job_id) }}"
          data-trial-base="{{ trial_base }}"
+         data-results="{{ url_for('job', job_id=job_id, view='results') }}"
          data-noun="{{ noun }}">
   <div class="lb-headline">
     <span class="lb-state"><i aria-hidden="true"></i><span data-lb-state>{{ live_board.initial.state|capitalize if live_board and live_board.initial else '' }}</span></span>

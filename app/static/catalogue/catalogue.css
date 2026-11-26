@@ -218,7 +218,7 @@ tr:has([data-pick]:not(:disabled)) { cursor: pointer; }
 .cite-emblem svg { display: block; width: 100%; height: 100%; }
 .cite-seal .ring { fill: none; stroke: currentColor; }
 .cite-seal text { fill: currentColor; font-family: var(--mono); }
-.cite-seal .yr { font-family: var(--serif, Georgia, serif); fill: var(--text); }
+.cite-seal .yr { font-family: var(--serif); fill: var(--text); }
 .cite-seal .spin { position: absolute; inset: 0; transform-origin: center; will-change: transform; animation: cite-spin 60s linear infinite; }
 @keyframes cite-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .cite-seal .spin { animation: none; will-change: auto; } }

@@ -1,0 +1,8 @@
+{
+ "judgement.questions.v2": {
+  "questions": "judgement.questions.v2",
+  "judge": {"model": "decision-model"},
+  "asked_at": "2026-11-01T10:00:00Z",
+  "answers": {"failure_cause": {"choice": "agent_error", "confidence": 0.8}}
+ }
+}

@@ -71,7 +71,7 @@ A count of runs leaves out the checks. The checks have a count of their own.
 
 ## Workspace
 
-The roots you opened, the imports converted and the judgements saved; the same roots reopen the same workspace.
+The roots you opened and the imports converted; the same roots reopen the same workspace. Judgements belong to the job, in every workspace that holds it.
 
 <div class="grid cards" markdown>
 

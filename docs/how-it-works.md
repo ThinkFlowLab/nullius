@@ -70,7 +70,6 @@ workspace root. `nullius paths` shows the active location.
 | `workspaces/<name>/jobs/<hash>.json` | Parse cache |
 | `workspaces/<name>/jobs/counts.json` | Runs and checks of a closed workspace whose jobs ended |
 | `workspaces/<name>/imported/` | Converted foreign roots |
-| `workspaces/<name>/judgements/<job>/<trial>.json` | Judge records |
 
 ## Page by page
 

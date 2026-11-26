@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from nullius import redact, workspace
 from nullius.judge import batch, client, questions, state, store
@@ -192,13 +193,13 @@ class Store(unittest.TestCase):
         self.assertEqual(store.load(self.ws.dir, "job-1", "task__abc/def")["answers"]["task_completed"], {"noul": 0.9})
 
     def test_count_is_one_per_trial_and_lane_every_version_inside(self):
-        self.assertEqual(store.count(self.ws.dir), 0)
+        count = lambda: store.count_in(store.job_dirs(self.ws.dir, ["job-1", "job-2"]))
+        self.assertEqual(count(), 0)
         for version in ("judgement.questions.v1", questions.VERSION):
             store.save(self.ws.dir, "job-1", "t0", {"questions": version, "answers": {}})              # two versions: one judgement
         store.save(self.ws.dir, "job-1", "t1", {"questions": "v", "answers": {}})
         store.save(self.ws.dir, "job-2", "t0", {"questions": "v", "answers": {}}, lane="llm")
-        (Path(self.ws.jobs_dir)).mkdir(parents=True, exist_ok=True); (Path(self.ws.jobs_dir) / "x.json").write_text("{}")   # the cache: not one
-        self.assertEqual(store.count(self.ws.dir), 3)
+        self.assertEqual(count(), 3)                                                                   # the lock beside them: not one
 
 
 class Versions(unittest.TestCase):
@@ -244,6 +245,26 @@ class Versions(unittest.TestCase):
         # a record from before tries were told apart is taken as it is
         store.save(d, "job", "old", self.record(questions.VERSION, task_completed={"noul": 0.5}))
         self.assertIsNotNone(store.load(d, "job", "old", started=retry))
+        # one of several tries is its own only by a start, and the same: an unstamped record is none's
+        self.assertIsNone(store.load(d, "job", "old", started=None, strict=True))
+        got = store.save(d, "job", "old", self.record(questions.VERSION, failure_cause={"choice": "x"}), strict=True)
+        self.assertEqual(sorted(got["answers"]), ["failure_cause"])
+        # a stamped record stays found by its start under an older, newer, unstamped one
+        old = {store._paths(d, "job", "t")[0]: [{questions.VERSION: dict(self.record(questions.VERSION, q={"choice": "y"}), asked_at="2099-01-01T00:00:00Z")}]}
+        self.assertEqual(sorted(store.load(d, "job", "t", started=retry, old=old, strict=True)["answers"]), ["failure_cause"])
+        # of two revisions of the try before, the newer is shown, kept beside the older; saves keep every one
+        path = store._paths(d, "job", "t")[0]
+        newer = dict(self.record(questions.VERSION, q={"choice": "newer"}), trial_started_at=first, asked_at="2099-01-01T00:00:00Z")
+        store._merge_into(path, [{questions.VERSION: newer}])
+        self.assertEqual(store.load(d, "job", "t", started=first, strict=True)["answers"], {"q": {"choice": "newer"}})
+        third = "2026-11-17T12:00:00+00:00"
+        for i, at in enumerate((third, first, third)):                       # each set aside where another is kept
+            store.save(d, "job", "t", dict(self.record(questions.VERSION, x={"choice": at}), asked_at=f"2100-01-0{i + 1}"),
+                       started=at, strict=True)
+        self.assertEqual(store.load(d, "job", "t", started=first, strict=True)["answers"]["q"], {"choice": "newer"})
+        with open(path) as fh:
+            kept = [r for r in json.load(fh).values() if isinstance(r, dict) and r.get("trial_started_at") == first]
+        self.assertEqual(len(kept), 2)
 
 
 class Batch(unittest.TestCase):
@@ -280,6 +301,13 @@ class Batch(unittest.TestCase):
         self.assertEqual(again["answers"].keys(), {"user_facing_answer"})
         self.assertIsNone(batch.ask_and_store(str(self.tmp), "job", "empty", {"trial": ([], "", False)}, KEY, post=post))
         self.assertIsNone(store.load(str(self.tmp), "job", "empty"))
+        n = len(calls)
+        with self.assertRaisesRegex(client.JudgeError, "no identity"):                                       # a pending job: nothing asked, nothing paid
+            batch.ask_and_store(str(self.tmp), "", "t", states, KEY, post=post)
+        pending = SimpleNamespace(uid="", dataset="", dataset_path="")                                       # nor its task lane: no key it would share
+        with self.assertRaisesRegex(client.JudgeError, "no identity"):
+            batch.ask_and_store(str(self.tmp), store.task_dataset(pending), "fix@abc", states, KEY, post=post, lane=store.TASKS)
+        self.assertEqual(len(calls), n)
 
     def test_the_llm_judge_keeps_its_records_apart_from_decision_judge(self):
         import json as _json

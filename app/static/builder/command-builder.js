@@ -82,9 +82,9 @@
       },
     };
   }
-  // The Saved recipes dialog's list. A browser on another machine gets Delete greyed, `why` its tooltip.
+  // The Saved recipes dialog's list: Delete asks first (C.deleteAsk). A browser on another machine gets Delete greyed, `why` its tooltip.
   function savedList({saved, local, why, esc, button, state}) {
-    const del = id => local ? `data-delete="${esc(id)}"` : `aria-disabled="true" title="${esc(why)}"`;
+    const del = id => local ? `data-ask="${esc(id)}"` : `aria-disabled="true" title="${esc(why)}"`;
     return saved.length ? saved.map(s => `<div class="nb-savedrow"><span><strong>${esc(s.name)}</strong><small>${esc(s.recipe.harness)} · ${esc(new Date(s.saved).toLocaleDateString())}${state(s.recipe)}</small></span>`
       + `<div>${button('Load', `data-load="${esc(s.id)}"`)} ${button('Delete', del(s.id))}</div></div>`).join('') : '<p class="nb-note">No saved recipes.</p>';
   }
@@ -111,7 +111,16 @@
   // Where the step bar's underline goes: under the active step `on`, raised from the bar's bottom edge (-1px, the last
   // step's row) to on's own row when the steps wrap.
   const underlineAt = (on, last) => ({left: on.offsetLeft, bottom: last.getBoundingClientRect().bottom - on.getBoundingClientRect().bottom - 1, width: on.offsetWidth});
-  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList, prereqHead, fieldErrors, underlineAt}; return; }
+  // Start over's three buttons, by id. An edited recipe is asked about first, in place, as a provider's Remove asks: only Yes
+  // resets it, Keep it or Start over again closes the question. An untouched one resets at once.
+  function startOver(id, {button, ask, keep}, untouched, reset) {
+    const open = button.getAttribute('aria-expanded') === 'true';
+    const show = on => { ask.hidden = !on; button.setAttribute('aria-expanded', String(on)); (on ? keep : button).focus({preventScroll: true}); };
+    if (id === 'nb-startover' && !open && !untouched()) return show(true);
+    show(false);
+    if (id === 'nb-startover-yes' || id === 'nb-startover' && !open) reset();
+  }
+  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList, prereqHead, fieldErrors, underlineAt, startOver}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
@@ -249,7 +258,7 @@
   };
   // Put the recipe on a runner, keeping the one each runner had: the benchmark follows.
   const toRunner = (target, key) => {
-    if (target !== r().harness) { keptByRunner[r().harness] = r(); recipe = keptByRunner[target] || (target === 'harbor' ? C.create() : C.createStandard(key)); runnerOut = null; runnerKey = ''; tab = 'select'; }
+    if (target !== r().harness) { keptByRunner[r().harness] = r(); recipe = keptByRunner[target] || (target === 'harbor' ? C.create() : C.createStandard(key)); runnerOut = null; runnerKey = ''; tab = 'select'; dropStartOverAsk(); }
     if (C.benchKey(r()) !== key) { if (C.isStandard(r())) C.setStandardBenchmark(r(), key); else C.setBenchmark(r(), key); }
   };
   // Branch, tag or commit first; then that kind's list, or the commit typed, for the
@@ -1130,7 +1139,7 @@
     if(C.validate(candidate).errors.some(e=>/environment variable name|credentials; do not put/.test(e.message))){$('#nb-save-message').textContent='Use environment variable names for credentials before saving. Their values belong in your shell.';return;}
     try{
       const item=await store.save(candidate,savedId);saved=[item,...saved.filter(s=>s.id!==item.id)];savedId=item.id;
-      recipe=candidate;$('#nb-save-dialog').close();render();renderSaved();
+      recipe=candidate;dropStartOverAsk();$('#nb-save-dialog').close();render();renderSaved();
       status('Saved “'+title+'”'+(compiled.errors.length?' as a draft.':'.'));
     }catch(e){ $('#nb-save-message').textContent='Not saved: '+e.message; }
   }
@@ -1209,8 +1218,13 @@
   // The button says it is reading until the answer's toast replaces it: a toast alone would be gone before a slow answer.
   async function refreshRegistry(){const b=$('#nb-refresh'),label=b.textContent;b.disabled=true;b.classList.add('nb-loading');b.setAttribute('aria-busy','true');b.textContent='Reading Harbor’s catalogue…';status('');try{const response=await nulliusFetch('/new-run/registry');if(!response.ok)throw Error();const data=await response.json(),names=[...new Set([...schema.datasets.map(d=>d.registry),...schema.seenRegistry,...(data.names||[]),...(data.hub||[])])].filter(Boolean);$('#nb-registry').innerHTML=names.map(n=>`<option value="${esc(n)}"></option>`).join('');status(names.length+' catalogue references available. You can also enter one directly.');}catch{status('Catalogue refresh unavailable. Existing references and custom entry still work.');}finally{if(b.isConnected){b.disabled=false;b.classList.remove('nb-loading');b.removeAttribute('aria-busy');b.textContent=label;}}}
   function completeDirectory(value){clearTimeout(pendingDirs);const seq=++dirsSequence;pendingDirs=setTimeout(async()=>{try{const response=await nulliusFetch('/new-run/dirs?path='+encodeURIComponent(value));if(!response.ok)return;const data=await response.json();if(seq===dirsSequence)$('#nb-paths').innerHTML=(data.dirs||[]).map(p=>`<option value="${esc(p)}"></option>`).join('');}catch{}},180);}
-  // Saved recipes: a dialog that a click on its backdrop closes, as Esc does (a button's click, by key too, is not one)
-  $('#nb-saved').addEventListener('click',event=>{if(event.target!==event.currentTarget)return;const box=event.currentTarget.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)event.currentTarget.close();});
+  // Start over (startOver): Escape outside a dialog is Keep it; another recipe taking the page's place (a load, an import,
+  // the other runner's) drops the question
+  const startOverClick=id=>startOver(id,{button:$('#nb-startover'),ask:$('#nb-startover-ask'),keep:$('#nb-startover-keep')},()=>C.atDefaults(r()),()=>{try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});savedId='';runnerOut=null;runnerKey='';modelActed=false;step=S.benchmark;tab='select';status('Started over from the defaults.');render();});
+  const dropStartOverAsk=()=>{$('#nb-startover-ask').hidden=true;$('#nb-startover').setAttribute('aria-expanded','false');};
+  root.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('#nb-startover-ask').hidden&&!event.target.closest('dialog')){event.preventDefault();startOverClick('nb-startover-keep');}});
+  // Saved recipes and its Delete's question: dialogs that a click on the backdrop closes, as Esc does (a button's click, by key too, is not one)
+  for(const dialog of [$('#nb-saved'),$('#nb-ask')])dialog.addEventListener('click',event=>{if(event.target!==event.currentTarget)return;const box=event.currentTarget.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)event.currentTarget.close();});
   root.addEventListener('click',async event=>{
     const b=event.target.closest('button');if(!b)return;const d=b.dataset;
     if(d.modelChoice){C.setModelChoice(r(),d.modelChoice);renderForm();refreshPlan();return;}
@@ -1260,13 +1274,15 @@
       return;
     }
     else if(d.remove!==undefined)r().custom.splice(Number(d.remove),1);
-    else if(d.load){try{recipe=C.fromJSON(saved.find(s=>s.id===d.load).recipe);savedId=d.load;step=REVIEW;$('#nb-saved').close();status('Loaded “'+(recipe.title||recipe.name)+'”.');}catch(error){status('This saved recipe cannot be read: '+error.message);return;}}
-    else if(d.delete){try{await store.remove(d.delete);saved=saved.filter(s=>s.id!==d.delete);if(savedId===d.delete)savedId='';renderSaved();status('Saved recipe deleted.');}catch(e){status('Not deleted: '+e.message);}return;}
+    else if(d.load){try{recipe=C.fromJSON(saved.find(s=>s.id===d.load).recipe);savedId=d.load;step=REVIEW;dropStartOverAsk();$('#nb-saved').close();status('Loaded “'+(recipe.title||recipe.name)+'”.');}catch(error){status('This saved recipe cannot be read: '+error.message);return;}}
+    else if(d.ask){const q=$('#nb-ask');q.innerHTML=C.deleteAsk(saved.find(s=>s.id===d.ask),'nb-ask-h',esc);q.showModal();return;}
+    else if(d.close!==undefined){$('#nb-ask').close();return;}
+    else if(d.delete){$('#nb-ask').close();try{await store.remove(d.delete);saved=saved.filter(s=>s.id!==d.delete);if(savedId===d.delete)savedId='';renderSaved();$('#nb-saved-close').focus();status('Saved recipe deleted.');}catch(e){status('Not deleted: '+e.message);}return;}
     else if(b.id==='nb-add'){r().custom.push({scope:'agent',key:'',type:'string',value:'',...(d.addAgent?{agent:d.addAgent}:{})});}
     else if(b.id==='nb-next'){if(step===REVIEW){if(!compiled.errors.length)download(JSON.stringify(r(),null,2)+'\n',r().name+'.json','application/json');return;}step=nextShown(step,1);}
     else if(b.id==='nb-back')step=nextShown(step,-1);
     else if(b.id==='nb-save'){if(schema.local)openSave();return;}
-    else if(b.id==='nb-startover'){try{localStorage.removeItem(draftKey);}catch{}recipe=C.prefill({});savedId='';runnerOut=null;runnerKey='';modelActed=false;step=S.benchmark;tab='select';status('Started over from the defaults.');}
+    else if(b.id.startsWith('nb-startover')){startOverClick(b.id);return;}
     else if(b.id==='nb-save-cancel'){$('#nb-save-dialog').close();return;}
     else if(b.id==='nb-saved-toggle'){renderSaved();$('#nb-saved').showModal();loadSaved();return;}
     else if(b.id==='nb-saved-close'){$('#nb-saved').close();return;}
@@ -1338,7 +1354,7 @@
     else if(d.harborChoice!==undefined){const rec=r(),v=el.value;if(v==='path')rec.harborDev='';else if(v==='dev')rec.harborDev=rec.harborDev||'~/harbor-dev/.venv/bin/harbor';renderForm();refreshPlan();if(v==='dev')root.querySelector('[data-field="harborDev"]')?.select();}
     else if(el.id==='nb-import-file'){
       const file=el.files[0];if(!file)return;
-      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());savedId='';step=REVIEW;render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Check it, then Run.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
+      try{if(file.size>100000)throw Error('Recipe file is too large.');recipe=C.fromJSON(await file.text());savedId='';step=REVIEW;dropStartOverAsk();render(true);status('Imported “'+(recipe.title||recipe.name)+'”. Check it, then Run.');}catch(error){status('Could not import recipe: '+error.message);}el.value='';
     }
   });
   { const dl=document.getElementById('nb-models'); if(dl){const seen=new Set(); for(const o of [...dl.options]){const v=C.bareModel(o.value); if(!v||seen.has(v)){o.remove();continue;} seen.add(v); o.value=v;}} }
