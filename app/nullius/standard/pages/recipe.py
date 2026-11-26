@@ -161,7 +161,7 @@ def _short(label: str) -> str:
     return re.sub(r"\s*\([0-9a-f]{7,40}\)$", "", label)
 
 
-def _procedure_label(b: dict) -> str:
+def procedure_label(b: dict) -> str:
     """The selected benchmark version whose own procedure runs by default."""
     return " · ".join(filter(None, (b["label"], _short(definitions.version_label(b) or ""))))
 
@@ -177,7 +177,7 @@ def _bench_page(b: dict) -> dict:
                 for c in (definitions.control(b, w) for w in definitions.CONTROLS) if c]
     versioned = definitions.version_of(b) is not None
     return {"key": b["key"], "label": b["label"], "summary": b["summary"], "family": b["family"], "kind": _capability_kind(b),
-            "procedure": _procedure_label(b),
+            "procedure": procedure_label(b),
             "origin": definitions.origin_of(b),
             "ref": definitions.ref_of(b) if "_version" in b else b["key"],
             "version": b["_version"] if versioned else "",

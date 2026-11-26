@@ -16,15 +16,13 @@ class StandardBenchmarkSwitch(CompilerCase):
         for key, others, own in out:
             self.assertEqual(others, [own or "original"], key)              # a benchmark with agents of its own: its first
 
-    def test_an_alternative_replaces_the_implicit_procedure_and_clearing_restores_it(self):
+    def test_the_procedure_runs_beside_an_alternative_and_comes_back_when_none_is_left(self):
         out = self.js('const r=C.createStandard("gsm8k"), states=[];'
                       'const a=C.standardOthers(r).find(o=>!o.setup&&!o.control&&!o.why.length).key;'
-                      'for(const k of [a,"nop",a,"nop"]) {C.toggleParticipant(r,k);states.push([...r.others]);}'
-                      'C.toggleParticipant(r,"oracle");states.push([...r.others]);'
-                      'C.toggleParticipant(r,"oracle");states.push([...r.others]);'
+                      'for(const k of [a,"nop","original",a,"nop"]) {C.toggleParticipant(r,k);states.push([...r.others]);}'
                       'process.stdout.write(JSON.stringify({a,states}));')
         a = out["a"]
-        self.assertEqual(out["states"], [[a], [a, "nop"], ["nop"], ["original"], ["oracle"], ["original"]])
+        self.assertEqual(out["states"], [["original", a], ["original", a, "nop"], [a, "nop"], ["nop"], ["original"]])
 
     def test_version_switch_keeps_the_implicit_procedure_and_names_that_version(self):
         out = self.js('const r=C.createStandard("locomo");C.setStandardBenchmark(r,"locomo@full");'

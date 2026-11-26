@@ -95,11 +95,14 @@ def new_run_agents():
     b = definitions.find(benches, request.args.get("benchmark", ""))
     if b is None:
         abort(404)
+    procedure = standard_recipe.procedure_label(b)
     name, b = b["label"], dict(b, label=definitions.title(b))     # its own agents keep its plain name, whatever its version
     kind = b["family"]
     found = [e for e in standard_recipe.entries(kind, benches=[b], every=True, own=True)["entries"] if not e["d"].get("example")]
     found.sort(key=lambda e: 0 if e["d"].get("benchmark") == b["key"] else 2 if e["d"].get("benchmark") else 1)   # its own, the catalogue's, others' own
-    items = [_pick_card(b, e) for e in found]
+    # a benchmark with agents of its own runs them as its procedure; another offers its procedure as one more card
+    setups = [] if any(e["d"].get("benchmark") == b["key"] for e in found) else [k for k in (b.get("setups") or {}) if k == "original"]
+    items = [_setup_card(b, k, procedure) for k in setups] + [_pick_card(b, e) for e in found]
     names = dict(definitions.FROM, benchmark=f"{name}'s own", elsewhere="Other benchmarks' agents")
     choices = {"protocol": [(p, p) for p in ("ACP", "A command", "Its own script", "JSON lines")
                             if any(i["protocol"] and i["protocol"]["value"] == p for i in items)],
@@ -110,6 +113,16 @@ def new_run_agents():
     # a filter only where its cards differ
     return render_template("builder/agents.html", items=items, kind=kind, choices={k: v for k, v in choices.items() if len(v) > 1},
                            layout="table" if request.args.get("view") == "table" else "cards")
+
+
+def _setup_card(b: dict, key: str, procedure: str) -> dict:
+    """The selected version's own procedure, run by its own code: a pick card beside the agents or capabilities, named
+    as its settings tab is."""
+    x = b["setups"][key]
+    return {"pick": {"value": key}, "id": "pick-" + key, "icon": "#i-origin", "title": {"text": procedure, "title": x.get("summary", "")},
+            "search": " ".join([procedure, b["label"], "its own procedure"]), "origin": origin_tag("benchmark"), "protocol": "",
+            "fit": {"text": "Can run it", "value": "fit"}, "from": {"text": b["label"], "value": "benchmark"},
+            "proves": [], "ticks": [], "alert": None}
 
 
 def _pick_card(b: dict, e: dict) -> dict:

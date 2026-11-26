@@ -38,12 +38,15 @@ class AgentGrid(unittest.TestCase):
             with self.subTest(b["key"]):
                 _, cards = self.grid(b["key"])
                 fits = {k: v for k, v in st["fits"][b["key"]].items() if k in offered}
-                self.assertEqual(set(cards), set(fits))
+                self.assertEqual({k for k in cards if k != "original"}, set(fits))
                 self.assertEqual({k for k, c in cards.items() if " disabled" in c[:c.index("</button>")]}, {k for k, v in fits.items() if v})
 
-    def test_the_version_procedure_is_implicit_and_other_benchmarks_agents_are_disabled(self):
+    def test_the_version_procedure_is_the_first_card_and_other_benchmarks_agents_are_disabled(self):
         _, cards = self.grid("gsm8k")
-        self.assertNotIn("original", cards)
+        self.assertEqual(list(cards)[0], "original")
+        self.assertIn(">GSM8K</button>", cards["original"])                                    # named as its settings tab
+        _, cards = self.grid("locomo@full")
+        self.assertIn(">LoCoMo · full</button>", cards["original"])                            # the version's, no commit
         html, _ = self.grid("gsm8k")
         self.assertNotIn('data-value="reference"', html)
         for k, c in cards.items():

@@ -62,10 +62,11 @@
   // A control that calls no model at all - on a benchmark with no judge - needs no key to run.
   // The agents, capabilities and controls a standard recipe runs, each its own job of the one run.
   const chosenOf = r => Array.isArray(r.others) ? r.others : (r.other ? [r.other] : []);
-  // The selected version supplies the procedure until another participant is selected.
+  // A participant ticked or unticked; the selected version's procedure is one of them, on by default and back when
+  // none is left.
   function toggleParticipant(r, key) {
     const current = chosenOf(r), removing = current.includes(key);
-    r.others = removing ? current.filter(k => k !== key) : [...current.filter(k => k !== 'original'), key];
+    r.others = removing ? current.filter(k => k !== key) : [...current, key];
     const b = standardBench(r);
     if (!r.others.length && !ownAgentsOf(b).length && (b.setups || []).some(s => s.key === 'original')) r.others = ['original'];
     delete r.other;
