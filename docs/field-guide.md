@@ -329,13 +329,7 @@ unavailable. All-zero Overall weights are invalid.
 Every row with an Overall is ranked by it; exact ties share competition rank.
 Incomplete or unknown coverage of the required verified entries across counted
 axes, positive-weight domains included, is listed beside the rank as a note.
-Removed entries and zero weights add no note. Manual sources cannot replace
-required verified evidence.
-
-Verified only excludes custom scores everywhere. All scores includes them with
-the configured weights; affected values identify unverified influence and name
-the sources. Custom scores supply no tasks, runs or efficiency measurements.
-They bind to stable agent/version/setup keys and never transfer to a new setup.
+Removed entries and zero weights add no note.
 
 Average uses available row scores and reports the count. A row comparison uses
 shared measured capabilities for best and weakest differences in percentage

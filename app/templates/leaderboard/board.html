@@ -13,8 +13,6 @@
 <section class="lb-panel" id="leaderboard-board">
 <div class="lb-head">
   <div class="seg-toggle" aria-label="Axes"><button type="button" data-family="capabilities" aria-pressed="true">Capabilities</button><button type="button" data-family="domains" aria-pressed="false">Domains</button></div>
-  <span id="lb-trust-key" class="muted lb-key" hidden><i></i>Includes a score not verified</span>
-  <div class="seg-toggle lb-trust" id="lb-mode" aria-label="Scores"><button type="button" data-mode="0" aria-pressed="{{ 'false' if board.all_scores else 'true' }}">Verified only</button><button type="button" data-mode="1" aria-pressed="{{ 'true' if board.all_scores else 'false' }}">All scores</button></div>
 </div>
 {% set cols = [dict(key='rank', label='#', type='num', fixed=true, sticky=true), dict(key='agent', label='Agent', fixed=true, sticky=true), dict(key='overall', label='Overall', type='num', fixed=true)] %}
 {% for name in board.axes %}{% set _ = cols.append(dict(key=name, label=name, type='num', off=board.averages[name].score is none)) %}{% endfor %}

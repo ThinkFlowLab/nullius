@@ -129,23 +129,20 @@ class LeaderboardRoutes(unittest.TestCase):
             self.assertIn("defaults are active", self.client.get(path).get_data(as_text=True))
         self.assertEqual(configuration.location().read_text(), "{")
 
-    def test_custom_mode_reset_and_conflicting_writes_keep_complete_documents(self):
+    def test_edit_reset_and_conflicting_writes_keep_complete_documents(self):
         self.client.get("/scoring")
         with self.client.session_transaction() as session:
             headers = {"X-CSRF-Token": session["csrf"], "Origin": "http://localhost"}
         initial = self.client.get("/api/scoring").get_json()
         import copy
         doc = copy.deepcopy(initial["settings"])
-        rows = self.client.get("/api/leaderboard").get_json()["rows"]
-        doc["custom"] = [{"id": "calendar", "name": " <b>test</b> ", "scores": {rows[0]["key"]: 72, rows[1]["key"]: 0}}]
-        doc["axes"]["Personalization"]["entries"] = [{"custom": "calendar", "weight": 1}]
-        doc["axes"]["Personalization"]["weight"] = .15  # an axis with no default benchmark starts at 0
+        legacy = copy.deepcopy(doc) | {"custom": []}
+        refused = self.client.post("/api/scoring", json=legacy, headers=headers | {"If-Match": initial["revision"]})
+        self.assertEqual(refused.status_code, 400)                    # custom benchmarks are gone
+        doc["axes"]["Safety"]["weight"] = .5
         result = self.client.post("/api/scoring", json=doc, headers=headers | {"If-Match": initial["revision"]})
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.get_json()["settings"]["custom"][0]["name"], "<b>test</b>")
-        self.assertTrue(all(r["overall"] is None for r in self.client.get("/api/leaderboard").get_json()["rows"]))
-        all_scores = self.client.get("/api/leaderboard?all_scores=1").get_json()["rows"]
-        self.assertEqual([(r["overall"], r["rank"]) for r in all_scores[:2]], [(.72, 1), (0, 2)])
+        self.assertEqual(result.get_json()["settings"]["axes"]["Safety"]["weight"], .5)
         before = configuration.location().read_bytes()
         conflict = self.client.post("/api/scoring", json={"reset": True}, headers=headers | {"If-Match": initial["revision"]})
         self.assertEqual(conflict.status_code, 409)
@@ -158,7 +155,6 @@ class LeaderboardRoutes(unittest.TestCase):
         reset = self.client.post("/api/scoring", json={"reset": True}, headers=headers)
         self.assertEqual(reset.status_code, 200)
         self.assertEqual(reset.get_json()["settings"], initial["settings"])
-        self.assertFalse(any(r["unverified"] for r in self.client.get("/api/leaderboard?all_scores=1").get_json()["rows"]))
 
 
 if __name__ == "__main__":

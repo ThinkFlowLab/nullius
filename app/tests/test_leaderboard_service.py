@@ -25,26 +25,6 @@ class RecordedIdentity(unittest.TestCase):
             identity = parse.identity_of({"standard": {"benchmark": key, **recorded}}, {}, "")
             self.assertEqual(identity["benchmark_version"], expected)
 
-    def test_no_roots_all_scores_can_rank_a_saved_manual_catalogue_score(self):
-        from nullius.leaderboard import service
-        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, NULLIUS_HOME=folder):
-            agents, benches = service.catalogue()
-            doc = configuration.defaults(benches)
-            key = board.build([], agents, benches, doc)["rows"][0]["key"]
-            doc["custom"] = [{"id": "calendar", "name": "Calendar", "scores": {key: 72}}]
-            doc["axes"]["Personalization"]["entries"] = [{"custom": "calendar", "weight": 1}]
-            doc["axes"]["Personalization"]["weight"] = .15  # an axis with no default benchmark starts at 0
-            configuration.save(configuration.location(), doc, benches)
-            env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]))
-            for flags, expected in (([], None), (["--all-scores"], .72)):
-                result = subprocess.run([sys.executable, "-m", "nullius", "leaderboard", "--json", *flags], env=env, capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                row = next(r for r in json.loads(result.stdout)["rows"] if r["key"] == key)
-                self.assertEqual(row["overall"], expected)
-                self.assertEqual(row["rank"], 1 if flags else None)
-                self.assertFalse(row["has_runs"])
-                self.assertTrue(all(m["value"] is None for m in row["metrics"].values()))
-
     def test_real_cli_reads_gaia_and_banking_result_directories(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / "jobs"

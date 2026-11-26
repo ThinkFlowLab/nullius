@@ -24,26 +24,13 @@ class BoardExamples(unittest.TestCase):
         result.identity.update(agent=name, agent_version="1", model="m", provider="p", **identity)
         return result
 
-    def build(self, jobs, all_scores=False):
-        return board.build(jobs, self.agents, self.benchmarks, self.config, all_scores=all_scores)
+    def build(self, jobs):
+        return board.build(jobs, self.agents, self.benchmarks, self.config)
 
     def test_c6_partial_perfection_follows_complete_sixty_percent(self):
         rows = self.build([self.make_run("A", ["resolved"]), self.make_run("B", ["resolved"] * 60 + ["agent_error"] * 40)])["rows"]
         self.assertEqual([(r["name"], r["overall"], r["rank"]) for r in rows], [("A", 1, 1), ("B", .6, 2), ("C", None, None)])
         self.assertIn("GAIA 1 of 100 tasks", rows[0]["reasons"])            # partial coverage is a note beside the rank
-
-    def test_c21_verified_all_custom_exemption_and_average(self):
-        jobs = [self.make_run("A", ["resolved"] * 50 + ["agent_error"] * 50), self.make_run("B", ["resolved"] * 60 + ["agent_error"] * 40)]
-        a = next(r for r in self.build(jobs)["rows"] if r["name"] == "A")
-        self.config["custom"] = [{"id": "calendar", "name": "Family calendar test", "scores": {a["key"]: 100}}]
-        self.config["axes"]["Personalization"] = {"weight": 1, "entries": [{"custom": "calendar", "weight": 1}]}
-        verified = self.build(jobs)
-        self.assertEqual([(r["name"], r["overall"]) for r in verified["rows"][:2]], [("B", .6), ("A", .5)])
-        all_scores = self.build(jobs, True)
-        self.assertEqual([(r["name"], r["overall"], r["rank"]) for r in all_scores["rows"][:2]], [("A", .75, 1), ("B", .6, 2)])
-        self.assertEqual(all_scores["averages"]["Personalization"], {"score": 1, "count": 1})
-        self.assertTrue(all_scores["rows"][0]["unverified"])
-        self.assertEqual(all_scores["rows"][0]["custom_names"], ["Family calendar test"])
 
     def test_c4_setup_and_version_isolation_sampling_not_setup(self):
         base = self.make_run("A", ["resolved"])
@@ -90,14 +77,6 @@ class BoardExamples(unittest.TestCase):
         self.benchmarks[0]["datasets"].append({"id": "second", "tasks": {"0": "extra"}})
         row = self.build([self.make_run("A", ["resolved"] * 100)])["rows"][0]
         self.assertIn("GAIA 100 of 101 tasks", row["reasons"])
-
-    def test_c21_custom_only_rows_rank_without_verified_requirements(self):
-        catalogue = self.build([])["rows"]
-        self.config["custom"] = [{"id": "calendar", "name": "Family calendar test", "scores": {catalogue[0]["key"]: 72}}]
-        self.config["axes"]["Retrieval"]["entries"] = [{"custom": "calendar", "weight": 1}]
-        row = self.build([], True)["rows"][0]
-        self.assertEqual((row["overall"], row["rank"], row["has_runs"]), (.72, 1, False))
-        self.assertEqual(row["metrics"]["cost"], {"value": None, "count": 0})
 
     def test_c6_attempted_unavailable_entry_still_requires_verified_evidence(self):
         jobs = [self.make_run("A", ["resolved"] * 100)]

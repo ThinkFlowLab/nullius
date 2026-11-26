@@ -13,7 +13,7 @@ Existing results open without credentials.
 | [Hosts](run-hosts.md) | SSH machines |
 | [Data providers](data-providers.md) | Hugging Face and Docker Hub connections |
 | [Sandbox](sandbox.md) | Docker on this machine, the Boat key |
-| [Scoring settings](#scoring-settings) | Leaderboard mappings, weights and custom scores |
+| [Scoring settings](#scoring-settings) | Leaderboard mappings and weights |
 | [General](other.md) | Tour and checklist |
 
 ## Variables
@@ -136,26 +136,20 @@ Set `NULLIUS_HOME` before both commands to migrate into a separate profile.
 ## Scoring settings
 
 **Scoring settings** in the Leaderboard head switches the page in place (`/scoring`);
-**Leaderboard** switches back, with saved changes applied. Order: Custom benchmarks,
-Capabilities, Domains. Read-only clients can inspect it; only local clients can write.
+**Leaderboard** switches back, with saved changes applied. Order: Capabilities, Domains,
+each with an overview of every benchmark's share. Read-only clients can inspect it; only local clients can write.
 
 Each entry chooses a benchmark, dataset or declared task-name part, pinned version, supported metric and
 independent weight in that axis. Score is always offered; pass^3 is offered for
 pass/fail benchmarks. Zero weight disables an entry without removing it.
-Weight in Overall controls each axis separately, including domains.
-Configured shares update while editing; the Leaderboard evidence shows effective
-shares among the sources actually measured for that row.
+Overall weighs the capabilities; an empty one weighs 0. Domains re-slice the same
+runs and carry no Overall weight. The Leaderboard evidence shows effective shares
+among the sources actually measured for that row.
 
 Valid complete documents autosave, followed by **Scoring saved**. There is no
 Save button. Invalid inputs stay in the draft and do not change active scoring.
 A failed write keeps the draft and shows Retry. A conflicting edit from another
 page requires reloading before editing again.
-
-Manual benchmarks have a unique trimmed name and optional scores from 0 to 100
-per agent/version/setup. Blank means absent; zero is measured. Rename preserves
-scores; removing a custom benchmark removes its scores and mappings together.
-Verified only ignores these scores; All scores includes them and identifies
-their unverified influence.
 
 Scoring is profile-wide in `scoring.json`, beside `settings.json` in the directory
 shown by `nullius paths`. Writes replace the complete validated document
@@ -164,9 +158,7 @@ Removed catalogue references remain unavailable and can be removed without
 blocking unrelated edits. New mappings must name a declared dataset/part and
 version. Legacy entries with an empty version remain unavailable until a pinned
 version is selected; runs also need that recorded identity. Negative or nonfinite weights, duplicate identical
-entries, duplicate custom names, invalid scores and all-zero Overall weights
-are refused.
+entries and all-zero Overall weights are refused.
 
-**Reset to defaults** asks in place before resetting mappings and weights and
-removing all custom benchmarks and scores. Cancel and failed writes preserve the
+**Reset to defaults** asks in place before resetting mappings and weights. Cancel and failed writes preserve the
 previous document.

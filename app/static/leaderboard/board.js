@@ -41,7 +41,7 @@
     if (axisName === 'Overall') {
       pop.append(element('p','Overall is the weighted mean of the capabilities measured'));
       const parts=data.axes.map(name=>[name,current.axes[name]]).filter(([,a]) => a.weight > 0);
-      parts.forEach(([name,a]) => line([name],a.entries.some(e=>e.unverified&&e.share>0)?[element('span','Not verified',{class:'lb-tag'})]:[],a.share,a.score,'not measured'));
+      parts.forEach(([name,a]) => line([name],[],a.share,a.score,'not measured'));
       total('Overall',current.overall,parts.reduce((n,[,a])=>n+(a.share||0),0));
     } else {
       const axis = current.axes[axisName];
@@ -52,10 +52,9 @@
           const [bench,...slice]=e.name.split(' · '), label=[e.note?element('span',bench,{title:e.note}):bench];if(slice.length)label.push(element('span',` · ${slice.join(' · ')}${e.metric&&e.metric!=='Score'?' · '+e.metric:''}`,{class:'muted'}));
           const sub=[];
           if(e.version)sub.push(e.version_label||e.version);
-          if(!e.custom&&e.tasks!=null)sub.push(`${e.covered} of ${e.tasks} tasks`);
+          if(e.tasks!=null)sub.push(`${e.covered} of ${e.tasks} tasks`);
           const small=[sub.join(' · ')];
           (e.links||[]).forEach((link,i,all)=>small.push(' · ',element('a',all.length>1?`Open run ${i+1}`:'Open run',{href:link.url,title:link.id})));
-          if(e.unverified)small.push(' ',element('span','Not verified',{class:'lb-tag'}));
           line(label,small,e.share,e.score,e.reason);
         });
         total(axisName,axis.score,axis.entries.reduce((n,e)=>n+(e.share||0),0));
@@ -107,18 +106,18 @@
      score is the same step of shade; at or below 50% it is the darkest */
   /* one colour per rate: below 60% a navy that deepens with the rate, from 60% one strong colour */
   const heat = v => Math.max(0,Math.min(1,v/.6));
-  function chip(cell, value, unverified, axis) {
+  function chip(cell, value, axis) {
     cell.replaceChildren();
     if (value == null) { cell.append(element('span','–',{class:'lb-none'})); return; }
     /* lightness runs .30 to .80 in the dark theme and .90 to .42 in the light one; past .62 dark text reads best */
     const t=heat(value), ink=value>=.6?' lb-top':'';
-    const span=element('span',whole(value),{class:`lb-chip${ink}${unverified?' lb-unverified':''}`,tabindex:'0','data-axis':axis});
+    const span=element('span',whole(value),{class:`lb-chip${ink}`,tabindex:'0','data-axis':axis});
     span.style.setProperty('--lb-t',t.toFixed(3));span.style.setProperty('--lb-t2',Math.max(0,(value-.6)/.4).toFixed(3));cell.append(span);
   }
   function overall(cell, r) {
     cell.replaceChildren();
     if (r.overall == null) { cell.append(element('span','–',{class:'lb-none'})); return; }
-    cell.append(element('span',`${(r.overall*100).toFixed(1)}%`,{class:`lb-overall${r.unverified?' lb-unverified':''}`,tabindex:'0','data-axis':'Overall'}));
+    cell.append(element('span',`${(r.overall*100).toFixed(1)}%`,{class:'lb-overall',tabindex:'0','data-axis':'Overall'}));
     const bar=element('span',null,{class:'lb-bar'}),fill=element('i');fill.style.width=`${r.overall*100}%`;bar.append(fill);cell.append(bar);
   }
   /* the medals and ranks follow who is on the board: a filter or a search ranks the rows that pass among themselves */
@@ -154,7 +153,7 @@
       const same = data.rows.filter(v=>v.agent===r.agent && v.version===r.version).length>1;
       tr.querySelector('[data-name]').textContent = r.name + (same ? ' · '+[r.identity.model,r.identity.effort].filter(Boolean).join(' ') : '');
       const o=tr.querySelector('[data-col="overall"]');overall(o,r);o.dataset.sort=r.overall??'';
-      data.axes.forEach(name=>{const cell=tr.querySelector(`[data-col="${name}"]`),a=r.axes[name];chip(cell,a.score,a.unverified,name);cell.dataset.sort=a.score??'';});
+      data.axes.forEach(name=>{const cell=tr.querySelector(`[data-col="${name}"]`),a=r.axes[name];chip(cell,a.score,name);cell.dataset.sort=a.score??'';});
       for(const [field,m] of Object.entries(r.metrics)) { const cell=tr.querySelector(`[data-col="${field}"]`);cell.replaceChildren(element('span',measure(field,m.value),{class:'lb-m'}));cell.dataset.sort=m.value??'';cell.title=`${m.count} observed`; }
       table.tBodies[0].append(tr);
     });
@@ -164,7 +163,6 @@
       if(cb) {cb.checked=data.averages[name].score!=null;table.querySelectorAll(`[data-col="${name}"]`).forEach(cell=>cell.style.display=cb.checked?'':'none');}
     });
     table.dispatchEvent(new Event('table:update'));
-    document.getElementById('lb-trust-key').hidden=!data.rows.some(r=>r.custom_names.length);
     applyFamily();
     const again=focusAxis&&focusRow?table.querySelector(`tr[data-key="${CSS.escape(focusRow)}"] [data-axis="${CSS.escape(focusAxis)}"]`):focused;
     if(again?.isConnected&&document.activeElement!==again)again.focus({preventScroll:true});
@@ -313,13 +311,13 @@
     const container=document.querySelector(`[data-chart="radars-${group}"]`), names=data[group], current=row(selected);if(!current)return;
     const cx=200, cy=178, R=126, n=names.length, at=(i,v)=>{const a=-Math.PI/2+i*2*Math.PI/n;return [cx+Math.cos(a)*v*R,cy+Math.sin(a)*v*R];};
     const points=list=>list.map(p=>p.map(v=>v.toFixed(1)).join(',')).join(' ');
-    const plot=svg('svg',{viewBox:'-72 -16 544 386',role:'group','aria-label':`${group} profile`,'data-cx':cx,'data-cy':cy});
+    const plot=svg('svg',{viewBox:'-90 -34 552 424',role:'group','aria-label':`${group} profile`,'data-cx':cx,'data-cy':cy});
     for(const v of [.5,1])plot.append(svg('polygon',{points:points(names.map((_,i)=>at(i,v))),class:'lb-ring','data-node':'ring'+v}));
     names.forEach((name,i)=>{
       /* a label's nearest edge sits the same gap from its corner whichever way it faces: above a corner it ends there,
          below it starts there, beside it it is centred on it */
-      const [ex,ey]=at(i,1),ux=(ex-cx)/R,uy=(ey-cy)/R,lx=ex+ux*14,anchor=ux<-.2?'end':ux>.2?'start':'middle';
-      const block=36, top=ey+uy*14-(uy<-.3?block:uy>.3?0:block/2), ly=top+14+4;
+      const [ex,ey]=at(i,1),ux=(ex-cx)/R,uy=(ey-cy)/R,lx=ex+ux*30,anchor=ux<-.2?'end':ux>.2?'start':'middle';
+      const block=36, top=ey+uy*30-(uy<-.3?block:uy>.3?0:block/2), ly=top+14+4;
       plot.append(svg('line',{x1:cx,y1:cy,x2:ex,y2:ey,class:'lb-ring','data-node':'spoke'+i}));
       const text=svg('text',{x:lx,y:ly-4,'text-anchor':anchor,tabindex:0,'data-axis':name,'data-node':'label:'+name,class:'lb-axis-label'});
       text.append(document.createTextNode(name),svg('tspan',{x:lx,dy:19,class:'lb-me'},whole(current.axes[name].score)));
@@ -384,7 +382,6 @@
     if(baseline!=null&&current.overall!=null)lines.push([`Overall against ${against}`,[change(current.overall-baseline)]]);
     lines.push([`Best against ${against}`,named(differences[0])],[`Weakest against ${against}`,named(differences.at(-1))]);
     lines.push(['Time per task',[measure('time',current.metrics?.time?.value)]],['Cost per task',[measure('cost',current.metrics?.cost?.value)]]);
-    if(current.custom_names.length)lines.push(['Not verified',[current.custom_names.join(', ')]]);
     box.replaceChildren(who,figure,bar,...lines.map(([k,v,title])=>{const line=element('div',null,{class:'lb-kv'});const value=element('b',null,title?{title}:{});value.append(...v);line.append(element('span',k),value);return line;}));
   }
   function draw() {
@@ -405,18 +402,16 @@
     swapping=setTimeout(()=>{table.classList.add('lb-instant');applyFamily();table.offsetWidth;table.classList.remove('lb-instant','lb-swap');},150);
   });
   document.querySelectorAll('[data-agent-select]').forEach(s=>s.onchange=()=>choose(s.value));
-  async function compareChoice() { const turn=++comparisonGeneration;projection=null;if(versus.startsWith('version:')) {const [benchmark,version]=JSON.parse(versus.slice(8));const response=await nulliusFetch('/api/leaderboard/comparison?'+new URLSearchParams({benchmark,version,all_scores:data.all_scores?'1':'0'}));if(response.ok){const result=await response.json();if(turn!==comparisonGeneration)return;projection=result;}}draw();}
+  async function compareChoice() { const turn=++comparisonGeneration;projection=null;if(versus.startsWith('version:')) {const [benchmark,version]=JSON.parse(versus.slice(8));const response=await nulliusFetch('/api/leaderboard/comparison?'+new URLSearchParams({benchmark,version}));if(response.ok){const result=await response.json();if(turn!==comparisonGeneration)return;projection=result;}}draw();}
   document.querySelectorAll('[data-vs-select]').forEach(s=>{data.versions.forEach(v=>s.append(element('option',`Same agent: ${v.label}`,{value:'version:'+JSON.stringify([v.benchmark,v.version])})));s.onchange=()=>{versus=s.value;document.querySelectorAll('[data-vs-select]').forEach(v=>setSelect(v,versus));compareChoice().catch(()=>{});};});
   document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{metric=b.dataset.metric;press('lb-metric','data-metric',metric);drawScatter();});
-  async function deferred(turn) { const response=await nulliusFetch(`/api/leaderboard/metrics?all_scores=${data.all_scores?1:0}&context=${encodeURIComponent(data.context)}`);if(!response.ok)return;const result=await response.json();if(turn!==generation||result.context!==data.context)return;result.rows.forEach(r=>{const existing=row(r.key);if(existing)existing.metrics=r.metrics;});updateTable();card();drawScatter(); }
-  async function fetchBoard(mode){const turn=++generation;const response=await nulliusFetch(`/api/leaderboard?all_scores=${mode}`);if(!response.ok)return null;const next=await response.json();return turn===generation?{next,turn}:null;}
+  async function deferred(turn) { const response=await nulliusFetch(`/api/leaderboard/metrics?context=${encodeURIComponent(data.context)}`);if(!response.ok)return;const result=await response.json();if(turn!==generation||result.context!==data.context)return;result.rows.forEach(r=>{const existing=row(r.key);if(existing)existing.metrics=r.metrics;});updateTable();card();drawScatter(); }
+  async function fetchBoard(){const turn=++generation;const response=await nulliusFetch('/api/leaderboard');if(!response.ok)return null;const next=await response.json();return turn===generation?{next,turn}:null;}
   function apply({next,turn}){if(turn!==generation)return;const kept=new Map(data.rows.map(r=>[r.key,r.metrics]));next.rows.forEach(r=>{const m=kept.get(r.key);if(!m)return;r.metrics={...m,...Object.fromEntries(Object.entries(r.metrics||{}).filter(([,v])=>v?.value!=null))};});data=next;if(!row(selected))selected=data.selected;updateTable();compareChoice().catch(()=>{});draw();deferred(turn).catch(()=>{});}
-  async function reload(mode){const got=await fetchBoard(mode);if(got)apply(got);}
-  document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{press('lb-mode','data-mode',b.dataset.mode);reload(b.dataset.mode).catch(()=>{});});
   /* scores saved in Scoring settings reach the board when it is shown again */
   /* each save fetches the new board at once, so it is ready when the board is shown; it is drawn then, at its real size */
   let fresh=null;
-  document.addEventListener('leaderboard:rescored',()=>{fresh=null;fetchBoard(data.all_scores?'1':'0').then(got=>{if(!got)return;if(table.getClientRects().length)apply(got);else fresh=got;}).catch(()=>{});});
+  document.addEventListener('leaderboard:rescored',()=>{fresh=null;fetchBoard().then(got=>{if(!got)return;if(table.getClientRects().length)apply(got);else fresh=got;}).catch(()=>{});});
   document.addEventListener('leaderboard:view',e=>{if(e.detail.view!=='board')return;if(fresh){const got=fresh;fresh=null;apply(got);}document.querySelectorAll('[data-chart^="radars-"] svg').forEach(pills);});
   document.getElementById(`${table.id}-tools`)?.addEventListener('change',e=>{
     const box=e.target;if(!box.matches('input[data-col]')||passing)return;

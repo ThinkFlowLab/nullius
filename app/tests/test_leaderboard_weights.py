@@ -92,33 +92,15 @@ class ConfigurationExamples(unittest.TestCase):
                 configuration.save(self.path, self.defaults, self.benchmarks)
         self.assertEqual(self.path.read_bytes(), before)
 
-    def test_c20_custom_scores_names_stability_and_removal(self):
+    def test_c20_a_file_saved_with_custom_benchmarks_loads_without_them(self):
         doc = copy.deepcopy(self.defaults)
-        doc["custom"] = [{"id": "calendar", "name": " Family calendar test ", "scores": {"A": 72, "B": 0, "C": None}}]
-        for axis in ("Personalization", "Home"):
-            doc["axes"][axis]["entries"] = [{"custom": "calendar", "weight": 1}]
-        clean = configuration.validate(doc, self.benchmarks)
-        self.assertEqual(clean["custom"][0]["name"], "Family calendar test")
-        for value in (120, -1, "abc", float("nan"), float("inf")):
-            bad = copy.deepcopy(doc)
-            bad["custom"][0]["scores"]["A"] = value
-            with self.assertRaises(ValueError):
-                configuration.validate(bad, self.benchmarks)
-        for name in ("", "  "):
-            bad = copy.deepcopy(doc)
-            bad["custom"][0]["name"] = name
-            with self.assertRaises(ValueError):
-                configuration.validate(bad, self.benchmarks)
-        bad = copy.deepcopy(doc)
-        bad["custom"].append({"id": "second", "name": " family calendar TEST ", "scores": {}})
-        with self.assertRaises(ValueError):
-            configuration.validate(bad, self.benchmarks)
-        clean["custom"][0]["name"] = "<b>test</b>"
-        renamed = configuration.validate(clean, self.benchmarks)
-        self.assertEqual(renamed["custom"][0]["scores"], {"A": 72, "B": 0, "C": None})
-        removed = configuration.remove_custom(renamed, "calendar")
-        self.assertFalse(removed["custom"])
-        self.assertFalse(removed["axes"]["Home"]["entries"])
+        doc["custom"] = [{"id": "calendar", "name": "Family calendar test", "scores": {"A": 72}}]
+        doc["axes"]["Retrieval"]["entries"].append({"custom": "calendar", "weight": 1})
+        self.path.write_text(json.dumps(doc))
+        loaded, warning = configuration.load(self.path, self.benchmarks)
+        self.assertEqual((loaded, warning), (self.defaults, ""))       # the GAIA row is kept, the custom one dropped
+        with self.assertRaises(ValueError):                             # and a write never takes them back
+            configuration.validate(doc, self.benchmarks)
 
 
 if __name__ == "__main__":

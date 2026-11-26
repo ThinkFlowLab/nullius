@@ -1,7 +1,6 @@
 /* Scoring settings, the Leaderboard's other view: complete-document autosave, writes in turn, the latest draft kept. */
 (() => {
   const data=JSON.parse(document.getElementById('scoring-data').textContent), form=document.getElementById('scoring-form');
-  const board=JSON.parse(document.getElementById('lb-data').textContent), marks=document.getElementById('scoring-marks').content;
   let draft=data.settings, revision=data.revision, timer, writing=false, dirty=false, resetting=false;
   const writable=form.dataset.writable==='true', status=form.querySelector('[data-changes]'), retry=form.querySelector('[data-settings-retry]');
   const el=(tag,text,attrs={})=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;Object.entries(attrs).forEach(([k,v])=>n.setAttribute(k,v));return n;};
@@ -12,11 +11,9 @@
   const none=()=>el('span','–',{class:'lb-cell lb-none'});
   const remove=(label,action)=>{const b=el('button',null,{type:'button',class:'btn ghost sm lb-icon','aria-label':label,title:'Remove'});b.append(icon('i-x'));b.onclick=action;return b;};
   const number=v=>Number.isFinite(v)&&v>=0;
-  const who=r=>{const twins=board.rows.filter(v=>v.agent===r.agent&&v.version===r.version).length>1;return [r.company,r.version_label,...(twins?[r.identity.model,r.identity.effort]:[])].filter(Boolean).join(' · ');};
   function valid() {
-    let ok=true;const names=new Set();
+    let ok=true;
     form.querySelectorAll('input').forEach(n=>n.setCustomValidity(''));
-    draft.custom.forEach(c=>{const normalized=c.name.trim().toLocaleLowerCase();const n=[...form.querySelectorAll('[data-custom-name]')].find(n=>n.dataset.customName===c.id);if(!normalized||names.has(normalized)){n?.setCustomValidity('Enter a unique name.');ok=false;}names.add(normalized);if(Object.values(c.scores).some(v=>v!=null&&(!number(v)||v>100)))ok=false;});
     if(!Object.values(draft.axes).some(a=>a.weight>0)) {form.querySelector('[data-overall]')?.setCustomValidity('At least one Weight in Overall must be positive.');ok=false;}
     Object.values(draft.axes).forEach(a=>{if(!number(a.weight)||a.entries.some(e=>!number(e.weight)))ok=false;});
     form.querySelectorAll('input').forEach(n=>{n.setAttribute('aria-invalid',String(!n.checkValidity()));});
@@ -24,8 +21,8 @@
   }
   /* each section opens on an overview: every benchmark's share of each of its axes */
   const names=section=>[...section.querySelectorAll('[data-scoring-axis]')].map(n=>n.dataset.scoringAxis);
-  const keyOf=e=>e.custom?'custom:'+e.custom:e.benchmark;
-  const labelOf=key=>key.startsWith('custom:')?(draft.custom.find(c=>'custom:'+c.id===key)?.name||'Custom benchmark'):(data.options.find(o=>o.key===key)?.label||key);
+  const keyOf=e=>e.benchmark;
+  const labelOf=key=>data.options.find(o=>o.key===key)?.label||key;
   const shareIn=(axis,key)=>{const a=draft.axes[axis],total=a.entries.reduce((n,e)=>n+(number(e.weight)?e.weight:0),0);return total?a.entries.filter(e=>keyOf(e)===key).reduce((n,e)=>n+(number(e.weight)?e.weight:0),0)/total:0;};
   function overview() {
     form.querySelectorAll('[data-overview]').forEach(table=>{
@@ -58,52 +55,30 @@
     finally {writing=false;if(reset){form.querySelector('fieldset').disabled=!writable;}}
     if(dirty&&valid())save();
   }
-  function custom() {
-    const box=document.getElementById('scoring-custom');box.replaceChildren();
-    draft.custom.forEach(c=>{
-      const item=el('div',null,{class:'lb-custom'}), head=el('div',null,{class:'lb-custom-head'});
-      const name=el('input',null,{type:'text',required:'',class:'lb-input','data-custom-name':c.id,placeholder:'Name','aria-label':'Custom benchmark name'});name.value=c.name;name.oninput=()=>{c.name=name.value;edited();};
-      head.append(name,el('span','Not verified',{class:'lb-tag'}),remove(`Remove ${c.name||'this custom benchmark'}`,()=>{draft.custom=draft.custom.filter(x=>x.id!==c.id);Object.values(draft.axes).forEach(a=>a.entries=a.entries.filter(e=>e.custom!==c.id));render();edited();}));
-      const scores=el('div',null,{class:'lb-custom-scores'});
-      board.rows.forEach(r=>{
-        const line=el('label',null,{class:'lb-custom-score'}), id=el('span',null,{class:'lb-who'});
-        const mark=marks.querySelector(`[data-key="${CSS.escape(r.key)}"]`)?.cloneNode(true)||el('span',null,{class:'lb-mark'});
-        const text=el('span');text.append(el('b',r.name),el('small',who(r)));id.append(mark,text);
-        const value=el('span',null,{class:'lb-pct'});value.append(input(c.scores[r.key],v=>c.scores[r.key]=v,{max:100,placeholder:'–','aria-label':`${c.name||'Custom benchmark'}: ${r.name} ${who(r)}`}),el('span','%'));
-        line.append(id,value);scores.append(line);
-      });
-      item.append(head,scores);box.append(item);
-    });
-  }
   function render() {
-    custom();
     document.querySelectorAll('[data-scoring-axis]').forEach(section=>{
       const name=section.dataset.scoringAxis, axis=draft.axes[name], container=section.querySelector('[data-entries]');container.replaceChildren();
       axis.entries.forEach((entry,index)=>{
-        const line=el('div',null,{class:'lb-entry'}), choices=[...new Map(data.options.map(o=>[o.key,o.label])).entries(),...draft.custom.map(c=>['custom:'+c.id,c.name||'Custom benchmark'])];
-        const n=index+1, source=select(choices,entry.custom?'custom:'+entry.custom:entry.benchmark,value=>{if(value.startsWith('custom:'))axis.entries[index]={custom:value.slice(7),weight:entry.weight};else {const b=data.options.find(b=>b.key===value);axis.entries[index]={benchmark:value,dataset:'',version:b.version,metric:'Score',weight:entry.weight};}},`${name}, benchmark ${n}`);
+        const line=el('div',null,{class:'lb-entry'}), choices=[...new Map(data.options.map(o=>[o.key,o.label])).entries()];
+        const n=index+1, source=select(choices,entry.benchmark,value=>{const b=data.options.find(b=>b.key===value);axis.entries[index]={benchmark:value,dataset:'',version:b.version,metric:'Score',weight:entry.weight};},`${name}, benchmark ${n}`);
         line.append(cell(source));
-        if(entry.custom) line.append(none(),none(),none());
-        else {
-          const versions=data.options.filter(o=>o.key===entry.benchmark), bench=versions.find(o=>o.version===entry.version), sets=bench?.datasets||[], metrics=bench?.metrics||['Score'];
-          line.append(sets.length||entry.dataset?cell(select([['','Whole benchmark'],...sets.map(d=>[d.id,d.label])],entry.dataset,v=>entry.dataset=v,`${name}, dataset ${n}`)):none());
-          line.append(versions.length>1||!bench?cell(select(versions.map(v=>[v.version,v.version_label||'–']),entry.version,v=>entry.version=v,`${name}, version ${n}`)):none());
-          line.append(metrics.length>1||entry.metric!=='Score'?cell(select(metrics.map(m=>[m,m]),entry.metric,v=>entry.metric=v,`${name}, metric ${n}`)):none());
-        }
+        const versions=data.options.filter(o=>o.key===entry.benchmark), bench=versions.find(o=>o.version===entry.version), sets=bench?.datasets||[], metrics=bench?.metrics||['Score'];
+        line.append(sets.length||entry.dataset?cell(select([['','Whole benchmark'],...sets.map(d=>[d.id,d.label])],entry.dataset,v=>entry.dataset=v,`${name}, dataset ${n}`)):none());
+        line.append(versions.length>1||!bench?cell(select(versions.map(v=>[v.version,v.version_label||'–']),entry.version,v=>entry.version=v,`${name}, version ${n}`)):none());
+        line.append(metrics.length>1||entry.metric!=='Score'?cell(select(metrics.map(m=>[m,m]),entry.metric,v=>entry.metric=v,`${name}, metric ${n}`)):none());
         line.append(cell(input(entry.weight,v=>entry.weight=v,{required:'','aria-label':`${name}, weight ${n}`})),remove(`Remove benchmark ${n} from ${name}`,()=>{axis.entries.splice(index,1);if(!axis.entries.length)axis.weight=0;render();edited();}));
         container.append(line);
       });
       section.querySelector('[data-count]').textContent=axis.entries.length;
-      const weight=section.querySelector('[data-overall]');weight.value=axis.weight;weight.oninput=()=>{axis.weight=weight.value===''?null:Number(weight.value);edited();};
+      const weight=section.querySelector('[data-overall]');if(weight){weight.value=axis.weight;weight.oninput=()=>{axis.weight=weight.value===''?null:Number(weight.value);edited();};}
       section.querySelector('[data-add-entry]').onclick=()=>{const b=data.options[0];if(!b)return;
         /* an empty axis weighs 0 in Overall; its first benchmark brings back the axis's standard weight */
         if(!axis.entries.length&&!axis.weight)axis.weight=data.overall?.[name]||0;
         axis.entries.push({benchmark:b.key,dataset:'',version:b.version,metric:'Score',weight:1});render();edited();};
     });overview();
   }
-  /* each axis folds its benchmarks away; open by default */
+  /* each axis folds its benchmarks away; rows open folded, the overview open */
   form.querySelectorAll('.lb-fold').forEach(b=>b.onclick=()=>{const open=b.getAttribute('aria-expanded')!=='true';b.setAttribute('aria-expanded',String(open));window.NulliusDisclosure.setHidden(document.getElementById(b.getAttribute('aria-controls')),open);});
-  document.getElementById('custom-add').onclick=()=>{const c={id:crypto.randomUUID(),name:'',scores:{}};draft.custom.push(c);render();edited();form.querySelector(`[data-custom-name="${c.id}"]`)?.focus();};
   document.getElementById('reset-ask').onclick=()=>{document.getElementById('reset-confirm').hidden=false;document.getElementById('reset-ask').hidden=true;document.getElementById('reset-no').focus();};
   document.getElementById('reset-no').onclick=()=>{resetting=false;document.getElementById('reset-confirm').hidden=true;document.getElementById('reset-ask').hidden=false;document.getElementById('reset-ask').focus();};
   document.getElementById('reset-yes').onclick=()=>save(true);

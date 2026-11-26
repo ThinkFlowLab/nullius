@@ -114,7 +114,7 @@ class LeaderboardBrowser(unittest.TestCase):
         expect(self.page.locator('#lb-evidence')).to_be_hidden()
         expect(cell).to_be_focused()
         # Returning normally to the trigger still opens it.
-        self.page.locator('#lb-mode [data-mode="0"]').focus()
+        self.page.locator('[data-family="capabilities"]').focus()
         cell.focus()
         expect(self.page.locator('#lb-evidence')).to_be_visible()
         self.assertFalse(self.errors)
@@ -199,17 +199,15 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertFalse(self.errors)
 
     def test_medals_for_the_first_four_ranks_then_plain_numbers(self):
-        settings, _ = configuration.load(configuration.location(), service.catalogue()[1])
-        rows = service.document(self.jobs)["rows"]
-        scores = (90, 90, 80, 70, 60, 50)                # a tie for 1st, then 3, 4, 5, 6
-        settings["custom"] = [{"id": "c", "name": "C", "scores": {r["key"]: v for r, v in zip([r for r in rows if not r["has_runs"]], scores)}}]
-        for axis in settings["axes"].values():
-            axis["entries"] = []
-        settings["axes"]["Personalization"]["entries"] = [{"custom": "c", "weight": 1}]
-        settings["axes"]["Personalization"]["weight"] = .15
-        configuration.save(configuration.location(), settings, service.catalogue()[1])
+        agents = [r["agent"] for r in service.document([])["rows"]][:6]
+        pin = definitions.version_identity(definitions.get("benchmark", "gaia"))
+        runs = []
+        for agent, passed in zip(agents, (9, 9, 8, 7, 6, 5)):    # a tie for 1st, then 3, 4, 5, 6
+            r = job([trial(str(i), "resolved" if i < passed else "agent_error") for i in range(10)], dataset="gaia/gaia-validation", agent=agent, job_id=agent)
+            r.identity = {"agent": agent, "agent_version": definitions.get("agent", agent)["_version"], "benchmark": "gaia", "benchmark_version": pin}
+            runs.append(r)
+        self.jobs[:] = runs
         self.open('/leaderboard')
-        self.page.locator('#lb-mode [data-mode="1"]').click()
         ranked = self.page.locator('tbody tr[data-sort-group="0"]')
         expect(ranked).to_have_count(6)
         cells = ranked.locator('[data-col="rank"]')

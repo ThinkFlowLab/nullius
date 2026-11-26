@@ -11,8 +11,7 @@ from . import shared
 def _document(deferred=False):
     workspace = shared.STATE["workspace"]
     return service.document(shared._load_jobs(), workspace=workspace.name if workspace else "",
-                            workspace_open=workspace is not None or bool(shared.STATE["roots"]),
-                            all_scores=request.args.get("all_scores") == "1", deferred=deferred)
+                            workspace_open=workspace is not None or bool(shared.STATE["roots"]), deferred=deferred)
 
 
 def _page(view):
@@ -41,8 +40,7 @@ def leaderboard_comparison():
     agents, benchmarks = service.catalogue()
     settings, _ = configuration.load(configuration.location(), benchmarks)
     return jsonify(board.project(shared._load_jobs(), agents, benchmarks, settings,
-                                 request.args.get("benchmark", ""), request.args.get("version", ""),
-                                 all_scores=request.args.get("all_scores") == "1"))
+                                 request.args.get("benchmark", ""), request.args.get("version", "")))
 
 
 @app.get("/api/leaderboard/metrics")
@@ -87,6 +85,6 @@ def scoring_data():
             settings = configuration.save(path, data, benchmarks)
             return jsonify(settings=settings, revision=service.revision(), message="Scoring saved")
     except (ValueError, TypeError, OverflowError):
-        return jsonify(error="Invalid scoring settings. Check names, mappings, scores and weights."), 400
+        return jsonify(error="Invalid scoring settings. Check mappings and weights."), 400
     except OSError:
         return jsonify(error="Scoring settings could not be saved. Retry."), 503

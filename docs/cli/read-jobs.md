@@ -75,15 +75,12 @@ A trial that ended early kept no ACP events: its trace has the model calls, and 
 nullius leaderboard --help
 nullius leaderboard --json
 nullius leaderboard ./jobs --json
-nullius leaderboard ./jobs --all-scores
 ```
 
 Supply the result roots of one workspace. This reads completed jobs; it never
-launches work. Without roots, catalogue rows have no recorded-run measurements. With
-`--all-scores`, saved manual scores can still contribute and rank those rows. Exit 0 means
+launches work. Without roots, catalogue rows have no recorded-run measurements. Exit 0 means
 the document was read; an invalid root exits 3, invalid arguments 2.
 
-Verified only is the default. `--all-scores` includes saved manual scores.
 The page and command use the same profile's [Scoring settings](../settings/README.md#scoring-settings).
 JSON includes agent/company/version and execution identity, benchmark entry
 versions, all capability and domain weights, effective shares, ranks and

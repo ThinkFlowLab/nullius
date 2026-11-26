@@ -82,7 +82,7 @@ def defaults(benchmarks):
         for axis in axes.values():
             if not axis["entries"]:
                 axis["weight"] = 0
-    return {"schema": 1, "custom": [], "axes": axes}
+    return {"schema": 1, "axes": axes}
 
 
 def _number(value, label, upper=None):
@@ -92,26 +92,11 @@ def _number(value, label, upper=None):
 
 def validate(document, benchmarks, *, previous=None, allow_unavailable=False):
     """Validate every field before a write; preserve removed catalogue references."""
-    if not isinstance(document, dict) or set(document) != {"schema", "custom", "axes"} or document["schema"] != 1:
+    if not isinstance(document, dict) or set(document) != {"schema", "axes"} or document["schema"] != 1:
         raise ValueError("Invalid scoring document")
     doc = copy.deepcopy(document)
-    if not isinstance(doc["axes"], dict) or set(doc["axes"]) != set(AXES) or not isinstance(doc["custom"], list):
-        raise ValueError("Scoring requires all fifteen axes and a custom benchmark list")
-    ids, names = set(), set()
-    for custom in doc["custom"]:
-        if not isinstance(custom, dict) or set(custom) != {"id", "name", "scores"}:
-            raise ValueError("Invalid custom benchmark")
-        key, name = custom["id"], custom["name"]
-        if not isinstance(key, str) or not key or key in ids or not isinstance(name, str) or not name.strip() or name.strip().casefold() in names:
-            raise ValueError("Custom benchmarks need unique IDs and nonempty unique names")
-        custom["name"] = name.strip()
-        ids.add(key)
-        names.add(name.strip().casefold())
-        if not isinstance(custom["scores"], dict) or not all(isinstance(k, str) and k for k in custom["scores"]):
-            raise ValueError("Custom scores require stable row keys")
-        for value in custom["scores"].values():
-            if value is not None:
-                _number(value, "Custom score", 100)
+    if not isinstance(doc["axes"], dict) or set(doc["axes"]) != set(AXES):
+        raise ValueError("Scoring requires all fifteen axes")
     available = {(b["key"], definitions.version_identity(b)): b for b in benchmarks}
     preserved = {tuple(e.get(k) for k in ("benchmark", "dataset", "version", "metric"))
                  for a in (previous or {}).get("axes", {}).values() for e in a.get("entries", []) if "benchmark" in e}
@@ -124,22 +109,17 @@ def validate(document, benchmarks, *, previous=None, allow_unavailable=False):
             if not isinstance(entry, dict):
                 raise ValueError(f"{name}: invalid entry")
             _number(entry.get("weight"), f"{name} entry weight")
-            if "custom" in entry:
-                if set(entry) != {"custom", "weight"} or entry["custom"] not in ids:
-                    raise ValueError("Unknown custom benchmark")
-                identity = ("custom", entry["custom"])
-            else:
-                if set(entry) != {"benchmark", "dataset", "version", "metric", "weight"} or not all(isinstance(entry[k], str) for k in ("benchmark", "dataset", "version", "metric")) or not entry["benchmark"]:
-                    raise ValueError("Invalid benchmark entry")
-                bench = available.get((entry["benchmark"], entry["version"]))
-                if entry["metric"] not in ("Score", "pass^3") or (entry["metric"] == "pass^3" and bench is not None and (bench.get("score") or {}).get("kind") != "pass"):
-                    raise ValueError("Choose Score or supported pass^3")
-                identity = tuple(entry[k] for k in ("benchmark", "dataset", "version", "metric"))
-                if bench is None and not allow_unavailable and identity not in preserved:
-                    raise ValueError("Choose a catalogue benchmark version")
-                if (bench is not None and entry["dataset"] and entry["dataset"] not in {c["id"] for c in scopes.choices(bench)}
-                    and not allow_unavailable and identity not in preserved):
-                    raise ValueError("Choose a declared dataset or task-name part")
+            if set(entry) != {"benchmark", "dataset", "version", "metric", "weight"} or not all(isinstance(entry[k], str) for k in ("benchmark", "dataset", "version", "metric")) or not entry["benchmark"]:
+                raise ValueError("Invalid benchmark entry")
+            bench = available.get((entry["benchmark"], entry["version"]))
+            if entry["metric"] not in ("Score", "pass^3") or (entry["metric"] == "pass^3" and bench is not None and (bench.get("score") or {}).get("kind") != "pass"):
+                raise ValueError("Choose Score or supported pass^3")
+            identity = tuple(entry[k] for k in ("benchmark", "dataset", "version", "metric"))
+            if bench is None and not allow_unavailable and identity not in preserved:
+                raise ValueError("Choose a catalogue benchmark version")
+            if (bench is not None and entry["dataset"] and entry["dataset"] not in {c["id"] for c in scopes.choices(bench)}
+                and not allow_unavailable and identity not in preserved):
+                raise ValueError("Choose a declared dataset or task-name part")
             if identity in seen:
                 raise ValueError(f"{name}: duplicate entry")
             seen.add(identity)
@@ -148,17 +128,19 @@ def validate(document, benchmarks, *, previous=None, allow_unavailable=False):
     return doc
 
 
-def remove_custom(document, key):
-    doc = copy.deepcopy(document)
-    doc["custom"] = [c for c in doc["custom"] if c["id"] != key]
-    for axis in doc["axes"].values():
-        axis["entries"] = [e for e in axis["entries"] if e.get("custom") != key]
-    return doc
+def _legacy(document):
+    """A file saved while scoring had custom benchmarks: they and their rows are dropped, the rest is kept."""
+    if isinstance(document, dict) and "custom" in document:
+        document = {k: v for k, v in document.items() if k != "custom"}
+        for axis in (document.get("axes") or {}).values():
+            if isinstance(axis, dict) and isinstance(axis.get("entries"), list):
+                axis["entries"] = [e for e in axis["entries"] if not (isinstance(e, dict) and "custom" in e)]
+    return document
 
 
 def load(path, benchmarks):
     try:
-        return validate(json.loads(Path(path).read_text()), benchmarks, allow_unavailable=True), ""
+        return validate(_legacy(json.loads(Path(path).read_text())), benchmarks, allow_unavailable=True), ""
     except FileNotFoundError:
         return defaults(benchmarks), ""
     except (OSError, ValueError, TypeError):

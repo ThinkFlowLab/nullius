@@ -39,12 +39,12 @@ def options(benchmarks):
             for b in benchmarks]
 
 
-def document(jobs, *, workspace="", workspace_open=False, all_scores=False, deferred=False):
+def document(jobs, *, workspace="", workspace_open=False, deferred=False):
     agents, benchmarks = catalogue()
     settings, warning = configuration.load(configuration.location(), benchmarks)
     sources = {}
-    result = board.build(jobs, agents, benchmarks, settings, all_scores=all_scores, workspace_open=workspace_open, metric_sources=sources)
-    context = {"workspace": workspace, "settings": settings, "all_scores": all_scores,
+    result = board.build(jobs, agents, benchmarks, settings, workspace_open=workspace_open, metric_sources=sources)
+    context = {"workspace": workspace, "settings": settings,
                "jobs": [(j.job_id, j.uid, str(j.finished_at), len(j.trials), j.identity, j.dir) for j in jobs]}
     result["context"] = hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
     result["warning"], result["revision"] = warning, revision()
@@ -56,9 +56,8 @@ def document(jobs, *, workspace="", workspace_open=False, all_scores=False, defe
     for row in result["rows"]:
         for axis in row["axes"].values():
             for entry in axis["entries"]:
-                if "benchmark" in entry:
-                    # a reader names a version by its release or short commit, never the whole pin
-                    entry["version_label"] = labels.get((entry["benchmark"], entry["version"]), entry["version"][:7])
+                # a reader names a version by its release or short commit, never the whole pin
+                entry["version_label"] = labels.get((entry["benchmark"], entry["version"]), entry["version"][:7])
                 entry["links"] = [{"id": id, "url": "/job/" + quote(id, safe="") + ("?workspace=" + quote(workspace, safe="") if workspace else "")} for id in entry["runs"]]
     if deferred:
         metrics.CACHE.complete(result, sources)

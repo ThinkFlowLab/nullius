@@ -7,13 +7,9 @@
 /* the score columns hold their name and chip in the middle; the measures stay right-aligned */
 #leaderboard-table :is(th, td):not([data-col=rank], [data-col=agent], [data-col=steps], [data-col=time], [data-col=calls], [data-col=cost]) { text-align: center; }
 #leaderboard-table td { vertical-align: middle; }
-.lb-panel h2 { font-size: 1.05rem; font-weight: 600; margin: 0; }
+.lb-panel h2 { font-size: 1.25rem; font-weight: 600; margin: 0; }
 .lb-panel h3 { font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; font-weight: 500; color: var(--text-dim); margin: 0 0 8px; }
 .lb-head { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.lb-trust { margin-left: auto; }
-.lb-key { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; font-size: .8rem; }
-.lb-key i { width: 22px; height: 14px; border: 1.5px dashed var(--lb-warn); border-radius: 4px; }
-.lb-key + .lb-trust { margin-left: 6px; }
 .lb-two { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); margin: 0 0 24px; }
 .lb-two > .lb-panel { margin: 0; }
 @media (min-width: 1000px) { .lb-two { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); } }
@@ -55,8 +51,6 @@
 .lb-bar { display: block; height: 4px; width: 68px; margin: 4px auto 0; border-radius: 2px; background: var(--surface-2); }
 .lb-bar i { display: block; height: 100%; border-radius: 2px; background: var(--accent); transition: width .32s cubic-bezier(.2,.7,.2,1); }
 .lb-chip { display: inline-block; min-width: 46px; padding: 4px 7px; border-radius: 6px; font-weight: 600; cursor: help; --lb-chip: color-mix(in oklab, var(--lb-chip-hi) calc(var(--lb-t, 0) * 100%), var(--lb-chip-lo)); background: var(--lb-chip); color: var(--lb-chip-text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent); }
-.lb-unverified { border: 1.5px dashed var(--lb-warn); }
-.lb-chip.lb-unverified { box-shadow: none; }
 /* the text is white on a dark shade and near black on a light one: the shade's lightness decides, per theme */
 .lb-chip.lb-top { --lb-chip: color-mix(in oklab, var(--accent) calc(60% + var(--lb-t2, 0) * 40%), var(--accent-soft)); color: var(--surface); }
 .lb-none { color: var(--text-faint); }
@@ -106,7 +100,8 @@
 /* two columns: domains, capabilities */
 .lb-chart-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
 .lb-chart-pair > * + * { border-top: 1px solid var(--border); padding-top: 24px; }
-@media (min-width: 900px) { .lb-chart-pair { grid-template-columns: 1fr 1fr; gap: 36px; } .lb-chart-pair > * + * { border-top: 0; border-left: 1px solid var(--border); padding: 0 0 0 36px; } }
+/* the two halves pad alike on either side of the divider, so both charts are drawn at one size */
+@media (min-width: 900px) { .lb-chart-pair { grid-template-columns: 1fr 1fr; gap: 0; } .lb-chart-pair > :first-child { padding-right: 36px; } .lb-chart-pair > * + * { border-top: 0; border-left: 1px solid var(--border); padding: 0 0 0 36px; } }
 
 /* strips */
 .lb-srow { display: grid; grid-template-columns: 104px minmax(0, 1fr) 42px; gap: 10px; align-items: center; height: 38px; font-size: .88rem; }
@@ -123,7 +118,7 @@
 .lb-track em { width: 11px; height: 11px; margin: -5.5px; transform: rotate(45deg); background: var(--series-2); box-shadow: 0 0 0 2px var(--surface); pointer-events: none; z-index: 3; }
 
 /* radars */
-.lb-chart-pair svg { display: block; width: 100%; max-height: 400px; overflow: visible; }
+.lb-chart-pair svg { display: block; width: 100%; max-height: 440px; overflow: visible; }
 .lb-ring { fill: none; stroke: var(--border-soft); }
 .lb-axis-label { cursor: help; outline: none; }
 .lb-axis-label:focus-visible { text-decoration: underline; }
@@ -230,16 +225,6 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
 .lb-cell.lb-none { color: var(--text-faint); text-align: center; }
 .lb-weight { display: grid; grid-template-columns: auto 58px; justify-content: start; gap: 8px; align-items: center; }
 .lb-weight output { text-align: left; }
-.lb-custom + .lb-custom { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
-.lb-custom-head { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
-.lb-custom-head .lb-input { flex: 0 1 280px; }
-.lb-tag { padding: 2px 8px; border: 1px dashed var(--lb-warn); border-radius: 6px; color: var(--lb-warn); font-size: .75rem; white-space: nowrap; }
-.lb-custom-scores { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px 28px; }
-.lb-custom-score { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
-.lb-custom-score .lb-who { display: flex; gap: 10px; align-items: center; }
-.lb-custom-score .lb-mark { width: 26px; height: 26px; }
-.lb-pct { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--text-dim); font-size: .85rem; }
-.lb-pct .lb-input { width: 64px; }
 .lb-reset { display: flex; justify-content: flex-end; margin: 0 0 16px; }
 #reset-confirm:not([hidden]) { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
 .lb-savebar[hidden] { display: none; }
