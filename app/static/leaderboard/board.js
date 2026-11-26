@@ -27,7 +27,7 @@
       const axis = current.axes[axisName];
       if (!axis.entries.length) pop.append(element('p','No benchmark'));
       axis.entries.forEach(e => {
-        const line = element('p', `${e.name}${e.version ? ' · '+e.version : ''} · ${e.score == null ? e.reason || 'not run' : percent(e.score)}${e.unverified ? ' · not verified' : ''} · ${innerWidth <= 700 ? 'x' : 'weight'} ${e.weight} · share ${percent(e.share)}`);
+        const line = element('p', `${e.name}${e.version ? ' · '+(e.version_label || e.version) : ''} · ${e.score == null ? e.reason || 'not run' : percent(e.score)}${e.unverified ? ' · not verified' : ''} · ${innerWidth <= 700 ? 'x' : 'weight'} ${e.weight} · share ${percent(e.share)}`);
         if (!e.custom && e.tasks != null) line.append(element('span', ` · ${e.covered}/${e.tasks} tasks`, {class:e.covered === e.tasks ? 'lb-complete-count' : ''}));
         (e.links || []).forEach(link => { line.append(document.createTextNode(' · '),element('a',link.id,{href:link.url})); });
         if (e.note) line.append(document.createTextNode(` · ${e.note}`));

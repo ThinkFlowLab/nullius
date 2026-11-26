@@ -52,9 +52,14 @@ def document(jobs, *, workspace="", workspace_open=False, all_scores=False, defe
     result["versions"] = [{"benchmark": b["key"], "version": definitions.version_identity(b),
                             "label": b["label"] + " · " + ((definitions.version_label(b) or definitions.version_identity(b)[:7]) or "Official")}
                            for b in benchmarks if any(e.get("benchmark") == b["key"] for a in settings["axes"].values() for e in a["entries"])]
+    labels = {(b["key"], definitions.version_identity(b)): definitions.version_label(b) or definitions.version_identity(b)[:7]
+              for b in benchmarks}
     for row in result["rows"]:
         for axis in row["axes"].values():
             for entry in axis["entries"]:
+                if "benchmark" in entry:
+                    # a reader names a version by its release or short commit, never the whole pin
+                    entry["version_label"] = labels.get((entry["benchmark"], entry["version"]), entry["version"][:7])
                 entry["links"] = [{"id": id, "url": "/job/" + quote(id, safe="") + ("?workspace=" + quote(workspace, safe="") if workspace else "")} for id in entry["runs"]]
     if deferred:
         metrics.CACHE.complete(result, sources)

@@ -83,6 +83,8 @@ class BoardExamples(unittest.TestCase):
         row = self.build([complete, partial])["rows"][0]
         self.assertIsNone(row["rank"])
         self.assertIn("GAIA · second 1 of 2 tasks", row["reasons"])
+        self.benchmarks[0]["datasets"][1]["label"] = "GAIA"           # a dataset named as its benchmark is not repeated
+        self.assertIn("GAIA 1 of 2 tasks", self.build([complete, partial])["rows"][0]["reasons"])
 
     def test_c6_whole_entry_requires_full_union_not_a_full_small_dataset(self):
         self.benchmarks[0]["datasets"].append({"id": "second", "tasks": {"0": "extra"}})

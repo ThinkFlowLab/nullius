@@ -10,6 +10,7 @@
 .lb-table [data-col="agent"] { width: 170px; }
 .lb-table [data-col="overall"] { width: 75px; }
 .lb-table [data-col="steps"], .lb-table [data-col="time"], .lb-table [data-col="calls"], .lb-table [data-col="cost"] { width: 65px; }
+.lb-table td[data-col="steps"], .lb-table td[data-col="time"], .lb-table td[data-col="calls"], .lb-table td[data-col="cost"] { white-space: nowrap; overflow-wrap: normal; }
 .lb-table th, .lb-table td { overflow-wrap: anywhere; white-space: normal; transition: opacity .2s, background-color .32s; }
 .lb-table [data-axis] { cursor: help; background: color-mix(in srgb, var(--series-1) var(--lb-shade, 0%), var(--bg)); color: var(--text); }
 .lb-unverified { outline: 1px dashed var(--text-dim); outline-offset: -2px; }

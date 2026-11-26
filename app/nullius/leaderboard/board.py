@@ -108,7 +108,8 @@ def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_ope
                     bench = benchmarks_by.get((entry["benchmark"], entry["version"]))
                     part = next((c["label"] for c in scopes.choices(bench) if c["id"] == entry["dataset"]), entry["dataset"]) if bench else entry["dataset"]
                     # one benchmark feeds an axis through several datasets and metrics: each names its own
-                    evidence["name"] = " · ".join(filter(None, (bench["label"] if bench else entry["benchmark"], part,
+                    label = bench["label"] if bench else entry["benchmark"]
+                    evidence["name"] = " · ".join(filter(None, (label, part if part != label else "",
                                                                  entry["metric"] if entry["metric"] != "Score" else "")))
                     evidence["available"] = bench is not None
                     if bench is None:

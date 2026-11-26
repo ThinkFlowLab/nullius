@@ -56,6 +56,8 @@ class LeaderboardRoutes(unittest.TestCase):
             load.assert_not_called()
         row = next(r for r in document["rows"] if r["has_runs"])
         self.assertEqual(row["axes"]["Retrieval"]["score"], .5)
+        gaia = next(e for e in row["axes"]["Retrieval"]["entries"] if e.get("benchmark") == "gaia")
+        self.assertEqual((len(gaia["version"]), gaia["version_label"]), (40, gaia["version"][:7]))   # a pin reads short
         output = io.StringIO()
         with patch.object(parse, "load_all", return_value=self.jobs), redirect_stdout(output):
             self.assertEqual(cli.main(["leaderboard", self.folder, "--json"]), 0)
