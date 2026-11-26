@@ -40,7 +40,7 @@ import urllib.parse
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
-from nullius import prices as price_list, providers, settings
+from nullius import ondisk, prices as price_list, providers, settings
 from nullius.standard.calls import exchanges, ledger as ledgers, relay
 from nullius.traces import calls as by_call
 
@@ -822,11 +822,7 @@ def _check_out(out: str, src: Source) -> str:
 
 
 def _write_json(path: str, doc: dict) -> None:
-    part = path + ".part"
-    with open(part, "w", encoding="utf-8") as f:
-        json.dump(doc, f, indent=1, ensure_ascii=False)
-        f.write("\n")
-    os.replace(part, path)
+    ondisk.write_whole(path, json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
 
 
 def _now() -> str:
