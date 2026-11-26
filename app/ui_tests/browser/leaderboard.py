@@ -217,7 +217,7 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertEqual(len(options), len(set(options)))               # no two rows read the same
         self.assertEqual([o for o in options if o.startswith('Codex')], ['Codex gpt-a', 'Codex gpt-b'])
         first = self.page.locator('tbody tr:visible').first
-        self.assertEqual((first.locator('[data-col="time"]').inner_text(), first.locator('[data-col="cost"]').inner_text()), ('2m 00s', '$0.004'))
+        self.assertEqual((first.locator('[data-col="time"]').inner_text(), first.locator('[data-col="cost"]').inner_text()), ('2m 00s', '$0.0040'))
         versus = self.page.locator('[data-vs-select]').first.locator('option').all_inner_texts()
         self.assertNotIn('Codex gpt-a', versus)                         # the chosen agent is not its own comparison
         self.assertIn('Codex gpt-b', versus)

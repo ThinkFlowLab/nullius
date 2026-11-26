@@ -9,7 +9,7 @@
   /* a time is rounded to the second before it is split, so 119.6 s reads 2m 00s */
   const minutes = s => { const t=Math.round(s); return `${Math.floor(t/60)}m ${String(t%60).padStart(2,'0')}s`; };
   /* a cost keeps two figures below ten cents, so $0.0042 and $0.0078 read apart */
-  const cost = v => { if (v >= .1 || v === 0) return `$${v.toFixed(2)}`; if (v < .0001) return '<$0.0001'; const p=Number(v.toPrecision(2)); return p >= .1 ? `$${p.toFixed(2)}` : `$${p}`; };
+  const cost = v => v >= .1 || v === 0 ? `$${v.toFixed(2)}` : v < .0001 ? '<$0.0001' : `$${v.toPrecision(2)}`;
   const measure = (field,v) => v == null ? '–' : field==='cost' ? cost(v) : field==='time' ? minutes(v) : String(Math.round(v));
   /* a score as a column sorts it: two means that differ only in their last bits are the same score */
   const level = v => v == null ? '' : Number(v.toFixed(12));
