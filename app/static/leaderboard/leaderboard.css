@@ -21,7 +21,7 @@
 .lb-table { transition: min-width .28s cubic-bezier(.2,.7,.2,1); }
 .lb-table td { overflow: hidden; }
 .lb-table .lb-closing { padding-left: 0; padding-right: 0; transition: width .28s cubic-bezier(.2,.7,.2,1), padding .28s cubic-bezier(.2,.7,.2,1); }
-.lb-table.lb-instant, .lb-table .lb-instant { transition: none; }
+.lb-table.lb-instant, .lb-table.lb-instant :is(th, td), .lb-table .lb-instant { transition: none; }
 /* switching families: the changing columns' contents fade, their cells and the row's colour stay */
 .lb-table :is(th, td) > * { transition: opacity .15s ease; }
 .lb-table.lb-swap :is(th, td):not([data-col="rank"], [data-col="agent"], [data-col="overall"]) { color: transparent; }

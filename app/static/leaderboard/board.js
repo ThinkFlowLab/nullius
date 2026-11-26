@@ -11,11 +11,16 @@
   const element = (tag, text, attrs = {}) => { const e = document.createElement(tag); if (text != null) e.textContent = text; Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k,v)); return e; };
   const svg = (tag, attrs = {}, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg',tag); Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k,v)); if (text != null) e.textContent = text; return e; };
   const row = key => data.rows.find(r => r.key === key);
-  const scored = () => data.rows.filter(r => r.overall != null);
+  /* the charts, the card and the pickers show who is on the board: an agent filtered out of the table leaves them too */
+  let onTable = null;
+  const shown = r => !onTable || onTable.has(r.key);
+  /* the average is the server's own mean, taken over the agents on the board */
+  const fieldAverage = axis => { const v=data.rows.filter(shown).map(r=>r.axes[axis]?.score).filter(x=>x!=null); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null; };
+  const scored = () => data.rows.filter(r => r.overall != null && shown(r));
   /* a name says only as much as tells two rows apart: the version when an agent has several, the model when a version has several */
   const label = r => { const same=data.rows.filter(v=>v.agent===r.agent); const twin=same.filter(v=>v.version===r.version);
     return [r.name, same.length>1 ? r.version_label : '', twin.length>1 ? [r.identity.model,r.identity.effort].filter(Boolean).join(' ') : ''].filter(Boolean).join(' '); };
-  const compared = axis => versus === 'average' ? data.averages[axis]?.score : versus.startsWith('version:') ? projection?.rows.find(r=>r.key===selected)?.axes[axis]?.score : row(versus)?.axes[axis]?.score;
+  const compared = axis => versus === 'average' ? fieldAverage(axis) : versus.startsWith('version:') ? projection?.rows.find(r=>r.key===selected)?.axes[axis]?.score : row(versus)?.axes[axis]?.score;
   const comparedName = () => versus === 'average' ? null : versus.startsWith('version:') ? 'benchmark version' : row(versus) ? label(row(versus)) : null;
   const signed = v => `${v < 0 ? '−' : '+'}${Math.abs(v*100).toFixed(1)}`;
   const pop = document.getElementById('lb-evidence');
@@ -106,11 +111,19 @@
   table.addEventListener('table:drawn',e=>{
     const keys=new Set(e.detail.rows.map(tr=>tr.dataset.key)), ranked=data.rows.filter(r=>keys.has(r.key)&&r.rank).sort((a,b)=>a.rank-b.rank);
     const next=new Map();let previous=null,at=0;ranked.forEach((r,i)=>{if(r.overall!==previous)at=i+1;next.set(r.key,at);previous=r.overall;});
+    const moved=!onTable||keys.size!==onTable.size||[...keys].some(k=>!onTable.has(k));onTable=keys;
+    if(moved)follow();
     const changed=!onBoard||ranked.length!==onBoard.size||ranked.some(r=>onBoard.get(r.key)!==next.get(r.key));
     onBoard=next;if(!changed)return;
     table.querySelectorAll('tbody tr').forEach(tr=>{const r=row(tr.dataset.key);if(!r)return;const cell=tr.querySelector('[data-col="rank"]');cell.replaceChildren(medal(shownRank(r)));cell.dataset.sort=shownRank(r)||'';});
     card();
   });
+  function follow() {
+    document.querySelectorAll('[data-agent-select] option, [data-vs-select] option').forEach(o=>{const r=row(o.value);if(r)o.hidden=!shown(r);});
+    const first=scored().sort((a,b)=>(a.rank??1e9)-(b.rank??1e9))[0];
+    if(versus!=='average'&&!versus.startsWith('version:')&&row(versus)&&!shown(row(versus))){versus='average';document.querySelectorAll('[data-vs-select]').forEach(v=>setSelect(v,versus));}
+    if(row(selected)&&!shown(row(selected))&&first)choose(first.key);else draw();
+  }
   function updateTable() {
     tableMotion?.capture();
     const focused=document.activeElement, focusAxis=focused?.dataset?.axis, focusRow=focused?.closest?.('tr')?.dataset.key;
@@ -268,9 +281,9 @@
       if(!line){line=element('div',null,{class:'lb-srow'});line.append(element('span',name,{class:'lb-axis-name',tabindex:'0','data-axis':name}),element('span',null,{class:'lb-track'}),element('span',null,{class:'lb-sval'}));container.append(line);}
       const track=line.children[1], keep=new Map([...track.children].map(n=>[n.dataset.node,n])), want=[];
       const put=(id,tag,cls,left,attrs={})=>{let n=keep.get(id);if(!n||n.tagName.toLowerCase()!==tag){n=element(tag,null,{'data-node':id});n.style.left=`${left}%`;}keep.delete(id);n.className=cls;Object.entries(attrs).forEach(([k,v])=>n.setAttribute(k,v));requestAnimationFrame(()=>{n.style.left=`${left}%`;});want.push(n);};
-      const average=data.averages[name]?.score;
+      const average=fieldAverage(name);
       if(average!=null)put('average','u','',average*100,{title:`Average ${whole(average)}`});
-      data.rows.filter(r=>r.axes[name].score!=null&&r.key!==selected).forEach(r=>put('r:'+r.key,'i','',r.axes[name].score*100,{role:'button',tabindex:'0','data-select':r.key,'aria-label':`${label(r)} ${whole(r.axes[name].score)}`,title:`${label(r)} ${whole(r.axes[name].score)}`}));
+      data.rows.filter(r=>r.axes[name].score!=null&&r.key!==selected&&shown(r)).forEach(r=>put('r:'+r.key,'i','',r.axes[name].score*100,{role:'button',tabindex:'0','data-select':r.key,'aria-label':`${label(r)} ${whole(r.axes[name].score)}`,title:`${label(r)} ${whole(r.axes[name].score)}`}));
       if(current.axes[name].score!=null)put('r:'+selected,'i','lb-me',current.axes[name].score*100,{role:'button',tabindex:'0','data-select':selected,'aria-label':`${label(current)} ${whole(current.axes[name].score)}`,title:`${label(current)} ${whole(current.axes[name].score)}`});
       const versusScore=compared(name);
       if(other&&versusScore!=null)put('versus','em','',versusScore*100,{title:`${comparedName()} ${whole(versusScore)}`});
@@ -360,7 +373,9 @@
     clearTimeout(swapping);
     if(motion.reduced.matches){applyFamily();return;}
     table.classList.add('lb-swap');
-    swapping=setTimeout(()=>{applyFamily();table.offsetWidth;table.classList.remove('lb-swap');},150);
+    /* the columns that come in take their widths at once, behind the faded contents: widths easing while the table's
+       own width has already changed would hand the difference to Agent and Overall */
+    swapping=setTimeout(()=>{table.classList.add('lb-instant');applyFamily();table.offsetWidth;table.classList.remove('lb-instant','lb-swap');},150);
   });
   document.querySelectorAll('[data-agent-select]').forEach(s=>s.onchange=()=>choose(s.value));
   async function compareChoice() { const turn=++comparisonGeneration;projection=null;if(versus.startsWith('version:')) {const [benchmark,version]=JSON.parse(versus.slice(8));const response=await nulliusFetch('/api/leaderboard/comparison?'+new URLSearchParams({benchmark,version,all_scores:data.all_scores?'1':'0'}));if(response.ok){const result=await response.json();if(turn!==comparisonGeneration)return;projection=result;}}draw();}
