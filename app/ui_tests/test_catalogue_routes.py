@@ -251,8 +251,9 @@ class BenchmarkPage(PageCase):
         for key in ("osworld2", "gsm8k", "humaneval", "gaia", "osworld1", "tau3-bench"):
             html, opts = self.page_html(key), json.loads((Path(catalog.__file__).parent / "benchmarks" / key / "standard.json").read_text())["options"]
             for o in opts.values():
-                if "pattern" in o:
+                if "example" in o:
                     self.assertIn("e.g. <code>%s</code>" % o["example"], html)
+                if "pattern" in o:
                     self.assertNotIn(o["pattern"], unescape(html))
         self.assertNotIn("Provider default", self.page("osworld1"))
 

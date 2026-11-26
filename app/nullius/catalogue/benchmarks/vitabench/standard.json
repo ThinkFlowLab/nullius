@@ -192,7 +192,6 @@
       ],
       "default": "300",
       "pattern": "[1-9][0-9]?|[12][0-9]{2}|300",
-      "example": "100",
       "limit": true
     },
     "max_errors": {
@@ -204,7 +203,6 @@
       ],
       "default": "10",
       "pattern": "[1-9][0-9]{0,3}",
-      "example": "5",
       "limit": true
     },
     "upstream_agent": {
@@ -241,11 +239,7 @@
       "values": [
         "off",
         "on"
-      ],
-      "about": {
-        "off": "The upstream's default: no reasoning effort sent. On a Claude model, thinking is turned off.",
-        "on": "Sends the reasoning effort below. On Claude and DeepSeek models, earlier reasoning is sent back."
-      }
+      ]
     },
     "agent_reasoning_effort": {
       "summary": "How much reasoning the benchmark's own agent model uses.",
@@ -276,8 +270,7 @@
         "original"
       ],
       "default": "0.0",
-      "pattern": "[0-9]+(\\.[0-9]+)?",
-      "example": "0.7"
+      "pattern": "[0-9]+(\\.[0-9]+)?"
     },
     "agent_max_tokens": {
       "summary": "The longest reply of the benchmark's own agent model. The default sends no limit.",

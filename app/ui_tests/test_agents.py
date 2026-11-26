@@ -316,7 +316,7 @@ class Tabs(unittest.TestCase):
         root = self.tmp / "catalogue"
         shutil.copytree(ROOT, root)
         path = root / "agents" / "fake" / "agent.json"
-        path.write_text(json.dumps(dict(json.loads(path.read_text()), options={"turns": {"summary": "Turns.", "pattern": "[1-9][0-9]{0,2}", "example": "40", "default": "10"}})))
+        path.write_text(json.dumps(dict(json.loads(path.read_text()), options={"turns": {"summary": "Turns.", "pattern": "default|[1-9][0-9]{0,2}", "example": "40", "default": "default"}})))
         self.stack.enter_context(patch.object(definitions, "load", lambda kind, root_=None, every=False: _LOAD(kind, str(root), every=every)))
         self.stack.enter_context(patch.object(definitions, "get", lambda kind, key, root_=None: _GET(kind, key, str(root))))
         html = self.get("/agents/fake").get_data(as_text=True)

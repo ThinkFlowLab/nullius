@@ -43,22 +43,24 @@ class Problems(unittest.TestCase):
         self.assertIn("options.effort: values or pattern, one of them", both)
         quote = definitions.problems(agent(options={"effort": dict(EFFORT, values=["low", 'x"; rm', "medium"])}), "agent")
         self.assertIn("options.effort.values: distinct plain words", quote)
-        pattern = {"summary": "s", "pattern": "^[0-9]{1,3}$", "default": "40", "example": "16"}
+        pattern = {"summary": "s", "pattern": "^[0-9]{1,3}$", "default": "40"}
         self.assertEqual(definitions.problems(agent(options={"effort": pattern}), "agent"), [])
         self.assertTrue(definitions.problems(agent(options={"effort": dict(pattern, default="x")}), "agent"))
 
-    def test_a_pattern_carries_an_example_it_allows(self):
-        pattern = {"summary": "s", "pattern": "^[0-9]{1,3}$", "default": "40"}
+    def test_an_example_only_beside_a_default_that_is_a_word(self):
+        pattern = {"summary": "s", "pattern": "^(default|[0-9]{1,3})$", "default": "default", "example": "16"}
         self.assertEqual(definitions.problems(agent(options={"effort": pattern}), "agent"), [])
-        for example in (16, "x", "1234", "40"):
+        self.assertIn("options.effort.example: only when its default is a word, not a number",
+                      definitions.problems(agent(options={"effort": dict(pattern, default="40")}), "agent"))
+        for example in (16, "x", "1234", "default"):
             o = dict(pattern, example=example)
             self.assertIn("options.effort.example: a value its pattern allows besides its default, shown in its place", definitions.problems(agent(options={"effort": o}), "agent"))
 
-    def test_every_bundled_pattern_carries_an_example(self):
+    def test_every_bundled_pattern_without_a_number_default_carries_an_example(self):
         for kind in ("benchmark", "agent", "capability"):
             for d in definitions.load(kind, root=definitions.CATALOGUE, every=True)[0]:
                 for n, o in (d.get("options") or {}).items():
-                    self.assertTrue("pattern" not in o or "example" in o, f"{d['_ref']} {n}")
+                    self.assertTrue("pattern" not in o or "example" in o or definitions._NUMBER.match(str(o.get("default"))), f"{d['_ref']} {n}")
 
     def test_a_name_and_a_summary(self):
         bad = definitions.problems(agent(options={"Effort": dict(EFFORT), "effort": dict(EFFORT, summary="")}), "agent")

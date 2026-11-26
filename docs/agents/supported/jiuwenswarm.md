@@ -31,7 +31,7 @@ openJiuwen's WorkSwarm agent.
 | Option | Values, default in bold | What it sets | Versions |
 |---|---|---|---|
 | `reasoning_effort` | **`default`**, `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` | How much reasoning the model uses before answering, with `default` leaving the choice to the provider. | every version |
-| `web_max_fetches` | e.g. `6`, default `3` | Pages fetched per invocation. | `jiuwenswarm@0.2.9` |
+| `web_max_fetches` | default `3` | Pages fetched per invocation. | `jiuwenswarm@0.2.9` |
 
 ## Benchmarks it fits
 

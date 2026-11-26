@@ -58,7 +58,7 @@
       {#- One version's proofs: its pin, each dataset's checks, and the form that runs them on it. -#}
       {% macro proofs(s) -%}
         {% if s.upstream.repository %}<p class="mono bench-runner-repo" title="The upstream it runs: the release tag or the branch, and the commit it was checked at">{{ s.upstream.repository|replace('https://github.com/', '') }} @ {% if s.upstream.tag %}{{ s.upstream.tag }} · {% elif s.upstream.branch %}{{ s.upstream.branch }} · {% endif %}{{ s.upstream.tested[:7] }}</p>{% endif %}
-        <p class="bench-ds-note">Null and reference controls check the scorer; stability and leak checks validate the tasks.</p>
+        <p class="bench-ds-note">Null and reference controls check each task's environment and scorer; stability and leak checks, the tasks themselves.</p>
 
         <table class="std-prooftable">
           <tbody>

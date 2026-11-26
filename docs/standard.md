@@ -486,7 +486,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 
 | Key of an option | Meaning |
 | --- | --- |
-| `summary`, `values` or `pattern`, `example`, `default` | What it changes, its allowed choices or input pattern, and its value when unset. `example`, optional and checked when given, is a value the pattern allows besides the default |
+| `summary`, `values` or `pattern`, `example`, `default` | What it changes, its allowed choices or input pattern, and its value when unset. `example`, only beside a default that is a word, is a value the pattern allows besides it |
 | `datasets` | The datasets it applies to |
 | `about` | A line about each value |
 | `names` | A name for some values, shown in their place; a recipe and the CLI keep the value |

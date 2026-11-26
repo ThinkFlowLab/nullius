@@ -128,6 +128,7 @@ _KEY = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _TAG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+/-]{0,127}$")
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
+_NUMBER = re.compile(r"^-?[0-9]+(?:\.[0-9]+)?$")       # a default that shows the form of its own input
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _HTTPS = re.compile(r"^https://[A-Za-z0-9.-]+(?:/[A-Za-z0-9_.%@+-]+)+$")
 _RELATIVE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$")
@@ -514,7 +515,9 @@ def _options(d: dict) -> List[str]:
             except re.error:
                 bad.append(f"{w}.pattern: a regular expression")
                 continue
-            if "example" in o and (option_problem(o, o["example"]) or o["example"] == o.get("default")):
+            if "example" in o and _NUMBER.match(str(o.get("default"))):
+                bad.append(f"{w}.example: only when its default is a word, not a number")
+            elif "example" in o and (option_problem(o, o["example"]) or o["example"] == o.get("default")):
                 bad.append(f"{w}.example: a value its pattern allows besides its default, shown in its place")
         if option_problem(o, o.get("default")):
             bad.append(f"{w}.default: the vendor's own default, a value it allows")
