@@ -293,7 +293,8 @@ Thirteen classes. The five marked **yes** under Infrastructure leave the adjuste
 Leaderboard scores describe one workspace's completed runs of catalogue agents.
 Controls, example agents, preparing/running jobs and standalone capability
 results do not contribute. Agent versions and execution setups are separate
-rows; sampling limits affect coverage rather than identity.
+rows; sampling, units at a time, a run's total spending cap and retries after
+an infrastructure failure affect coverage rather than identity.
 
 For each dataset and benchmark version, select the compatible run with the most
 distinct non-infrastructure tasks, then the latest finish, then its stable run

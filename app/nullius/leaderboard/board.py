@@ -37,8 +37,10 @@ def row_identity(job):
     identity = job.identity
     # a run names its agent as the user chose it: "codex", or "codex@2.2.2" for a version of it
     agent, version = definitions.split(identity.get("agent", job.agent_name))
+    # which tasks, how many at a time, the whole run's spending cap and retries after an infrastructure
+    # failure change coverage, never how a task is done
     limits = {k: v for k, v in identity.get("limits", {}).items()
-              if k not in ("repeat", "n_tasks", "task_names", "sample", "seed")}
+              if k not in ("repeat", "n_tasks", "task_names", "sample", "seed", "concurrency", "max_usd", "retries")}
     return {"agent": agent, "version": version or identity.get("agent_version", job.agent_version),
             "model": identity.get("model", job.model_name), "effort": job.reasoning_effort,
             "provider": identity.get("provider"), "options": identity.get("agent_options"),
@@ -104,7 +106,10 @@ def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_ope
                                     unverified=all_scores and value is not None and entry["weight"] > 0)
                 else:
                     bench = benchmarks_by.get((entry["benchmark"], entry["version"]))
-                    evidence["name"] = bench["label"] if bench else entry["benchmark"]
+                    part = next((c["label"] for c in scopes.choices(bench) if c["id"] == entry["dataset"]), entry["dataset"]) if bench else entry["dataset"]
+                    # one benchmark feeds an axis through several datasets and metrics: each names its own
+                    evidence["name"] = " · ".join(filter(None, (bench["label"] if bench else entry["benchmark"], part,
+                                                                 entry["metric"] if entry["metric"] != "Score" else "")))
                     evidence["available"] = bench is not None
                     if bench is None:
                         evidence["reason"] = "Benchmark version unavailable"
@@ -145,7 +150,8 @@ def build(jobs, agents, benchmarks, settings, *, all_scores=False, workspace_ope
             for entry in row["axes"][name]["entries"]:
                 if _entry_key(entry) not in entries or "custom" in entry:
                     continue
-                reason = (f"{entry['name']} not run" if entry["score"] is None else
+                reason = (f"{entry['name']}: {entry['reason']}" if entry["score"] is None and entry["runs"] else
+                          f"{entry['name']} not run" if entry["score"] is None else
                           f"{entry['name']} full task coverage unavailable" if entry["tasks"] is None else
                           f"{entry['name']} {entry['covered']} of {entry['tasks']} tasks" if entry["covered"] < entry["tasks"] else "")
                 if reason and reason not in row["reasons"]:

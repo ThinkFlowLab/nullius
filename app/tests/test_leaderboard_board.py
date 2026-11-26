@@ -52,7 +52,10 @@ class BoardExamples(unittest.TestCase):
         version = replace(base, job_id="version", identity=base.identity | {"agent_version": "2"})
         self.assertEqual(len([r for r in self.build([base, changed, other, version])["rows"] if r["has_runs"]]), 4)
         sample = replace(base, job_id="sample", n_tasks=30, identity=base.identity | {"limits": {"repeat": 3}})
-        self.assertEqual(len([r for r in self.build([base, sample])["rows"] if r["has_runs"]]), 1)
+        throughput = replace(base, job_id="throughput", identity=base.identity | {"limits": {"concurrency": 5, "max_usd": .4, "retries": 2}})
+        self.assertEqual(len([r for r in self.build([base, sample, throughput])["rows"] if r["has_runs"]]), 1)
+        per_task = replace(base, job_id="per-task", identity=base.identity | {"limits": {"unit_max_usd": .01}})
+        self.assertEqual(len([r for r in self.build([base, per_task])["rows"] if r["has_runs"]]), 2)
 
     def test_c4_benchmark_options_do_not_split_the_participant(self):
         base = self.make_run("A", ["resolved"])
@@ -79,7 +82,7 @@ class BoardExamples(unittest.TestCase):
         self.config["axes"]["Travel"]["weight"] = 1
         row = self.build([complete, partial])["rows"][0]
         self.assertIsNone(row["rank"])
-        self.assertIn("GAIA 1 of 2 tasks", row["reasons"])
+        self.assertIn("GAIA · second 1 of 2 tasks", row["reasons"])
 
     def test_c6_whole_entry_requires_full_union_not_a_full_small_dataset(self):
         self.benchmarks[0]["datasets"].append({"id": "second", "tasks": {"0": "extra"}})
@@ -104,7 +107,9 @@ class BoardExamples(unittest.TestCase):
         rows = self.build(jobs + [short])["rows"]
         a = next(r for r in rows if r["name"] == "A")
         self.assertIsNone(a["rank"])
-        self.assertIn("Tau not run", a["reasons"])
+        self.assertIn("Tau · pass^3 not run", a["reasons"])
+        b = next(r for r in rows if r["name"] == "B")           # ran, one attempt: says why there is no pass^3
+        self.assertIn("Tau · pass^3: Three recorded attempts per eligible task required", b["reasons"])
 
     def test_task_name_part_uses_its_distinct_union_and_excludes_other_tasks(self):
         from tests.test_comparison import trial
