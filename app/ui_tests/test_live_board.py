@@ -568,13 +568,13 @@ for (const query of ['', '?view=live', '?view=logs', '?view=results']) {
 
     def test_renderer_reads_harbors_recorded_run(self):
         s = json.loads((FIXTURE / "harbor-oracle-x4" / "expected.json").read_text())
-        out = self.render(s)
+        out = self.render(s, results="/job/demo-x3?workspace=b&view=results")
         self.assertTrue(out["finished"]); self.assertEqual(out["status"], "")
         self.assertEqual(out["tiles"].count('class="lb-tile done lbo-resolved'), 4)
         for task in ("harbor/hello-world", "harbor/hello-alpine", "reward-kit-example", "harbor/hello-user"):
             self.assertIn(escape(task.split("/")[-1]), out["tiles"])      # no tile is blank
         self.assertIn("The feed saw 4 of 4 trials end, 4 resolved", visible(out["flight"]))
-        self.assertIn('href="?view=results"', out["flight"])              # the settled board points at Results
+        self.assertIn('href="/job/demo-x3?workspace=b&amp;view=results"', out["flight"])   # the settled board points at Results, the page's own
         self.assertIn("100", out["stats"])                                 # raw and adjusted so far, from the feed's outcomes
         self.assertNotIn("$0", self.board(out)); self.assertNotIn("tokens", out["meta"])   # the oracle reports no counters
         opened = self.render(s, selected=s["trials"][0]["trial"])

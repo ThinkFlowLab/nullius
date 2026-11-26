@@ -93,6 +93,14 @@ class JudgementsOfAnotherWorkspace(unittest.TestCase):
                     with self.subTest(rule.endpoint):
                         self.assertIn(f"workspace={self.b.name}", url_for(rule.endpoint, **dict.fromkeys(rule.arguments, "x")))
 
+    def test_the_pages_of_that_record_link_into_no_other_workspace(self):
+        client, kept = web.app.test_client(), f"workspace={self.b.name}"
+        page = unescape(client.get(f"/job/job-y?{kept}").get_data(as_text=True))
+        self.assertNotIn('href="?', page, "a link of the query alone drops the workspace")
+        links = re.findall(r'(?:href|data-results)="(/job/job-y\?[^"]*)"', page)
+        for arg in ("sort=tokens", "outcome=", "view=results"):
+            self.assertTrue([link for link in links if arg in link and kept in link], f"no {arg} link keeps the workspace")
+
     def test_a_user_judge_flag_goes_to_the_job_of_that_workspace(self):
         shutil.copytree(JOB, self.tmp / "b" / "job-x")              # B holds a job-x too, as the open workspace does
         client = web.app.test_client()

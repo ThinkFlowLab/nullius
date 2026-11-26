@@ -197,7 +197,7 @@
       const how = s.ended_by ? s.ended_by : 'finished';
       return `<div class="lb-settle"><div><p><b>${esc(how[0].toUpperCase() + how.slice(1))} at ${hms(s.finished_at)}</b>${s.elapsed_sec != null ? ' after ' + clock(s.elapsed_sec) : ''}. The feed saw ${C.completed} of ${C.total == null ? '?' : C.total} trials end, ${oc.scored && !oc.resolved && !oc.unresolved ? oc.scored + ' scored' : oc.resolved + ' resolved'}.</p>
         <small>The feed's outcomes are provisional. Results reads the job's own files and the judge, and it is where the score lives.</small></div>
-        <a class="btn sm" href="?view=results" data-open-results>Open Results</a></div>`;
+        <a class="btn sm" href="${esc(opts.results)}" data-open-results>Open Results</a></div>`;
     }
     const ended = (t) => ((s.timeline || {})[t.trial] || {}).ended || '';
     const done = trials.filter(t => t.state === 'done').sort((a, b) => ended(a).localeCompare(ended(b)));
@@ -317,7 +317,7 @@
     if (!board) return;
     const $ = sel => board.querySelector(sel);
     const endpoint = board.dataset.endpoint, trialBase = board.dataset.trialBase;
-    const opts = {trialBase, noun: board.dataset.noun || '', filter: null, selected: null, showAll: false};
+    const opts = {trialBase, results: board.dataset.results, noun: board.dataset.noun || '', filter: null, selected: null, showAll: false};
     let snap = null, timer = null, misses = 0;
     // opened while the run was going: the Results rendered with the page are older than its end
     const startedLive = board.dataset.state !== 'finished';
