@@ -92,7 +92,8 @@
 @media (min-width: 900px) { .lb-chart-pair { grid-template-columns: 1fr 1fr; gap: 36px; } .lb-chart-pair > * + * { border-top: 0; border-left: 1px solid var(--border); padding: 0 0 0 36px; } }
 
 /* strips */
-.lb-srow { display: grid; grid-template-columns: 104px minmax(0, 1fr) 42px; gap: 10px; align-items: center; min-height: 34px; font-size: .88rem; }
+.lb-srow { display: grid; grid-template-columns: 104px minmax(0, 1fr) 42px; gap: 10px; align-items: center; height: 38px; font-size: .88rem; }
+.lb-srow > :last-child { line-height: 1.15; }
 .lb-srow > :first-child { text-align: right; cursor: help; }
 .lb-srow > :last-child { font-weight: 600; color: var(--text); }
 .lb-srow small { display: block; color: var(--series-2); font-weight: 500; font-size: .72rem; line-height: 1; }
@@ -118,7 +119,8 @@
 .lb-point { fill: var(--accent); cursor: pointer; transform-box: fill-box; transform-origin: center; transition: transform 150ms; outline: none; }
 .lb-point.lb-comparison { fill: var(--text-dim); cursor: default; }
 .lb-versus-agent .lb-point.lb-comparison { fill: var(--series-2); }
-.lb-point:hover, .lb-point:focus-visible, .lb-point.lb-hover { transform: scale(1.6); }
+.lb-point:not(.lb-dot):is(:hover, :focus-visible, .lb-hover) { transform: scale(1.6); }
+.lb-dot.lb-point { transform: none; }
 
 /* score evidence */
 .lb-evidence { position: fixed; z-index: 100; max-width: min(600px, calc(100vw - 24px)); max-height: min(440px, calc(100vh - 24px)); overflow: auto; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: .8rem; box-shadow: 0 8px 24px color-mix(in srgb, #000 30%, transparent); }

@@ -48,10 +48,14 @@
     pop.style.top = `${Math.max(12,Math.min(box.bottom+6,innerHeight-pop.offsetHeight-12))}px`;
   }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { dismiss(); returningFocus=true;focusBefore?.focus();returningFocus=false; } });
-  document.addEventListener('pointerdown', e => { if (!pop.contains(e.target) && !e.target.closest('[data-axis]')) dismiss(); });
-  document.addEventListener('focusin', e => { const target=e.target.closest('[data-axis]'); if(target&&!returningFocus) evidence(target); });
-  document.addEventListener('pointerover', e => { const target=e.target.closest('[data-axis]'); if(target) evidence(target); });
-  document.addEventListener('click', e => { const target=e.target.closest('[data-axis]'); if(target) evidence(target); });
+  /* hovering shows a score's evidence while the pointer is on it or on the card; a click or keyboard focus keeps it open */
+  let pinned=false;
+  document.addEventListener('pointerdown', e => { if (!pop.contains(e.target) && !e.target.closest('[data-axis]')) { pinned=false; dismiss(); } });
+  document.addEventListener('focusin', e => { const target=e.target.closest('[data-axis]'); if(target&&!returningFocus) { pinned=target.matches(':focus-visible'); evidence(target); } });
+  let leaving=0;
+  document.addEventListener('pointerover', e => { const target=e.target.closest('[data-axis]'); if(target||pop.contains(e.target))clearTimeout(leaving); if(target&&!pinned) evidence(target); });
+  document.addEventListener('pointerout', e => { if(pinned||pop.hidden)return; if(!e.target.closest('[data-axis]')&&!pop.contains(e.target))return; clearTimeout(leaving); leaving=setTimeout(()=>{if(!pinned)dismiss();},180); });
+  document.addEventListener('click', e => { const target=e.target.closest('[data-axis]'); if(target) { pinned=true; evidence(target); } });
   function medal(rank) {
     if (!rank) return document.createTextNode('');
     if (rank > 4) return document.createTextNode(String(rank));
@@ -281,13 +285,24 @@
     swatches();card();drawScatter();for(const group of ['domains','capabilities']){strips(group);radar(group);}
   }
   function press(group,attr,value){document.querySelectorAll(`#${group} [${attr}]`).forEach(b=>b.setAttribute('aria-pressed',String(b.getAttribute(attr)===value)));}
-  document.querySelectorAll('[data-family]').forEach(b=>b.onclick=()=>{family=b.dataset.family;applyFamily();table.querySelectorAll('td[data-col]:not([hidden]) .lb-chip').forEach(cell=>motion.fade(cell,[{opacity:0},{opacity:1}],200));});
+  /* switching families fades the columns after the agent out, swaps them, and fades them back in, so nothing jumps sideways */
+  let switching=null;
+  document.querySelectorAll('[data-family]').forEach(b=>b.onclick=()=>{
+    if(b.dataset.family===family)return; family=b.dataset.family;
+    document.querySelectorAll('[data-family]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.family===family)));
+    const moving=()=>[...table.querySelectorAll('th[data-col],td[data-col]')].filter(c=>!['rank','agent'].includes(c.dataset.col));
+    switching?.forEach(a=>a.cancel());
+    if(motion.reduced.matches){applyFamily();return;}
+    switching=moving().map(c=>c.animate([{opacity:1},{opacity:0}],{duration:120,easing:'ease-in',fill:'forwards'}));
+    const out=switching;
+    Promise.all(out.map(a=>a.finished)).then(()=>{if(switching!==out)return;applyFamily();out.forEach(a=>a.cancel());switching=null;moving().forEach(c=>c.animate([{opacity:0},{opacity:1}],{duration:200,easing:'ease-out'}));},()=>{});
+  });
   document.querySelectorAll('[data-agent-select]').forEach(s=>s.onchange=()=>choose(s.value));
   async function compareChoice() { const turn=++comparisonGeneration;projection=null;if(versus.startsWith('version:')) {const [benchmark,version]=JSON.parse(versus.slice(8));const response=await nulliusFetch('/api/leaderboard/comparison?'+new URLSearchParams({benchmark,version,all_scores:data.all_scores?'1':'0'}));if(response.ok){const result=await response.json();if(turn!==comparisonGeneration)return;projection=result;}}draw();}
   document.querySelectorAll('[data-vs-select]').forEach(s=>{data.versions.forEach(v=>s.append(element('option',`Same agent: ${v.label}`,{value:'version:'+JSON.stringify([v.benchmark,v.version])})));s.onchange=()=>{versus=s.value;document.querySelectorAll('[data-vs-select]').forEach(v=>setSelect(v,versus));compareChoice().catch(()=>{});};});
   document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{metric=b.dataset.metric;press('lb-metric','data-metric',metric);drawScatter();});
   async function deferred(turn) { const response=await nulliusFetch(`/api/leaderboard/metrics?all_scores=${data.all_scores?1:0}&context=${encodeURIComponent(data.context)}`);if(!response.ok)return;const result=await response.json();if(turn!==generation||result.context!==data.context)return;result.rows.forEach(r=>{const existing=row(r.key);if(existing)existing.metrics=r.metrics;});updateTable();card();drawScatter(); }
-  document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=async()=>{press('lb-mode','data-mode',b.dataset.mode);const turn=++generation;const response=await nulliusFetch(`/api/leaderboard?all_scores=${b.dataset.mode}`);if(!response.ok)return;const next=await response.json();if(turn!==generation)return;data=next;if(!row(selected))selected=data.selected;updateTable();compareChoice().catch(()=>{});draw();deferred(turn).catch(()=>{});});
+  document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=async()=>{press('lb-mode','data-mode',b.dataset.mode);const turn=++generation;const response=await nulliusFetch(`/api/leaderboard?all_scores=${b.dataset.mode}`);if(!response.ok)return;const next=await response.json();if(turn!==generation)return;const kept=new Map(data.rows.map(r=>[r.key,r.metrics]));next.rows.forEach(r=>{const m=kept.get(r.key);if(!m)return;r.metrics={...m,...Object.fromEntries(Object.entries(r.metrics||{}).filter(([,v])=>v?.value!=null))};});data=next;if(!row(selected))selected=data.selected;updateTable();compareChoice().catch(()=>{});draw();deferred(turn).catch(()=>{});});
   document.getElementById(`${table.id}-tools`)?.addEventListener('change',e=>{if(e.target.matches('input[data-col]'))requestAnimationFrame(applyFamily);});
   updateTable();choose(selected);tableMotion=motion.table(table);deferred(generation).catch(()=>{});
 })();
