@@ -50,13 +50,12 @@
       if (!axis.entries.length) pop.append(element('p','No benchmark'));
       else {
         axis.entries.forEach(e => {
-          const [bench,...slice]=e.name.split(' · '), label=[bench];if(slice.length)label.push(element('span',` · ${slice.join(' · ')}${e.metric&&e.metric!=='Score'?' · '+e.metric:''}`,{class:'muted'}));
+          const [bench,...slice]=e.name.split(' · '), label=[e.note?element('span',bench,{title:e.note}):bench];if(slice.length)label.push(element('span',` · ${slice.join(' · ')}${e.metric&&e.metric!=='Score'?' · '+e.metric:''}`,{class:'muted'}));
           const sub=[];
           if(e.version)sub.push(e.version_label||e.version);
           if(!e.custom&&e.tasks!=null)sub.push(`${e.covered} of ${e.tasks} tasks`);
           const small=[sub.join(' · ')];
           (e.links||[]).forEach((link,i,all)=>small.push(' · ',element('a',all.length>1?`Open run ${i+1}`:'Open run',{href:link.url,title:link.id})));
-          if(e.note)small.push(` · ${e.note}`);
           if(e.unverified)small.push(' ',element('span','Not verified',{class:'lb-tag'}));
           line(label,small,e.share,e.score,e.reason);
         });
@@ -371,7 +370,7 @@
     /* a difference reads green above the reference and red below it */
     const change=d=>element('span',signed(d),{class:d>0?'lb-up':d<0?'lb-down':''});
     const named=v=>v?[`${v.name} `,change(v.d)]:['–'];
-    if(current.reasons.length)lines.push(['Partial',[current.reasons.length>1?`${current.reasons[0]} and ${current.reasons.length-1} more`:current.reasons[0]],current.reasons.join('\n')]);
+    if(current.reasons.length){const families=current.reasons.filter(r=>/^\d+ of \d+ (capabilities|domains)$/.test(r)),n=current.reasons.length-families.length;lines.push(['Partial',[[n?`${n} benchmark${n>1?'s':''} incomplete`:'',...families].filter(Boolean).join(' · ')],current.reasons.join('\n')]);}
     if(baseline!=null&&current.overall!=null)lines.push([`Overall against ${against}`,[change(current.overall-baseline)]]);
     lines.push([`Best against ${against}`,named(differences[0])],[`Weakest against ${against}`,named(differences.at(-1))]);
     lines.push(['Time per task',[measure('time',current.metrics?.time?.value)]],['Cost per task',[measure('cost',current.metrics?.cost?.value)]]);
