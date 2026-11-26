@@ -19,8 +19,8 @@ def judge_tasks_route(job_id):
         abort(404)
     todo = judge.tasks_todo(job)
     judge._guard()
-    k, cal, d = judge.key(), judge.batch_calibration(), judge.ws_dir()
-    done, failed = judge.run_batch(todo, lambda t: judge.judge_task(job, t, k, calibration=cal, d=d), lambda t: t.task_base)
+    k, cal, col = judge.key(), judge.batch_calibration(), judge.batch_workspace()
+    done, failed = judge.run_batch(todo, lambda t: judge.judge_task(job, t, k, calibration=cal, column=col), lambda t: t.task_base)
     flash(f"Judged {done} of {len(todo)} task instruction(s)." + (" Failed: " + "; ".join(failed[:3]) if failed else ""), "error" if failed else "")
     return redirect(url_for("job", job_id=job_id) + "#task-quality")
 

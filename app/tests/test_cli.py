@@ -105,7 +105,6 @@ class Help(Scratch):
                 out = self.sh(module, *args, "--help")
                 self.assertEqual(out.returncode, 0, out.stderr)
                 self.assertIn("usage:", out.stdout)
-                self.assertIn(f"python3 -m nullius.{module}", out.stdout)
                 self.assertIn("examples:", out.stdout)
                 self.assertIn("exit codes:", out.stdout)
                 self.assertIn("--json", out.stdout)

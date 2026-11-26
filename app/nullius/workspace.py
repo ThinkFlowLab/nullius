@@ -205,6 +205,8 @@ def rename(home_dir: str, ws: Workspace, label: str) -> Workspace:
         name = _free(name, taken - {ws.name})
         new_dir = os.path.join(home_dir, name)
         os.rename(ws.dir, new_dir)
+        from nullius.judge import store
+        store.unmark(ws.dir, to=new_dir)
         ws.name, ws.dir = name, new_dir
     ws.label = label
     save(ws)
@@ -219,12 +221,84 @@ def touch(ws: Workspace) -> None:
 
 def delete(home_dir: str, name: str) -> bool:
     """Remove a workspace: its record, its parse cache and its converted
-    imports. The job roots it pointed at are not touched. True when something was removed."""
+    imports. The job roots it pointed at are not touched, nor the
+    judgements of their jobs (`_keep_judgements`). True when something was
+    removed; ValueError, nothing removed, while it holds judgements kept
+    before or failure analyses of its imports and one of its roots cannot be read."""
     ws = load(home_dir, name)
     if ws is None:
         return False
+    from nullius.judge import store
+    _keep_judgements(ws)
     shutil.rmtree(ws.dir, ignore_errors=True)
+    store.unmark(ws.dir)
     return True
+
+
+def check_deletable(home_dir: str, name: str) -> None:
+    """Raise as `delete` would refuse the workspace *name*, removing nothing."""
+    ws = load(home_dir, name)
+    if ws is not None:
+        _check_roots(ws, _analyses(ws))
+
+
+def _check_roots(ws: Workspace, made) -> None:
+    """ValueError while *ws* holds records its delete could lose - judgements kept before by job
+    id, or the failure analyses *made* of its imports - and one of its roots, as registered or as
+    converted, cannot be read: its jobs, and so their records, are unknown."""
+    from nullius.judge import store
+    if not made and not any(os.path.isdir(os.path.join(ws.dir, r)) for r in store.ROOTS.values()):
+        return
+    unread = [r for r in dict.fromkeys([*ws.roots, *ws.job_roots]) if not _listable(r)]
+    if unread:
+        raise ValueError(f"{ws.label} stays: {unread[0]} cannot be read, so its judgements cannot be kept. Reconnect it or remove the root first.")
+
+
+def _listable(folder: str) -> bool:
+    """Whether *folder* can be listed: a folder without permission exists but hides its jobs."""
+    try:
+        with os.scandir(folder):
+            return True
+    except OSError:
+        return False
+
+
+def _analyses(ws: Workspace) -> list:
+    """The User judge's failure analyses of the workspace's converted imports; ValueError when a
+    folder of its imports cannot be listed."""
+    from nullius.judge import store
+    from nullius.runs import failure_analysis
+    try:
+        return [os.path.join(d, n) for d, _, names in os.walk(ws.imports_dir, onerror=store._raise)
+                for n in names if n.startswith(failure_analysis.FILE)] if os.path.isdir(ws.imports_dir) else []
+    except OSError as e:
+        raise ValueError(f"{ws.label} stays: {e.filename or ws.imports_dir} cannot be read, so its failure analyses cannot be kept. Try again.")
+
+
+def _keep_judgements(ws: Workspace) -> None:
+    """The judgements a workspace kept before they were kept by job
+    (``<workspace>/judgements{,-llm}/``): copied into the user's store under
+    the one job its roots hold that owns each (`store.adopt_owned`), then its files moved there whole, so none is
+    lost with it - a job its roots no longer reach included - and the User
+    judge's failure analyses of its converted imports beside them, under
+    ``imported/`` by their job folder's path. Refused while a root, or a folder
+    of its imports, cannot be read, since its jobs' records could not be kept."""
+    from nullius.judge import store
+    old = [d for r in store.ROOTS.values() if os.path.isdir(d := os.path.join(ws.dir, r))]
+    made = _analyses(ws)
+    if not old and not made:
+        return
+    _check_roots(ws, made)
+    if old and not store.moved(ws.dir):
+        store.adopt_owned(ws)                # a record several jobs may own is not copied: it is kept below, whole
+    keep = os.path.join(store.home(), "judgements-of-deleted-workspaces", f"{ws.name}~{datetime.now(timezone.utc):%Y%m%dT%H%M%S%fZ}")
+    os.makedirs(keep)
+    for d in old:
+        shutil.move(d, keep)
+    for f in made:
+        to = os.path.join(keep, os.path.relpath(f, ws.dir))
+        os.makedirs(os.path.dirname(to), exist_ok=True)
+        shutil.move(f, to)
 
 
 def holding(home_dir: str, folder: str) -> list:
@@ -590,7 +664,8 @@ def load_jobs(ws: Workspace, roots, runs: dict | None = None) -> list:
         jobs = [load_job(ws, d, index, runs)[0] for d in dirs]
     # a job folder gone from disk, or no longer found under these roots, leaves the index
     found = set(dirs)
-    gone = [d for d in index if d not in found and (_under(d, roots) or not os.path.isdir(d))]
+    # one under a root that cannot be read (unmounted) stays: whether it is gone is unknown
+    gone = [d for d in index if d not in found and (_under(d, roots) or not os.path.isdir(d) and os.path.isdir(os.path.dirname(d)))]
     if gone:
         keep = {_cache_file(ws, d) for d in dirs}      # the same folder found by another path
         for d in gone:

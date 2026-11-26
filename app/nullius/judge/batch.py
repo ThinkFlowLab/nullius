@@ -96,20 +96,32 @@ def ask_states(states: dict, key: str, post: Optional[Callable] = None, calibrat
     return merged
 
 
-def ask_and_store(ws_dir: str, job_id: str, trial_name: str, states: dict, key, post: Optional[Callable] = None,
-                  calibration: Optional[dict] = None, started: Optional[str] = None) -> Optional[dict]:
+def ask_and_store(base: str, job_id: str, trial_name: str, states: dict, key, post: Optional[Callable] = None,
+                  calibration: Optional[dict] = None, started: Optional[str] = None,
+                  lane: Optional[str] = None, old: Optional[dict] = None, job_dir: Optional[str] = None,
+                  strict: bool = False) -> Optional[dict]:
     """`ask_states`, then the merged record saved under the trial's key -
-    its answers over the version's earlier ones. Returns the record as
-    stored. The pre-flight reads the workspace's own calibration unless one
-    is given. `started`: the trial's own
-    start, which the record keeps (`store.save`)."""
+    its answers over the version's earlier ones - in the store at `base`
+    (`store.home`). Returns the record as stored. The pre-flight reads the
+    job's own calibration unless one is given. `started`: the trial's own
+    start, which the record keeps (`store.save`). `lane`: where it is kept,
+    the judge's own lane unless named (`store.TASKS`). `old`: the job's
+    older records (`store.overlay`), the file's copied in by the save. `job_dir`: the
+    job's folder, nothing saved once it is deleted (`store.Gone`). `strict`: an
+    attempt with several tries (`store.save`). A job with no identity yet (pending), or such a try
+    with no start, is refused before the judge is asked: its record could not be kept, or shown."""
+    if not job_id:
+        raise client.JudgeError(0, "this job has no identity until its result is written, so it is not judged yet")
+    if strict and not started:
+        raise client.JudgeError(0, "this try has no start, so its judgement could not be told from another try's")
     if calibration is None:
-        calibration = store.calibration(ws_dir)
+        calibration = store.calibration(base, [job_id])
     rec = ask_states(states, key, post=post, calibration=calibration)
     if rec is not None:
         # the LLM judge's records apart from Decision's; a call over some of the kinds keeps the
         # earlier readings for the others, as the answers are kept (`store.save`), and returns them
-        lane = getattr(key, "lane", "decision")
+        lane = lane or getattr(key, "lane", "decision")
         rec.setdefault("hygiene", {})
-        rec["hygiene"] = store.save(ws_dir, job_id, trial_name, rec, lane=lane, started=started)["hygiene"]
+        rec["hygiene"] = store.save(base, job_id, trial_name, rec, lane=lane, started=started, old=old, job_dir=job_dir,
+                                     strict=strict)["hygiene"]
     return rec

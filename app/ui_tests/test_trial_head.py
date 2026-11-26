@@ -271,6 +271,7 @@ class JudgeTabNotes(unittest.TestCase):
         self.stack.enter_context(patch.dict(web.app.config, TESTING=True))
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
+        self.stack.enter_context(patch.object(store, "home", return_value=self.tmp.name + "/data"))
         self.job = write_job(self.tmp.name, "r-agent", "my-agent", {"failed": 0, "plain": 0})
         self.stack.enter_context(patch.object(web.shared, "_jobs_for_request", return_value=[self.job]))
         self.ws = workspace.create(self.tmp.name + "/home", [self.tmp.name], label="notes")

@@ -104,7 +104,7 @@ and Delete work only from a browser on the application host.
 | Proofs | Local runs save to the user catalogue. A host's proofs come back beside `jobs/`; the user catalogue is unchanged |
 | Docker or Podman | Must answer `ps`, or the run stops before it starts |
 | Stop | Ends the current part (exit 130), records `stopped`; the next part never starts |
-| Delete launch | Once every run of the launch has ended. Deletes each run's `<RUNS_DIR>/<name>/` (a shard per machine included), every job of the launch, their judgements in every workspace, and each run's copy on its host when ticked. A run still going is refused: stop it first. A launch with jobs from elsewhere has no Delete |
+| Delete launch | Once every run of the launch has ended. Deletes each run's `<RUNS_DIR>/<name>/` (a shard per machine included), every job of the launch, their judgements unless a copy of a job is found under another run or a workspace's root, or one of those roots cannot be read, and each run's copy on its host when ticked. A run still going is refused: stop it first. A launch with jobs from elsewhere has no Delete |
 | Restart of Nullius | Reattaches; the job goes back into the workspace it started in, under the name a rename gave it, while that workspace exists, without opening it. The workspace open before the restart opens again. One process follows a runs folder: a second `nullius serve` on it stops with a message |
 | Cannot run from the page | Generated tasks and custom agents are not supported by Run |
 | Refused | Reads *refused* on the runs page, with why; the job was never written |

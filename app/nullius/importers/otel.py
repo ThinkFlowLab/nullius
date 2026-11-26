@@ -232,14 +232,6 @@ def _write_job(documents: list, out_root: str, job_name: str, command: str,
     os.makedirs(job_dir, exist_ok=True)
     summaries = [write_trial(doc, job_dir, name) for doc, name in zip(documents, names)]
 
-    # Derived output this importer wholly owns: a trial the export no longer
-    # produces is stale and would keep being counted.
-    produced = {s["trial_dir"] for s in summaries}
-    for name in os.listdir(job_dir):
-        sub = os.path.join(job_dir, name)
-        if os.path.isdir(sub) and name not in produced:
-            shutil.rmtree(sub)
-
     starts = sorted(s["started_at"] for s in summaries if s["started_at"])
     ends = sorted(s["finished_at"] for s in summaries if s["finished_at"])
     _dump(os.path.join(job_dir, "result.json"), {
@@ -266,6 +258,14 @@ def _write_job(documents: list, out_root: str, job_name: str, command: str,
         "trial_documents": importers.reservations(job_dir, zip(names, ids), *existing),
         **importers.recorded_as(sid, root),
     })
+    # Derived output this importer wholly owns: a trial the export no longer
+    # produces is stale and would keep being counted. Pruned once
+    # config.json reserves its name: a refresh cut short before then keeps the folder.
+    produced = {s["trial_dir"] for s in summaries}
+    for name in os.listdir(job_dir):
+        sub = os.path.join(job_dir, name)
+        if os.path.isdir(sub) and name not in produced:
+            shutil.rmtree(sub)
     return job_dir
 
 
