@@ -69,6 +69,7 @@ def product(install: Path, *, port: int = 18092, project: Path | None = None, mc
             DIGITALMATE_WORKSWARM_COMMAND=json.dumps([str(runtime), "-m", "server_engine.workswarm_launcher"]),
             DIGITALMATE_SEARCH_PYTHON=sys.executable,
             DIGITALMATE_WORKSWARM_TOOL_PYTHON=str(runtime),
+            DIGITALMATE_IMAGE_MODEL=os.environ.get("MODEL_NAME") or "",
         )
         # Match the release's deploy/entrypoint.py defaults for its owned state.
         env.setdefault("DIGITALMATE_SECRET_STORE", "file")
@@ -132,7 +133,7 @@ def product(install: Path, *, port: int = 18092, project: Path | None = None, mc
 
 def run(install: Path, prompt: str) -> str:
     with product(install) as token:
-        return submit_task(prompt, token)
+        return submit_task(prompt, token, timeout=1800)
 
 
 def session(install: Path, port: int, *, project: Path | None = None, mcp_config: Path | None = None) -> None:
@@ -147,7 +148,8 @@ def session(install: Path, port: int, *, project: Path | None = None, mcp_config
             prompt = json.loads(line).get("prompt")
             if not isinstance(prompt, str):
                 raise ValueError("Session prompt must be text")
-            answer = submit_task(prompt, token, url=f"ws://127.0.0.1:{port}/digitalmate/ws",
+            answer = submit_task(prompt, token, timeout=1800,
+                                 url=f"ws://127.0.0.1:{port}/digitalmate/ws",
                                  conversation=conversation)
             print(json.dumps({"answer": answer}), flush=True)
 
