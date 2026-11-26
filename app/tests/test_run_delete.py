@@ -105,6 +105,35 @@ class RunDelete(unittest.TestCase):
         execution.delete(["r1"], self.home, self.root)
         self.assertEqual(store.job_dirs(self.data, [uid]), [])
 
+    def test_runs_of_one_launch_deleted_together_are_no_copy_of_each_other(self):
+        uid = self.judged(self.jobs, "job-a")
+        self.run_("r2")
+        execution.delete(["r1", "r2"], self.home, self.root)
+        self.assertEqual(store.job_dirs(self.data, [uid]), [])
+
+    def test_a_copy_is_told_from_its_files_not_from_a_cached_parse(self):
+        start = lambda d, at: _write_json(os.path.join(d, "result.json"), {"id": "j1", "started_at": at, "stats": {}})
+        start(os.path.join(self.jobs, "job-a"), "2026-09-04T00:00:00Z")
+        uid = self.judged(self.jobs, "job-a")
+        twin = os.path.join(self.tmp, "twin"); _job_dir(twin, "job-a"); start(os.path.join(twin, "job-a"), "2026-09-05T00:00:00Z")
+        d = workspace.create(self.home, [twin], label="d")
+        workspace.load_jobs(d, d.roots)                                              # cached as another job
+        res = os.path.join(twin, "job-a", "result.json"); st = os.stat(res)
+        start(os.path.join(twin, "job-a"), "2026-09-04T00:00:00Z")                    # now a copy: same size, same time
+        os.utime(res, ns=(st.st_atime_ns, st.st_mtime_ns))
+        self.assertEqual(self.uid("job-a", twin), uid)
+        execution.delete(["r1"], self.home, self.root)
+        self.assertTrue(store.job_dirs(self.data, [uid]))
+
+    def test_a_job_of_the_same_id_under_a_root_that_cannot_be_read_keeps_the_old_records(self):
+        twin = os.path.join(self.tmp, "twin"); _job_dir(twin, "job-a")
+        self.a.roots.append(twin); workspace.save(self.a); workspace.load_jobs(self.a, self.a.roots)
+        os.rename(twin, twin + ".unmounted")
+        workspace.load_jobs(self.a, [self.jobs])                                     # a page of the run's root alone
+        self.assertEqual(sorted(e.get("job_id") for e in workspace.job_index(self.a).values()), ["job-a", "job-a", "job-b"])
+        execution.delete(["r1"], self.home, self.root)
+        self.assertEqual(len(store.job_dirs(self.a.dir, ["job-a"])), 2)
+
     def test_a_job_of_the_same_id_in_another_root_keeps_its_judgements(self):
         twin = os.path.join(self.tmp, "twin"); _job_dir(twin, "job-a")
         self.a.roots.append(twin); workspace.save(self.a); workspace.load_jobs(self.a, self.a.roots)

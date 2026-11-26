@@ -1833,8 +1833,8 @@ def deletable(names: List[str], root: Optional[str] = None) -> None:
 def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, ends: dict, final: bool = False) -> dict:
     """What deleting the run *name* removes. Its judgements are counted, the
     older records its workspaces kept included, nothing written; *final* (the
-    delete itself) copies those older records in first and keeps the
-    judgements of a job a copy of which is found elsewhere (`_judged_elsewhere`)."""
+    delete itself) copies those older records in first. ``uids``: its jobs'
+    identities, whose judgements ``deletion`` keeps when a copy is found elsewhere."""
     path, rec = _deletable(name, root)
     plan = rec.get("plan") or {}
     # a run refused at the name check never made the host folder: one of that name there is not its own
@@ -1854,29 +1854,26 @@ def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, 
         judged = judgements.job_dirs(ws.dir, [i for i in ids if i.split("~")[0] not in others])
         held.append({"ws": ws, "roots": roots, "jobs": dirs, "judged": judged})
     uids = {parse.parse_job(d, trials=False).uid for d in parse.find_job_dirs([os.path.join(path, "jobs")])} - {""}
-    if final and judgements.job_dirs(judgements.home(), sorted(uids)):
-        uids -= _judged_elsewhere(home, path, uids)
-    return {"name": name, "dir": path, "bytes": size_of(path), "host": host, "workspaces": held,
+    return {"name": name, "dir": path, "bytes": size_of(path), "host": host, "workspaces": held, "uids": uids,
             "judged": judgements.job_dirs(judgements.home(), sorted(uids)),
             "judgements": judgements.records_of(judgements.home(), uids, olds)}
 
 
-def _judged_elsewhere(home: str, path: str, uids: set) -> set:
-    """Which of the jobs *uids* of the run folder *path* keep their
-    judgements when it goes: those with another folder of the same identity
-    outside it - a copy - under a root of any workspace or another run, and
-    all of them when one of those roots cannot be read, since who owns them
-    is then unknown."""
-    outside = lambda d: os.path.commonpath([os.path.realpath(d), path]) != path
-    kept = set()
+def _judged_elsewhere(home: str, paths: list, uids: set) -> set:
+    """Which of the jobs *uids* of the run folders *paths*, deleted together,
+    keep their judgements: those with another folder of the same identity
+    outside them - a copy - under a root of any workspace or another run, read
+    afresh, never from a cache; all of them when one of those roots cannot be
+    read, since who owns them is then unknown."""
+    outside = lambda d: all(os.path.commonpath([os.path.realpath(d), p]) != p for p in paths)
+    roots = []
     for ws in workspace.list_all(home):
-        roots = ws.job_roots or ws.roots
-        if not all(os.path.isdir(r) for r in roots):
+        if not all(os.path.isdir(r) for r in ws.job_roots or ws.roots):
             return set(uids)
-        kept |= {j.uid for j in workspace.load_jobs(ws, roots) if outside(j.dir)} & uids
-    others = [j for e in os.scandir(os.path.dirname(path))
-              if e.is_dir(follow_symlinks=False) and e.path != path and os.path.isdir(j := os.path.join(e.path, "jobs"))]
-    return kept | ({parse.parse_job(d, trials=False).uid for d in parse.find_job_dirs(others)} & uids)
+        roots += ws.job_roots or ws.roots
+    roots += [j for parent in {os.path.dirname(p) for p in paths} for e in os.scandir(parent)
+              if e.is_dir(follow_symlinks=False) and e.path not in paths and os.path.isdir(j := os.path.join(e.path, "jobs"))]
+    return {parse.parse_job(d, trials=False).uid for d in parse.find_job_dirs(roots) if outside(d)} & uids
 
 
 def deletion(names: List[str], home: str, root: Optional[str] = None, holding: Optional[Callable] = None,
@@ -1891,6 +1888,10 @@ def deletion(names: List[str], home: str, root: Optional[str] = None, holding: O
     holding = holding or (lambda path: workspace.holding(home, path))
     ends = run_ends()
     runs = [_run_deletion(n, home, root, holding, ends, final) for n in dict.fromkeys(names)]
+    if final and any(r["judged"] for r in runs):
+        kept = _judged_elsewhere(home, [r["dir"] for r in runs], set().union(*(r["uids"] for r in runs)))
+        for r in runs:
+            r["judged"] = judgements.job_dirs(judgements.home(), sorted(r["uids"] - kept))
     copies: Dict[str, int] = {}
     for r in runs:
         if r["host"]:
@@ -1918,10 +1919,9 @@ def delete(names: List[str], home: str, root: Optional[str] = None, copies=(), r
         for key in [k for k, e in EXECUTIONS.items() if os.path.realpath(e.dir) == r["dir"]]:
             del EXECUTIONS[key]
         for d in r["judged"]:
-            shutil.rmtree(d, ignore_errors=True)
+            judgements.remove(d)
         for w in r["workspaces"]:
-            for d in w["judged"]:
-                shutil.rmtree(d, ignore_errors=True)
+            judgements.forget(w["ws"].dir, w["judged"])
             # read again: another run of the launch may have left this workspace already
             ws = workspace.load(home, w["ws"].name)
             if ws is not None:

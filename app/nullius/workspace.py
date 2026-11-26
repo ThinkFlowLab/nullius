@@ -640,7 +640,8 @@ def load_jobs(ws: Workspace, roots, runs: dict | None = None) -> list:
         jobs = [load_job(ws, d, index, runs)[0] for d in dirs]
     # a job folder gone from disk, or no longer found under these roots, leaves the index
     found = set(dirs)
-    gone = [d for d in index if d not in found and (_under(d, roots) or not os.path.isdir(d))]
+    # one under a root that cannot be read (unmounted) stays: whether it is gone is unknown
+    gone = [d for d in index if d not in found and (_under(d, roots) or not os.path.isdir(d) and os.path.isdir(os.path.dirname(d)))]
     if gone:
         keep = {_cache_file(ws, d) for d in dirs}      # the same folder found by another path
         for d in gone:
