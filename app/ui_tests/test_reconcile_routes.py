@@ -122,6 +122,9 @@ class ReconcilePage(unittest.TestCase):
         self.assertEqual(len(self.rows(html, "reconcile-gated-rows")), 4)
         html = self.get("/job/r-agent/reconcile?threshold=nonsense")
         self.assertIn('value="0.50"', html); self.assertNotIn("default 0.50", html)
+        with patch.object(web.shared, "WS_HOME", self.tmp.name + "/home"):               # another workspace's record: Apply stays in it
+            html = self.get(f"/job/r-agent/reconcile?workspace={self.ws.name}")
+        self.assertIn(f'name="workspace" value="{self.ws.name}"', re.search(r'<form[^>]*id="reconcile-threshold".*?</form>', html, re.S).group(0))
 
     def test_a_control_run_does_not_apply_and_an_unknown_job_is_404(self):
         html = self.get("/job/r-nop/reconcile")

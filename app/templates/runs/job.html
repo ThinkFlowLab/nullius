@@ -248,13 +248,13 @@
     <div class="lab">Outcomes</div>
     <div class="slot">
       <div class="mix run-mix" role="group" aria-label="Outcome mix: each segment filters the trials">
-        {% for k in ORDER %}{% if oc[k] %}<a class="mseg fx hl oc-{{ k }}" style="flex:{{ oc[k] }}" data-o="{{ k }}" href="?outcome={{ k }}" tabindex="-1"
+        {% for k in ORDER %}{% if oc[k] %}<a class="mseg fx hl oc-{{ k }}" style="flex:{{ oc[k] }}" data-o="{{ k }}" href="{{ url_for('job', job_id=job.job_id, outcome=k) }}" tabindex="-1"
           aria-label="{{ LABELS[k] }}: {{ oc[k] }}" data-tip="{{ LABELS[k] }}: {{ oc[k] }}"></a>{% endif %}{% endfor %}
       </div>
     </div>
     <div class="run-outcome-filters" role="group" aria-label="Filter trials by outcome">
     {% for k in ORDER %}{% if oc[k] %}{% set h = 45 + 30 * ((nlines.get(k) or 1) - 1) %}
-      <a class="row lg fx hl oc-{{ k }}" data-o="{{ k }}" href="?outcome={{ k }}"{% if h != 45 %} style="height:{{ h }}px"{% endif %}
+      <a class="row lg fx hl oc-{{ k }}" data-o="{{ k }}" href="{{ url_for('job', job_id=job.job_id, outcome=k) }}"{% if h != 45 %} style="height:{{ h }}px"{% endif %}
          data-tip="{{ DESCRIPTIONS[k] }}"><i class="sw"></i><b>{{ oc[k] }}</b><span>{{ LABELS[k] }}{% if k in INFRA %}<span class="infra">infra</span>{% endif %}</span></a>
     {% endif %}{% endfor %}
     </div>
@@ -290,7 +290,7 @@
           {% set side = 'a' if g.lane == 'agree' else 'd' %}
           {% set tip = g.n ~ ' ' ~ r.label ~ ' read as ' ~ g.cause ~ ' · ' ~ g.status_label ~ '. Filters to ' ~ ('that trial.' if g.n == 1 else 'those trials.') %}
           <div class="ll hl" data-o="{{ r.outcome }}" data-c="{{ g.cause }}" data-s="{{ g.status }}"><span class="cx {{ side }}{{ ' jog' if side == 'd' }}" aria-hidden="true"></span><a
-            class="cn {{ side }} fx hl" href="?outcome={{ r.outcome }}&amp;cause={{ g.cause }}&amp;status={{ g.status }}" data-o="{{ r.outcome }}" data-c="{{ g.cause }}" data-s="{{ g.status }}"
+            class="cn {{ side }} fx hl" href="{{ url_for('job', job_id=job.job_id, outcome=r.outcome, cause=g.cause, status=g.status) }}" data-o="{{ r.outcome }}" data-c="{{ g.cause }}" data-s="{{ g.status }}"
             data-sl="{{ g.status_label }}" aria-label="{{ tip }}" data-tip="{{ tip }}"><i class="rg" aria-hidden="true"></i><span>{{ g.cause }}</span><b>{{ g.n }}</b></a></div>
           {% endif %}
           {% endfor %}
@@ -309,7 +309,7 @@
         {% set never = judgement.flag_ids|reject('in', judgement.flags|map('first')|list)|list %}
         <div class="slot"><span>Flags raised</span><span class="end"{% if never %} data-tip="Never raised: {{ never|join(', ') }}"{% endif %}>of {{ judgement.judged }} judged</span></div>
         {% for f, n in judgement.flags %}{% set num = judgement.flag_ids.index(f) + 1 %}
-        <a class="fr fx hl" data-f="{{ f }}" href="?flag={{ f }}" data-tip="{{ num }} · {{ f }}: raised on {{ n }} of {{ judgement.judged }} judged trials. Filters to them.">
+        <a class="fr fx hl" data-f="{{ f }}" href="{{ url_for('job', job_id=job.job_id, flag=f) }}" data-tip="{{ num }} · {{ f }}: raised on {{ n }} of {{ judgement.judged }} judged trials. Filters to them.">
           <span class="pip on key-n" data-n="{{ num }}" aria-hidden="true"></span><span class="fn">{{ f }}</span><span class="fb"><i style="width:{{ (100 * n / judgement.judged)|round(1) }}%"></i></span><span class="fc">{{ n }}</span></a>
         {% endfor %}
       </div>
@@ -363,18 +363,18 @@
     <h2 id="trials-heading" tabindex="-1">Trials</h2><span class="cnt" id="trial-count">{{ job.trials|length }}</span>
     <div class="facet" data-k="o"><details><summary class="fsum"><span class="k">Outcome</span><span class="v">All</span><span class="car">▾</span></summary>
       <div class="fmenu">
-        {% for k in ORDER %}{% if oc[k] %}<a class="fx" data-o="{{ k }}" href="?outcome={{ k }}"><i class="sw oc-{{ k }}"></i><span>{{ LABELS[k] }}</span><b>{{ oc[k] }}</b></a>{% endif %}{% endfor %}
+        {% for k in ORDER %}{% if oc[k] %}<a class="fx" data-o="{{ k }}" href="{{ url_for('job', job_id=job.job_id, outcome=k) }}"><i class="sw oc-{{ k }}"></i><span>{{ LABELS[k] }}</span><b>{{ oc[k] }}</b></a>{% endif %}{% endfor %}
       </div></details><button class="x plain" type="button" hidden aria-label="Remove the outcome filter"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     {% if judgement and judgement.causes %}
     <div class="facet j" data-k="c"><details><summary class="fsum"><span class="k">Judge cause</span><span class="v">All</span><span class="car">▾</span></summary>
       <div class="fmenu" id="judge-filters">
-        {% for cause, n in judgement.causes %}<a class="fx" data-c="{{ cause }}" href="?cause={{ cause }}"><span class="mono">{{ cause }}</span><b>{{ n }}</b></a>{% endfor %}
+        {% for cause, n in judgement.causes %}<a class="fx" data-c="{{ cause }}" href="{{ url_for('job', job_id=job.job_id, cause=cause) }}"><span class="mono">{{ cause }}</span><b>{{ n }}</b></a>{% endfor %}
       </div></details><button class="x plain" type="button" hidden aria-label="Remove the judge cause filter"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     {% endif %}
     {% if judgement and judgement.flags %}
     <div class="facet j" data-k="f"><details><summary class="fsum"><span class="k">Flag</span><span class="v">All</span><span class="car">▾</span></summary>
       <div class="fmenu">
-        {% for f, n in judgement.flags %}<a class="fx" data-f="{{ f }}" href="?flag={{ f }}"><span class="pip on key-n" data-n="{{ judgement.flag_ids.index(f) + 1 }}" aria-hidden="true"></span><span class="mono">{{ f }}</span><b>{{ n }}</b></a>{% endfor %}
+        {% for f, n in judgement.flags %}<a class="fx" data-f="{{ f }}" href="{{ url_for('job', job_id=job.job_id, flag=f) }}"><span class="pip on key-n" data-n="{{ judgement.flag_ids.index(f) + 1 }}" aria-hidden="true"></span><span class="mono">{{ f }}</span><b>{{ n }}</b></a>{% endfor %}
       </div></details><button class="x plain" type="button" hidden aria-label="Remove the flag filter"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     {% endif %}
     <button class="fclear plain" id="clear-filters" type="button" hidden>Show all {{ job.trials|length }}</button>
@@ -417,8 +417,8 @@
         {% if show_ins %}<th scope="col" class="num"><span data-tip="A judge model's score of the task's instruction text alone: about the task, not this trial">Instruction</span></th>{% endif %}
         {% if vocab.gained %}<th scope="col" class="num" title="{% if vocab.gained_term %}{{ vocab.gained_term }} {% endif %}pass / fail">{{ vocab.gained_abbr or vocab.gained }}</th>{% endif %}
         {% if vocab.held %}<th scope="col" class="num" title="{% if vocab.held_term %}{{ vocab.held_term }} {% endif %}pass / fail">{{ vocab.held_abbr or vocab.held }}</th>{% endif %}
-        <th scope="col" class="num"><a class="sort" href="?sort=tokens" data-sort="tokens" data-tip="Recorded input + output tokens; cached input is already included. Sorts.">Tokens</a></th>
-        <th scope="col" class="num"><a class="sort" href="?sort=total" data-sort="total" data-tip="Recorded start-to-finish trial duration, including setup and overhead. Sorts.">Total</a></th>
+        <th scope="col" class="num"><a class="sort" href="{{ url_for('job', job_id=job.job_id, sort='tokens') }}" data-sort="tokens" data-tip="Recorded input + output tokens; cached input is already included. Sorts.">Tokens</a></th>
+        <th scope="col" class="num"><a class="sort" href="{{ url_for('job', job_id=job.job_id, sort='total') }}" data-sort="total" data-tip="Recorded start-to-finish trial duration, including setup and overhead. Sorts.">Total</a></th>
         <th scope="col" class="num"><span data-tip="The environment's setup, before the agent starts">Env</span></th>
         <th scope="col" class="num"><span data-tip="The agent's own run">Agent</span></th>
         <th scope="col" class="num"><span data-tip="The verifier; — when it did not run">Verify</span></th>
