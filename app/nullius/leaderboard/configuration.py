@@ -19,25 +19,49 @@ OVERALL = (.12, .12, .08, .15, .15, .10, .08, .20, 0, 0, 0, 0, 0, 0, 0)
 # datasets is shared out among them.
 DIRECT, PARTIAL = 1, .5
 TAU = ("airline", "retail", "telecom", "banking_knowledge")
+VITA = ("cross", "delivery", "instore", "ota")
+CLAW = ("general", "multimodal", "multi_turn")
 DEFAULT_ENTRIES = {
     "Safety": [("tau3-bench", "retail", "Score", DIRECT), ("tau3-bench", "airline", "Score", PARTIAL),
                ("tau3-bench", "banking_knowledge", "Score", PARTIAL), ("osworld1", "test_infeasible", "Score", PARTIAL),
-               ("osworld2", "test_v2", "Score", PARTIAL)],
-    "Consistency": [("tau3-bench", d, "pass^3", PARTIAL / len(TAU)) for d in TAU],
+               ("osworld2", "test_v2", "Score", PARTIAL)]
+              + [("claw-eval", d, "Score", DIRECT / len(CLAW)) for d in CLAW],
+    "Consistency": [("tau3-bench", d, "pass^3", PARTIAL / len(TAU)) for d in TAU]
+                   + [("vitabench", d, "pass^3", PARTIAL / len(VITA)) for d in VITA]
+                   + [("claw-eval", d, "pass^3", PARTIAL / len(CLAW)) for d in CLAW],
+    "Personalization": [("mypcbench", "final", "Score", DIRECT)]
+                       + [("vitabench", d, "Score", PARTIAL / len(VITA)) for d in VITA],
     "Retrieval": [("gaia", "gaia-validation", "Score", DIRECT), ("tau3-bench", "banking_knowledge", "Score", DIRECT),
-                  ("osworld2", "test_v2", "Score", PARTIAL)],
-    "Communication": [("tau3-bench", d, "Score", DIRECT / len(TAU)) for d in TAU],
+                  ("osworld2", "test_v2", "Score", PARTIAL), ("mypcbench", "final", "Score", DIRECT),
+                  ("claw-eval", "general", "Score", PARTIAL / 2), ("claw-eval", "multimodal", "Score", PARTIAL / 2),
+                  ("medagentbench", "v2", "Score", PARTIAL), ("healthagentbench", "full", "Score", PARTIAL)],
+    "Communication": [("tau3-bench", d, "Score", DIRECT / len(TAU)) for d in TAU]
+                     + [("vitabench", d, "Score", DIRECT / len(VITA)) for d in VITA]
+                     + [("claw-eval", "multi_turn", "Score", DIRECT), ("mypcbench", "final", "Score", PARTIAL)],
     "Execution": [("osworld1", "test_nogdrive", "Score", DIRECT), ("osworld2", "test_v2", "Score", DIRECT),
                   ("swe-bench-verified", "verified", "Score", DIRECT), ("terminal-bench", "full", "Score", DIRECT),
                   ("gaia", "gaia-validation", "Score", PARTIAL), ("gsm8k", "test", "Score", PARTIAL),
-                  ("humaneval", "humaneval", "Score", PARTIAL)]
-                 + [("tau3-bench", d, "Score", DIRECT / len(TAU)) for d in TAU],
-    "Travel": [("tau3-bench", "airline", "Score", DIRECT)],
-    "Shopping": [("tau3-bench", "retail", "Score", DIRECT)],
-    "Money": [("tau3-bench", "banking_knowledge", "Score", DIRECT), ("osworld2", "websites35", "Score", PARTIAL)],
+                  ("humaneval", "humaneval", "Score", PARTIAL), ("mypcbench", "final", "Score", DIRECT),
+                  ("costbench", "test", "Score", DIRECT), ("clawmark", "all", "Score", DIRECT),
+                  ("medagentbench", "v2", "Score", DIRECT), ("healthagentbench", "full", "Score", DIRECT)]
+                 + [("tau3-bench", d, "Score", DIRECT / len(TAU)) for d in TAU]
+                 + [("vitabench", d, "Score", DIRECT / len(VITA)) for d in VITA]
+                 + [("claw-eval", d, "Score", DIRECT / len(CLAW)) for d in CLAW],
+    "Travel": [("tau3-bench", "airline", "Score", DIRECT), ("vitabench", "ota", "Score", DIRECT),
+               ("vitabench", "cross", "Score", PARTIAL), ("costbench", "test", "Score", DIRECT)],
+    "Dining": [("vitabench", "delivery", "Score", DIRECT / 2), ("vitabench", "instore", "Score", DIRECT / 2),
+               ("vitabench", "cross", "Score", PARTIAL)],
+    "Shopping": [("tau3-bench", "retail", "Score", DIRECT), ("vitabench", "instore", "Score", PARTIAL),
+                 ("clawmark", "ecommerce", "Score", PARTIAL)],
+    "Money": [("tau3-bench", "banking_knowledge", "Score", DIRECT), ("osworld2", "websites35", "Score", PARTIAL),
+              ("clawmark", "insurance", "Score", PARTIAL / 2), ("clawmark", "investment_analyst", "Score", PARTIAL / 2)],
+    "Health": [("medagentbench", "v2", "Score", DIRECT), ("healthagentbench", "full", "Score", DIRECT),
+               ("clawmark", "clinical_assistant", "Score", PARTIAL)],
     "Work": [("swe-bench-verified", "verified", "Score", DIRECT), ("terminal-bench", "full", "Score", DIRECT),
              ("osworld2", "test_v2", "Score", DIRECT), ("osworld1", "test_nogdrive", "Score", PARTIAL),
-             ("humaneval", "humaneval", "Score", PARTIAL), ("open-telco", "teleqna-lite", "Score", PARTIAL)],
+             ("humaneval", "humaneval", "Score", PARTIAL), ("open-telco", "teleqna-lite", "Score", PARTIAL),
+             ("clawmark", "all", "Score", DIRECT), ("mypcbench", "final", "Score", PARTIAL),
+             ("claw-eval", "general", "Score", PARTIAL)],
 }
 
 
