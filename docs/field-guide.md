@@ -318,7 +318,8 @@ count (one when absent). Distinct task scores are then averaged. Infrastructure
 outcomes are excluded; missing measurements stay absent. Scores outside the
 supported 0–1 scale are unavailable. Raw job metrics are unchanged. pass^3 uses
 recorded attempts in one selected run and the existing eligible-unit semantics;
-independent one-attempt runs cannot supply it.
+independent one-attempt runs cannot supply it. A pass^3 entry selects first among
+the runs that recorded three attempts per task, whatever they scored.
 
 Each axis normalizes positive entry weights over available scores. Each family
 (capabilities, domains) has its own Overall: positive axis weights normalized over

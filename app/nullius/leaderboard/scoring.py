@@ -94,7 +94,12 @@ join several datasets; they cannot infer overlap from short task names.
     pool = [j for j in pool if j.job_id not in sources]
     selected = {}
     precedence = lambda j: _precedence(j, scope[j.dataset])
-    for j in sorted(pool, key=precedence):
+    order = precedence
+    if metric == "pass^3":
+        # a run that recorded one attempt per task cannot supply pass^3: one that can comes first, whatever it scored
+        supplies = lambda j: ((attempts.for_tasks(_groups(j, scope[j.dataset]).values()) or {}).get("hat") or {}).get(3) is not None
+        order = lambda j: (not supplies(j),) + precedence(j)
+    for j in sorted(pool, key=order):
         selected.setdefault(j.dataset, j)
     ids = tuple(j.job_id for j in selected.values())
     if not selected:

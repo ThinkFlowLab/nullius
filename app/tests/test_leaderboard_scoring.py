@@ -121,6 +121,17 @@ class Contributions(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.contribution([task], metric=metric)
 
+    def test_c4_pass_cubed_reads_a_run_that_can_supply_it_before_a_newer_single_attempt_run(self):
+        thrice = run("thrice", [])
+        thrice.trials = [trial(str(task), trial_name=f"{task}-{attempt}") for task in range(2) for attempt in range(3)]
+        once = replace(run("once", ["resolved", "agent_error"]), finished_at=thrice.finished_at + timedelta(hours=1))
+        got = self.contribution([thrice, once], metric="pass^3")
+        self.assertEqual((got.score, got.run_ids), (1, ("thrice",)))
+        self.assertEqual(self.contribution([thrice, once]).run_ids, ("once",))          # Score still reads the newest run
+        # with no run that can supply it, the usual run is named with why
+        got = self.contribution([once], metric="pass^3")
+        self.assertEqual((got.score, got.run_ids, got.reason), (None, ("once",), "Three recorded attempts per eligible task required"))
+
     def test_c1_c4_only_completed_matching_version_contributes(self):
         good = run("good", ["resolved", "agent_error"])
         for bad in (replace(good, preparing=True), replace(good, n_running_trials=1),
