@@ -320,19 +320,20 @@ supported 0–1 scale are unavailable. Raw job metrics are unchanged. pass^3 use
 recorded attempts in one selected run and the existing eligible-unit semantics;
 independent one-attempt runs cannot supply it.
 
-Each axis normalizes positive entry weights over available scores. Overall
-normalizes positive axis weights over measured axes. Missing values are never
+Each axis normalizes positive entry weights over available scores. Each family
+(capabilities, domains) has its own Overall: positive axis weights normalized over
+its measured axes. The Leaderboard ranks by the family it shows. Missing values are never
 zero. Evidence gives effective shares, configured weights, benchmark versions,
 task coverage and links to each selected run. An all-zero entry column is
 unavailable. All-zero Overall weights are invalid.
 
 Every row with an Overall is ranked by it; exact ties share competition rank.
 Incomplete or unknown coverage of the required verified entries across counted
-axes, positive-weight domains included, is listed beside the rank as a note.
+axes is listed beside the rank as a note.
 Removed entries and zero weights add no note.
 
 Average uses available row scores and reports the count. A row comparison uses
-shared measured capabilities for best and weakest differences in percentage
+the shown family's shared measured axes for best and weakest differences in percentage
 points. Benchmark-version comparisons are temporary: settings and ranks do not
 change. Missing evidence for a replacement version leaves affected axes and
 Overall differences absent, rather than renormalizing a partial comparison.

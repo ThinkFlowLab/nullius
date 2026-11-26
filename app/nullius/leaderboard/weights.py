@@ -15,16 +15,24 @@ def percent(value):
     return f"{100 * value:.1f}".rstrip("0").rstrip(".") + "%" if value is not None else "—"
 
 
+def competition(rows, value):
+    """Competition ranks (1, 1, 3) by a value from full precision; a row without one has no rank."""
+    eligible = sorted((r for r in rows if value(r) is not None), key=lambda r: (-value(r), r["name"], r["key"]))
+    ranks, previous, assigned = {}, None, None
+    for i, row in enumerate(eligible, 1):
+        if value(row) != previous:
+            assigned = i
+        ranks[row["key"]], previous = assigned, value(row)
+    return ranks
+
+
 def rank(rows, sort="overall", descending=True):
     """Rank every row with an Overall from full precision; incomplete coverage stays a note, never a gate."""
     rows = [dict(row, rank=None) for row in rows]
-    eligible = sorted((r for r in rows if r["overall"] is not None),
-                      key=lambda r: (-r["overall"], r["name"], r["key"]))
-    previous, assigned = None, None
-    for i, row in enumerate(eligible, 1):
-        if row["overall"] != previous:
-            assigned = i
-        row["rank"], previous = assigned, row["overall"]
+    ranks = competition(rows, lambda r: r["overall"])
+    for row in rows:
+        row["rank"] = ranks.get(row["key"])
+    eligible = [r for r in rows if r["overall"] is not None]
     groups = [eligible, [r for r in rows if r["overall"] is None]]
     result = []
     for group in groups:

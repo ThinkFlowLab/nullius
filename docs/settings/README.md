@@ -142,9 +142,9 @@ each with an overview of every benchmark's share. Read-only clients can inspect 
 Each entry chooses a benchmark, dataset or declared task-name part, pinned version, supported metric and
 independent weight in that axis. Score is always offered; pass^3 is offered for
 pass/fail benchmarks. Zero weight disables an entry without removing it.
-Overall weighs the capabilities; an empty one weighs 0. Domains re-slice the same
-runs and carry no Overall weight. The Leaderboard evidence shows effective shares
-among the sources actually measured for that row.
+Each family has its own Overall: the Capabilities view ranks by the capabilities'
+weights, the Domains view by the domains'. An empty axis weighs 0. The Leaderboard
+evidence shows effective shares among the sources actually measured for that row.
 
 Valid complete documents autosave, followed by **Scoring saved**. There is no
 Save button. Invalid inputs stay in the draft and do not change active scoring.

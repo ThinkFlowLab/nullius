@@ -28,8 +28,12 @@ def project(jobs, agents, benchmarks, settings, benchmark, version):
                 axis["score"] = None
                 axis["share"] = 0
                 if axis["weight"] > 0:
-                    row["overall"] = None
+                    family = "capabilities" if name in configuration.CAPABILITIES else "domains"
+                    row["families"][family]["overall"] = None
+        row["overall"] = row["families"]["capabilities"]["overall"]
         row["rank"] = None
+        for family in row["families"].values():
+            family["rank"] = None
     return result
 
 
@@ -122,9 +126,14 @@ def build(jobs, agents, benchmarks, settings, *, workspace_open=True, metric_sou
             for evidence, share in zip(entries, shares):
                 evidence["share"] = share
             row["axes"][name] = {"score": score, "weight": axis["weight"], "share": 0, "entries": entries}
-        row["overall"], shares = weights.combine((a["score"], a["weight"]) for a in row["axes"].values())
-        for axis, share in zip(row["axes"].values(), shares):
-            axis["share"] = share
+        # each family has its own Overall; an axis's share is its share of its family's
+        row["families"] = {}
+        for family, names in configuration.FAMILIES.items():
+            overall, shares = weights.combine((row["axes"][n]["score"], row["axes"][n]["weight"]) for n in names)
+            for n, share in zip(names, shares):
+                row["axes"][n]["share"] = share
+            row["families"][family] = {"overall": overall, "rank": None}
+        row["overall"] = row["families"]["capabilities"]["overall"]
         for metric, field in (("time", "dur_agent"), ("cost", "cost_usd")):
             values = [getattr(t, field) for t in trials.values() if getattr(t, field) is not None and isfinite(getattr(t, field)) and getattr(t, field) >= 0]
             row["metrics"][metric] = {"value": sum(values) / len(values) if values else None, "count": len(values)}
@@ -151,6 +160,10 @@ def build(jobs, agents, benchmarks, settings, *, workspace_open=True, metric_sou
             if present < len(needed):
                 row["reasons"].append(f"{present} of {len(needed)} {family}")
     rows = weights.rank(rows)
+    for family in configuration.FAMILIES:
+        ranks = weights.competition(rows, lambda r: r["families"][family]["overall"])
+        for row in rows:
+            row["families"][family]["rank"] = ranks.get(row["key"])
     averages = {}
     for name in configuration.AXES:
         values = [r["axes"][name]["score"] for r in rows if r["axes"][name]["score"] is not None]

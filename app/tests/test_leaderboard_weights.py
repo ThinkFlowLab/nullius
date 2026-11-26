@@ -50,7 +50,7 @@ class ConfigurationExamples(unittest.TestCase):
         # only GAIA is in this catalogue: the capabilities without a benchmark weigh nothing
         self.assertEqual([axes[k]["weight"] for k in configuration.CAPABILITIES], [0, 0, 0, 0, 0, .10, 0, .20])
         self.assertEqual(configuration.defaults([])["axes"]["Memory"]["weight"], .12)
-        self.assertTrue(all(axes[k]["weight"] == 0 for k in configuration.DOMAINS))
+        self.assertEqual({axes[k]["weight"] for k in configuration.DOMAINS}, {.14})   # no domain has a benchmark here: equal weights stay
         self.assertEqual([(e["dataset"], e["version"], e["weight"]) for e in axes["Retrieval"]["entries"]], [("gaia-validation", "v1", 1)])
         self.assertEqual([(e["dataset"], e["weight"]) for e in axes["Execution"]["entries"]], [("gaia-validation", .5)])
         self.assertFalse(any(e["benchmark"] != "gaia" for a in axes.values() for e in a["entries"]))
@@ -92,8 +92,10 @@ class ConfigurationExamples(unittest.TestCase):
                 configuration.save(self.path, self.defaults, self.benchmarks)
         self.assertEqual(self.path.read_bytes(), before)
 
-    def test_c20_a_file_saved_with_custom_benchmarks_loads_without_them(self):
-        doc = copy.deepcopy(self.defaults)
+    def test_c20_a_schema_1_file_loads_without_custom_benchmarks_and_with_domain_weights(self):
+        doc = copy.deepcopy(self.defaults) | {"schema": 1}
+        for name in configuration.DOMAINS:
+            doc["axes"][name]["weight"] = 0                              # domains weighed nothing before schema 2
         doc["custom"] = [{"id": "calendar", "name": "Family calendar test", "scores": {"A": 72}}]
         doc["axes"]["Retrieval"]["entries"].append({"custom": "calendar", "weight": 1})
         self.path.write_text(json.dumps(doc))
@@ -101,6 +103,12 @@ class ConfigurationExamples(unittest.TestCase):
         self.assertEqual((loaded, warning), (self.defaults, ""))       # the GAIA row is kept, the custom one dropped
         with self.assertRaises(ValueError):                             # and a write never takes them back
             configuration.validate(doc, self.benchmarks)
+        doc["schema"] = 2
+        doc.pop("custom")
+        doc["axes"]["Retrieval"]["entries"].pop()
+        self.path.write_text(json.dumps(doc))
+        loaded, _ = configuration.load(self.path, self.benchmarks)
+        self.assertEqual({loaded["axes"][n]["weight"] for n in configuration.DOMAINS}, {0})   # a schema 2 zero is the user's
 
 
 if __name__ == "__main__":

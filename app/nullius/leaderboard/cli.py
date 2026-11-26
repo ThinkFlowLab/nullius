@@ -29,6 +29,8 @@ def main(argv=None):
             print(result["empty"])
         for row in result["rows"]:
             print(f"{row['rank'] or ''}\t{row['name']}\t{row['company']}\t{row['version_label']}\t{weights.percent(row['overall'])}")
+            domains = row["families"]["domains"]
+            print(f"  Domains overall: {weights.percent(domains['overall'])}" + (f" · rank {domains['rank']}" if domains["rank"] else ""))
             setup = " · ".join(str(row["identity"][key]) for key in ("model", "effort") if row["identity"].get(key))
             if setup:
                 print(f"  {setup}")

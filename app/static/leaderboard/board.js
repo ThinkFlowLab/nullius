@@ -32,15 +32,15 @@
     const shareOf=v=>v==null?'–':v.toFixed(2), adds=(score,share)=>score==null||!share?'–':(score*share*100).toFixed(1);
     const scoreCell=(score,reason)=>{const td=element('td',null,{class:'lb-ev-score'}),box=element('span',null,{class:'lb-ev-scorebox'});td.append(box);if(score==null){box.append(element('span',reason||'not run',{class:'muted'}));return td;}const bar=element('span',null,{class:'lb-ev-bar'}),fill=element('i');fill.style.width=`${score*100}%`;bar.append(fill);box.append(bar,element('span',whole(score),{class:'lb-ev-pct'}));return td;};
     const table=element('table',null,{class:'lb-ev-table'}), head=element('tr'), body=element('tbody');
-    [axisName==='Overall'?'Capability':'Benchmark · dataset','Weight','Score','Adds'].forEach(t=>head.append(element('th',t)));
+    [axisName==='Overall'?(family==='domains'?'Domain':'Capability'):'Benchmark · dataset','Weight','Score','Adds'].forEach(t=>head.append(element('th',t)));
     const thead=element('thead');thead.append(head);table.append(thead,body);
     const line=(label,sub,share,score,reason)=>{const tr=element('tr'),name=element('td');name.append(...label);if(sub.length){const small=element('small');small.append(...sub);name.append(small);}tr.append(name,element('td',shareOf(share),{class:'lb-ev-num'}),scoreCell(score,reason),element('td',adds(score,share),{class:'lb-ev-num'}));body.append(tr);};
     const total=(label,score,share)=>{const foot=element('tfoot'),tr=element('tr');tr.append(element('td',label),element('td',shareOf(share),{class:'lb-ev-num'}),element('td',score==null?'–':percent(score),{class:'lb-ev-num'}),element('td'));foot.append(tr);table.append(foot);};
     const field=axisName==='Overall'?null:fieldAverage(axisName);
     pop.replaceChildren(element('strong', `${axisName} · ${current.name}`));
     if (axisName === 'Overall') {
-      pop.append(element('p','Overall is the weighted mean of the capabilities measured'));
-      const parts=data.axes.map(name=>[name,current.axes[name]]).filter(([,a]) => a.weight > 0);
+      pop.append(element('p',`Overall is the weighted mean of the ${family} measured`));
+      const parts=data[family].map(name=>[name,current.axes[name]]).filter(([,a]) => a.weight > 0);
       parts.forEach(([name,a]) => line([name],[],a.share,a.score,'not measured'));
       total('Overall',current.overall,parts.reduce((n,[,a])=>n+(a.share||0),0));
     } else {
@@ -383,7 +383,7 @@
     const figure=element('div',null,{class:'lb-figure'});figure.append(element('span',current.overall==null?'–':`${(current.overall*100).toFixed(1)}%`,{class:'lb-fig'}),element('span',shownRank(current)?`rank ${shownRank(current)} of ${ranked}`:'not ranked',{class:'muted'}));
     const bar=element('span',null,{class:'lb-bar lb-bar-wide'}),fill=element('i');fill.style.width=`${(current.overall||0)*100}%`;bar.append(fill);
     const against=comparedName()||'the field';
-    const differences=data.capabilities.map(name=>({name,d:current.axes[name].score!=null&&compared(name)!=null?current.axes[name].score-compared(name):null})).filter(v=>v.d!=null).sort((a,b)=>b.d-a.d);
+    const differences=data[family].map(name=>({name,d:current.axes[name].score!=null&&compared(name)!=null?current.axes[name].score-compared(name):null})).filter(v=>v.d!=null).sort((a,b)=>b.d-a.d);
     const baseline=versus==='average'?null:versus.startsWith('version:')?projection?.rows.find(r=>r.key===selected)?.overall:row(versus)?.overall;
     const lines=[];
     /* a difference reads green above the reference and red below it */
@@ -405,11 +405,12 @@
     if(b.dataset.family===family)return; family=b.dataset.family;
     document.querySelectorAll('[data-family]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.family===family)));
     clearTimeout(swapping);
-    if(motion.reduced.matches){applyFamily();return;}
+    useFamily();
+    if(motion.reduced.matches){updateTable();draw();return;}
     table.classList.add('lb-swap');
     /* the columns that come in take their widths at once, behind the faded contents: widths easing while the table's
        own width has already changed would hand the difference to Agent and Overall */
-    swapping=setTimeout(()=>{table.classList.add('lb-instant');applyFamily();table.offsetWidth;table.classList.remove('lb-instant','lb-swap');},150);
+    swapping=setTimeout(()=>{table.classList.add('lb-instant');updateTable();table.offsetWidth;table.classList.remove('lb-instant','lb-swap');draw();},150);
   });
   document.querySelectorAll('[data-agent-select]').forEach(s=>s.onchange=()=>choose(s.value));
   async function compareChoice() { const turn=++comparisonGeneration;projection=null;if(versus.startsWith('version:')) {const [benchmark,version]=JSON.parse(versus.slice(8));const response=await nulliusFetch('/api/leaderboard/comparison?'+new URLSearchParams({benchmark,version}));if(response.ok){const result=await response.json();if(turn!==comparisonGeneration)return;projection=result;}}draw();}
@@ -417,7 +418,9 @@
   document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{metric=b.dataset.metric;press('lb-metric','data-metric',metric);drawScatter();});
   async function deferred(turn) { const response=await nulliusFetch(`/api/leaderboard/metrics?context=${encodeURIComponent(data.context)}`);if(!response.ok)return;const result=await response.json();if(turn!==generation||result.context!==data.context)return;result.rows.forEach(r=>{const existing=row(r.key);if(existing)existing.metrics=r.metrics;});updateTable();card();drawScatter(); }
   async function fetchBoard(){const turn=++generation;const response=await nulliusFetch('/api/leaderboard');if(!response.ok)return null;const next=await response.json();return turn===generation?{next,turn}:null;}
-  function apply({next,turn}){if(turn!==generation)return;const kept=new Map(data.rows.map(r=>[r.key,r.metrics]));next.rows.forEach(r=>{const m=kept.get(r.key);if(!m)return;r.metrics={...m,...Object.fromEntries(Object.entries(r.metrics||{}).filter(([,v])=>v?.value!=null))};});data=next;if(!row(selected))selected=data.selected;updateTable();compareChoice().catch(()=>{});draw();deferred(turn).catch(()=>{});}
+  /* each family has its own Overall and ranks: the shown family's stand in a row's overall and rank, its ranking orders the rows */
+  function useFamily(){data.rows.forEach(r=>{const f=r.families?.[family];if(f){r.overall=f.overall;r.rank=f.rank;}});data.rows.sort((a,b)=>(a.rank??1e9)-(b.rank??1e9)||(b.overall??-1)-(a.overall??-1)||a.name.localeCompare(b.name));}
+  function apply({next,turn}){if(turn!==generation)return;const kept=new Map(data.rows.map(r=>[r.key,r.metrics]));next.rows.forEach(r=>{const m=kept.get(r.key);if(!m)return;r.metrics={...m,...Object.fromEntries(Object.entries(r.metrics||{}).filter(([,v])=>v?.value!=null))};});data=next;useFamily();if(!row(selected))selected=data.selected;updateTable();compareChoice().catch(()=>{});draw();deferred(turn).catch(()=>{});}
   /* scores saved in Scoring settings reach the board when it is shown again */
   /* each save fetches the new board at once, so it is ready when the board is shown; it is drawn then, at its real size */
   let fresh=null;
@@ -428,5 +431,5 @@
     if(!box.checked){e.stopPropagation();shrink(box);}
     else requestAnimationFrame(()=>motion.reduced.matches?size():grow(box.dataset.col));
   },true);
-  updateTable();choose(selected);tableMotion=motion.table(table);deferred(generation).catch(()=>{});
+  useFamily();updateTable();choose(selected);tableMotion=motion.table(table);deferred(generation).catch(()=>{});
 })();

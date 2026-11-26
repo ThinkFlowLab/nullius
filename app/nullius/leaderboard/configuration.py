@@ -13,7 +13,10 @@ from . import scopes
 DOMAINS = ("Travel", "Dining", "Shopping", "Money", "Health", "Home", "Work")
 CAPABILITIES = ("Memory", "Safety", "Consistency", "Personalization", "Proactivity", "Retrieval", "Communication", "Execution")
 AXES = CAPABILITIES + DOMAINS
-OVERALL = (.12, .12, .08, .15, .15, .10, .08, .20, 0, 0, 0, 0, 0, 0, 0)
+# Each family has its own Overall: the capabilities' weights, and the domains' (equal) weights.
+FAMILIES = {"capabilities": CAPABILITIES, "domains": DOMAINS}
+OVERALL = (.12, .12, .08, .15, .15, .10, .08, .20) + (.14,) * len(DOMAINS)
+SCHEMA = 2
 # Each axis's benchmarks, from what their tasks were counted to need: a direct
 # entry weighs 1, a partial one 0.5. A whole-benchmark flag over several disjoint
 # datasets is shared out among them.
@@ -77,12 +80,17 @@ def defaults(benchmarks):
         {"benchmark": key, "dataset": dataset, "version": versions[key], "metric": metric, "weight": weight}
         for key, dataset, metric, weight in DEFAULT_ENTRIES.get(axis, [])
         if key in versions and declared(key, dataset)]} for axis, weight in zip(AXES, OVERALL)}
-    # an axis with no benchmark weighs nothing in Overall, unless none has one: Overall needs a positive weight
-    if any(axis["entries"] and axis["weight"] > 0 for axis in axes.values()):
-        for axis in axes.values():
-            if not axis["entries"]:
-                axis["weight"] = 0
-    return {"schema": 1, "axes": axes}
+    for names in FAMILIES.values():
+        _zero_empty(axes, names)
+    return {"schema": SCHEMA, "axes": axes}
+
+
+def _zero_empty(axes, names):
+    """An axis with no benchmark weighs nothing in its family's Overall, unless none of the family has one."""
+    if any(axes[n]["entries"] and axes[n]["weight"] > 0 for n in names):
+        for n in names:
+            if not axes[n]["entries"]:
+                axes[n]["weight"] = 0
 
 
 def _number(value, label, upper=None):
@@ -92,7 +100,7 @@ def _number(value, label, upper=None):
 
 def validate(document, benchmarks, *, previous=None, allow_unavailable=False):
     """Validate every field before a write; preserve removed catalogue references."""
-    if not isinstance(document, dict) or set(document) != {"schema", "axes"} or document["schema"] != 1:
+    if not isinstance(document, dict) or set(document) != {"schema", "axes"} or document["schema"] != SCHEMA:
         raise ValueError("Invalid scoring document")
     doc = copy.deepcopy(document)
     if not isinstance(doc["axes"], dict) or set(doc["axes"]) != set(AXES):
@@ -128,19 +136,27 @@ def validate(document, benchmarks, *, previous=None, allow_unavailable=False):
     return doc
 
 
-def _legacy(document):
-    """A file saved while scoring had custom benchmarks: they and their rows are dropped, the rest is kept."""
-    if isinstance(document, dict) and "custom" in document:
-        document = {k: v for k, v in document.items() if k != "custom"}
-        for axis in (document.get("axes") or {}).values():
-            if isinstance(axis, dict) and isinstance(axis.get("entries"), list):
-                axis["entries"] = [e for e in axis["entries"] if not (isinstance(e, dict) and "custom" in e)]
+def _upgrade(document):
+    """A file saved before schema 2: its custom benchmarks and their rows are dropped, and its domains, which then
+    weighed nothing, take the default domain weight when they have a benchmark. The rest is kept."""
+    if not isinstance(document, dict) or document.get("schema") != 1 or not isinstance(document.get("axes"), dict):
+        return document
+    document = {k: v for k, v in document.items() if k != "custom"} | {"schema": SCHEMA}
+    for axis in document["axes"].values():
+        if isinstance(axis, dict) and isinstance(axis.get("entries"), list):
+            axis["entries"] = [e for e in axis["entries"] if not (isinstance(e, dict) and "custom" in e)]
+    axes = document["axes"]
+    if all(isinstance(axes.get(n), dict) and isinstance(axes[n].get("entries"), list) and not axes[n].get("weight") for n in DOMAINS):
+        for name, weight in zip(AXES, OVERALL):
+            if name in DOMAINS:
+                axes[name]["weight"] = weight
+        _zero_empty(axes, DOMAINS)
     return document
 
 
 def load(path, benchmarks):
     try:
-        return validate(_legacy(json.loads(Path(path).read_text())), benchmarks, allow_unavailable=True), ""
+        return validate(_upgrade(json.loads(Path(path).read_text())), benchmarks, allow_unavailable=True), ""
     except FileNotFoundError:
         return defaults(benchmarks), ""
     except (OSError, ValueError, TypeError):
