@@ -47,6 +47,8 @@ class AgentGrid(unittest.TestCase):
         self.assertIn(">GSM8K</button>", cards["original"])                                    # named as its settings tab
         _, cards = self.grid("locomo@full")
         self.assertIn(">LoCoMo · full</button>", cards["original"])                            # the version's, no commit
+        for c in cards.values():                                                            # origin, protocol, source: filters
+            self.assertNotIn("origin-tag", c); self.assertNotIn("bench-harness", c); self.assertNotIn("std-tag", c)
         html, _ = self.grid("gsm8k")
         self.assertNotIn('data-value="reference"', html)
         for k, c in cards.items():
