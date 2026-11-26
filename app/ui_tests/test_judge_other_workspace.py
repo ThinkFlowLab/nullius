@@ -4,11 +4,13 @@ user's store under the job's identity, into neither workspace."""
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 import unittest
 from contextlib import ExitStack
 from dataclasses import replace
+from html import unescape
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -17,6 +19,7 @@ from flask import url_for
 
 from nullius import workspace
 from nullius.judge import questions as Q, store
+from nullius.runs import failure_analysis as fa
 
 from .test_routes import web
 
@@ -29,6 +32,7 @@ class JudgementsOfAnotherWorkspace(unittest.TestCase):
         stack = ExitStack()
         self.addCleanup(stack.close)
         tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="nullius-judge-ws-")))
+        self.tmp = tmp
         shutil.copytree(JOB, tmp / "a" / "job-x")
         shutil.copytree(JOB, tmp / "b" / "job-y")
         (tmp / "b" / "job-y" / TRIAL / "agent" / "trajectory.json").write_text("{}")
@@ -81,6 +85,26 @@ class JudgementsOfAnotherWorkspace(unittest.TestCase):
         with web.app.test_request_context(self.url):
             for endpoint, args in (("judge_trial_route", {"trial_name": TRIAL}), ("judge_job_route", {}), ("judge_tasks_route", {})):
                 self.assertIn(f"workspace={self.b.name}", url_for(endpoint, job_id="job-y", **args))
+
+    def test_every_link_to_a_job_s_record_keeps_that_workspace(self):
+        with web.app.test_request_context(self.url):
+            for rule in web.app.url_map.iter_rules():
+                if "job_id" in rule.arguments:
+                    with self.subTest(rule.endpoint):
+                        self.assertIn(f"workspace={self.b.name}", url_for(rule.endpoint, **dict.fromkeys(rule.arguments, "x")))
+
+    def test_a_user_judge_flag_goes_to_the_job_of_that_workspace(self):
+        shutil.copytree(JOB, self.tmp / "b" / "job-x")              # B holds a job-x too, as the open workspace does
+        client = web.app.test_client()
+        with client.session_transaction() as sess:
+            sess["csrf"] = "t"
+        page = client.get(f"/trial/job-x/{TRIAL}?workspace={self.b.name}").get_data(as_text=True)
+        action = unescape(re.search(r'action="(/failure/[^"]+)"', page).group(1))
+        saved = client.post(action, data={"csrf": "t", "action": "flag", "kind": "flawed", "category": "c"})
+        self.assertEqual(saved.status_code, 302)
+        self.assertTrue((self.tmp / "b" / "job-x" / fa.FILE).exists(), "the flag is not in B's job")
+        self.assertFalse((self.tmp / "a" / "job-x" / fa.FILE).exists(), "the flag went to the open workspace's job")
+        self.assertIn(f"workspace={self.b.name}", saved.headers["Location"])
 
     def test_each_compare_column_reads_its_own_workspace(self):
         with web.app.test_request_context(f"/compare?pick={self.a.name}:job-x&pick={self.b.name}:job-y"):

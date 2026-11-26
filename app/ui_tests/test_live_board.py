@@ -462,6 +462,8 @@ for (const query of ['', '?view=live', '?view=logs', '?view=results']) {
         self.assertEqual(out["flight"].count('<tr class="lb-row lb-ended'), len(done))
         self.assertLess(out["flight"].rfind('lbp-'), out["flight"].find('lb-ended'))          # the running on top, the ended below
         self.assertIn('class="lb-open-row" href="/trial/demo-x3/', out["flight"])              # an ended trial opens its page
+        other = self.render(s, trialBase="/job/demo-x3?workspace=b")
+        self.assertRegex(other["flight"], r'href="/trial/demo-x3/[^"?]+\?workspace=b"')        # and stays in the job's workspace
         named = self.render(dict(s, trials=[dict(running[0], task="4")]), noun="task")
         self.assertIn(">Task 4<", named["flight"])                                            # a bare number reads with its noun
         self.assertIn('class="lb-tile done lbo-resolved', out["tiles"])                  # a resolved trial's tile

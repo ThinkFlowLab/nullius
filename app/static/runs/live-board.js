@@ -77,7 +77,9 @@
     return oc;
   }
   function trialHref(t, opts) {
-    return opts && opts.trialBase ? `${opts.trialBase.replace(/\/job\//, '/trial/')}/${encodeURIComponent(t.trial)}` : '';
+    if (!(opts && opts.trialBase)) return '';
+    const [path, query] = opts.trialBase.split('?');                    // the job's link may carry ?workspace=
+    return `${path.replace(/\/job\//, '/trial/')}/${encodeURIComponent(t.trial)}${query ? '?' + query : ''}`;
   }
 
   function renderHead(s, state) {
