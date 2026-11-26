@@ -1,9 +1,12 @@
 """Harbor selection, runnable scripts and saved recipe drafts."""
 import json
+import re
 import subprocess
 import unittest
 
-from ui_tests.builder_support import AGENT, PIN, CompilerCase
+from ui_tests.builder_support import AGENT, APP, PIN, CompilerCase
+
+PAGE = APP / "static/builder/command-builder.js"
 
 
 class HarborPin(CompilerCase):
@@ -153,6 +156,55 @@ class DraftBetweenPages(CompilerCase):
                       'process.stdout.write(JSON.stringify([typeof text,back.recipe.tasks,back.recipe.title,back.step,back.tab,typeof back.at,pre,run,bad,none,back.saved]));')
         # `saved`: the saved recipe the page holds, so a save after a reload still updates (renames) it
         self.assertEqual(out, ['string', 9, 'mine', 4, 'tau3-llm-agent', 'string', None, None, None, None, '0123456789abcdef'])
+
+    def test_start_over_and_delete_have_a_question_to_ask(self):
+        out = self.js('const r=C.prefill({}),back=C.unpackDraft(C.packDraft({recipe:r,step:0,tab:"select"}),{}).recipe,edited=C.prefill({}),bad=C.prefill({});edited.title="mine";bad.repeat=33;'
+                      'process.stdout.write(JSON.stringify([C.atDefaults(r),C.atDefaults(back),C.atDefaults(edited),C.atDefaults(C.create("harbor")),C.atDefaults(bad),'
+                      'C.deleteAsk({id:"0123456789abcdef",name:"a<b"},"h",x=>String(x).replace(/</g,"&lt;"))]));')
+        # an untouched recipe, a reloaded draft of it too, has nothing to lose; an edited one, another runner's and
+        # one holding a value a saved recipe would not keep have
+        self.assertEqual(out[:5], [True, True, False, False, False])
+        self.assertEqual(out[5], '<div class="std-how-head"><h2 id="h">Delete recipe a&lt;b</h2></div><div class="launch-delete-acts">'
+                                 '<button type="button" class="btn ghost" data-close autofocus>Keep it</button>'
+                                 '<button type="button" class="btn danger" data-delete="0123456789abcdef">Delete recipe</button></div>')
+
+    def test_start_over_resets_an_edited_recipe_on_yes_alone(self):
+        """The page's own click handler and its own untouched check, on stand-in elements: what the draft holds after each click."""
+        page = PAGE.read_text(encoding="utf-8")
+        wiring = re.search(r"^  const startOverClick=.*$", page, re.M)
+        clicks = page[page.index("  root.addEventListener('click',async event=>{"):page.index("  // a benchmark chosen on the Benchmark step's grid")]
+        program = ('const C=require(' + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ')(' + json.dumps(self.schema) + ');'
+                   'const {startOver}=require(' + json.dumps(str(PAGE)) + ');'
+                   'const data=new Map(),localStorage={removeItem:k=>data.delete(k),setItem:(k,v)=>data.set(k,v)},draftKey="draft",S=C.STEP,REVIEW=S.review;'
+                   'let recipe=C.prefill({}),step=S.limits,tab="select",savedId="",runnerOut,runnerKey,modelActed,click;recipe.repeat=33;'
+                   'const r=()=>recipe,status=()=>{},render=()=>localStorage.setItem(draftKey,C.packDraft({recipe,step,tab,saved:savedId}));'
+                   'const el=()=>({hidden:true,a:{"aria-expanded":"false"},getAttribute(k){return this.a[k];},setAttribute(k,v){this.a[k]=v;},focus(){}});'
+                   'const els={"#nb-startover":el(),"#nb-startover-ask":el(),"#nb-startover-keep":el()},$=s=>els[s];'
+                   'const root={addEventListener:(type,f)=>{click=f;}};\n' + (wiring.group(0) if wiring else "") + "\n" + clicks + '\n'
+                   'const press=async id=>{await click({target:{closest:()=>({id,dataset:{}})}});const d=JSON.parse(data.get(draftKey));'
+                   'return [d.recipe.repeat??null,d.step,els["#nb-startover-ask"].hidden];};'
+                   '(async()=>{render();const got=[];for(const id of ["nb-startover","nb-startover-keep","nb-startover","nb-startover","nb-startover","nb-startover-yes"])got.push(await press(id));'
+                   'step=S.limits;got.push(await press("nb-startover"));process.stdout.write(JSON.stringify({got,limits:S.limits,first:S.benchmark}));})();')
+        out = json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
+        asked, kept, reset = [33, out["limits"], False], [33, out["limits"], True], [None, out["first"], True]
+        # Start over asks, Keep it closes; Start over asks, Start over again closes; Start over asks, Yes resets; then untouched: at once
+        self.assertEqual(out["got"], [asked, kept, asked, kept, asked, reset, reset])
+
+
+    def test_saving_closes_an_open_start_over_question(self):
+        """Save swaps in its own copy of the draft, so a Yes left open would clear the saved recipe's successor."""
+        page = PAGE.read_text(encoding="utf-8")
+        drop = re.search(r"^  const dropStartOverAsk=.*$", page, re.M)
+        save = page[page.index("  async function save(){"):page.index("  root.addEventListener('submit'")]
+        program = ('const C=require(' + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ')(' + json.dumps(self.schema) + ');'
+                   'let recipe=C.prefill({}),saved=[],savedId="",compiled={errors:[]};const r=()=>recipe,render=()=>{},renderSaved=()=>{},status=()=>{},recipeSlug=t=>t.toLowerCase();'
+                   'const store={save:async c=>({id:"0123456789abcdef",recipe:c})};'
+                   'const el=()=>({hidden:false,value:"Renamed",textContent:"",a:{"aria-expanded":"true"},setAttribute(k,v){this.a[k]=v;},close(){},focus(){}});'
+                   'const els={"#nb-startover":el(),"#nb-startover-ask":el(),"#nb-recipe-title":el(),"#nb-save-dialog":el(),"#nb-save-message":el()},$=s=>els[s];\n'
+                   + (drop.group(0) if drop else "") + "\n" + save + '\n'
+                   '(async()=>{await save();process.stdout.write(JSON.stringify([recipe.title,els["#nb-startover-ask"].hidden,els["#nb-startover"].a["aria-expanded"]]));})();')
+        out = json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
+        self.assertEqual(out, ["Renamed", True, "false"])
 
 
 if __name__ == "__main__":
