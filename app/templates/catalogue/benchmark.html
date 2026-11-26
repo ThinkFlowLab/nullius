@@ -205,7 +205,7 @@
       {% endif %}
 
       {% for y in views %}{% set sfx = '' if y.default else '-' ~ y.version %}
-      <div{{ vattr(y) }}>
+      <div{{ vattr(y, 'bench-notes') }}>
       {% if y.changes %}
       <section class="bench-section" aria-labelledby="changes{{ sfx }}">
         <h2 id="changes{{ sfx }}">Changes from official</h2>
@@ -218,21 +218,17 @@
         <ul class="bench-list">{% for note in y.b.good_to_know %}<li>{{ note }}</li>{% endfor %}</ul>
       </section>
       {% endif %}
-      {% if y.b.upstream_limitations or y.b.limitations %}
-      <div class="bench-cols one">
-        {% if y.b.upstream_limitations %}
-        <section class="bench-section" aria-labelledby="upstream-limitations{{ sfx }}">
-          <h2 id="upstream-limitations{{ sfx }}">Upstream limitations</h2>
-          <ul class="bench-list">{% for l in y.b.upstream_limitations %}<li>{{ l }}</li>{% endfor %}</ul>
-        </section>
-        {% endif %}
-        {% if y.b.limitations %}
-        <section class="bench-section" aria-labelledby="limitations{{ sfx }}">
-          <h2 id="limitations{{ sfx }}">Nullius limitations</h2>
-          <ul class="bench-list">{% for l in y.b.limitations %}<li>{{ l }}</li>{% endfor %}</ul>
-        </section>
-        {% endif %}
-      </div>
+      {% if y.b.upstream_limitations %}
+      <section class="bench-section" aria-labelledby="upstream-limitations{{ sfx }}">
+        <h2 id="upstream-limitations{{ sfx }}">Upstream limitations</h2>
+        <ul class="bench-list">{% for l in y.b.upstream_limitations %}<li>{{ l }}</li>{% endfor %}</ul>
+      </section>
+      {% endif %}
+      {% if y.b.limitations %}
+      <section class="bench-section" aria-labelledby="limitations{{ sfx }}">
+        <h2 id="limitations{{ sfx }}">Nullius limitations</h2>
+        <ul class="bench-list">{% for l in y.b.limitations %}<li>{{ l }}</li>{% endfor %}</ul>
+      </section>
       {% endif %}
       </div>
       {% endfor %}

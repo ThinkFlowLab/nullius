@@ -408,7 +408,11 @@ a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underli
 .std-optvals-detailed li { align-content: start; padding: 12px; }
 
 .bench-main { gap: 20px; }
-.bench-main > .bench-section, .bench-main > .bench-cols > .bench-section { padding: 22px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); min-width: 0; }
-.bench-main > .bench-section > h2, .bench-main > .bench-cols > .bench-section > h2 { margin-bottom: 18px; }
+.bench-notes { display: flex; flex-direction: column; gap: 20px; }
+.bench-notes[hidden] { display: none; }
+.bench-main > .bench-section, .bench-main > .bench-cols > .bench-section, .bench-notes > .bench-section { padding: 22px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); min-width: 0; }
+.bench-main > .bench-section > h2, .bench-main > .bench-cols > .bench-section > h2, .bench-notes > .bench-section > h2 { margin-bottom: 18px; }
 .std-option-range { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; color: var(--text-dim); font-size: 14px; }
-@media (max-width: 640px) { .bench-main > .bench-section, .bench-main > .bench-cols > .bench-section { padding: 16px; } }
+@media (max-width: 640px) { .bench-notes { display: flex; flex-direction: column; gap: 20px; }
+.bench-notes[hidden] { display: none; }
+.bench-main > .bench-section, .bench-main > .bench-cols > .bench-section, .bench-notes > .bench-section { padding: 16px; } }
