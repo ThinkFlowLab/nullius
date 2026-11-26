@@ -10,6 +10,7 @@ Standard library only.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 
@@ -122,9 +123,8 @@ def handle(m, nx):
 
 
 def main(argv=None) -> int:
-    if argv:
-        print(__doc__.strip(), file=sys.stderr)
-        return 0 if argv[0] in ("-h", "--help") else 2
+    argparse.ArgumentParser(prog="nullius mcp", description="A Nullius server as MCP tools for an assistant, over stdio. "
+                            "NULLIUS_SERVER and NULLIUS_TOKEN name the server and its token.").parse_args(argv)
     try:
         nx = Client()
     except ValueError as e:
