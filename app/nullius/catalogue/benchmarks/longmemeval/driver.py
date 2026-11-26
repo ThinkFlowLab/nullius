@@ -152,8 +152,11 @@ def describe(dataset, **_):
     out = {}
     for unit in units(dataset)["units"]:
         q = entry(unit)
-        text = q["question"]
-        out[unit] = {"title": text, "text": text, "categories": {"question_type": str(q["question_type"])}}
+        # questions are relative to their date; an abstention question's id ends _abs
+        date = q.get("question_date")
+        out[unit] = {"title": q["question"], "text": f"{q['question']}\n\nQuestion date: {date}" if date else q["question"],
+                     "categories": {"question_type": str(q["question_type"]),
+                                    "abstention": "yes" if unit.endswith("_abs") else "no"}}
     return {"units": out}
 
 

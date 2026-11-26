@@ -62,6 +62,11 @@
   "units": {
     "noun": "question",
     "nouns": "questions",
+    "categories": {
+      "level": {
+        "label": "Level"
+      }
+    },
     "redistribute": false
   },
   "environments": {

@@ -105,20 +105,20 @@ function element(id) {
   });
   return elements.get(id);
 }
-element('tasks-page').dataset = {set: 'dev', writable: 'true', listing: '/listing', rows: '/rows'};
-element('tasks-chosen-ids').textContent = '["alpha","beta"]';
+element('tasks-page').dataset = {set: 'dev', writable: 'true', base: '/t/', dataset: 'all'};
+element('tasks-chosen-parts').textContent = '{"all": ["alpha","beta"]}';
 const tasks = ['alpha', 'beta'].map(id => ({id, title: id, categories: {kind: id}}));
 const requests = [];
 async function request(url) {
   requests.push(url);
   const query = new URL(url, 'http://localhost').searchParams;
   const found = query.has('q') ? [] : query.has('cat') ? tasks.slice(1) : tasks;
-  return {json: async () => url === '/rows' ? {tasks, unknown: []}
+  return {json: async () => url === '/t/all/rows' ? {tasks, unknown: []}
     : {ok: true, ready: true, total: found.length, of: 2, pages: 1, page: 1,
        categories: {}, described: true, tasks: found}};
 }
 require('node:vm').runInNewContext(require('node:fs').readFileSync(process.argv[1], 'utf8'), {
-  document: {getElementById: element, querySelectorAll: () => [], querySelector: () => null},
+  document: {getElementById: element, querySelectorAll: () => [], querySelector: () => null, addEventListener() {}},
   URLSearchParams, nulliusFetch: request, setTimeout: callback => { callback(); return 1; }, clearTimeout() {}
 });
 async function flush() { for (let n = 0; n < 20; n++) await Promise.resolve(); }
@@ -133,7 +133,7 @@ async function flush() { for (let n = 0; n < 20; n++) await Promise.resolve(); }
     element('tasks-cats').listeners.click({target: {closest: () => ({dataset: {field: 'kind', value: 'beta'}})}});
   }
   await flush();
-  assert.equal(requests.slice(before).some(url => url === '/rows'), false);
+  assert.equal(requests.slice(before).some(url => url === '/t/all/rows'), false);
   assert.equal(element('tasks-show').attributes['aria-pressed'], 'false');
   assert.equal(element('tasks-show').textContent, 'Show selected');
   assert.equal(element('tasks-chosen').textContent, '2 chosen');
@@ -254,13 +254,13 @@ function element(id) {
   return elements.get(id);
 }
 const writable = process.argv[2] === 'true';
-element('tasks-page').dataset = {writable: process.argv[2], listing: '/listing', rows: '/rows'};
+element('tasks-page').dataset = {writable: process.argv[2], base: '/t/', dataset: 'all'};
 const long = 'Open the report and ' + 'make the second table match the first one, '.repeat(6);
 const tasks = [{id: 'os__a', title: long.slice(0, 99) + '…', text: long, categories: {}}, {id: 'b', title: '', text: '', categories: {}}];
 const request = async () => ({json: async () => ({ok: true, ready: true, total: 2, of: 2, pages: 1, page: 1, categories: {}, described: true, tasks})});
 let selected = '';
 require('node:vm').runInNewContext(require('node:fs').readFileSync(process.argv[1], 'utf8'), {
-  document: {getElementById: element, querySelectorAll: () => [], querySelector: () => null},
+  document: {getElementById: element, querySelectorAll: () => [], querySelector: () => null, addEventListener() {}},
   URLSearchParams, nulliusFetch: request, setTimeout: callback => { callback(); return 1; }, clearTimeout() {},
   getSelection: () => ({toString: () => selected})
 });
@@ -480,10 +480,27 @@ class Saving(Case):
         self.assertEqual(sets.revision(sets.load("described", "dev"))["units"], ["t001"])
         self.assertEqual(sorted(os.listdir(self.tmp / "catalogue" / "sets" / "described")), ["dev.json"])
 
+    def test_ids_of_several_datasets_save_one_set_whose_page_opens_each(self):
+        self.b["datasets"] = [*self.b["datasets"], {"id": "more", "label": "More", "units": 250}]
+        got = self.save({"name": "Mix", "parts": {"all": ["t001", "t002"], "more": ["t003"]}})
+        self.assertEqual(got["open"], "/benchmarks/described/tasks/all?set=mix")
+        self.assertEqual(sets.parts(sets.load("described", "mix")), {"all": ["t001", "t002"], "more": ["t003"]})
+        html = self.get("/benchmarks/described/tasks/more?set=mix").get_data(as_text=True)
+        self.assertEqual(json.loads(re.search(r'<script id="tasks-chosen-parts" type="application/json">(.*?)</script>', html).group(1)),
+                         {"all": ["t001", "t002"], "more": ["t003"]})
+        pages = json.loads(re.search(r'<script id="tasks-dataset-pages" type="application/json">(.*?)</script>', html).group(1))
+        self.assertEqual([(d, x["href"]) for d, x in pages], [("all", "/benchmarks/described/tasks/all?set=mix"),
+                                                               ("more", "/benchmarks/described/tasks/more?set=mix")])
+        self.assertIn("Datasets all 2, More 1", visible(html))
+        # a dataset the set does not hold opens the set at its first
+        r = self.client.get("/benchmarks/described/tasks/nowhere?set=mix"); self.addCleanup(r.close)
+        self.assertEqual((r.status_code, r.headers["Location"]), (302, "/benchmarks/described/tasks/all?set=mix"))
+        self.assertEqual(self.save({"name": "x", "parts": {"all": [], "more": []}}, 400)["error"], "Tick at least one task.")
+
     def test_a_set_opened_keeps_its_tasks_and_other_ticks_save_a_new_set(self):
         self.save({"name": "dev", "units": ["t001", "t002"]})
         html = self.get("/benchmarks/described/tasks/all?set=dev").get_data(as_text=True)
-        self.assertEqual(json.loads(re.search(r'<script id="tasks-chosen-ids" type="application/json">(.*?)</script>', html).group(1)), ["t001", "t002"])
+        self.assertEqual(json.loads(re.search(r'<script id="tasks-chosen-parts" type="application/json">(.*?)</script>', html).group(1)), {"all": ["t001", "t002"]})
         self.assertIn('data-writable="true"', html)
         self.assertIn("Save as a new set", html)
         self.assertNotIn("revision", visible(html).lower())
@@ -505,7 +522,7 @@ class Saving(Case):
         (folder / "older.json").write_text(json.dumps(entry))
         before = (folder / "older.json").read_bytes()
         html = self.get("/benchmarks/described/tasks/all?set=older").get_data(as_text=True)
-        self.assertEqual(json.loads(re.search(r'<script id="tasks-chosen-ids" type="application/json">(.*?)</script>', html).group(1)), ["t001", "t002"])
+        self.assertEqual(json.loads(re.search(r'<script id="tasks-chosen-parts" type="application/json">(.*?)</script>', html).group(1)), {"all": ["t001", "t002"]})
         self.assertNotIn("revision", visible(html).lower())
         self.assertEqual((folder / "older.json").read_bytes(), before)
 
@@ -527,7 +544,8 @@ class Saving(Case):
         def bar(html):
             rows = html.index('id="tasks-rows"')
             got = re.search(r'<div class="tasks-savebar" id="tasks-savebar">(.*?)</div>', html, re.S)
-            return got and (got.start() > rows and got.start() < html.index('id="tasks-save-title"'), visible(got.group(1)))
+            # the form above the rows, the bar that leads back to it below them
+            return got and (html.index('id="tasks-save-title"') < rows < got.start(), visible(got.group(1)))
         self.assertEqual(bar(self.get("/benchmarks/described/tasks/all").get_data(as_text=True)), (True, "0 chosen Save as task set"))
         self.save({"name": "dev", "units": ["t001"]})
         self.assertEqual(bar(self.get("/benchmarks/described/tasks/all?set=dev").get_data(as_text=True)), (True, "0 chosen Save as a new set"))
@@ -661,25 +679,27 @@ class TheBenchmarksSection(Case):
         self.assertIsNotNone(got)
         return got.group(0)
 
-    def test_a_benchmark_with_no_set_shows_each_datasets_link(self):
-        osw = _GET("benchmark", "osworld1")
+    def test_a_benchmark_with_no_set_shows_new_task_set_alone(self):
         part = self.section("osworld1")
-        for d in osw["datasets"]:
-            self.assertIn(f'href="/benchmarks/osworld1/tasks/{d["id"]}"', part)
+        self.assertEqual(visible(part), "Task sets New task set")      # no count, no table, no dataset's link
         self.assertNotIn("<table", part)
 
     def test_new_task_set_in_the_sections_head_opens_the_tasks_of_a_dataset(self):
         telco = _GET("benchmark", "open-telco")
         part = self.section("open-telco")
-        self.assertNotIn("New task set", part)         # several datasets: no menu, the button of each opens its tasks
-        for d in telco["datasets"]:
-            self.assertIn(f'<a class="btn ghost sm" href="/benchmarks/open-telco/tasks/{d["id"]}">', part)
+        first = telco["datasets"][0]["id"]            # several datasets: the first's tasks, whose page chooses another
+        self.assertIn(f'<a class="btn sm" href="/benchmarks/open-telco/tasks/{first}">New task set</a>', part)
+        page = self.get(f"/benchmarks/open-telco/tasks/{first}").get_data(as_text=True)
+        choice = re.search(r'<select id="tasks-dataset">(.*?)</select>', page, re.S).group(1)
+        self.assertEqual(re.findall(r'value="([^"]+)"', choice), [d["id"] for d in telco["datasets"]])
+        self.assertIn(f'value="{first}" selected', choice)
+        self.assertNotIn('id="tasks-dataset"', self.get("/benchmarks/humaneval/tasks/humaneval").get_data(as_text=True))
         [only] = _GET("benchmark", "humaneval")["datasets"]
         one = self.section("humaneval")              # one dataset: the button is its link
         self.assertIn(f'<a class="btn sm" href="/benchmarks/humaneval/tasks/{only["id"]}">New task set</a>', one)
         self.assertNotIn("bench-newset", one)
         r = self.client.get("/benchmarks/humaneval", headers={"X-Forwarded-For": "192.0.2.4"}); self.addCleanup(r.close)
-        self.assertNotIn("New task set", r.get_data(as_text=True))       # saving is a browser's on the application host
+        self.assertNotIn('id="task-sets"', r.get_data(as_text=True))   # saving is a browser's on the application host
 
     def test_it_lists_the_benchmarks_sets_with_the_version_each_was_made_at(self):
         osw = _GET("benchmark", "osworld1")
@@ -687,8 +707,7 @@ class TheBenchmarksSection(Case):
         earlier = _GET("benchmark", "osworld1@044bc33")
         sets.create(earlier, "Chrome tabs", dataset="test_nogdrive", units=["a"])
         text = visible(self.section("osworld1"))
-        own = len([d for d in osw["datasets"] if d.get("subset_of")])       # the benchmark's own sets, counted too
-        self.assertIn(f"Task sets {2 + own}", text)
+        self.assertIn("Task sets 2 New task set", text)                    # the user's sets alone are counted
         self.assertNotIn("Revision", text)
         label = next(d.get("label") or d["id"] for d in osw["datasets"] if d["id"] == "test_nogdrive")
         self.assertRegex(text, re.escape(f"Chrome tabs four of them {label} 4 {osw['_version']} ") + r"\d{4}-\d\d-\d\d")
@@ -698,34 +717,22 @@ class TheBenchmarksSection(Case):
 
 
 class TheBenchmarksOwnSets(Case):
-    """A benchmark whose lists name the one they are cut from: its page and the builder draw one dataset, and its cuts as
-    the benchmark's own task sets, before the user's."""
+    """A benchmark whose lists name the one they are cut from: its page and the builder draw one dataset; its cuts
+    stay datasets, never task sets."""
 
     def section(self, key):
         html = self.get(f"/benchmarks/{key}").get_data(as_text=True)
         return re.search(r'<section class="bench-section" id="task-sets".*?</section>', html, re.S).group(0)
 
-    def test_the_page_lists_its_own_sets_then_the_users_and_one_dataset_to_cut_from(self):
+    def test_its_cuts_are_datasets_and_new_task_set_opens_the_whole_list(self):
         osw = _GET("benchmark", "osworld1")
         cuts = [d for d in osw["datasets"] if d.get("subset_of")]
         part = self.section("osworld1")
-        text = visible(part)
-        self.assertIn(f"Task sets {len(cuts)}", text)
-        self.assertIn("From OSWorld1", text)
-        for d in cuts:
-            self.assertIn(f'href="/benchmarks/osworld1/tasks/{d["id"]}"', part)
-            self.assertIn(f"{d['label']} · {d['units']} tasks", text)
-        self.assertNotIn("Yours", text)
-        # New task set opens the whole list's tasks: one dataset, no menu
+        for d in cuts:                                 # in the Dataset section above, not again as task sets
+            self.assertNotIn(f'href="/benchmarks/osworld1/tasks/{d["id"]}"', part)
         self.assertIn('<a class="btn sm" href="/benchmarks/osworld1/tasks/test_all">New task set</a>', part)
-        self.assertNotIn("bench-newset", part)
         sets.create(osw, "Chrome tabs", dataset="test_nogdrive", units=["a", "b"])
-        text = visible(self.section("osworld1"))
-        self.assertIn(f"Task sets {len(cuts) + 1}", text)
-        self.assertLess(text.index("From OSWorld1"), text.index("Yours"))
-        self.assertLess(text.index("Yours"), text.index("Chrome tabs"))
-        # a benchmark that declares nothing is drawn as before
-        self.assertNotIn("From ", visible(self.section("open-telco")))
+        self.assertIn("Task sets 1 New task set", visible(self.section("osworld1")))
 
     def node_program(self, body):
         node = shutil.which("node")
@@ -886,6 +893,26 @@ class TheRecipeCore(BuilderCase):
                 result = subprocess.run([node, "-e", program], stdin=subprocess.DEVNULL,
                                         check=True, capture_output=True, text=True, timeout=10)
                 self.assertEqual(json.loads(result.stdout), ["described", ["more"], task_sets])
+
+    def test_a_set_of_several_datasets_is_chosen_for_each_of_them(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node is required for the recipe core")
+        import subprocess
+        self.b["datasets"].append({"id": "more", "units": 250})
+        sets.create(self.b, "mix", parts={"all": ["t001", "t002"], "more": ["t003"]})
+        html = self.get("/new-run").get_data(as_text=True)
+        schema = json.loads(re.search(r'<script id="nb-schema" type="application/json">(.*?)</script>', html, re.S).group(1))
+        page = recipe._bench_page(self.b)
+        self.assertEqual([(s["units"], s["whole"]) for d in page["datasets"] for s in d["sets"]], [(2, 3), (1, 3)])
+        schema["standard"]["benchmarks"].append(page)
+        core = Path(__file__).resolve().parents[1] / "static" / "builder" / "command-builder-core.js"
+        program = (f"const C=require({json.dumps(str(core))})({json.dumps(schema)});\n"
+                   "const r=C.createStandard('described');r.datasets=['all'];C.setTaskSet(r,'all','mix');\n"
+                   "const both=[r.datasets,r.task_sets];C.setTaskSet(r,'more','');\n"
+                   "process.stdout.write(JSON.stringify({both,after:r.task_sets}));")
+        got = json.loads(subprocess.run([node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
+        self.assertEqual(got, {"both": [["all", "more"], {"all": "mix", "more": "mix"}], "after": {"all": "mix"}})
 
     def test_task_sets_follow_the_chosen_datasets(self):
         node = shutil.which("node")

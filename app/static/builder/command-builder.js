@@ -846,7 +846,9 @@
     const page = `/benchmarks/${encodeURIComponent(b.key)}/tasks/${encodeURIComponent(x.id)}`;
     const picked = sets.find(s => on === s.name || on.split('@')[0] === s.name);
     // a set made at another version of the benchmark says which: the run refuses a task that version lacks
-    const made = s => s.version && b.version && s.version !== b.version ? ' · made at ' + s.version_label : '';
+    // a set of several datasets says so: its ids here, of all it holds
+    const made = s => (s.version && b.version && s.version !== b.version ? ' · made at ' + s.version_label : '')
+      + ((s.datasets || []).length > 1 ? ` · ${s.whole} in ${s.datasets.length} datasets` : '');
     const choice = sets.length + 1 > 5
       ? `<label class="nb-field">Tasks of ${esc(x.label)}<select data-std-taskset-select="${esc(x.id)}"><option value="">${esc(all)}</option>`
         + sets.map(s => `<option value="${esc(ref(s))}" ${s === picked ? 'selected' : ''}>${esc(s.label)} · ${s.units} ${esc(u.nouns)}${esc(made(s))}</option>`).join('')

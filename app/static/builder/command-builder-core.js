@@ -202,10 +202,17 @@
     return keepTaskSets(r);
   }
   // A chosen dataset's task set, NAME, run in place of all its tasks (recipe.py: task_sets, {dataset: NAME});
-  // '' for all of them. A dataset no longer chosen keeps none.
+  // '' for all of them. A set of several datasets is chosen for each of them, those not chosen yet added: each runs
+  // its part, a job of its own. A dataset no longer chosen keeps none.
   function setTaskSet(r, dataset, ref) {
     r.task_sets = {...(r.task_sets || {})};
-    if (ref) r.task_sets[dataset] = ref; else delete r.task_sets[dataset];
+    if (!ref) { delete r.task_sets[dataset]; return keepTaskSets(r); }
+    const b = standardBench(r), name = ref.split('@')[0];
+    const set = b && b.datasets.flatMap(d => d.sets || []).find(s => s.name === name);
+    const all = set && (set.datasets || []).length > 1 ? set.datasets.filter(id => b.datasets.some(d => d.id === id)) : [dataset];
+    r.datasets = [...new Set([...datasetsOf(r), ...all])];
+    delete r.dataset;
+    for (const id of all) r.task_sets[id] = ref;
     return keepTaskSets(r);
   }
   function keepTaskSets(r) {

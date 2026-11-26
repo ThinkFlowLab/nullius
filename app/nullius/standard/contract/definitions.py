@@ -1649,6 +1649,12 @@ def problems(d: dict, kind: str) -> List[str]:
             bad.append("units: {noun, nouns}")
         if "redistribute" in u and not isinstance(u["redistribute"], bool):
             bad.append("units.redistribute: false when the data may not be redistributed")
+        cats = u.get("categories", {})
+        if not isinstance(cats, dict) or not all(
+                isinstance(c, dict) and set(c) <= {"label", "names"} and isinstance(c.get("label", ""), str)
+                and isinstance(c.get("names", {}), dict) and all(isinstance(v, str) and v for v in c.get("names", {}).values())
+                for c in cats.values()):
+            bad.append("units.categories: {FIELD: {label, names: {VALUE: name}}}, how a listing's categories read")
         lim = d.get("limits")
         if lim is not None:
             if not isinstance(lim, dict):

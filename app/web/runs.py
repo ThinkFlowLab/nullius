@@ -659,7 +659,9 @@ def _set_link(j) -> dict:
     entry = task_sets.by_id(ts["benchmark"], ts.get("id"), ts["name"]) if ts.get("benchmark") else None
     if entry is None:
         return {"name": ts.get("label") or ts["name"], "link": ""}
-    return {"name": task_sets.label_of(entry), "link": url_for("benchmark_tasks", key=ts["benchmark"], dataset=entry["dataset"],
+    held = task_sets.datasets_of(entry)            # of a set of several datasets, the one the job ran
+    shown = j.dataset.rpartition("/")[2] if j.dataset.rpartition("/")[2] in held else held[0]
+    return {"name": task_sets.label_of(entry), "link": url_for("benchmark_tasks", key=ts["benchmark"], dataset=shown,
                                                                set=entry["name"])}
 
 

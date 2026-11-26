@@ -411,24 +411,33 @@ def _matches(task: dict, words: List[str]) -> bool:
     return all(w in hay for w in words)
 
 
+def fields(bench: dict, names: List[str]) -> Dict[str, dict]:
+    """Each category field of ``names`` as it reads: {FIELD: {label, names: {VALUE: name}}}, from the definition's
+    ``units.categories``; a field it leaves out is its key, capitalised and spaced, and a value its own word."""
+    said = (bench.get("units") or {}).get("categories") or {}
+    return {f: {"label": (said.get(f) or {}).get("label") or f[:1].upper() + f[1:].replace("_", " "),
+                "names": dict((said.get(f) or {}).get("names") or {})} for f in names}
+
+
 def find(bench: dict, dataset: str, options: Optional[dict] = None, search: str = "",
          categories: Optional[Dict[str, List[str]]] = None, page: int = 1, size: Optional[int] = PAGE,
          licences=None) -> dict:
     """The tasks of ``dataset`` under ``options`` that the search text and the category values match, a page
     of ``size`` (all of them when None), page 1 first:
     {total, page, pages, of, described, tasks: [{id, title, text, categories}],
-     categories: {FIELD: [{value, count}, ...]}}. ``total`` counts every match, ``of`` the dataset's tasks;
-    each field's values are counted over the tasks the search and the other fields' filters match, the most
-    first. A field no task has is refused; a page past the last is empty."""
+     categories: {FIELD: [{value, name, count}, ...]}, fields: {FIELD: {label, names}}}. ``total`` counts
+    every match, ``of`` the dataset's tasks;
+    each field's values are counted over the tasks the search and the other fields' filters match, numbers
+    in their order, words the most first. A field no task has is refused; a page past the last is empty."""
     if not isinstance(page, int) or page < 1:
         raise Refused(f"page {page}: 1, 2, ...")
     got = listing(bench, dataset, options, licences)
     tasks, chosen = got["tasks"], categories or {}
-    fields = sorted({f for t in tasks for f in t["categories"]})
-    unknown = [f for f in chosen if f not in fields]
+    names = sorted({f for t in tasks for f in t["categories"]})
+    unknown = [f for f in chosen if f not in names]
     if unknown:
         raise Refused(f"--category {unknown[0]}: no such category"
-                      + (f"; the categories are {', '.join(fields)}" if fields else "; these tasks have none"))
+                      + (f"; the categories are {', '.join(names)}" if names else "; these tasks have none"))
     words = [w for w in str(search or "").lower().split() if w]
     searched = [t for t in tasks if _matches(t, words)]
 
@@ -436,14 +445,18 @@ def find(bench: dict, dataset: str, options: Optional[dict] = None, search: str 
         return all(t["categories"].get(f) in values for f, values in chosen.items() if f != but)
 
     matched = [t for t in searched if kept(t)]
-    counts = {}
-    for f in fields:
+    counts, shown = {}, fields(bench, names)
+    for f in names:
         n: Dict[str, int] = {}
         for t in searched:
             if f in t["categories"] and kept(t, but=f):
                 n[t["categories"][f]] = n.get(t["categories"][f], 0) + 1
-        counts[f] = [{"value": v, "count": c} for v, c in sorted(n.items(), key=lambda vc: (-vc[1], vc[0]))]
+        # numbers (a level) in their order; words the most first
+        order = (lambda vc: int(vc[0])) if all(v.isdigit() for v in n) else (lambda vc: (-vc[1], vc[0]))
+        named = shown[f]["names"]
+        counts[f] = [{"value": v, "name": named.get(v, v), "count": c} for v, c in sorted(n.items(), key=order)]
     per = size if size else max(1, len(matched))
     start = (page - 1) * per
     return {"total": len(matched), "page": page, "pages": max(1, -(-len(matched) // per)), "of": len(tasks),
-            "described": got["described"], "tasks": matched[start:start + per], "categories": counts}
+            "described": got["described"], "tasks": matched[start:start + per], "categories": counts,
+            "fields": shown}

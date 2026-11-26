@@ -209,9 +209,11 @@ def _bench_page(b: dict) -> dict:
                                        for c in controls],
                           "proofs": {k: status[d["id"]][k]["proven"] for k in ("units", "leak")},
                           "failed": {k: status[d["id"]][k]["failed"] for k in ("units", "leak") if status[d["id"]][k]["failed"]},
-                          # the user's task sets cut from it (standard/runner/sets.py), each with the version it was made at
-                          "sets": [dict(s, version_label=sets.version_label(b, s["version"]) if s["version"] else "")
-                                   for s in task_sets if s["dataset"] == d["id"]]}
+                          # the user's task sets cut from it (standard/runner/sets.py), each with the version it was made at;
+                          # a set of several datasets under each, its ``units`` its ids of this one
+                          "sets": [dict(s, units=s["parts"][d["id"]], whole=s["units"],
+                                        version_label=sets.version_label(b, s["version"]) if s["version"] else "")
+                                   for s in task_sets if d["id"] in s["parts"]]}
                          for d in b["datasets"]]}
 
 
@@ -499,10 +501,12 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         except sets.Refused as e:
             add("dataset", f"Task set {ref}: {e}.")
             continue
-        if entry["dataset"] != ds_id:
-            add("dataset", f"The task set {sets.label_of(entry)} is cut from the dataset {entry['dataset']}, not {ds_id}.")
+        part = sets.parts(entry, got).get(ds_id)
+        if part is None:
+            add("dataset", f"The task set {sets.label_of(entry)} is cut from the dataset{'s' if len(sets.datasets_of(entry)) > 1 else ''} "
+                           f"{', '.join(sets.datasets_of(entry))}, not {ds_id}.")
             continue
-        set_of[ds_id] = {"name": set_name, "label": sets.label_of(entry), "units": len(got["units"]), "ids": set(got["units"])}
+        set_of[ds_id] = {"name": set_name, "label": sets.label_of(entry), "units": len(part), "ids": set(part)}
     side = "agent" if b["family"] == "agent" else "capability"
     # A control the benchmark declares (nop, oracle) is a choice beside the agents or capabilities: it runs
     # nothing as you and calls no model - a judged benchmark's judge only - so it asks for neither.

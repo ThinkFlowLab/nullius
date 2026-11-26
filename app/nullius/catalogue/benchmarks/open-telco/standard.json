@@ -113,7 +113,58 @@
   ],
   "units": {
     "noun": "question",
-    "nouns": "questions"
+    "nouns": "questions",
+    "categories": {
+      "subject": {
+        "label": "Subject"
+      },
+      "difficulty": {
+        "label": "Difficulty",
+        "names": {
+          "easy": "Easy",
+          "medium": "Medium",
+          "hard": "Hard"
+        }
+      },
+      "task_id": {
+        "label": "Task family",
+        "names": {
+          "T1": "Intent Feasibility Assessment",
+          "T2": "Intent Conflict Resolution",
+          "T3": "Intent Drift Detection",
+          "T4": "Slice Selection Reasoning",
+          "T5": "Slice Switching Decision",
+          "T6": "Slice Fairness vs Safety",
+          "T7": "Compute Placement Decision",
+          "T8": "Graceful Degradation under Edge Overload",
+          "T9": "Trust-Aware Offloading",
+          "T10": "SLA Violation Prediction",
+          "T11": "Preemptive Autonomy Downgrade",
+          "T12": "Conservative Continuation Decision",
+          "T13": "Swarm-Level Slice Negotiation",
+          "T14": "Scheduler Reconfiguration Adaptation",
+          "T15": "Decision Consistency under Replanning",
+          "T16": "Network-Exposed Compute Marketplace",
+          "T17": "Network-Knowledge RAG Augmentation",
+          "T18": "AI Agent Identity & Onboarding",
+          "T19": "AI Agent Interoperability & Federation",
+          "T20": "Agent-to-Agent Communication Management",
+          "T21": "Device-Network Task Offload Arbitration",
+          "T22": "Federated / Collaborative Learning Orchestration",
+          "T23": "Network-Assisted Digital Twin Control",
+          "T24": "Sensing-Enhanced Decisioning (ISAC)",
+          "T25": "AI-Agent-based Disaster / Public-Safety Coordination",
+          "T26": "Trust-Aware Third-Party Agent Exposure",
+          "T27": "Agent Lifecycle & Management",
+          "T28": "6G Model Training-as-a-Service Decision",
+          "T29": "Immersive/AR Resource Prioritization",
+          "T30": "Network Security Detection & Response Automation"
+        }
+      },
+      "category": {
+        "label": "Category"
+      }
+    }
   },
   "score": {
     "kind": "pass",

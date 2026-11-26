@@ -192,13 +192,19 @@ def benchmark_tasks(key, dataset):
         except sets.Refused as e:
             # said without the file's path; a file there that cannot be read can still be deleted from the page
             problem, broken = sets.plain(e, key, name), "" if isinstance(e, sets.NotFound) else name
-        if entry is not None and entry["dataset"] != dataset:
-            return redirect(url_for("benchmark_tasks", key=key, dataset=entry["dataset"], set=entry["name"]))
+        if entry is not None and dataset not in sets.datasets_of(entry):
+            return redirect(url_for("benchmark_tasks", key=key, dataset=sets.datasets_of(entry)[0], set=entry["name"]))
         if entry is not None and entry.get("version") and not version and standard_definitions.get("benchmark", f"{key}@{entry['version']}"):
             version = entry["version"]            # its tasks as listed at the version it was made at
     bench, ds = _std_dataset(key, dataset, version)
+    rev = sets.latest(entry) if entry else None
+    # each dataset's page, for the chosen of each (a set's own, or a new one's): the set's at each of its datasets
+    pages = {d["id"]: {"label": d.get("label") or d["id"],
+                       "href": url_for("benchmark_tasks", key=key, dataset=d["id"], set=entry["name"] if entry else None,
+                                       version=None if entry else (version or None))} for d in bench["datasets"]}
     return render_template("catalogue/tasks.html", bench=bench, title=standard_definitions.title(bench),
-                           ds=ds, entry=entry, rev=sets.latest(entry) if entry else None, problem=problem,
+                           ds=ds, entry=entry, rev=rev, problem=problem, parts=sets.parts(entry, rev) if entry else {},
+                           total=sets.size(entry, rev) if entry else 0, pages=pages,
                            label=sets.label_of(entry) if entry else "", version=standard_definitions.version_of(bench) or "",
                            made_at=sets.version_label(bench, entry["version"]) if entry and entry.get("version") else "",
                            broken=broken, nouns=(bench.get("units") or {}).get("nouns", "units"),
@@ -231,8 +237,10 @@ def benchmark_tasks_listing(key, dataset):
             ids, seed = units.draw(ids, n, seed)
             return jsonify(ok=True, ready=True, total=got["total"], ids=ids, seed=seed,
                            note=units.sample_note(n, seed, request.args.get("q", ""), cats))
+        size = request.args.get("size", "")       # the page's Show: 10, 25 or 100 a page, or 0 for all
         got = units.find(bench, dataset, search=request.args.get("q", ""), categories=cats,
-                         page=int(page) if page.isdigit() and int(page) >= 1 else 1)
+                         page=int(page) if page.isdigit() and int(page) >= 1 else 1,
+                         size=(int(size) or None) if size in ("10", "25", "100", "0") else units.PAGE)
     except units.Refused as e:
         return jsonify(ok=False, error=str(e)), 400
     return jsonify(ok=True, ready=True, **got)
@@ -301,27 +309,30 @@ def _set_problem(key: str, name: str) -> str:
 
 @app.route("/benchmarks/<key>/tasks/<dataset>/save", methods=["POST"])
 def benchmark_tasks_save(key, dataset):
-    """Keep the ticked ids as a new task set ({name, description, units, version}), at the version the page listed:
-    the name typed is its label, and the name commands take is made from it. A set is never changed: the page of
-    one saves another."""
+    """Keep the ticked ids as a new task set ({name, description, parts: {dataset: ids}, version}), at the version
+    the page listed: the name typed is its label, and the name commands take is made from it. Ids of several
+    datasets make a set of each, one of them its list. A set is never changed: the page of one saves another."""
     shared._require_csrf()
     if not shared._local_client():
         abort(403, description="Task sets are saved from a browser on the application host only.")
     body = request.get_json(silent=True) or {}
     bench, _ = _std_dataset(key, dataset, str(body.get("version") or ""))
-    ids = [u for u in body.get("units") or [] if isinstance(u, str)]
-    if not ids:
+    given = body.get("parts") if isinstance(body.get("parts"), dict) else {dataset: body.get("units")}
+    parts = {str(d): [u for u in ids if isinstance(u, str)] for d, ids in given.items() if isinstance(ids, list)}
+    parts = {d: ids for d, ids in parts.items() if ids}
+    if not parts:
         return jsonify(ok=False, error="Tick at least one task."), 400
     label = str(body.get("name") or "").strip()
     problem = _set_problem(key, label)
     if problem:
         return jsonify(ok=False, error=problem), 400
     try:
-        entry = sets.create(bench, label, dataset=dataset, units=ids, description=str(body.get("description") or "").strip(),
+        entry = sets.create(bench, label, parts=parts, description=str(body.get("description") or "").strip(),
                             note=str(body.get("note") or ""))
     except sets.Refused as e:
         return jsonify(ok=False, error=str(e)), 400
-    return jsonify(ok=True, name=entry["name"], open=url_for("benchmark_tasks", key=key, dataset=dataset, set=entry["name"]))
+    shown = dataset if dataset in parts else next(iter(parts))
+    return jsonify(ok=True, name=entry["name"], open=url_for("benchmark_tasks", key=key, dataset=shown, set=entry["name"]))
 
 
 def _set_guard(key: str, dataset: str) -> str:
@@ -351,7 +362,7 @@ def benchmark_tasks_rename(key, dataset):
         flash(sets.plain(e, key, name), "error")
         return redirect(url_for("benchmark_tasks", key=key, dataset=dataset, set=name))
     flash(f"Renamed {was} to {entry['label']}. Runs made from it follow the new name.", "ok")
-    return redirect(url_for("benchmark_tasks", key=key, dataset=entry["dataset"], set=entry["name"]))
+    return redirect(url_for("benchmark_tasks", key=key, dataset=dataset, set=entry["name"]))
 
 
 @app.route("/benchmarks/<key>/tasks/<dataset>/delete", methods=["POST"])

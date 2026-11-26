@@ -14,6 +14,7 @@
     "license": "MIT"
   },
   "driver": {
+    "describe": true,
     "command": [
       "python3",
       "{here}/driver.py"

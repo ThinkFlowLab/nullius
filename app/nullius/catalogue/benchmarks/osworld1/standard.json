@@ -93,7 +93,24 @@
   ],
   "units": {
     "noun": "task",
-    "nouns": "tasks"
+    "nouns": "tasks",
+    "categories": {
+      "domain": {
+        "label": "App",
+        "names": {
+          "chrome": "Chrome",
+          "gimp": "GIMP",
+          "libreoffice_calc": "LibreOffice Calc",
+          "libreoffice_impress": "LibreOffice Impress",
+          "libreoffice_writer": "LibreOffice Writer",
+          "multi_apps": "Several apps",
+          "os": "OS",
+          "thunderbird": "Thunderbird",
+          "vlc": "VLC",
+          "vs_code": "VS Code"
+        }
+      }
+    }
   },
   "score": {
     "kind": "score",
