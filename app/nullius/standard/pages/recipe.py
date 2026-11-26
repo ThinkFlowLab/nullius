@@ -122,7 +122,8 @@ def _capability_kind(b: dict) -> str:
 def benchmarks(cat) -> List[dict]:
     """The benchmarks the Benchmarks page and the builder's Benchmark step list: each of the catalogue's listed
     entries (``Catalog.listed_benchmarks``, whichever runner runs it) as ``b``, with its ``datasets``, its ``tasks``
-    and their ``unit`` (``Catalog.tasks_of``), what some of its options need of a machine (``host``, each name's label, None for nothing),
+    and their ``unit`` (``Catalog.tasks_of``), what it needs of a machine (``host``, each name's label, None for nothing: what its options need, and Docker when
+    its tasks run in images or Harbor runs it),
     what it is run with: ``family`` agent or capability (a benchmark only Harbor runs runs agents) and, for a
     capability, its ``kind``; ``versions``, another version's tasks and unit by version; and ``origins``, its versions'
     origins, each once, the default version's first."""
@@ -132,7 +133,7 @@ def benchmarks(cat) -> List[dict]:
         d = defs.get(b.key) or {}
         tasks, unit = cat.tasks_of(b)
         out.append({"b": b, "datasets": cat.datasets_of(b), "tasks": tasks, "unit": unit,
-                    "host": {n: hostreq.label(d, n) for n in sorted(d["host"])} if d.get("host") else None,
+                    "host": _machine_needs(b, d),
                     "family": d.get("family") or "agent", "kind": _capability_kind(d),
                     "origins": origins(d) if d else [b.origin],
                     # another version's tasks, when its datasets count differently (``Catalog.in_version``)
@@ -144,6 +145,15 @@ def origins(d: dict) -> List[str]:
     """The origins of a definition's versions, each once, its default version's first."""
     every = d.get("_origins") or {}
     return list(dict.fromkeys([every.get(d["_default"]) or definitions.origin_of(d), *every.values()]))
+
+
+def _machine_needs(b, d: dict) -> Optional[dict]:
+    """What a listed benchmark needs of a machine, each name's label: what its options need, and Docker when its
+    tasks run in images or Harbor runs it (a Harbor run needs ``docker ps`` to answer)."""
+    out = {n: hostreq.label(d, n) for n in sorted(d.get("host") or {})}
+    if "docker" not in out and ("harbor" in b.harness or any(e.get("image") for e in (d.get("environments") or {}).values())):
+        out["docker"] = "Docker"
+    return out or None
 
 
 def _short(label: str) -> str:
@@ -931,6 +941,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             return [STEP["agent"], "Check", f"{o['label']} ({o['key']}) · {o['source']} · {o['from']}"]
         if p.get("agent"):
             return [STEP["agent"], "Participant", f"{p['agent']['label']} · {p['agent'].get('benchmark_label') or b['label']}'s own"]
+        if p.get("setup"):                                                          # the version's own procedure
+            return [STEP["agent"], "Participant", f"{b['label']} · its own procedure"]
         proven = ", ".join(f"{q} {r.get('passed', '')}".strip() for q, r in (o.get("proven") or {}).items() if q in b["needs"])
         return [STEP["agent"], "Agent" if side == "agent" else "Capability", f"{o['label']} · {protocol(o)} · proven {proven}"]
     out["review"] = [[STEP["benchmark"], "Benchmark", f"{b['label']} · needs {', '.join(b['needs'])}"],
@@ -945,7 +957,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                        and not ((b.get("options") or {})[k].get("when") or {}).get("agent")
                        or "agent" in ((b.get("options") or {})[k].get("when") or {}) and any(      # one of its own agents' settings: that agent's
                            p.get("agent") and p["agent"]["start"]["driver"]["agent"] in b["options"][k]["when"]["agent"] for p in picks)],
-                     *[row(p) for p in picks if not p.get("setup") or p.get("agent")],
+                     *[row(p) for p in picks],
                      *[[STEP["agent"], "Options" + (f" of {p['o']['label']}" if several else ""),
                         ", ".join(f"{(p['o'].get('options') or {}).get(k, {}).get('label') or k.replace('_', ' ').capitalize()} {v}" + ("" if k in p["given"] else " (its default)") for k, v in p["opts"].items())]
                        for p in picks if p["opts"]],

@@ -270,7 +270,7 @@ class BenchmarkPage(PageCase):
 
     def test_what_its_options_need_filters_the_cards_by_label(self):
         for key, needs in (("locomo", "cuda_gpu"), ("longmemeval", "cuda_gpu&#10;stella_gpu"), ("osworld2", "docker&#10;scoring_programs"),
-                           ("tau3-bench", "sandbox"), ("gsm8k", "none")):
+                           ("tau3-bench", "sandbox&#10;docker"), ("swe-bench-verified", "docker"), ("gsm8k", "none")):   # Harbor or images need Docker
             with self.subTest(key):
                 card = self.card(key)
                 self.assertIn(f'data-f-needs="{needs}&#10;"', card)

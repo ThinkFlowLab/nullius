@@ -46,6 +46,7 @@ class Compile(unittest.TestCase):
         rows = {row[1]: row[0] for row in out["review"]}
         self.assertEqual(rows["Retrieval"], recipe.STEP["agent"])
         self.assertNotIn("Procedure", rows)
+        self.assertIn([recipe.STEP["agent"], "Participant", "LoCoMo 3eb6f2c · its own procedure"], out["review"])   # what runs, named as the Benchmark row
 
     def test_time_limits_are_forced_in_seconds_on_every_job_and_turns_only_on_a_conversation(self):
         out = recipe.compile(a_recipe(timeouts={"agent": 30, "verify": 1.5, "setup": ""}, turns=40), defs())

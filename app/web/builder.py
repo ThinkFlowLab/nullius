@@ -133,7 +133,7 @@ def _pick_card(b: dict, e: dict) -> dict:
     return {"pick": {"value": d["_ref"], "disabled": bool(why)}, "id": "pick-" + d["_ref"].replace(":", "-").replace("@", "-"),
             "icon": agent_mark_url(d["key"]) if b["family"] == "agent" else "", "title": {"text": title, "title": d.get("summary", "")},
             "search": " ".join([title, d["key"], version, e["protocol"], d.get("summary", "")]),
-            "protocol": {"text": e["protocol"], "value": e["protocol"]}, "published": "",
+            "protocol": {"text": e["protocol"], "value": e["protocol"]},
             "origin": origin_tag("benchmark" if d.get("benchmark") else definitions.origin_of(d)),
             "fit": {"text": "Cannot" if why else "Can run it", "value": "unfit" if why else "fit"}, "from": there,
             "proves": [{"text": r["label"], "value": r["port"]} for r in rows.values()],
