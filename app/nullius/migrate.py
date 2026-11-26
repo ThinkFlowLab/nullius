@@ -269,7 +269,7 @@ def migrate_providers(apply_it: bool) -> int:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Copy legacy settings, custom catalogue entries and workspaces; preview by default.")
+    parser = argparse.ArgumentParser(prog="nullius migrate", description="Copy legacy settings, custom catalogue entries and workspaces; preview by default.")
     parser.add_argument("--from", dest="checkout", type=Path, help="existing Nullius checkout (left unchanged)")
     parser.add_argument("--secrets", type=Path, help="also copy a legacy benchmark licence directory")
     parser.add_argument("--providers", action="store_true",

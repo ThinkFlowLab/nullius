@@ -31,9 +31,9 @@ EXIT_FAILED = 4
 
 EPILOG = """\
 examples:
-  PYTHONPATH=app python3 -m nullius.importers.cli /path/to/logs -o jobs_imported
-  PYTHONPATH=app python3 -m nullius.importers.cli /path/to/logs -o jobs_imported --json
-  PYTHONPATH=app python3 -m nullius.importers.cli --list
+  nullius import /path/to/logs -o jobs_imported
+  nullius import /path/to/logs -o jobs_imported --json
+  nullius import --list
 
 exit codes:
   0  done
@@ -47,7 +47,7 @@ With --json, stdout is exactly one JSON document; everything else goes to stderr
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        prog="python3 -m nullius.importers.cli", description=__doc__.splitlines()[0],
+        prog="nullius import", description=__doc__.splitlines()[0],
         epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run_dir", nargs="?", help="the harness's run tree")
     ap.add_argument("-o", "--out", default="jobs_imported",
