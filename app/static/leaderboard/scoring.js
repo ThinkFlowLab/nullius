@@ -22,21 +22,28 @@
     form.querySelectorAll('input').forEach(n=>{n.setAttribute('aria-invalid',String(!n.checkValidity()));});
     return ok&&form.checkValidity();
   }
-  function shares() {
-    const normalized = values => {
-      const scale=Math.max(0,...values.filter(number));
-      const total=scale?values.reduce((n,w)=>n+(number(w)?w/scale:0),0):0;
-      return values.map(w=>total&&number(w)?Number((w/scale/total*100).toFixed(1)):0);
-    };
-    const overall=normalized(Object.values(draft.axes).map(a=>a.weight));
-    Object.entries(draft.axes).forEach(([name,a],i)=>{
-      form.querySelector(`[data-overall-share="${name}"]`).textContent=`${overall[i]}%`;
-      const shares=normalized(a.entries.map(e=>e.weight));
-      form.querySelectorAll(`[data-scoring-axis="${name}"] [data-share]`).forEach((n,j)=>n.textContent=`${shares[j]}%`);
+  /* each section opens on an overview: every benchmark's share of each axis, and the other family's axes it feeds */
+  const names=section=>[...section.querySelectorAll('[data-scoring-axis]')].map(n=>n.dataset.scoringAxis);
+  const keyOf=e=>e.custom?'custom:'+e.custom:e.benchmark;
+  const labelOf=key=>key.startsWith('custom:')?(draft.custom.find(c=>'custom:'+c.id===key)?.name||'Custom benchmark'):(data.options.find(o=>o.key===key)?.label||key);
+  const shareIn=(axis,key)=>{const a=draft.axes[axis],total=a.entries.reduce((n,e)=>n+(number(e.weight)?e.weight:0),0);return total?a.entries.filter(e=>keyOf(e)===key).reduce((n,e)=>n+(number(e.weight)?e.weight:0),0)/total:0;};
+  function overview() {
+    form.querySelectorAll('[data-overview]').forEach(table=>{
+      const section=table.closest('section'), mine=names(section), others=Object.keys(draft.axes).filter(a=>!mine.includes(a));
+      const keys=[...new Set(mine.flatMap(a=>draft.axes[a].entries.map(keyOf)))];
+      const head=el('tr');head.append(el('th','Benchmark'),...mine.map(a=>el('th',a,{class:'lb-ov-num'})),el('th',table.dataset.overview));
+      const body=el('tbody');
+      keys.forEach(key=>{
+        const tr=el('tr');tr.append(el('td',labelOf(key)));
+        mine.forEach(a=>{const v=shareIn(a,key),td=el('td',null,{class:'lb-ov-num'});if(v>0){const chip=el('span',v.toFixed(2),{class:'lb-ov-chip'});chip.style.setProperty('--v',v.toFixed(3));td.append(chip);}else td.append(el('span','·',{class:'lb-ov-none'}));tr.append(td);});
+        const fed=others.filter(a=>shareIn(a,key)>0);tr.append(el('td',fed.join(', ')||'–',{class:'lb-ov-other'}));body.append(tr);
+      });
+      if(!keys.length){const tr=el('tr');tr.append(el('td','No benchmark',{colspan:mine.length+2,class:'lb-ov-other'}));body.append(tr);}
+      const thead=el('thead');thead.append(head);table.replaceChildren(thead,body);
     });
   }
   function report(message,error=false) {status.textContent=message;status.closest('.lb-savebar').hidden=!error;}
-  function edited() {resetting=false;dirty=true;shares();clearTimeout(timer);if(!valid())return;timer=setTimeout(save,300);}
+  function edited() {resetting=false;dirty=true;overview();clearTimeout(timer);if(!valid())return;timer=setTimeout(save,300);}
   async function save(reset=false) {
     if(!writable||writing||(!reset&&(!dirty||!valid())))return;
     writing=true;dirty=false;const body=reset?{reset:true}:structuredClone(draft);
@@ -83,13 +90,16 @@
           line.append(versions.length>1||!bench?cell(select(versions.map(v=>[v.version,v.version_label||'–']),entry.version,v=>entry.version=v,`${name}, version ${n}`)):none());
           line.append(metrics.length>1||entry.metric!=='Score'?cell(select(metrics.map(m=>[m,m]),entry.metric,v=>entry.metric=v,`${name}, metric ${n}`)):none());
         }
-        line.append(cell(input(entry.weight,v=>entry.weight=v,{required:'','aria-label':`${name}, weight ${n}`})),el('output','',{'data-share':'',class:'lb-share'}),remove(`Remove benchmark ${n} from ${name}`,()=>{axis.entries.splice(index,1);render();edited();}));
+        line.append(cell(input(entry.weight,v=>entry.weight=v,{required:'','aria-label':`${name}, weight ${n}`})),remove(`Remove benchmark ${n} from ${name}`,()=>{axis.entries.splice(index,1);if(!axis.entries.length)axis.weight=0;render();edited();}));
         container.append(line);
       });
-      section.querySelector('[data-count]').textContent=axis.entries.length||'';
+      section.querySelector('[data-count]').textContent=axis.entries.length;
       const weight=section.querySelector('[data-overall]');weight.value=axis.weight;weight.oninput=()=>{axis.weight=weight.value===''?null:Number(weight.value);edited();};
-      section.querySelector('[data-add-entry]').onclick=()=>{const b=data.options[0];if(!b)return;axis.entries.push({benchmark:b.key,dataset:'',version:b.version,metric:'Score',weight:1});render();edited();};
-    });shares();
+      section.querySelector('[data-add-entry]').onclick=()=>{const b=data.options[0];if(!b)return;
+        /* an empty axis weighs 0 in Overall; its first benchmark brings back the axis's standard weight */
+        if(!axis.entries.length&&!axis.weight)axis.weight=data.overall?.[name]||0;
+        axis.entries.push({benchmark:b.key,dataset:'',version:b.version,metric:'Score',weight:1});render();edited();};
+    });overview();
   }
   /* each axis folds its benchmarks away; open by default */
   form.querySelectorAll('.lb-fold').forEach(b=>b.onclick=()=>{const open=b.getAttribute('aria-expanded')!=='true';b.setAttribute('aria-expanded',String(open));window.NulliusDisclosure.setHidden(document.getElementById(b.getAttribute('aria-controls')),open);});

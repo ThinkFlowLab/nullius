@@ -139,6 +139,7 @@ class LeaderboardRoutes(unittest.TestCase):
         rows = self.client.get("/api/leaderboard").get_json()["rows"]
         doc["custom"] = [{"id": "calendar", "name": " <b>test</b> ", "scores": {rows[0]["key"]: 72, rows[1]["key"]: 0}}]
         doc["axes"]["Personalization"]["entries"] = [{"custom": "calendar", "weight": 1}]
+        doc["axes"]["Personalization"]["weight"] = .15  # an axis with no default benchmark starts at 0
         result = self.client.post("/api/scoring", json=doc, headers=headers | {"If-Match": initial["revision"]})
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.get_json()["settings"]["custom"][0]["name"], "<b>test</b>")

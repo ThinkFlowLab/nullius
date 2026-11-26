@@ -47,7 +47,9 @@ class ConfigurationExamples(unittest.TestCase):
     def test_c1_c5_all_fifteen_axes_and_defaults(self):
         axes = self.defaults["axes"]
         self.assertEqual(len(axes), 15)
-        self.assertEqual([axes[k]["weight"] for k in configuration.CAPABILITIES], [.12, .12, .08, .15, .15, .10, .08, .20])
+        # only GAIA is in this catalogue: the capabilities without a benchmark weigh nothing
+        self.assertEqual([axes[k]["weight"] for k in configuration.CAPABILITIES], [0, 0, 0, 0, 0, .10, 0, .20])
+        self.assertEqual(configuration.defaults([])["axes"]["Memory"]["weight"], .12)
         self.assertTrue(all(axes[k]["weight"] == 0 for k in configuration.DOMAINS))
         self.assertEqual([(e["dataset"], e["version"], e["weight"]) for e in axes["Retrieval"]["entries"]], [("gaia-validation", "v1", 1)])
         self.assertEqual([(e["dataset"], e["weight"]) for e in axes["Execution"]["entries"]], [("gaia-validation", .5)])

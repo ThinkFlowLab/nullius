@@ -191,7 +191,7 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
 .lb-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; flex: none; }
 .lb-icon .ic { width: 16px; height: 16px; }
 /* every select keeps room for its name on one line; an axis's weight in Overall sits under its name, leaving the row to the selects */
-.lb-axis { --lb-entry: minmax(112px, 1.2fr) minmax(132px, 1.3fr) minmax(132px, 1.2fr) minmax(96px, 1fr) 56px 40px 34px;
+.lb-axis { --lb-entry: minmax(112px, 1.2fr) minmax(132px, 1.3fr) minmax(132px, 1.2fr) minmax(96px, 1fr) 56px 34px;
   display: grid; grid-template-columns: 156px minmax(0, 1fr); grid-template-areas: 'name entries' 'weight entries'; grid-template-rows: min-content 1fr; row-gap: 6px; gap: 16px; align-items: start; padding: 14px 0; border-top: 1px solid var(--border-soft); }
 .lb-axis h3 { text-transform: none; letter-spacing: normal; margin: 0; font-size: .88rem; font-weight: 600; color: var(--text); }
 .lb-fold { display: inline-flex; align-items: center; min-height: 34px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
@@ -199,9 +199,24 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
 .lb-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .lb-count { margin-left: 8px; color: var(--text-faint); font-weight: 400; font-size: .76rem; font-variant-numeric: tabular-nums; }
 .lb-fold[aria-expanded="true"] .lb-count { display: none; }
+.lb-overview { margin: 12px 0 20px; }
+.lb-overview > .lb-fold { font-size: .82rem; font-weight: 600; color: var(--text-dim); }
+.lb-ov-wrap { margin-top: 8px; }
+.lb-ov { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.lb-ov th { padding: 6px 6px 8px; color: var(--text-faint); font-weight: 500; font-size: .72rem; text-align: left; border-bottom: 1px solid var(--border-soft); hyphens: auto; vertical-align: bottom; }
+.lb-ov td { padding: 8px 6px; border-bottom: 1px solid var(--border-soft); color: var(--text); vertical-align: middle; }
+.lb-ov tr > :first-child { padding-left: 0; font-weight: 500; }
+.lb-ov .lb-ov-num { text-align: center; }
+.lb-ov-chip { display: inline-block; min-width: 40px; padding: 3px 6px; border-radius: 6px; font: 600 .74rem var(--mono); font-variant-numeric: tabular-nums;
+  background: color-mix(in oklab, var(--accent) calc(16% + var(--v, 0) * 30%), transparent); color: var(--text); }
+.lb-ov-none, .lb-ov-other { color: var(--text-faint); }
+.lb-ov-other { font-size: .76rem; }
 .lb-axis > h3 { grid-area: name; }
 .lb-axis > .lb-entries { grid-area: entries; }
 .lb-weight { grid-area: weight; align-self: start; }
+/* folded, an axis is one line: its weight in Overall moves beside its name while its benchmarks slide away below */
+.lb-axis:has(> h3 > .lb-fold[aria-expanded="false"]) { grid-template-areas: 'name weight'; grid-template-rows: auto; }
+.lb-axis:has(> h3 > .lb-fold[aria-expanded="false"]) > .lb-entries { grid-area: auto; grid-column: 2; grid-row: 2; }
 .lb-weight-name { color: var(--text-faint); font-size: .75rem; }
 .lb-axis-head .lb-fold { display: none; }
 .lb-axis-head { padding: 0 0 8px; border-top: 0; color: var(--text-faint); font-size: .75rem; }
@@ -212,8 +227,7 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
 .lb-cell { min-width: 0; }
 .lb-cell .ui-select-trigger { width: 100%; }
 .lb-cell.lb-none { color: var(--text-faint); text-align: center; }
-.lb-share, [data-overall-share] { color: var(--text-faint); font-size: .78rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.lb-weight { display: grid; grid-template-columns: auto 58px 1fr; gap: 8px; align-items: center; }
+.lb-weight { display: grid; grid-template-columns: auto 58px; justify-content: start; gap: 8px; align-items: center; }
 .lb-weight output { text-align: left; }
 .lb-custom + .lb-custom { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
 .lb-custom-head { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
@@ -239,10 +253,12 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
   .lb-srow { grid-template-columns: 96px minmax(0, 1fr) 40px; }
   .lb-axis { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'name' 'weight' 'entries'; gap: 10px; }
   .lb-axis-head { display: none; }
+  .lb-axis:has(> h3 > .lb-fold[aria-expanded="false"]) { grid-template-columns: minmax(0, 1fr) auto; }
+  .lb-axis:has(> h3 > .lb-fold[aria-expanded="false"]) > .lb-entries { grid-column: 1 / -1; }
   .lb-entry { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding-bottom: 8px; border-bottom: 1px dashed var(--border-soft); }
   .lb-entry > .lb-none { display: none; }
   .lb-entry > :first-child { grid-column: 1 / -1; }
-  .lb-weight { grid-template-columns: auto 90px 1fr; }
+  .lb-weight { grid-template-columns: auto 90px; }
   .lb-complete-count { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {

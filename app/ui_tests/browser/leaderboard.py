@@ -155,7 +155,7 @@ class LeaderboardBrowser(unittest.TestCase):
         self.page.locator('th[data-col="overall"]').click()
         self.page.locator('th[data-col="overall"]').click()
         self.page.wait_for_timeout(40)
-        self.assertGreater(self.page.locator('tbody').evaluate('(e)=>e.getAnimations({subtree:true}).length'),0)
+        self.assertGreater(self.page.locator('#leaderboard-table tbody').evaluate('(e)=>e.getAnimations({subtree:true}).length'),0)
         search=self.page.locator('#leaderboard-table-tools [data-search]')
         search.fill('Goose')
         expect(search).to_be_focused()
@@ -165,6 +165,9 @@ class LeaderboardBrowser(unittest.TestCase):
 
     def test_autosave_valid_invalid_retry_and_latest_edit(self):
         self.open('/scoring')
+        fold = self.page.locator('[data-scoring-axis="Retrieval"] .lb-fold')
+        expect(fold).to_have_attribute('aria-expanded', 'false')  # rows open folded
+        fold.click()
         weight = self.page.locator('[data-scoring-axis="Retrieval"] [data-entries] input').first
         with self.page.expect_response(lambda r: r.url.endswith('/api/scoring') and r.request.method == 'POST'):
             weight.fill('3')
@@ -203,6 +206,7 @@ class LeaderboardBrowser(unittest.TestCase):
         for axis in settings["axes"].values():
             axis["entries"] = []
         settings["axes"]["Personalization"]["entries"] = [{"custom": "c", "weight": 1}]
+        settings["axes"]["Personalization"]["weight"] = .15
         configuration.save(configuration.location(), settings, service.catalogue()[1])
         self.open('/leaderboard')
         self.page.locator('#lb-mode [data-mode="1"]').click()

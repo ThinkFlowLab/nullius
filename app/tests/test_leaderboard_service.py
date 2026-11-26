@@ -33,6 +33,7 @@ class RecordedIdentity(unittest.TestCase):
             key = board.build([], agents, benches, doc)["rows"][0]["key"]
             doc["custom"] = [{"id": "calendar", "name": "Calendar", "scores": {key: 72}}]
             doc["axes"]["Personalization"]["entries"] = [{"custom": "calendar", "weight": 1}]
+            doc["axes"]["Personalization"]["weight"] = .15  # an axis with no default benchmark starts at 0
             configuration.save(configuration.location(), doc, benches)
             env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]))
             for flags, expected in (([], None), (["--all-scores"], .72)):

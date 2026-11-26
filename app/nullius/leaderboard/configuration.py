@@ -73,12 +73,16 @@ def defaults(benchmarks):
     defaults_of = {b["key"]: b for b in benchmarks if b.get("_version") == b.get("_default")}
     versions = {k: definitions.version_identity(b) for k, b in defaults_of.items()}
     declared = lambda key, dataset: not dataset or dataset in {c["id"] for c in scopes.choices(defaults_of[key])}
-    return {"schema": 1, "custom": [], "axes": {
-        axis: {"weight": weight, "entries": [
-            {"benchmark": key, "dataset": dataset, "version": versions[key], "metric": metric, "weight": weight}
-            for key, dataset, metric, weight in DEFAULT_ENTRIES.get(axis, [])
-            if key in versions and declared(key, dataset)]}
-        for axis, weight in zip(AXES, OVERALL)}}
+    axes = {axis: {"weight": weight, "entries": [
+        {"benchmark": key, "dataset": dataset, "version": versions[key], "metric": metric, "weight": weight}
+        for key, dataset, metric, weight in DEFAULT_ENTRIES.get(axis, [])
+        if key in versions and declared(key, dataset)]} for axis, weight in zip(AXES, OVERALL)}
+    # an axis with no benchmark weighs nothing in Overall, unless none has one: Overall needs a positive weight
+    if any(axis["entries"] and axis["weight"] > 0 for axis in axes.values()):
+        for axis in axes.values():
+            if not axis["entries"]:
+                axis["weight"] = 0
+    return {"schema": 1, "custom": [], "axes": axes}
 
 
 def _number(value, label, upper=None):

@@ -22,7 +22,8 @@ def _page(view):
     return render_template("leaderboard/board.html", board=_document(), percent=weights.percent, view=view,
                            settings=settings, options=service.options(benchmarks),
                            capabilities=configuration.CAPABILITIES, domains=configuration.DOMAINS,
-                           writable=shared._local_client(), revision=service.revision())
+                           writable=shared._local_client(), revision=service.revision(),
+                           overall=dict(zip(configuration.AXES, configuration.OVERALL)))
 
 
 @app.get("/leaderboard")
