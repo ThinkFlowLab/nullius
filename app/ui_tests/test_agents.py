@@ -149,9 +149,9 @@ class Tabs(unittest.TestCase):
         self.assertIn('data-f-origin="benchmark&#10;"', card)
         self.assertIn('href="/benchmarks/osworld1"', card)
         self.assertIn('<div class="bench-card-setup">computer-use-preview</div>', card)
-        self.assertIn('<div class="bench-card-runs run-tags" role="group" aria-label="Kind, Origin, Uses, Example"><span class="origin-tag benchmark">A benchmark&#39;s own</span><span class="std-tag">Computer use</span></div>', card)
-        self.assertIn('<div class="bench-card-foot"><span class="bench-card-tags"><span class="std-tag">Its own script</span></span>'
-                      '<span class="bench-harness">OSWorld1</span></div>', card)                   # the builder's foot: its protocol, where it comes from
+        self.assertIn('<div class="bench-card-runs run-tags" role="group" aria-label="Kind, Uses, Example"><span class="std-tag">Computer use</span></div>', card)
+        self.assertIn('<div class="bench-card-foot"><span class="bench-harness">OSWorld1</span></div>', card)   # its benchmark; origin and protocol are filters
+        self.assertIn('data-f-protocol="Its own script&#10;"', card)
         self.assertNotIn("Ports proven", card)
         self.assertIn('id="osworld2-muse-spark"', table)
         self.assertEqual(self.get("/agents/openai-cua").status_code, 404)                 # its benchmark's page is its page
