@@ -125,6 +125,9 @@
 
   /* the efficiency scatter, on the mockup's 640 by 426 grid: Overall up, time or cost per task across */
   const PL={l:46,r:618,t:30,b:380};
+  /* the scatter is drawn at its box's own width, so its text keeps its size at any width and only the plot grows */
+  const scatterBox=document.getElementById('lb-scatter').parentElement;
+  const plotWidth=()=>Math.max(520,Math.round(scatterBox.clientWidth||640));
   function fit(values,steps,n,floor) {
     let a=Math.min(...values),b=Math.max(...values);const pad=Math.max((b-a)*.12,steps[0]);a=Math.max(floor,a-pad);b=b+pad;
     const q=steps.find(q=>(b-a)/q<=n)||steps.at(-1);return {step:q,lo:Math.max(floor,Math.floor(a/q+1e-9)*q),hi:Math.ceil(b/q-1e-9)*q};
@@ -132,7 +135,8 @@
   const ruler=document.createElement('canvas').getContext('2d');
   const textWidth=(t,weight=600)=>{ruler.font=`${weight} 12px system-ui, sans-serif`;return Math.ceil(ruler.measureText(t).width);};
   function drawScatter() {
-    const live=document.getElementById('lb-scatter'),plot=svg('svg');
+    const live=document.getElementById('lb-scatter'),plot=svg('svg'),W=plotWidth();
+    PL.r=W-22;live.setAttribute('viewBox',`0 0 ${W} 426`);
     const time=metric==='time', value=r=>r.metrics?.[metric]?.value, x=r=>time?value(r)/60:value(r);
     const points=scored().filter(r=>value(r)!=null);
     const defs=svg('defs');
@@ -182,6 +186,7 @@
   }
   function nearest(plot) { plot.addEventListener('click',e=>{if(e.target.closest('[data-select]'))return;const pt=plot.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const p=pt.matrixTransform(plot.getScreenCTM().inverse());const points=[...plot.querySelectorAll('[data-cx]')].map(n=>({n,d:Math.hypot(p.x-Number(n.dataset.cx),p.y-Number(n.dataset.cy))})).sort((a,b)=>a.d-b.d||a.n.dataset.select.localeCompare(b.n.dataset.select));if(points[0]&&points[0].d<30){e.stopPropagation();choose(points[0].n.dataset.select);}},true); }
   nearest(document.getElementById('lb-scatter'));
+  let drawnWidth=0;new ResizeObserver(()=>{const W=plotWidth();if(W!==drawnWidth&&drawnWidth){drawnWidth=W;drawScatter();}else drawnWidth=W;}).observe(scatterBox);
 
   /* strips: every agent's dot on one line per axis; the chosen one larger, the average a dashed tick, the compared one a diamond */
   function strips(group) {
@@ -261,13 +266,15 @@
     const differences=data.capabilities.map(name=>({name,d:current.axes[name].score!=null&&compared(name)!=null?current.axes[name].score-compared(name):null})).filter(v=>v.d!=null).sort((a,b)=>b.d-a.d);
     const baseline=versus==='average'?null:versus.startsWith('version:')?projection?.rows.find(r=>r.key===selected)?.overall:row(versus)?.overall;
     const lines=[];
-    const model=[current.identity.model,current.identity.effort].filter(Boolean).join(' · ');if(model)lines.push(['Model',model]);
-    if(!current.rank&&current.reasons.length)lines.push(['Not ranked',current.reasons.length>1?`${current.reasons[0]} and ${current.reasons.length-1} more`:current.reasons[0],current.reasons.join('\n')]);
-    if(baseline!=null&&current.overall!=null)lines.push([`Overall against ${against}`,signed(current.overall-baseline)]);
-    lines.push([`Best against ${against}`,differences.length?`${differences[0].name} ${signed(differences[0].d)}`:'–'],[`Weakest against ${against}`,differences.length?`${differences.at(-1).name} ${signed(differences.at(-1).d)}`:'–']);
-    lines.push(['Time per task',measure('time',current.metrics?.time?.value)],['Cost per task',measure('cost',current.metrics?.cost?.value)]);
-    if(current.custom_names.length)lines.push(['Not verified',current.custom_names.join(', ')]);
-    box.replaceChildren(who,figure,bar,...lines.map(([k,v,title])=>{const line=element('div',null,{class:'lb-kv'});line.append(element('span',k),element('b',v,title?{title}:{}));return line;}));
+    /* a difference reads green above the reference and red below it */
+    const change=d=>element('span',signed(d),{class:d>0?'lb-up':d<0?'lb-down':''});
+    const named=v=>v?[`${v.name} `,change(v.d)]:['–'];
+    if(!current.rank&&current.reasons.length)lines.push(['Not ranked',[current.reasons.length>1?`${current.reasons[0]} and ${current.reasons.length-1} more`:current.reasons[0]],current.reasons.join('\n')]);
+    if(baseline!=null&&current.overall!=null)lines.push([`Overall against ${against}`,[change(current.overall-baseline)]]);
+    lines.push([`Best against ${against}`,named(differences[0])],[`Weakest against ${against}`,named(differences.at(-1))]);
+    lines.push(['Time per task',[measure('time',current.metrics?.time?.value)]],['Cost per task',[measure('cost',current.metrics?.cost?.value)]]);
+    if(current.custom_names.length)lines.push(['Not verified',[current.custom_names.join(', ')]]);
+    box.replaceChildren(who,figure,bar,...lines.map(([k,v,title])=>{const line=element('div',null,{class:'lb-kv'});const value=element('b',null,title?{title}:{});value.append(...v);line.append(element('span',k),value);return line;}));
   }
   function draw() {
     if(!row(selected))return;

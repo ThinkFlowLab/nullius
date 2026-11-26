@@ -62,7 +62,7 @@
 .lb-dot.lb-current .lb-edge { stroke: var(--accent); stroke-width: 2.5; }
 .lb-dot:is(:hover, :focus-visible) .lb-edge { stroke: var(--text); }
 .lb-dot .lb-logo { transform-box: fill-box; transform-origin: center; transition: transform .18s ease-out; }
-.lb-dot:is(:hover, :focus-visible) .lb-logo { transform: scale(1.12); }
+.lb-dot:is(:hover, :focus-visible) .lb-logo { transform: scale(1.06); }
 
 /* the agent card */
 .lb-who-big { display: flex; gap: 12px; align-items: center; }
@@ -73,7 +73,9 @@
 .lb-fig { font-size: 2.5rem; font-weight: 650; line-height: 1.1; color: var(--text); }
 .lb-bar-wide { width: 100%; height: 6px; margin: 0 0 12px; }
 .lb-kv { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; color: var(--text-dim); font-size: .88rem; }
-.lb-kv span { white-space: nowrap; }
+.lb-kv > span { white-space: nowrap; }
+.lb-kv .lb-up { color: var(--lb-good); }
+.lb-kv .lb-down { color: var(--bad); }
 .lb-kv b { color: var(--text); font-weight: 600; text-align: right; }
 
 /* pickers over the strips and the radars */

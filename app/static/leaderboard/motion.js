@@ -84,10 +84,13 @@ window.LeaderboardMotion = (() => {
     const update=()=>{
       cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{
         const next=measure();
+        /* a row slides whole to its new place; a cell is never moved on its own, since a table re-lays its columns
+           at once and cells pulled apart from their row draw blank in some engines: a cell that appears or changes fades in */
         next.forEach(({rect,text},node)=>{
           const old=previous.get(node);if(!old||!rect.width||!rect.height)return;
-          const dx=old.rect.width?old.rect.x-rect.x:0,dy=node.tagName==='TR'?old.rect.y-rect.y:0;
-          if(Math.abs(dx)+Math.abs(dy)>.5)fade(node,[{transform:`translate(${dx}px,${dy}px)`},{transform:'translate(0,0)'}]);
+          const appeared=!old.rect.width||!old.rect.height;
+          if(node.tagName==='TR'){const dy=old.rect.y-rect.y;if(!appeared&&Math.abs(dy)>.5)fade(node,[{transform:`translateY(${dy}px)`},{transform:'translateY(0)'}]);return;}
+          if(appeared)fade(node,[{opacity:0},{opacity:1}],240);
           else if(old.text!==text)fade(node,[{opacity:.25},{opacity:1}]);
         });previous=next;
       });
