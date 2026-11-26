@@ -6,8 +6,11 @@
   const motion=window.LeaderboardMotion;
   const percent = v => v == null ? '–' : `${Number((v * 100).toFixed(1))}%`;
   const whole = v => v == null ? '–' : `${Math.round(v * 100)}%`;
-  const minutes = s => `${Math.floor(s/60)}m ${String(Math.round(s%60)).padStart(2,'0')}s`;
-  const measure = (field,v) => v == null ? '–' : field==='cost' ? `$${v.toFixed(2)}` : field==='time' ? minutes(v) : String(Math.round(v));
+  /* a time is rounded to the second before it is split, so 119.6 s reads 2m 00s; a cost that rounds to nothing says so */
+  const minutes = s => { const t=Math.round(s); return `${Math.floor(t/60)}m ${String(t%60).padStart(2,'0')}s`; };
+  const measure = (field,v) => v == null ? '–' : field==='cost' ? (v>0&&v<.005 ? '<$0.01' : `$${v.toFixed(2)}`) : field==='time' ? minutes(v) : String(Math.round(v));
+  /* a score as a column sorts it: two means that differ only in their last bits are the same score */
+  const level = v => v == null ? '' : Number(v.toFixed(12));
   const element = (tag, text, attrs = {}) => { const e = document.createElement(tag); if (text != null) e.textContent = text; Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k,v)); return e; };
   const svg = (tag, attrs = {}, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg',tag); Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k,v)); if (text != null) e.textContent = text; return e; };
   const row = key => data.rows.find(r => r.key === key);
@@ -18,11 +21,12 @@
   const fieldAverage = axis => { const v=data.rows.filter(shown).map(r=>r.axes[axis]?.score).filter(x=>x!=null); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null; };
   const scored = () => data.rows.filter(r => r.overall != null && shown(r));
   /* a name says only as much as tells two rows apart: the version when an agent has several, the model when a version has several */
-  const label = r => { const same=data.rows.filter(v=>v.agent===r.agent); const twin=same.filter(v=>v.version===r.version);
-    return [r.name, same.length>1 ? r.version_label : '', twin.length>1 ? [r.identity.model,r.identity.effort].filter(Boolean).join(' ') : ''].filter(Boolean).join(' '); };
+  const setup = r => data.rows.filter(v=>v.agent===r.agent&&v.version===r.version).length>1 ? [r.identity.model,r.identity.effort].filter(Boolean).join(' ') : '';
+  const label = r => [r.name, new Set(data.rows.filter(v=>v.agent===r.agent).map(v=>v.version)).size>1 ? r.version_label : '', setup(r)].filter(Boolean).join(' ');
   const compared = axis => versus === 'average' ? fieldAverage(axis) : versus.startsWith('version:') ? projection?.rows.find(r=>r.key===selected)?.axes[axis]?.score : row(versus)?.axes[axis]?.score;
   const comparedName = () => versus === 'average' ? null : versus.startsWith('version:') ? 'benchmark version' : row(versus) ? label(row(versus)) : null;
-  const signed = v => `${v < 0 ? '−' : '+'}${Math.abs(v*100).toFixed(1)}`;
+  /* a difference that rounds to nothing is 0.0, neither up nor down */
+  const signed = v => { const n=Math.abs(v*100).toFixed(1); return Number(n) ? `${v < 0 ? '−' : '+'}${n}` : '0.0'; };
   const pop = document.getElementById('lb-evidence');
   function dismiss() { pop.hidden = true; }
   function evidence(target) {
@@ -61,9 +65,11 @@
       }
     }
     if(body.children.length)pop.append(table);
-    focusBefore = target; pop.hidden = false;
-    /* the card never covers what it explains: a radar's whole chart, beside it, else the score itself: below it, else
-       above, else beside it; only a window too small for any overlaps */
+    focusBefore = target; pop.hidden = false; place(target);
+  }
+  /* the card never covers what it explains: a radar's whole chart, beside it, else the score itself: below it, else
+     above, else beside it; only a window too small for any overlaps */
+  function place(target) {
     const box = target.getBoundingClientRect(), w=pop.offsetWidth, h=pop.offsetHeight, gap=8, edge=12;
     const clamp=(v,lo,hi)=>Math.max(lo,Math.min(v,hi));
     const chart=target.closest('[data-chart^="radars-"]')?.querySelector('svg')?.getBoundingClientRect();
@@ -83,11 +89,31 @@
     }
     pop.style.left=`${left}px`;pop.style.top=`${top}px`;
   }
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { dismiss(); returningFocus=true;focusBefore?.focus();returningFocus=false; } });
+  const back = () => { returningFocus=true; focusBefore?.focus(); returningFocus=false; };
+  /* Escape closes an open card; focus returns to its score only when it was inside the card */
+  document.addEventListener('keydown', e => { if (e.key !== 'Escape' || pop.hidden) return; if (pop.contains(document.activeElement)) back(); pinned=false; dismiss(); });
+  /* Enter on a score goes into its card's links; Tab past the last of them goes on to what follows the score, Shift+Tab
+     before the first back to the score */
+  document.addEventListener('keydown', e => {
+    if (pop.hidden || !focusBefore?.isConnected) return;
+    const links=[...pop.querySelectorAll('a[href]')], at=document.activeElement; if (!links.length) return;
+    if ((e.key==='Enter' || e.key===' ') && at===focusBefore) { e.preventDefault(); pinned=true; links[0].focus(); }
+    else if (e.key==='Tab' && e.shiftKey && at===links[0]) { e.preventDefault(); back(); }
+    else if (e.key==='Tab' && !e.shiftKey && at===links.at(-1)) back();   // not prevented: the browser's own Tab then leaves the score
+  });
+  /* the card follows its score as the page scrolls or resizes, and closes once the score is out of sight */
+  const track = e => {
+    if (pop.hidden || (e.target instanceof Node && pop.contains(e.target))) return;
+    const box=focusBefore?.isConnected ? focusBefore.getBoundingClientRect() : null, clip=focusBefore?.closest('.table-wrap')?.getBoundingClientRect();
+    if (!box || !box.width || box.bottom<0 || box.top>innerHeight || box.right<0 || box.left>innerWidth || (clip && (box.right<clip.left || box.left>clip.right))) { pinned=false; dismiss(); }
+    else place(focusBefore);
+  };
+  document.addEventListener('scroll', track, true); addEventListener('resize', track);
   /* hovering shows a score's evidence while the pointer is on it or on the card; a click or keyboard focus keeps it open */
   let pinned=false;
   document.addEventListener('pointerdown', e => { if (!pop.contains(e.target) && !e.target.closest('[data-axis]')) { pinned=false; dismiss(); } });
-  document.addEventListener('focusin', e => { const target=e.target.closest('[data-axis]'); if(target&&!returningFocus) { pinned=target.matches(':focus-visible'); evidence(target); } });
+  /* the card closes once focus is on something that is neither a score nor the card */
+  document.addEventListener('focusin', e => { const target=e.target.closest('[data-axis]'); if(target&&!returningFocus) { pinned=target.matches(':focus-visible'); evidence(target); } else if(!target&&!pop.hidden&&!pop.contains(e.target)) { pinned=false; dismiss(); } });
   let leaving=0;
   document.addEventListener('pointerover', e => { const target=e.target.closest('[data-axis]'); if(target||pop.contains(e.target))clearTimeout(leaving); if(target&&!pinned) evidence(target); });
   document.addEventListener('pointerout', e => { if(pinned||pop.hidden)return; if(!e.target.closest('[data-axis]')&&!pop.contains(e.target))return; clearTimeout(leaving); leaving=setTimeout(()=>{if(!pinned)dismiss();},180); });
@@ -142,7 +168,7 @@
   const shownRank=r=>onBoard?onBoard.get(r.key)??null:r.rank;
   table.addEventListener('table:drawn',e=>{
     const keys=new Set(e.detail.rows.map(tr=>tr.dataset.key)), ranked=data.rows.filter(r=>keys.has(r.key)&&r.rank).sort((a,b)=>a.rank-b.rank);
-    const next=new Map();let previous=null,at=0;ranked.forEach((r,i)=>{if(r.overall!==previous)at=i+1;next.set(r.key,at);previous=r.overall;});
+    const next=new Map();let previous=null,at=0;ranked.forEach((r,i)=>{if(r.rank!==previous)at=i+1;next.set(r.key,at);previous=r.rank;});
     const moved=!onTable||keys.size!==onTable.size||[...keys].some(k=>!onTable.has(k));onTable=keys;
     if(moved)follow();
     const changed=!onBoard||ranked.length!==onBoard.size||ranked.some(r=>onBoard.get(r.key)!==next.get(r.key));
@@ -151,7 +177,6 @@
     card();
   });
   function follow() {
-    document.querySelectorAll('[data-agent-select] option, [data-vs-select] option').forEach(o=>{const r=row(o.value);if(r)o.hidden=!shown(r);});
     const first=scored().sort((a,b)=>(a.rank??1e9)-(b.rank??1e9))[0];
     if(versus!=='average'&&!versus.startsWith('version:')&&row(versus)&&!shown(row(versus))){versus='average';document.querySelectorAll('[data-vs-select]').forEach(v=>setSelect(v,versus));}
     if(row(selected)&&!shown(row(selected))&&first)choose(first.key);else draw();
@@ -167,38 +192,54 @@
       tr.classList.toggle('lb-sel', r.key === selected);
       tr.querySelector('[data-col="rank"]').replaceChildren(medal(shownRank(r)));
       tr.querySelector('[data-col="rank"]').dataset.sort=shownRank(r) || '';
-      const same = data.rows.filter(v=>v.agent===r.agent && v.version===r.version).length>1;
-      tr.querySelector('[data-name]').textContent = r.name + (same ? ' · '+[r.identity.model,r.identity.effort].filter(Boolean).join(' ') : '');
-      const o=tr.querySelector('[data-col="overall"]');overall(o,r);o.dataset.sort=r.overall??'';
-      data.axes.forEach(name=>{const cell=tr.querySelector(`[data-col="${name}"]`),a=r.axes[name];chip(cell,a.score,name);cell.dataset.sort=a.score??'';});
+      tr.querySelector('[data-name]').textContent = [r.name,setup(r)].filter(Boolean).join(' · ');
+      const o=tr.querySelector('[data-col="overall"]');overall(o,r);o.dataset.sort=level(r.overall);
+      data.axes.forEach(name=>{const cell=tr.querySelector(`[data-col="${name}"]`),a=r.axes[name];chip(cell,a.score,name);cell.dataset.sort=level(a.score);});
       for(const [field,m] of Object.entries(r.metrics)) { const cell=tr.querySelector(`[data-col="${field}"]`);cell.replaceChildren(element('span',measure(field,m.value),{class:'lb-m'}));cell.dataset.sort=m.value??'';cell.title=`${m.count} observed`; }
       table.tBodies[0].append(tr);
     });
-    /* a column no agent has a score in is hidden, whatever was saved, and cannot be ticked; a saved choice holds for the others */
-    let saved=null;try {saved=JSON.parse(localStorage.getItem(table.id+'.cols')||'null');} catch {}
-    data.axes.forEach(name=>{
-      const cb=document.querySelector(`#${table.id}-tools input[data-col="${name}"]`);if(!cb)return;
-      const empty=data.averages[name].score==null;
-      cb.disabled=empty;cb.closest('label')?.setAttribute('title',empty?'No score yet':'');
-      cb.checked=!empty&&(saved?saved.includes(name):true);
-      table.querySelectorAll(`[data-col="${name}"]`).forEach(cell=>cell.style.display=cb.checked?'':'none');
-    });
+    columns();
     table.dispatchEvent(new Event('table:update'));
     applyFamily();
     const again=focusAxis&&focusRow?table.querySelector(`tr[data-key="${CSS.escape(focusRow)}"] [data-axis="${CSS.escape(focusAxis)}"]`):focused;
     if(again?.isConnected&&document.activeElement!==again)again.focus({preventScroll:true});
   }
+  const tools=document.getElementById(`${table.id}-tools`);
+  /* what the viewer chose for each score column, kept apart from the toolkit's list of the columns then shown */
+  const choices=()=>{try{const kept=JSON.parse(localStorage.getItem(table.id+'.axes')||'{}');return kept&&typeof kept==='object'?kept:{};}catch{return {};}};
+  /* a score column shows when an agent has a score in it, unless the viewer chose otherwise for that column: an
+     empty one stays out until it is ticked, and comes in by itself with its first score */
+  function columns() {
+    const chosen=choices();
+    data.axes.forEach(name=>{
+      const cb=tools?.querySelector(`input[data-col="${name}"]`);if(!cb)return;
+      cb.checked=name in chosen?chosen[name]===true:data.averages[name].score!=null;
+      table.querySelectorAll(`[data-col="${name}"]`).forEach(cell=>cell.style.display=cb.checked?'':'none');
+    });
+  }
   function applyFamily() {
     document.querySelectorAll('[data-family]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.family===family)));
     table.querySelectorAll('[data-col]').forEach(cell=> { if(data.axes.includes(cell.dataset.col)) cell.hidden=!data[family].includes(cell.dataset.col); });
+    /* Columns and Sort by list the shown family's columns alone */
+    tools?.querySelectorAll('input[data-col], input[data-sort-col]').forEach(box=>{const name=box.dataset.col??box.value;if(data.axes.includes(name))box.closest('label').hidden=!data[family].includes(name);});
     size();
   }
+  /* rows in the shown family's ranking: the order Sort by's Default means */
+  const ranking=()=>data.rows.forEach(r=>{const tr=[...table.tBodies[0].rows].find(t=>t.dataset.key===r.key);if(tr)table.tBodies[0].append(tr);});
+  const unsort=()=>{const none=tools?.querySelector('input[data-sort-col][value=""]');if(none){none.checked=true;none.dispatchEvent(new Event('change',{bubbles:true}));}};
+  tools?.addEventListener('change',e=>{if(e.target.matches('input[data-sort-col]')&&!e.target.value){ranking();table.dispatchEvent(new Event('table:update'));}});
   /* each shown column keeps room for its name; past the card's width the table scrolls */
   const heads=()=>[...table.tHead.rows[0].cells];
   const shownHeads=()=>heads().filter(th=>!th.hidden&&th.style.display!=='none');
+  const ruler=document.createElement('canvas').getContext('2d');
   function columnWidth(th) {
-    const fixed={rank:48,agent:innerWidth<=700?176:238,overall:innerWidth<=700?92:104,steps:66,time:84,calls:92,cost:72};
-    return fixed[th.dataset.col]??Math.max(88,Math.round(th.textContent.trim().length*7.4+26));
+    /* on a phone #, Agent and Overall fill the card's width exactly, so Overall is never cut */
+    const phone=innerWidth<=700, fixed={rank:phone?44:48,agent:phone?168:238,overall:phone?84:104,steps:66,time:84,calls:92,cost:72};
+    if(fixed[th.dataset.col])return fixed[th.dataset.col];
+    /* a score column is as wide as its name, measured in the header's own font */
+    const style=getComputedStyle(th);ruler.font=`${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const name=th.textContent.trim(), spacing=parseFloat(style.letterSpacing)||0;
+    return Math.max(88,Math.ceil(ruler.measureText(name).width+spacing*name.length+parseFloat(style.paddingLeft)+parseFloat(style.paddingRight))+2);
   }
   /* the columns fill the card exactly: room to spare goes to the score columns alone, so #, Agent, Overall and the
      measures keep their width whatever is shown */
@@ -251,7 +292,6 @@
     let a=Math.min(...values),b=Math.max(...values);const pad=Math.max((b-a)*.12,steps[0]);a=Math.max(floor,a-pad);b=b+pad;
     const q=steps.find(q=>(b-a)/q<=n)||steps.at(-1);return {step:q,lo:Math.max(floor,Math.floor(a/q+1e-9)*q),hi:Math.ceil(b/q-1e-9)*q};
   }
-  const ruler=document.createElement('canvas').getContext('2d');
   const textWidth=(t,weight=600)=>{ruler.font=`${weight} 12px system-ui, sans-serif`;return Math.ceil(ruler.measureText(t).width);};
   function drawScatter() {
     const live=document.getElementById('lb-scatter'),plot=svg('svg'),W=plotWidth();
@@ -275,12 +315,13 @@
     for(let i=0,v;(v=fx.lo+i*fx.step)<=fx.hi+1e-6;i++)plot.append(svg('line',{x1:X(v),x2:X(v),y1:PL.t,y2:PL.b,class:'lb-grid','data-node':'gx'+i}),svg('text',{x:X(v),y:PL.b+18,'text-anchor':'middle','data-node':'tx'+i},time?v.toFixed(places(fx.step)):'$'+v.toFixed(Math.max(1,places(fx.step)))));
     plot.append(svg('text',{x:PL.l+10,y:PL.t+20,class:'lb-better','data-node':'better'},'BETTER'),svg('text',{x:PL.l-34,y:PL.t-14,'data-node':'ylabel'},'Overall'),svg('text',{x:(PL.l+PL.r)/2,y:PL.b+36,'text-anchor':'middle','data-node':'xlabel'},`${time?'Minutes':'Cost'} per task`));
     /* each name sits beside its own logo, on whichever side is free of other logos and names */
+    const under=r=>[r.version_label,setup(r)].filter(Boolean).join(' · ');
     const R=13, H=27, spots=points.map(r=>({r,x:X(x(r)),y:Y(r.overall)})), taken=spots.map(s=>({x:s.x-R,y:s.y-R,w:2*R,h:2*R}));
     const clash=(a,b)=>a.x<b.x+b.w+4&&b.x<a.x+a.w+4&&a.y<b.y+b.h+2&&b.y<a.y+a.h+2;
     const ordered=[...spots].sort((a,b)=>(a.r.key===selected)-(b.r.key===selected));
     const placed=new Map();
     [...spots].sort((a,b)=>a.y-b.y).forEach(s=>{
-      const w=Math.max(textWidth(s.r.name),textWidth(s.r.version_label,400))+3;
+      const w=Math.max(textWidth(s.r.name),textWidth(under(s.r),400))+3;
       const options=[{x:s.x+R+5,y:s.y-H/2,anchor:'start'},{x:s.x-R-5-w,y:s.y-H/2,anchor:'end'},{x:s.x-w/2,y:s.y-R-2-H,anchor:'middle'},{x:s.x-w/2,y:s.y+R+2,anchor:'middle'},{x:s.x+R+5,y:s.y-H,anchor:'start'},{x:s.x+R+5,y:s.y,anchor:'start'},{x:s.x-R-5-w,y:s.y-H,anchor:'end'},{x:s.x-R-5-w,y:s.y,anchor:'end'}]
         .map(o=>({...o,w,h:H})).filter(o=>o.x>=PL.l+3&&o.x+w<=PL.r-3&&o.y>=PL.t+2&&o.y+H<=PL.b-2&&!(o.x<PL.l+74&&o.y<PL.t+28));
       const own=taken.find(t=>Math.abs(t.x+R-s.x)<.01&&Math.abs(t.y+R-s.y)<.01);
@@ -298,7 +339,7 @@
       else if(mark)logo.append(svg('image',{href:mark,x:s.x-R,y:s.y-R,width:2*R,height:2*R,'clip-path':'url(#lb-logo-clip)','data-node':'image'}));
       else logo.append(svg('text',{x:s.x,y:s.y+4,'text-anchor':'middle','data-node':'initial'},r.name.slice(0,1)));
       logo.append(svg('rect',{class:'lb-edge',x:s.x-R,y:s.y-R,width:2*R,height:2*R,rx:7,'data-node':'edge'}));
-      group.append(logo,svg('text',{x:tx,y:box.y+12,'text-anchor':box.anchor,class:`lb-name${me?' lb-me':''}`,'data-node':'name'},r.name),svg('text',{x:tx,y:box.y+24.5,'text-anchor':box.anchor,class:'lb-version','data-node':'version'},r.version_label));
+      group.append(logo,svg('text',{x:tx,y:box.y+12,'text-anchor':box.anchor,class:`lb-name${me?' lb-me':''}`,'data-node':'name'},r.name),svg('text',{x:tx,y:box.y+24.5,'text-anchor':box.anchor,class:'lb-version','data-node':'version'},under(r)));
       plot.append(group);
     }
     motion.morph(live,plot);
@@ -395,19 +436,30 @@
     const bar=element('span',null,{class:'lb-bar lb-bar-wide'}),fill=element('i');fill.style.width=`${(current.overall||0)*100}%`;bar.append(fill);
     const against=comparedName()||'the field';
     const differences=data[family].map(name=>({name,d:current.axes[name].score!=null&&compared(name)!=null?current.axes[name].score-compared(name):null})).filter(v=>v.d!=null).sort((a,b)=>b.d-a.d);
-    const baseline=versus==='average'?null:versus.startsWith('version:')?projection?.rows.find(r=>r.key===selected)?.overall:row(versus)?.overall;
+    /* a version comparison holds each family's Overall: the shown family's is the one to compare with */
+    const baseline=versus==='average'?null:versus.startsWith('version:')?projection?.rows.find(r=>r.key===selected)?.families?.[family]?.overall:row(versus)?.overall;
     const lines=[];
     /* a difference reads green above the reference and red below it */
-    const change=d=>element('span',signed(d),{class:d>0?'lb-up':d<0?'lb-down':''});
+    const change=d=>{const text=signed(d);return element('span',text,{class:text==='0.0'?'':d>0?'lb-up':'lb-down'});};
     const named=v=>v?[`${v.name} `,change(v.d)]:['–'];
     if(baseline!=null&&current.overall!=null)lines.push([`Overall against ${against}`,[change(current.overall-baseline)]]);
     lines.push([`Best against ${against}`,named(differences[0])],[`Weakest against ${against}`,named(differences.at(-1))]);
     lines.push(['Time per task',[measure('time',current.metrics?.time?.value)]],['Cost per task',[measure('cost',current.metrics?.cost?.value)]]);
     box.replaceChildren(who,figure,bar,...lines.map(([k,v,title])=>{const line=element('div',null,{class:'lb-kv'});const value=element('b',null,title?{title}:{});value.append(...v);line.append(element('span',k),value);return line;}));
   }
+  /* the pickers list who is on the board with an Overall in the shown family, each named apart from its twins; the
+     chosen agent is always among them, and a comparison that is gone falls back to the average */
+  function pickers() {
+    const rows=scored(), current=row(selected), agents=current&&!rows.includes(current)?[current,...rows]:rows;
+    const option=r=>element('option',label(r),{value:r.key});
+    const versions=data.versions.map(v=>element('option',`Same agent: ${v.label}`,{value:'version:'+JSON.stringify([v.benchmark,v.version])}));
+    if(versus!=='average'&&!rows.some(r=>r.key===versus)&&!versions.some(o=>o.value===versus)){versus='average';projection=null;}
+    document.querySelectorAll('[data-agent-select]').forEach(s=>{s.replaceChildren(...agents.map(option));setSelect(s,selected);});
+    document.querySelectorAll('[data-vs-select]').forEach(s=>{s.replaceChildren(element('option','Average',{value:'average'}),...rows.map(option),...versions.map(o=>o.cloneNode(true)));setSelect(s,versus);});
+  }
   function draw() {
     if(!row(selected))return;
-    swatches();card();drawScatter();for(const group of ['domains','capabilities']){strips(group);radar(group);}
+    pickers();swatches();card();drawScatter();for(const group of ['domains','capabilities']){strips(group);radar(group);}
   }
   function press(group,attr,value){document.querySelectorAll(`#${group} [${attr}]`).forEach(b=>b.setAttribute('aria-pressed',String(b.getAttribute(attr)===value)));}
   /* switching families fades what the changing columns hold, never the cells, so a row's colour and Overall stay put */
@@ -417,30 +469,34 @@
     document.querySelectorAll('[data-family]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.family===family)));
     clearTimeout(swapping);
     useFamily();
-    if(motion.reduced.matches){updateTable();draw();return;}
+    /* a sort by a column of the family that leaves would order the rows by a column nobody sees: it goes with it */
+    const sorted=table.tHead.querySelector('th[data-sorted]')?.dataset.col, stale=data.axes.includes(sorted)&&!data[family].includes(sorted);
+    if(motion.reduced.matches){if(stale)unsort();updateTable();draw();return;}
     table.classList.add('lb-swap');
     /* the columns that come in take their widths at once, behind the faded contents: widths easing while the table's
        own width has already changed would hand the difference to Agent and Overall */
-    swapping=setTimeout(()=>{table.classList.add('lb-instant');updateTable();table.offsetWidth;table.classList.remove('lb-instant','lb-swap');draw();},150);
+    swapping=setTimeout(()=>{table.classList.add('lb-instant');if(stale)unsort();updateTable();table.offsetWidth;table.classList.remove('lb-instant','lb-swap');draw();},150);
   });
   document.querySelectorAll('[data-agent-select]').forEach(s=>s.onchange=()=>choose(s.value));
   async function compareChoice() { const turn=++comparisonGeneration;projection=null;if(versus.startsWith('version:')) {const [benchmark,version]=JSON.parse(versus.slice(8));const response=await nulliusFetch('/api/leaderboard/comparison?'+new URLSearchParams({benchmark,version}));if(response.ok){const result=await response.json();if(turn!==comparisonGeneration)return;projection=result;}}draw();}
-  document.querySelectorAll('[data-vs-select]').forEach(s=>{data.versions.forEach(v=>s.append(element('option',`Same agent: ${v.label}`,{value:'version:'+JSON.stringify([v.benchmark,v.version])})));s.onchange=()=>{versus=s.value;document.querySelectorAll('[data-vs-select]').forEach(v=>setSelect(v,versus));compareChoice().catch(()=>{});};});
+  document.querySelectorAll('[data-vs-select]').forEach(s=>{s.onchange=()=>{versus=s.value;document.querySelectorAll('[data-vs-select]').forEach(v=>setSelect(v,versus));compareChoice().catch(()=>{});};});
   document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{metric=b.dataset.metric;press('lb-metric','data-metric',metric);drawScatter();});
   async function deferred(turn) { const response=await nulliusFetch(`/api/leaderboard/metrics?context=${encodeURIComponent(data.context)}`);if(!response.ok)return;const result=await response.json();if(turn!==generation||result.context!==data.context)return;result.rows.forEach(r=>{const existing=row(r.key);if(existing)existing.metrics=r.metrics;});updateTable();card();drawScatter(); }
   async function fetchBoard(){const turn=++generation;const response=await nulliusFetch('/api/leaderboard');if(!response.ok)return null;const next=await response.json();return turn===generation?{next,turn}:null;}
   /* each family has its own Overall and ranks: the shown family's stand in a row's overall and rank, its ranking orders the rows */
-  function useFamily(){data.rows.forEach(r=>{const f=r.families?.[family];if(f){r.overall=f.overall;r.rank=f.rank;}});data.rows.sort((a,b)=>(a.rank??1e9)-(b.rank??1e9)||(b.overall??-1)-(a.overall??-1)||a.name.localeCompare(b.name));}
+  function useFamily(){data.rows.forEach(r=>{const f=r.families?.[family];if(f){r.overall=f.overall;r.rank=f.rank;}});data.rows.sort((a,b)=>(a.rank??1e9)-(b.rank??1e9)||a.name.localeCompare(b.name)||a.key.localeCompare(b.key));}
   function apply({next,turn}){if(turn!==generation)return;const kept=new Map(data.rows.map(r=>[r.key,r.metrics]));next.rows.forEach(r=>{const m=kept.get(r.key);if(!m)return;r.metrics={...m,...Object.fromEntries(Object.entries(r.metrics||{}).filter(([,v])=>v?.value!=null))};});data=next;useFamily();if(!row(selected))selected=data.selected;updateTable();compareChoice().catch(()=>{});draw();deferred(turn).catch(()=>{});}
   /* scores saved in Scoring settings reach the board when it is shown again */
   /* each save fetches the new board at once, so it is ready when the board is shown; it is drawn then, at its real size */
   let fresh=null;
   document.addEventListener('leaderboard:rescored',()=>{fresh=null;fetchBoard().then(got=>{if(!got)return;if(table.getClientRects().length)apply(got);else fresh=got;}).catch(()=>{});});
   document.addEventListener('leaderboard:view',e=>{if(e.detail.view!=='board')return;if(fresh){const got=fresh;fresh=null;apply(got);}document.querySelectorAll('[data-chart^="radars-"] svg').forEach(pills);});
-  document.getElementById(`${table.id}-tools`)?.addEventListener('change',e=>{
+  tools?.addEventListener('change',e=>{
     const box=e.target;if(!box.matches('input[data-col]')||passing)return;
+    if(data.axes.includes(box.dataset.col)){try{localStorage.setItem(table.id+'.axes',JSON.stringify({...choices(),[box.dataset.col]:box.checked}));}catch{}}
     if(!box.checked){e.stopPropagation();shrink(box);}
     else requestAnimationFrame(()=>motion.reduced.matches?size():grow(box.dataset.col));
   },true);
   useFamily();updateTable();choose(selected);tableMotion=motion.table(table);deferred(generation).catch(()=>{});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{columns();applyFamily();});
 })();

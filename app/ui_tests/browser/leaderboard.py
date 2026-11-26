@@ -55,7 +55,7 @@ class LeaderboardBrowser(unittest.TestCase):
         self.page = self.context.new_page()
         self.page.set_default_timeout(5000)
         self.errors, self.posts = [], []
-        self.fail_save = False
+        self.fail_save, self.held = False, None
         self.page.on("pageerror", lambda error: self.errors.append(str(error)))
         self.page.route("**/*", self.route)
 
@@ -68,8 +68,18 @@ class LeaderboardBrowser(unittest.TestCase):
         if url.path == "/api/scoring" and request.method == "POST":
             self.posts.append(json.loads(request.post_data))
             if self.fail_save:
-                route.fulfill(status=503, json={"error": "Scoring settings could not be saved. Retry."})
+                status = 503 if self.fail_save is True else self.fail_save
+                route.fulfill(status=status, json={"error": "Scoring settings changed in another page. Reload before editing." if status == 409
+                                                   else "Scoring settings could not be saved. Retry."})
                 return
+            if self.held is not None:                                  # kept in flight until the test answers it
+                self.held.append(route)
+                return
+        self.answer(route)
+
+    def answer(self, route):
+        request = route.request
+        url = urlsplit(request.url)
         response = self.client.open(url.path + ("?" + url.query if url.query else ""), method=request.method,
                                     data=request.post_data, headers=dict(request.headers))
         try:
@@ -109,7 +119,8 @@ class LeaderboardBrowser(unittest.TestCase):
         cell.focus()
         link = self.page.locator('#lb-evidence a').first
         expect(link).to_be_visible()
-        link.focus()
+        self.page.keyboard.press("Enter")                              # Enter on a score goes into its card
+        expect(link).to_be_focused()
         self.page.keyboard.press("Escape")
         expect(self.page.locator('#lb-evidence')).to_be_hidden()
         expect(cell).to_be_focused()
@@ -117,6 +128,115 @@ class LeaderboardBrowser(unittest.TestCase):
         self.page.locator('[data-family="capabilities"]').focus()
         cell.focus()
         expect(self.page.locator('#lb-evidence')).to_be_visible()
+        self.assertFalse(self.errors)
+
+    def test_the_card_closes_on_escape_or_a_focus_elsewhere_and_follows_its_score(self):
+        self.open("/leaderboard")
+        evidence = self.page.locator('#lb-evidence')
+        cell = self.page.locator('tbody tr [data-axis="Retrieval"]').first
+        search = self.page.locator('#leaderboard-table-tools [data-search]')
+        cell.hover()
+        expect(evidence).to_be_visible()
+        search.focus()                                                 # focus on something else closes the card
+        expect(evidence).to_be_hidden()
+        self.page.keyboard.press("Escape")                             # and Escape there moves no focus
+        expect(search).to_be_focused()
+        cell.click()                                                   # kept open by a click, closed by Escape
+        self.page.keyboard.press("Escape")
+        expect(evidence).to_be_hidden()
+        self.page.locator('tbody tr [data-axis="Execution"]').first.hover()
+        expect(evidence).to_be_visible()                               # a later hover opens it again
+        cell.click()
+        gap = ("document.getElementById('lb-evidence').getBoundingClientRect().top"
+               " - document.querySelector('tbody tr [data-axis=\"Retrieval\"]').getBoundingClientRect().bottom")
+        before = self.page.evaluate(gap)
+        self.page.mouse.wheel(0, 60)
+        self.page.wait_for_timeout(200)
+        self.assertEqual(self.page.evaluate(gap), before)              # the card follows its score
+        self.page.mouse.wheel(0, 3000)
+        expect(evidence).to_be_hidden()                                # and closes once the score is out of sight
+        self.assertFalse(self.errors)
+
+    def test_a_family_switch_drops_a_sort_that_leaves_and_menus_list_the_shown_columns(self):
+        self.open('/leaderboard')
+        names = self.page.locator('tbody tr:visible [data-name]')
+        head = self.page.locator('th[data-col="Communication"]')
+        head.click()
+        self.assertLessEqual(head.evaluate("th=>th.scrollWidth-th.clientWidth"), 0)   # a sorted name and its arrow are whole
+        head.click()                                                   # ascending: Goose before Codex
+        expect(names.first).to_have_text('Goose')
+        self.page.locator('[data-family="domains"]').click()
+        expect(self.page.locator('th[data-sorted]')).to_have_count(0)
+        expect(names.first).to_have_text('Codex')                      # no domain is scored here: the names' order
+        self.page.locator('[data-tools-btn="sort"]').click()
+        listed = [t.strip() for t in self.page.locator('[data-tools="sort"] fieldset').first.locator('label:visible').all_inner_texts()]
+        self.assertIn('Travel', listed)
+        self.assertFalse({'Communication', 'Company', 'Status'} & set(listed))
+        # Default is the shown family's ranking, whatever the page first came in
+        self.page.locator('[data-tools="sort"] input[value="agent"]').check()
+        self.page.locator('[data-tools="sort"] input[data-sort-dir][value="desc"]').check()
+        expect(names.first).not_to_have_text('Codex')
+        self.page.locator('[data-tools="sort"] input[data-sort-col][value=""]').check()
+        expect(names.first).to_have_text('Codex')
+        self.assertFalse(self.errors)
+
+    def test_an_empty_score_column_is_off_until_ticked_and_the_choice_is_kept(self):
+        self.open('/leaderboard')
+        memory = self.page.locator('th[data-col="Memory"]')
+        expect(memory).to_be_hidden()
+        self.page.locator('[data-tools-btn="columns"]').click()
+        listed = [t.strip() for t in self.page.locator('[data-tools="columns"] label:visible').all_inner_texts()]
+        self.assertIn('Memory', listed)
+        self.assertFalse({'Travel', 'Company', 'Status'} & set(listed))   # the shown family's columns, and columns only
+        self.page.locator('[data-tools="columns"] input[data-col="Memory"]').check()
+        expect(memory).to_be_visible()
+        self.page.locator('[data-tools="columns"] input[data-col="Retrieval"]').uncheck()
+        expect(self.page.locator('th[data-col="Retrieval"]')).to_be_hidden()
+        self.open('/leaderboard')                                      # both choices hold after a reload
+        expect(memory).to_be_visible()
+        expect(self.page.locator('th[data-col="Retrieval"]')).to_be_hidden()
+        self.assertFalse(self.errors)
+
+    def test_pickers_name_twins_apart_and_measures_round_as_they_read(self):
+        pin = definitions.version_identity(definitions.get("benchmark", "gaia"))
+        runs = []
+        for name, agent, model, passed, seconds, cost in (("a", "codex", "gpt-a", 2, 119.6, .004), ("b", "codex", "gpt-b", 1, 40, 1), ("g", "goose", "", 1, 40, 1)):
+            r = job([trial(str(i), "resolved" if i < passed else "agent_error", trial_name=f"{name}-{i}", dur_agent=seconds, cost_usd=cost)
+                     for i in range(2)], dataset="gaia/gaia-validation", agent=agent, job_id=name)
+            r.identity = {"agent": agent, "agent_version": definitions.get("agent", agent)["_version"], "benchmark": "gaia", "benchmark_version": pin}
+            if model:
+                r.identity["model"] = model
+            runs.append(r)
+        self.jobs[:] = runs
+        self.open('/leaderboard')
+        options = self.page.locator('[data-agent-select]').first.locator('option').all_inner_texts()
+        self.assertEqual(len(options), len(set(options)))               # no two rows read the same
+        self.assertEqual([o for o in options if o.startswith('Codex')], ['Codex gpt-a', 'Codex gpt-b'])
+        first = self.page.locator('tbody tr:visible').first
+        self.assertEqual((first.locator('[data-col="time"]').inner_text(), first.locator('[data-col="cost"]').inner_text()), ('2m 00s', '<$0.01'))
+        # choosing a row that has no score shows that row in the pickers too
+        self.page.locator('tbody tr', has_text='DigitalMate').locator('.lb-agent').click()
+        expect(self.page.locator('#lb-card h2')).to_have_text('DigitalMate')
+        expect(self.page.locator('[data-agent-select]').first.locator('xpath=following-sibling::button[1]')).to_have_text('DigitalMate')
+        self.assertFalse(self.errors)
+
+    def test_a_version_comparison_reads_the_shown_family_s_overall(self):
+        default, other = [definitions.version_identity(b) for b in service.catalogue()[1] if b["key"] == "osworld1"][:2]
+        runs = []
+        for name, benchmark, dataset, version, score in (("first", "osworld1", "osworld1/test_nogdrive", default, 1), ("second", "osworld1", "osworld1/test_nogdrive", other, .5),
+                                                          ("gaia", "gaia", "gaia/gaia-validation", definitions.version_identity(definitions.get("benchmark", "gaia")), None)):
+            trials = [trial("0", "scored", score=score, trial_name=name + "-0")] if score is not None else [trial("0", trial_name=name + "-0")]
+            r = job(trials, dataset=dataset, agent="codex", job_id=name)
+            r.identity = {"agent": "codex", "agent_version": definitions.get("agent", "codex")["_version"], "benchmark": benchmark, "benchmark_version": version}
+            runs.append(r)
+        self.jobs[:] = runs
+        self.open('/leaderboard')
+        self.page.locator('[data-family="domains"]').click()
+        expect(self.page.locator('#lb-card .lb-fig')).to_have_text('100.0%')            # Work, from OSWorld1 alone
+        with self.page.expect_response(lambda r: '/api/leaderboard/comparison' in r.url):
+            self.page.evaluate("version=>{const s=document.querySelector('[data-vs-select]');s.value=[...s.options].find(o=>o.value.includes(version)).value;s.dispatchEvent(new Event('change'));}", other)
+        # the other version scores Work 50%: the Domains Overall is compared with the Domains Overall
+        expect(self.page.locator('#lb-card .lb-kv').first).to_have_text('Overall against benchmark version+50.0')
         self.assertFalse(self.errors)
 
     def test_logo_keyboard_selection_keeps_node_focus_and_morphs_radar(self):
@@ -190,12 +310,86 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertEqual(configuration.load(configuration.location(), service.catalogue()[1])[0]['axes']['Retrieval']['entries'][0]['weight'], 6)
         self.assertFalse(self.errors)
 
+    def test_scoring_says_what_keeps_a_draft_from_saving(self):
+        self.open('/scoring')
+        saved = lambda r: r.url.endswith('/api/scoring') and r.request.method == 'POST' and r.status == 200
+        bar, retry = self.page.locator('.lb-savebar'), self.page.locator('[data-settings-retry]')
+        row = self.page.locator('[data-scoring-axis="Memory"]')
+        row.locator('.lb-fold').click()
+        for _ in range(2):                                             # a second new row reads another benchmark
+            with self.page.expect_response(saved):
+                row.locator('[data-add-entry]').click()
+        first, second = self.posts[-1]['axes']['Memory']['entries']
+        self.assertNotEqual(first['benchmark'], second['benchmark'])
+        expect(bar).to_be_hidden()
+        sent = len(self.posts)
+        self.choose('[data-scoring-axis="Memory"] .lb-entry:nth-child(2) select', 0)   # the first row's benchmark, again
+        expect(bar).to_contain_text('listed twice')
+        expect(retry).to_be_hidden()
+        with self.page.expect_response(saved):                         # removing one saves, and the line goes
+            row.locator('.lb-entry:nth-child(2) > .lb-icon').click()
+        expect(bar).to_be_hidden()
+        self.assertEqual(len(self.posts), sent + 1)
+        # a family left without a weighted row: said in words, never sent
+        for box in self.page.locator('section.lb-axes').first.locator('[data-overall]:not([disabled])').all():
+            box.fill('0')
+        expect(bar).to_contain_text('Capabilities')
+        self.page.wait_for_timeout(500)
+        self.assertTrue(all(any(post['axes'][name]['weight'] > 0 for name in configuration.CAPABILITIES) for post in self.posts))
+        self.assertFalse(self.errors)
+
+    def test_a_reset_asked_during_a_save_still_runs_and_a_conflict_offers_reload(self):
+        self.open('/scoring')
+        weight = self.page.locator('[data-overall="Retrieval"]')
+        default = weight.input_value()
+        self.held = []
+        weight.fill('0.33')
+        self.page.wait_for_function("document.querySelector('[data-overall=\"Retrieval\"]').value==='0.33'")
+        for _ in range(40):                                            # the save is in flight
+            if self.held:
+                break
+            self.page.wait_for_timeout(50)
+        self.page.locator('#reset-ask').click()
+        self.page.locator('#reset-yes').click()
+        held, self.held = self.held, None
+        self.assertEqual(len(held), 1)
+        with self.page.expect_response(lambda r: r.url.endswith('/api/scoring') and r.request.post_data == '{"reset":true}'):
+            self.answer(held[0])
+        expect(weight).to_have_value(default)
+        expect(self.page.locator('#reset-confirm')).to_be_hidden()
+        self.fail_save = 409
+        with self.page.expect_response(lambda r: r.status == 409):
+            weight.fill('0.5')
+        retry = self.page.locator('[data-settings-retry]')
+        expect(retry).to_have_text('Reload')
+        self.fail_save = False
+        with self.page.expect_navigation():
+            retry.click()
+        expect(self.page.locator('[data-overall="Retrieval"]')).to_have_value(default)
+        self.assertFalse(self.errors)
+
+    def test_a_changed_select_keeps_the_keyboard_focus(self):
+        self.page.emulate_media(reduced_motion='reduce')               # the row opens at once: a menu opened while it slides closes
+        self.open('/scoring')
+        self.page.locator('[data-scoring-axis="Retrieval"] .lb-fold').click()
+        dataset = self.page.locator('[data-scoring-axis="Retrieval"] .lb-entry').first.locator('.ui-select-trigger').nth(1)
+        dataset.focus()
+        with self.page.expect_response(lambda r: r.url.endswith('/api/scoring') and r.request.method == 'POST'):
+            for key in ('ArrowUp', 'ArrowUp', 'Enter'):                # open, move to Whole benchmark, choose
+                self.page.keyboard.press(key)
+        expect(dataset).to_be_focused()
+        expect(dataset).to_have_text('Whole benchmark')
+        self.assertFalse(self.errors)
+
     def test_a_phone_scrolls_the_table_not_the_page(self):
         self.page.set_viewport_size({"width": 390, "height": 900})
         self.open('/leaderboard')
         wrap = self.page.locator('.table-wrap').first
         self.assertGreater(wrap.evaluate("w=>w.scrollWidth-w.clientWidth"), 0)
         self.assertEqual(self.page.evaluate("document.documentElement.scrollWidth-document.documentElement.clientWidth"), 0)
+        # Overall is whole before any sideways scroll, and no name is cut
+        self.assertLessEqual(self.page.locator('tbody td[data-col="overall"]').first.evaluate("o=>o.getBoundingClientRect().right-o.closest('.table-wrap').getBoundingClientRect().right"), .5)
+        self.assertEqual(self.page.locator('.lb-who b').evaluate_all("n=>n.filter(b=>b.scrollWidth>b.clientWidth+1).length"), 0)
         self.assertFalse(self.errors)
 
     def test_medals_for_the_first_four_ranks_then_plain_numbers(self):

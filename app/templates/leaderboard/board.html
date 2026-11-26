@@ -3,7 +3,7 @@
 {% import '_tables.html' as tables %}
 {% block title %}{{ 'Scoring settings' if view == 'scoring' else 'Leaderboard' }} · Nullius{% endblock %}
 {% block head %}<script src="{{ url_for('static', filename='tables.js') }}"></script><link rel="stylesheet" href="{{ url_for('static', filename='leaderboard/leaderboard.css') }}">{% endblock %}
-{% macro picks() %}<span class="lb-picks"><span class="lb-pick"><svg class="lb-swatch" viewBox="0 0 22 14" aria-hidden="true" data-swatch="0"></svg><select data-agent-select aria-label="Agent">{% for r in board.rows if r.overall is not none %}<option value="{{ r.key }}">{{ r.name }}</option>{% endfor %}</select></span><span class="muted">vs</span><span class="lb-pick"><svg class="lb-swatch" viewBox="0 0 22 14" aria-hidden="true" data-swatch="1"></svg><select data-vs-select aria-label="Compared with"><option value="average">Average</option>{% for r in board.rows if r.overall is not none %}<option value="{{ r.key }}">{{ r.name }}</option>{% endfor %}</select></span></span>{% endmacro %}
+{% macro picks() %}<span class="lb-picks"><span class="lb-pick"><svg class="lb-swatch" viewBox="0 0 22 14" aria-hidden="true" data-swatch="0"></svg><select data-agent-select aria-label="Agent"></select></span><span class="muted">vs</span><span class="lb-pick"><svg class="lb-swatch" viewBox="0 0 22 14" aria-hidden="true" data-swatch="1"></svg><select data-vs-select aria-label="Compared with"><option value="average">Average</option></select></span></span>{% endmacro %}
 {% block body %}
 {% set actions %}<a class="btn ghost lb-head-link" id="lb-switch" href="{{ url_for('leaderboard') if view == 'scoring' else url_for('scoring_page') }}">{{ 'Leaderboard' if view == 'scoring' else 'Scoring settings' }}</a>{% endset %}
 {{ page_head('Scoring settings' if view == 'scoring' else 'Leaderboard', actions=actions, id='lb-title') }}
@@ -17,11 +17,13 @@
 {% set cols = [dict(key='rank', label='#', type='num', fixed=true, sticky=true), dict(key='agent', label='Agent', fixed=true, sticky=true), dict(key='overall', label='Overall', type='num', fixed=true)] %}
 {% for name in board.axes %}{% set _ = cols.append(dict(key=name, label=name, type='num', off=board.averages[name].score is none)) %}{% endfor %}
 {% for key, label in [('steps','Steps'),('time','Time'),('calls','Tool calls'),('cost','Cost')] %}{% set _ = cols.append(dict(key=key, label=label, type='num')) %}{% endfor %}
-{% set _ = cols.append(dict(key='company', label='Company', table=false)) %}
-{% set _ = cols.append(dict(key='status', label='Status', table=false)) %}
+{# Company and Status are filters, never columns: Columns and Sort by leave them out #}
+{% set sortable = cols|map(attribute='key')|list %}
+{% set _ = cols.append(dict(key='company', label='Company', table=false, menu=false)) %}
+{% set _ = cols.append(dict(key='status', label='Status', table=false, menu=false)) %}
 {% set filters = dict(agent=[],company=[],status=[('ranked','Ranked'),('not-ranked','Not ranked'),('no-run','No run')]) %}
 {% for r in board.rows %}{% if (r.agent,r.name) not in filters.agent %}{% set _=filters.agent.append((r.agent,r.name)) %}{% endif %}{% if r.company and (r.company,r.company) not in filters.company %}{% set _=filters.company.append((r.company,r.company)) %}{% endif %}{% endfor %}
-{{ tables.controls('leaderboard-table', cols, search='Search by agent or company', columns=true, choices=filters) }}
+{{ tables.controls('leaderboard-table', cols, search='Search by agent or company', columns=true, choices=filters, sort=sortable) }}
 <div class="table-wrap"><table class="grid sortable tools lb-table" id="leaderboard-table" data-table>
 <thead><tr>{{ tables.heads(cols|rejectattr('table','sameas',false)|list) }}</tr></thead>
 <tbody>{% for r in board.rows %}

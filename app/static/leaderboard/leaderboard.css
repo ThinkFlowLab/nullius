@@ -28,6 +28,8 @@
 /* the sideways scrollbar's track is always there, so a wider table never pushes the page down */
 #leaderboard-board .table-wrap { overflow-x: scroll; }
 .lb-table [data-col="rank"] { width: 48px; text-align: center; }
+/* the sort arrow sits in the header's own padding: a sorted name stays centred, and is never cut by its column */
+#leaderboard-table thead th[data-sorted]::after { position: absolute; top: 50%; transform: translateY(-50%); line-height: 1; margin-left: .25rem; }
 .lb-table [data-col="agent"] { width: 238px; text-align: left; }
 .lb-table [data-col="overall"] { width: 104px; }
 .lb-table [data-col="steps"] { width: 66px; } .lb-table [data-col="time"] { width: 84px; } .lb-table [data-col="calls"] { width: 92px; } .lb-table [data-col="cost"] { width: 72px; }
@@ -48,7 +50,7 @@
 .lb-who b { display: block; font-weight: 600; color: var(--text); white-space: normal; overflow-wrap: anywhere; }
 .lb-who small { display: block; color: var(--text-faint); font-size: .75rem; white-space: normal; overflow-wrap: anywhere; }
 .lb-overall { display: inline-block; font-weight: 600; color: var(--text); padding: 2px 5px; border: 1.5px solid transparent; cursor: help; }
-.lb-bar { display: block; height: 4px; width: 68px; margin: 4px auto 0; border-radius: 2px; background: var(--surface-2); }
+.lb-bar { display: block; height: 4px; width: 68px; max-width: 100%; margin: 4px auto 0; border-radius: 2px; background: var(--surface-2); }
 .lb-bar i { display: block; height: 100%; border-radius: 2px; background: var(--accent); transition: width .32s cubic-bezier(.2,.7,.2,1); }
 .lb-chip { display: inline-block; min-width: 46px; padding: 4px 7px; border-radius: 6px; font-weight: 600; cursor: help; --lb-chip: color-mix(in oklab, var(--lb-chip-hi) calc(var(--lb-t, 0) * 100%), var(--lb-chip-lo)); background: var(--lb-chip); color: var(--lb-chip-text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent); }
 /* the text is white on a dark shade and near black on a light one: the shade's lightness decides, per theme */
@@ -232,8 +234,11 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
 .lb-savebar { position: sticky; bottom: 12px; display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--bad); border-radius: 10px; background: var(--surface-2); }
 @media (max-width: 700px) {
   .lb-company { display: none; }
-  .lb-table [data-col="agent"] { position: static; width: 176px; }
-  .lb-table [data-col="overall"] { width: 92px; }
+  /* #, Agent and Overall fill a phone's width exactly: the first score is a sideways scroll away, Overall never cut */
+  .lb-table :is(th, td) { padding-left: .6rem; padding-right: .6rem; }
+  .lb-table [data-col="rank"] { width: 44px; }
+  .lb-table [data-col="agent"] { position: static; width: 168px; }
+  .lb-table [data-col="overall"] { width: 84px; }
   .lb-picks .lb-pick { flex: 1 1 100%; }
   .lb-picks select, .lb-picks .ui-select-trigger { flex: 1; width: auto; }
   .lb-picks > .muted { display: none; }
