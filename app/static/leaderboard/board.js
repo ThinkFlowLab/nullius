@@ -174,10 +174,14 @@
       for(const [field,m] of Object.entries(r.metrics)) { const cell=tr.querySelector(`[data-col="${field}"]`);cell.replaceChildren(element('span',measure(field,m.value),{class:'lb-m'}));cell.dataset.sort=m.value??'';cell.title=`${m.count} observed`; }
       table.tBodies[0].append(tr);
     });
-    let explicit=false;try {explicit=localStorage.getItem(table.id+'.cols')!==null;} catch {}
-    if(!explicit) data.axes.forEach(name=>{
-      const cb=document.querySelector(`#${table.id}-tools input[data-col="${name}"]`);
-      if(cb) {cb.checked=data.averages[name].score!=null;table.querySelectorAll(`[data-col="${name}"]`).forEach(cell=>cell.style.display=cb.checked?'':'none');}
+    /* a column no agent has a score in is hidden, whatever was saved, and cannot be ticked; a saved choice holds for the others */
+    let saved=null;try {saved=JSON.parse(localStorage.getItem(table.id+'.cols')||'null');} catch {}
+    data.axes.forEach(name=>{
+      const cb=document.querySelector(`#${table.id}-tools input[data-col="${name}"]`);if(!cb)return;
+      const empty=data.averages[name].score==null;
+      cb.disabled=empty;cb.closest('label')?.setAttribute('title',empty?'No score yet':'');
+      cb.checked=!empty&&(saved?saved.includes(name):true);
+      table.querySelectorAll(`[data-col="${name}"]`).forEach(cell=>cell.style.display=cb.checked?'':'none');
     });
     table.dispatchEvent(new Event('table:update'));
     applyFamily();
@@ -194,7 +198,7 @@
   const shownHeads=()=>heads().filter(th=>!th.hidden&&th.style.display!=='none');
   function columnWidth(th) {
     const fixed={rank:48,agent:innerWidth<=700?152:238,overall:innerWidth<=700?92:104,steps:66,time:84,calls:92,cost:72};
-    return fixed[th.dataset.col]??Math.max(64,Math.round(th.textContent.trim().length*7.4+26));
+    return fixed[th.dataset.col]??Math.max(88,Math.round(th.textContent.trim().length*7.4+26));
   }
   /* the columns fill the card exactly: room to spare goes to the score columns alone, so #, Agent, Overall and the
      measures keep their width whatever is shown */
