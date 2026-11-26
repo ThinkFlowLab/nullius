@@ -109,12 +109,39 @@
   function applyFamily() {
     document.querySelectorAll('[data-family]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.family===family)));
     table.querySelectorAll('[data-col]').forEach(cell=> { if(data.axes.includes(cell.dataset.col)) cell.hidden=!data[family].includes(cell.dataset.col); });
-    /* each shown column keeps room for its name; past the card's width the table scrolls */
-    const shown=[...table.tHead.rows[0].cells].filter(th=>!th.hidden&&th.style.display!=='none');
+    size();
+  }
+  /* each shown column keeps room for its name; past the card's width the table scrolls */
+  const heads=()=>[...table.tHead.rows[0].cells];
+  const shownHeads=()=>heads().filter(th=>!th.hidden&&th.style.display!=='none');
+  function columnWidth(th) {
     const fixed={rank:48,agent:innerWidth<=700?152:238,overall:innerWidth<=700?92:104,steps:66,time:84,calls:92,cost:72};
-    const width=th=>fixed[th.dataset.col]??Math.max(64,Math.round(th.textContent.trim().length*6.4+24));
-    shown.forEach(th=>{if(!(th.dataset.col in fixed))th.style.width=`${width(th)}px`;});
-    table.style.minWidth=`${shown.reduce((sum,th)=>sum+width(th),0)}px`;
+    return fixed[th.dataset.col]??Math.max(64,Math.round(th.textContent.trim().length*6.4+24));
+  }
+  function size(except=null) {
+    const shown=shownHeads().filter(th=>th.dataset.col!==except);
+    shown.forEach(th=>{th.style.width=`${columnWidth(th)}px`;});
+    if(except)heads().find(th=>th.dataset.col===except).style.width='0px';
+    table.style.minWidth=`${shown.reduce((sum,th)=>sum+columnWidth(th),0)}px`;
+  }
+  /* a column chosen in Columns grows from nothing and fades in; one taken away fades and narrows to nothing first */
+  const cellsOf=col=>[...table.querySelectorAll(`td[data-col="${CSS.escape(col)}"]`)];
+  let passing=false;
+  function grow(col) {
+    const th=heads().find(h=>h.dataset.col===col);if(!th||th.hidden)return size();
+    const cells=[th,...cellsOf(col)];
+    cells.forEach(c=>c.classList.add('lb-instant','lb-closing'));th.style.width='0px';table.classList.add('lb-instant');table.offsetWidth;
+    cells.forEach(c=>c.classList.remove('lb-instant','lb-closing'));table.classList.remove('lb-instant');size();
+    cellsOf(col).forEach(c=>c.animate([{opacity:0},{opacity:1}],{duration:280,easing:'ease-out'}));
+  }
+  function shrink(box) {
+    const col=box.dataset.col,th=heads().find(h=>h.dataset.col===col);
+    const pass=()=>{passing=true;box.dispatchEvent(new Event('change',{bubbles:true}));passing=false;size();};
+    if(!th||th.hidden||motion.reduced.matches){pass();return;}
+    const cells=[th,...cellsOf(col)];
+    cells.forEach(c=>{c.classList.add('lb-closing');c.animate([{opacity:1},{opacity:0}],{duration:200,easing:'ease-in',fill:'forwards'});});
+    size(col);
+    setTimeout(()=>{pass();cells.forEach(c=>{c.classList.remove('lb-closing');c.getAnimations().forEach(a=>a.cancel());});},290);
   }
   /* a select changed from here: its selected attribute moves too, which the page's own select button watches */
   function setSelect(s,value) { if(![...s.options].some(o=>o.value===value))return; [...s.options].forEach(o=>o.toggleAttribute('selected',o.value===value)); s.value=value; }
@@ -303,6 +330,10 @@
   document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{metric=b.dataset.metric;press('lb-metric','data-metric',metric);drawScatter();});
   async function deferred(turn) { const response=await nulliusFetch(`/api/leaderboard/metrics?all_scores=${data.all_scores?1:0}&context=${encodeURIComponent(data.context)}`);if(!response.ok)return;const result=await response.json();if(turn!==generation||result.context!==data.context)return;result.rows.forEach(r=>{const existing=row(r.key);if(existing)existing.metrics=r.metrics;});updateTable();card();drawScatter(); }
   document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=async()=>{press('lb-mode','data-mode',b.dataset.mode);const turn=++generation;const response=await nulliusFetch(`/api/leaderboard?all_scores=${b.dataset.mode}`);if(!response.ok)return;const next=await response.json();if(turn!==generation)return;const kept=new Map(data.rows.map(r=>[r.key,r.metrics]));next.rows.forEach(r=>{const m=kept.get(r.key);if(!m)return;r.metrics={...m,...Object.fromEntries(Object.entries(r.metrics||{}).filter(([,v])=>v?.value!=null))};});data=next;if(!row(selected))selected=data.selected;updateTable();compareChoice().catch(()=>{});draw();deferred(turn).catch(()=>{});});
-  document.getElementById(`${table.id}-tools`)?.addEventListener('change',e=>{if(e.target.matches('input[data-col]'))requestAnimationFrame(applyFamily);});
+  document.getElementById(`${table.id}-tools`)?.addEventListener('change',e=>{
+    const box=e.target;if(!box.matches('input[data-col]')||passing)return;
+    if(!box.checked){e.stopPropagation();shrink(box);}
+    else requestAnimationFrame(()=>motion.reduced.matches?size():grow(box.dataset.col));
+  },true);
   updateTable();choose(selected);tableMotion=motion.table(table);deferred(generation).catch(()=>{});
 })();

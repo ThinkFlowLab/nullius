@@ -165,7 +165,7 @@
 {% macro pager(table, empty='No rows match.', noun='rows') %}
 {{ empty_note(table, empty) }}
 <div class="table-tools table-pager" data-pager="{{ table }}">
-  <label class="table-note">Show <select data-per><option>10</option><option selected>25</option><option>100</option><option value="0">All</option></select></label>
+  <label class="table-note">Show <select data-per><option>5</option><option>10</option><option selected>25</option><option>50</option><option value="0">All</option></select></label>
   <span class="header-spacer"></span>
   <button type="button" class="btn sm ghost" data-prev aria-label="Previous page"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
   <span class="table-note" data-note></span>
