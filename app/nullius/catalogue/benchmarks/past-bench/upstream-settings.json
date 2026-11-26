@@ -1,0 +1,198 @@
+[
+  {
+    "entry": "config.yaml",
+    "setting": "judge.enabled",
+    "values": "true, false",
+    "default": "true",
+    "nullius": "fixed:true - every episode's communication part is judged"
+  },
+  {
+    "entry": "config.yaml",
+    "setting": "judge.model_id",
+    "values": "any chat model",
+    "default": "google/gemini-2.5-flash - config.yaml pins MiniMax-M2.7",
+    "nullius": "not offered - the Nullius judge route names the model, declared as score.judge"
+  },
+  {
+    "entry": "config.yaml",
+    "setting": "judge.base_url",
+    "values": "an OpenAI-compatible base URL",
+    "default": "https://openrouter.ai/api/v1 - config.yaml pins https://api.minimaxi.com/v1",
+    "nullius": "not offered - the judge route supplies its base URL"
+  },
+  {
+    "entry": "config.yaml",
+    "setting": "judge.api_key",
+    "values": "an API key",
+    "default": "an API key - config.yaml leaves it empty",
+    "nullius": "not offered - the judge route supplies its key"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.persistence_allowed",
+    "values": "true, false",
+    "default": "true",
+    "nullius": "fixed:the dataset's arm - past-bench keeps the workspace, past-bench-nop resets it before every episode"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.requires_fresh_session",
+    "values": "true, false",
+    "default": "false",
+    "nullius": "fixed:as the publisher declares - the driver starts a new session where it is true"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.shared_cold_run",
+    "values": "true, false",
+    "default": "false",
+    "nullius": "not offered - the driver keeps one workspace per family; the publisher's shared cold run is not applied"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.history_mode",
+    "values": "continue, save, load",
+    "default": "continue",
+    "nullius": "fixed:as the publisher declares - the driver keeps, saves or loads the workspace at the anchor"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.history_save_anchor",
+    "values": "an episode label, or empty",
+    "default": "",
+    "nullius": "fixed:as the publisher declares - the workspace saved when that episode ends"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.history_load_anchor",
+    "values": "an episode label, or empty",
+    "default": "",
+    "nullius": "fixed:as the publisher declares - the workspace as it stood when the anchor was saved"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.initial_home_fixture_dir",
+    "values": "a directory, or empty",
+    "default": "",
+    "nullius": "not offered - the home directory belongs to the agent under test"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.preseed_artifacts_dir",
+    "values": "a directory, or empty",
+    "default": "",
+    "nullius": "not offered - the driver starts the episode from the task's own workspace"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.stage",
+    "values": "cold, learn_a, eval_near, eval_far",
+    "default": "cold",
+    "nullius": "fixed:as the publisher declares - the episode's place in the family sequence"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.bucket",
+    "values": "baseline, learn, control, evaluation",
+    "default": "baseline",
+    "nullius": "fixed:as the publisher declares - which part of the composite the episode feeds"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.expected_persistence_signal",
+    "values": "a mechanism name",
+    "default": "none",
+    "nullius": "not offered - the publisher's own analysis reads it, not the run"
+  },
+  {
+    "entry": "configs/self_evolve_v2/*_only.yaml",
+    "setting": "episodes.*.reflection_required",
+    "values": "true, false",
+    "default": "false",
+    "nullius": "not offered - reflection is the agent's own, not a benchmark step"
+  },
+  {
+    "entry": "configs/agents.yaml",
+    "setting": "agents.*.default_model.model_id",
+    "values": "any chat model",
+    "default": "anthropic/claude-sonnet-4.6",
+    "nullius": "not offered - the agent under test brings its own model"
+  },
+  {
+    "entry": "configs/agents.yaml",
+    "setting": "agents.*.default_model.api_key_env",
+    "values": "an environment variable name",
+    "default": "OPENROUTER_API_KEY",
+    "nullius": "not offered - the agent under test reaches the Nullius relay itself"
+  },
+  {
+    "entry": "configs/agents.yaml",
+    "setting": "agents.*.default_model.base_url",
+    "values": "an OpenAI-compatible base URL",
+    "default": "https://openrouter.ai/api/v1",
+    "nullius": "not offered - the agent under test reaches the Nullius relay itself"
+  },
+  {
+    "entry": "configs/agents.yaml",
+    "setting": "agents.*.install_policy",
+    "values": "prebaked, build",
+    "default": "prebaked",
+    "nullius": "not offered - the upstream's runner and its agents are not used"
+  },
+  {
+    "entry": "src/past_bench/config.py",
+    "setting": "defaults.trace_dir",
+    "values": "a directory",
+    "default": "traces",
+    "nullius": "fixed:the unit's trace folder - written by the driver in the upstream trace shape"
+  },
+  {
+    "entry": "src/past_bench/config.py",
+    "setting": "sandbox.enabled",
+    "values": "true, false",
+    "default": "false",
+    "nullius": "fixed:false - Nullius runs the agent under test, not the upstream's Docker sandbox"
+  },
+  {
+    "entry": "src/past_bench/config.py",
+    "setting": "sandbox.image",
+    "values": "a Docker image",
+    "default": "past-bench-agent:latest",
+    "nullius": "not offered - the upstream's sandbox image is not used"
+  },
+  {
+    "entry": "src/past_bench/config.py",
+    "setting": "sandbox.container_timeout",
+    "values": "seconds",
+    "default": "900",
+    "nullius": "not offered - the run's own limits apply (limits.turn_seconds)"
+  },
+  {
+    "entry": "src/past_bench/config.py",
+    "setting": "runtime.mode",
+    "values": "container, local",
+    "default": "container",
+    "nullius": "not offered - the upstream's agent runtime is not used"
+  },
+  {
+    "entry": "src/past_bench/config.py",
+    "setting": "runtime.temperature",
+    "values": "a decimal",
+    "default": "0.0",
+    "nullius": "not offered - the agent under test sets its own model arguments"
+  },
+  {
+    "entry": "src/past_bench/config.py",
+    "setting": "runtime.server_port",
+    "values": "a port",
+    "default": "8090",
+    "nullius": "not offered - the upstream's agent runtime is not used"
+  },
+  {
+    "entry": "src/past_bench/graders/llm_judge.py",
+    "setting": "temperature",
+    "values": "a decimal",
+    "default": "0.0",
+    "nullius": "fixed:0 - the publisher's own judge call, at its default temperature"
+  }
+]

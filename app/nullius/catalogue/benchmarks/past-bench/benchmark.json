@@ -1,0 +1,148 @@
+{
+  "key": "past-bench",
+  "title": "PAST-Bench",
+  "category": "General assistance",
+  "domain": "Cross-session self-evolution for personal agents: retaining preferences and constraints, reusing procedures, gathering prior context before acting, and replacing stale facts, rules and procedures. A family is an ordered sequence of episodes with matched persistence-on and persistence-off controls.",
+  "scoring": "Episode composite (0.8 × completion + 0.2 × robustness, × safety), family = evaluation-episode mean",
+  "harness": [
+    "standard"
+  ],
+  "origin": "official",
+  "good_to_know": [
+    "A unit is one family, not one episode: its episodes run in the publisher's sequence order, share a workspace, and are judged as a sequence. The run reports 26 units for 211 episodes.",
+    "The first message only explains how the session works and asks the agent to reply READY; every task then arrives as its own message, so the episodes can be counted and each gets its own fresh session where the manifest says so.",
+    "Persistence on is past-bench; the control is past-bench-nop, which runs the same families with the workspace reset before every episode. Report the two together, as the publisher's AblationLift needs both.",
+    "The tools are the benchmark's: each episode declares its tools and their mock-service endpoints, and they reach the agent as MCP tools that change with the episode. An agent needs the tools port.",
+    "The mock services run beside the driver on ports it picks, so two families can run at once; their audit logs are the evidence the graders read.",
+    "Episode order, fresh-session rules, history anchors and the no-persistence controls come from the publisher's own configs/self_evolve_v2/*_only.yaml, not from the driver's guess.",
+    "The publisher declares a judge, so a provider key is needed before any run, including the nop control. Override --judge-model when the benchmark's default model is not served by your provider.",
+    "An ablation compares past-bench's eval_near/eval_far episodes with past-bench-isolated's: same episodes, but the isolated unit never saw the learn episodes and has a fresh home. past-bench-nop alone is not that control - it only resets the workspace."
+  ],
+  "upstream_limitations": [
+    "The official harness drives its own agents (hermes-plus, hermes-agent, nanobot, zeroclaw, agent-zero) through its own runner and sandbox; it exposes no interface for an arbitrary agent. This entry substitutes the Nullius agent under test, keeps the publisher's own graders, services and sequence manifests, and does not use its runner or sandbox.",
+    "The publisher's README states 26 families and 204 episodes; the pinned tree holds 211 episode directories, 29 of them controls. The driver counts what is on disk.",
+    "Some episodes seed an agent-specific home directory (hermes_home_seed); that seed is not applied, because the home directory belongs to the agent under test.",
+    "History anchors are reproduced at the workspace level: an episode that loads an anchor gets the workspace as it stood when the anchor was saved and a new session, not a replay of the earlier conversation."
+  ],
+  "limitations": [
+    "No persistence means a cleaned workspace and a new session. The agent's own memory store lives in its home directory, which belongs to the unit and is not addressable by the benchmark, so an agent with durable internal memory is measured with that memory intact in both arms.",
+    "One episode is one agent turn: the agent is asked once per episode and its final message is the answer. An episode that would need a clarifying question is scored on what it did with one message.",
+    "The graders see the episode's own exchange, its MCP tool calls and the services' audit logs; internal tool calls the agent makes outside the benchmark's MCP tools are not in that evidence.",
+    "The communication part of an episode's score is an LLM judge on the benchmark's default model unless --judge-model says otherwise; use one judge model across arms for comparable numbers."
+  ],
+  "datasets": [
+    {
+      "key": "past-bench",
+      "title": "All 26 families · persistence on",
+      "tasks": 211,
+      "official": "https://github.com/Gen-Verse/PAST-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The publisher's grader for each episode, then the evaluation-episode mean per family.",
+      "notes": "26 units, 211 episodes: memory 5 families, procedural 8, information gathering 6, update 7."
+    },
+    {
+      "key": "past-bench-nop",
+      "title": "All 26 families · workspace reset per episode (workspace-only control)",
+      "tasks": 211,
+      "official": "https://github.com/Gen-Verse/PAST-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The same graders, over the same episodes with the workspace reset before each one.",
+      "notes": "Workspace-only control: the workspace is reset before every episode, but the agent's own memory lives in its home directory and survives. Use past-bench-isolated for an ablation."
+    },
+    {
+      "key": "past-bench-isolated",
+      "title": "Evaluation episodes alone · 60 units (the control)",
+      "tasks": 60,
+      "official": "https://github.com/Gen-Verse/PAST-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The publisher's grader for each evaluation episode, scored with nothing carried over.",
+      "notes": "Each eval_near/eval_far episode is one unit: its own container, its own home, its own workspace, and no learn episode before it. This is the arm an ablation compares against."
+    },
+    {
+      "key": "past-bench-memory",
+      "title": "Memory · 5 families",
+      "tasks": 41,
+      "official": "https://github.com/Gen-Verse/PAST-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The publisher's graders over memory_ability families.",
+      "notes": "Retaining preferences, constraints and prior cases."
+    },
+    {
+      "key": "past-bench-procedural",
+      "title": "Procedural reuse · 8 families",
+      "tasks": 64,
+      "official": "https://github.com/Gen-Verse/PAST-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The publisher's graders over procedural_ability families.",
+      "notes": "Reusing procedures and skills."
+    },
+    {
+      "key": "past-bench-information-gathering",
+      "title": "Information gathering · 6 families",
+      "tasks": 48,
+      "official": "https://github.com/Gen-Verse/PAST-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The publisher's graders over proactive_information_gathering families.",
+      "notes": "Looking up prior context before acting."
+    },
+    {
+      "key": "past-bench-update",
+      "title": "Update · 7 families",
+      "tasks": 51,
+      "official": "https://github.com/Gen-Verse/PAST-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The publisher's graders over update_ability families.",
+      "notes": "Replacing stale facts, rules and procedures."
+    },
+    {
+      "key": "past-bench-smoke",
+      "title": "SM01 preference adoption · 1 family",
+      "tasks": 8,
+      "official": "https://github.com/Gen-Verse/PAST-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The publisher's graders over the family's eight episodes.",
+      "notes": "The smallest end-to-end check: baseline, two learn episodes, near and far transfer, three controls."
+    },
+    {
+      "key": "past-bench-smoke-isolated",
+      "title": "SM01 evaluation episodes alone · 2 units",
+      "tasks": 2,
+      "official": "https://github.com/Gen-Verse/PAST-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The publisher's graders, scored with nothing carried over.",
+      "notes": "The smallest control check."
+    },
+    {
+      "key": "past-bench-smoke-nop",
+      "title": "SM01 preference adoption · persistence off",
+      "tasks": 8,
+      "official": "https://github.com/Gen-Verse/PAST-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The same graders with the workspace reset before each episode.",
+      "notes": "The control that makes SM01's number mean something."
+    }
+  ],
+  "task_count": 211,
+  "citation": "@article{xue2026pastbench,\n  title={PAST-Bench: Benchmarking the Foundations of Recursive Self-Improvement in Personal Agents},\n  author={Xue, Shuhan and Ding, Zixin and Shen, Yichen and Wang, Yinjie and Yin, Zhenfei and Wu, Yingcheng and Chen, Yuxin and Wang, Mengdi and Yang, Ling},\n  journal={arXiv preprint arXiv:2608.04003},\n  year={2026}\n}",
+  "citation_source": "https://github.com/Gen-Verse/PAST-Bench"
+}

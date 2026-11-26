@@ -130,7 +130,7 @@ class BenchmarksList(PageCase):
         cat = catalog.load()
         keys = re.findall(r'<a class="card-link" href="/benchmarks/([^"]+)"', self.html)
         self.assertEqual(sorted(keys), sorted(b.key for b in cat.listed_benchmarks))
-        self.assertEqual(len(keys), 11)
+        self.assertEqual(len(keys), 13)
         # two shelves, the official benchmarks then the experiments; a shelf with nothing on it is not shown
         official = self.html[self.html.index('data-shelf="official"'):].split('</section>', 1)[0]
         for b in cat.listed_benchmarks:
