@@ -18,7 +18,9 @@ def select(benchmark, dataset, runs):
     part = next((p for p in benchmark.get("task_parts", []) if p["id"] == dataset), None)
     if part:
         prefixes = tuple(part["prefixes"])
-        matches = lambda name: name.startswith(prefixes)
+        # a run records a task as <benchmark>/<unit>; a part's prefixes are the unit's
+        own = benchmark["key"] + "/"
+        matches = lambda name: (name[len(own):] if name.startswith(own) else name).startswith(prefixes)
         manifests = {d: {n: canonical for n, canonical in m.items() if matches(n)} if m is not None else None
                      for d, m in manifests.items()}
         normalized = [replace(j, trials=[t for t in j.trials if matches(t.task_name)]) for j in normalized]

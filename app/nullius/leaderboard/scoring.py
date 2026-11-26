@@ -47,11 +47,15 @@ def _precedence(job, manifest=None):
     return -count, -stamp, job.job_id
 
 
-def _score(ts, graded):
+def _score(ts, graded, verified=False):
+    """One task's score. ``verified``: its run passed or failed something, so an attempt that ran and ended with no
+    verdict is a miss, as the run's adjusted rate counts it."""
     ran = attempts.ran(ts)
     if not graded:
         grouped = attempts.Attempts(tuple(ts))
-        return grouped.rate if grouped.has_verdicts else None
+        if grouped.has_verdicts:
+            return grouped.rate
+        return 0 if verified and ran and all(t.outcome == classify.UNKNOWN for t in ran) else None
     values = []
     for t in ran:
         if t.outcome == classify.AGENT_ERROR:
@@ -128,7 +132,11 @@ join several datasets; they cannot infer overlap from short task names.
         covered = sum(bool(ts) and len(ts) >= 3 and not any(t.is_infra or t.outcome == classify.SCORED for t in ts) for ts in groups)
     else:
         try:
-            scores = [_score(ts, graded) for ts in groups]
+            by_run = {}
+            for run_id, _, ts in tasks:
+                by_run.setdefault(run_id, []).extend(ts)
+            verified = {run_id: attempts.has_verdict(ts) for run_id, ts in by_run.items()}
+            scores = [_score(ts, graded, verified[run_id]) for run_id, _, ts in tasks]
             measured = [v for v in scores if v is not None]
             score = sum(measured) / len(measured) if measured else None
             if score is None:

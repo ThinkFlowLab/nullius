@@ -105,6 +105,14 @@ class BoardExamples(unittest.TestCase):
         self.assertEqual((entry["score"], entry["covered"], entry["tasks"]), (.5, 2, 2))
         self.assertEqual(row["rank"], 1)
 
+    def test_c13_a_version_comparison_reads_two_versions_of_a_benchmark_as_one_entry(self):
+        both = self.benchmarks + [dict(self.benchmarks[0], _version="v2")]
+        self.config["axes"]["Retrieval"]["entries"].append(
+            {"benchmark": "gaia", "dataset": "", "version": "v2", "metric": "Score", "weight": 3})
+        projected = board.project([self.make_run("A", ["resolved", "agent_error"])], self.agents, both, self.config, "gaia", "v1")
+        entries = next(r for r in projected["rows"] if r["has_runs"])["axes"]["Retrieval"]["entries"]
+        self.assertEqual([(e["version"], e["weight"], e["score"]) for e in entries], [("v1", 4, .5)])
+
     def test_c13_missing_version_evidence_never_renormalizes_a_difference(self):
         self.benchmarks.append({"key": "other", "label": "Other", "_version": "v1", "score": {"kind": "pass"},
                                 "datasets": [{"id": "first", "tasks": {"0": "0", "1": "1"}}]})
@@ -112,14 +120,18 @@ class BoardExamples(unittest.TestCase):
         self.config["axes"]["Retrieval"]["entries"].append(other)
         self.config["axes"]["Execution"] = {"weight": 1, "entries": [other]}
         jobs = [self.make_run("A", ["resolved"]),
-                replace(self.make_run("A", ["resolved", "agent_error"], benchmark="other"), job_id="other-run")]
+                replace(self.make_run("A", ["resolved", "agent_error"], benchmark="other"), job_id="other-run"),
+                replace(self.make_run("B", ["resolved", "agent_error"], benchmark="other"), job_id="other-run-b")]
         original = self.build(jobs)
         self.assertEqual(original["rows"][0]["axes"]["Retrieval"]["score"], .75)
-        projected = board.project(jobs, self.agents, self.benchmarks, self.config, "gaia", "unrun")
-        row = next(r for r in projected["rows"] if r["has_runs"])
+        projected = {r["name"]: r for r in board.project(jobs, self.agents, self.benchmarks, self.config, "gaia", "unrun")["rows"]}
+        row = projected["A"]
         self.assertIsNone(row["axes"]["Retrieval"]["score"])
         self.assertIsNone(row["overall"])
         self.assertEqual(row["axes"]["Execution"]["score"], .5)
+        # B never ran GAIA: another version of it changes nothing for B
+        before = next(r for r in original["rows"] if r["name"] == "B")
+        self.assertEqual((projected["B"]["axes"]["Retrieval"]["score"], projected["B"]["overall"]), (.5, before["overall"]))
         self.assertEqual(self.build(jobs), original)
 
 

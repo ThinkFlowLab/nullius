@@ -15,16 +15,27 @@ def project(jobs, agents, benchmarks, settings, benchmark, version):
     draft = copy.deepcopy(settings)
     affected = set()
     for name, axis in draft["axes"].items():
+        merged = {}
         for entry in axis["entries"]:
             if entry.get("benchmark") == benchmark:
                 entry["version"] = version
                 if entry["weight"] > 0:
                     affected.add(name)
+            # an axis that listed two versions of the benchmark now lists one entry, with both weights
+            same = merged.setdefault(_entry_key(entry), entry)
+            if same is not entry:
+                same["weight"] += entry["weight"]
+        axis["entries"] = list(merged.values())
+    # what each row measured of the benchmark before: a row that never ran it loses nothing to another version
+    had = {row["key"]: {(name, e["dataset"], e["metric"]) for name, axis in row["axes"].items() for e in axis["entries"]
+                        if e.get("benchmark") == benchmark and e["weight"] > 0 and e["score"] is not None}
+           for row in build(jobs, agents, benchmarks, settings)["rows"]}
     result = build(jobs, agents, benchmarks, draft)
     for row in result["rows"]:
         for name in affected:
             axis = row["axes"][name]
-            if any(e.get("benchmark") == benchmark and e["weight"] > 0 and e["score"] is None for e in axis["entries"]):
+            if any(e.get("benchmark") == benchmark and e["weight"] > 0 and e["score"] is None
+                   and (name, e["dataset"], e["metric"]) in had.get(row["key"], ()) for e in axis["entries"]):
                 axis["score"] = None
                 axis["share"] = 0
                 if axis["weight"] > 0:
@@ -136,7 +147,8 @@ def build(jobs, agents, benchmarks, settings, *, workspace_open=True, metric_sou
         row["overall"] = row["families"]["capabilities"]["overall"]
         for metric, field in (("time", "dur_agent"), ("cost", "cost_usd")):
             values = [getattr(t, field) for t in trials.values() if getattr(t, field) is not None and isfinite(getattr(t, field)) and getattr(t, field) >= 0]
-            row["metrics"][metric] = {"value": sum(values) / len(values) if values else None, "count": len(values)}
+            mean = sum(values) / len(values) if values else None
+            row["metrics"][metric] = {"value": mean if mean is None or isfinite(mean) else None, "count": len(values)}
         rows.append(row)
         if metric_sources is not None:
             metric_sources[key] = tuple(dict.fromkeys(t.trajectory_path for t in trials.values()))

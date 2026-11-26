@@ -34,6 +34,11 @@ class WeightExamples(unittest.TestCase):
         self.assertEqual([(r["key"], r["rank"]) for r in result],
                          [("partial", 1), ("a", 2), ("b", 2), ("c", 4), ("none", None)])
         self.assertEqual(weights.rank(rows, sort="name", descending=True)[0]["key"], "partial")
+        # one mean summed in two orders differs in its last bit: the same score, the same rank, the names' order
+        noisy = .9 * .5 + .8 * .5
+        self.assertNotEqual(noisy, .85)
+        tied = weights.rank([{"key": key, "name": key, "overall": score} for key, score in (("b", noisy), ("a", .85))])
+        self.assertEqual([(r["key"], r["rank"]) for r in tied], [("a", 1), ("b", 1)])
 
 
 class ConfigurationExamples(unittest.TestCase):
@@ -61,7 +66,7 @@ class ConfigurationExamples(unittest.TestCase):
     def test_c19_invalid_values_preserve_stored_bytes(self):
         configuration.save(self.path, self.defaults, self.benchmarks)
         before = self.path.read_bytes()
-        for value in (-1, float("nan"), float("inf"), "abc", True):
+        for value in (-1, float("nan"), float("inf"), "abc", True, 10 ** 400):
             draft = copy.deepcopy(self.defaults)
             draft["axes"]["Retrieval"]["weight"] = value
             with self.assertRaises(ValueError):
@@ -76,13 +81,29 @@ class ConfigurationExamples(unittest.TestCase):
         draft["axes"]["Retrieval"]["entries"] *= 2
         with self.assertRaises(ValueError):
             configuration.save(self.path, draft, self.benchmarks)
+        # a family whose every row with a benchmark weighs 0 would have no Overall: a write refuses it,
+        # a file that already holds it still reads
+        draft = copy.deepcopy(self.defaults)
+        for name in configuration.CAPABILITIES:
+            draft["axes"][name]["weight"] = 0
+        with self.assertRaises(ValueError):
+            configuration.save(self.path, draft, self.benchmarks)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.path.write_text(json.dumps(draft))
+        self.assertEqual(configuration.load(self.path, self.benchmarks), (draft, ""))
 
     def test_c19_broken_settings_warn_without_overwrite_and_removed_references_survive(self):
-        self.path.write_text("{")
-        doc, warning = configuration.load(self.path, self.benchmarks)
-        self.assertEqual(doc, self.defaults)
-        self.assertIn("defaults", warning)
-        self.assertEqual(self.path.read_text(), "{")
+        huge = copy.deepcopy(self.defaults)
+        huge["axes"]["Retrieval"]["weight"] = 7.25
+        damaged = {"cut short": "{", "a number no float holds": json.dumps(huge).replace("7.25", "1" + "0" * 400),
+                   "nested too deep": "[" * 100000 + "]" * 100000}
+        for case, text in damaged.items():
+            with self.subTest(case):
+                self.path.write_text(text)
+                doc, warning = configuration.load(self.path, self.benchmarks)
+                self.assertEqual(doc, self.defaults)
+                self.assertIn("defaults", warning)
+                self.assertEqual(self.path.read_text(), text)
         configuration.save(self.path, self.defaults, self.benchmarks)
         configuration.save(self.path, self.defaults, [])
         self.assertEqual(json.loads(self.path.read_text()), self.defaults)

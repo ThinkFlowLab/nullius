@@ -66,6 +66,19 @@ class LeaderboardRoutes(unittest.TestCase):
         response = self.client.get("/api/leaderboard/metrics", query_string={"context": "old-workspace"})
         self.assertEqual(response.status_code, 409)
 
+    def test_runs_of_one_name_in_two_folders_stay_apart_on_the_page_as_in_the_command(self):
+        from dataclasses import replace
+        from nullius.standard.contract import definitions
+        for folder, benchmark, dataset, cost in (("/one", "gaia", "gaia/gaia-validation", 1.0), ("/two", "tau3-bench", "tau3-bench/banking_knowledge", 3.0)):
+            run = replace(job([trial("0", cost_usd=cost)], dataset=dataset, agent="codex", job_id="same"), dir=folder + "/same")
+            run.identity = {"agent": "codex", "agent_version": "2.2.2", "benchmark": benchmark,
+                            "benchmark_version": definitions.version_identity(definitions.get("benchmark", benchmark))}
+            self.jobs.append(run)
+        row = next(r for r in self.client.get("/api/leaderboard").get_json()["rows"] if r["has_runs"])
+        self.assertEqual(row["metrics"]["cost"], {"value": 2.0, "count": 2})          # both trials, each once
+        links = [link for e in row["axes"]["Retrieval"]["entries"] for link in e["links"]]
+        self.assertEqual([(link["id"], link["url"]) for link in links], [("/one/same", "/job/same"), ("/two/same", "/job/same")])
+
     def test_new_unknown_dataset_is_rejected_but_saved_removed_part_can_be_edited(self):
         self.client.get("/scoring")
         with self.client.session_transaction() as session:
@@ -88,8 +101,9 @@ class LeaderboardRoutes(unittest.TestCase):
         self.assertEqual(self.client.post("/api/scoring", json=doc, headers=headers).status_code, 400)
 
     def test_osworld_parts_read_only_matching_task_names(self):
-        self.jobs.append(job([trial("os__one", "scored", score=1), trial("libreoffice_writer__two", "scored", score=.5),
-                              trial("chrome__three", "scored", score=0)], dataset="osworld1/test_nogdrive", agent="codex"))
+        # task names as a run records them: <benchmark>/<unit>
+        self.jobs.append(job([trial("osworld1/os__one", "scored", score=1), trial("osworld1/libreoffice_writer__two", "scored", score=.5),
+                              trial("osworld1/chrome__three", "scored", score=0)], dataset="osworld1/test_nogdrive", agent="codex"))
         self.jobs[0].identity = {"benchmark": "osworld1", "benchmark_version": "desktop-env-v1.0.3", "agent": "codex", "agent_version": "2.2.2"}
         from nullius.leaderboard import service
         benchmarks = service.catalogue()[1]
@@ -122,12 +136,23 @@ class LeaderboardRoutes(unittest.TestCase):
         document["axes"]["Retrieval"]["weight"] = -1
         self.assertEqual(self.client.post("/api/scoring", json=document, headers=headers).status_code, 400)
         self.assertEqual(configuration.location().read_bytes(), before)
+        nested = self.client.post("/api/scoring", data="[" * 100000 + "]" * 100000, headers=headers | {"Content-Type": "application/json"})
+        self.assertEqual((nested.status_code, "error" in nested.get_json()), (400, True))
+        self.assertEqual(configuration.location().read_bytes(), before)
         self.assertEqual(self.client.post("/api/scoring", json=document).status_code, 403)
         self.assertEqual(self.client.post("/api/scoring", json=document, headers=headers, environ_base={"REMOTE_ADDR": "192.0.2.2"}).status_code, 403)
+        # a HEAD reads: it never takes the write's place
+        document["axes"]["Retrieval"]["weight"] = .77
+        self.assertEqual(self.client.head("/api/scoring", json=document, headers=headers).status_code, 200)
+        self.assertEqual(configuration.location().read_bytes(), before)
         configuration.location().write_text("{")
         for path in ("/leaderboard", "/scoring"):
             self.assertIn("defaults are active", self.client.get(path).get_data(as_text=True))
         self.assertEqual(configuration.location().read_text(), "{")
+        configuration.location().unlink()
+        configuration.location().mkdir()                               # not a file at all: the same defaults, no error
+        for path in ("/leaderboard", "/scoring", "/api/scoring", "/api/leaderboard"):
+            self.assertEqual(self.client.get(path).status_code, 200, path)
 
     def test_edit_reset_and_conflicting_writes_keep_complete_documents(self):
         self.client.get("/scoring")

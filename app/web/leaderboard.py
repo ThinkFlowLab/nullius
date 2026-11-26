@@ -10,7 +10,7 @@ from . import shared
 
 def _document(deferred=False):
     workspace = shared.STATE["workspace"]
-    return service.document(shared._load_jobs(), workspace=workspace.name if workspace else "",
+    return service.document(service.qualified(shared._load_jobs()), workspace=workspace.name if workspace else "",
                             workspace_open=workspace is not None or bool(shared.STATE["roots"]), deferred=deferred)
 
 
@@ -39,8 +39,11 @@ def leaderboard_data():
 def leaderboard_comparison():
     agents, benchmarks = service.catalogue()
     settings, _ = configuration.load(configuration.location(), benchmarks)
-    return jsonify(board.project(shared._load_jobs(), agents, benchmarks, settings,
-                                 request.args.get("benchmark", ""), request.args.get("version", "")))
+    try:
+        return jsonify(board.project(service.qualified(shared._load_jobs()), agents, benchmarks, settings,
+                                     request.args.get("benchmark", ""), request.args.get("version", "")))
+    except ValueError:                                                 # a version the mapped metric does not fit
+        return jsonify(error="This version cannot be compared."), 400
 
 
 @app.get("/api/leaderboard/metrics")
@@ -67,7 +70,7 @@ def scoring_page():
 @app.route("/api/scoring", methods=["GET", "POST"])
 def scoring_data():
     _, benchmarks = service.catalogue()
-    if request.method == "GET":
+    if request.method != "POST":                                       # GET, and the HEAD Flask adds to it
         settings, warning = configuration.load(configuration.location(), benchmarks)
         return jsonify(settings=settings, warning=warning, revision=service.revision())
     shared._require_csrf()
@@ -84,7 +87,7 @@ def scoring_data():
                 data = configuration.defaults(benchmarks)
             settings = configuration.save(path, data, benchmarks)
             return jsonify(settings=settings, revision=service.revision(), message="Scoring saved")
-    except (ValueError, TypeError, OverflowError):
+    except (ValueError, TypeError, OverflowError, RecursionError):
         return jsonify(error="Invalid scoring settings. Check mappings and weights."), 400
     except OSError:
         return jsonify(error="Scoring settings could not be saved. Retry."), 503

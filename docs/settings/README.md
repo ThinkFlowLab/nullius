@@ -155,10 +155,10 @@ Scoring is profile-wide in `scoring.json`, beside `settings.json` in the directo
 shown by `nullius paths`. Writes replace the complete validated document
 atomically. Malformed content uses defaults with a warning and is left intact.
 Removed catalogue references remain unavailable and can be removed without
-blocking unrelated edits. New mappings must name a declared dataset/part and
-version. Legacy entries with an empty version remain unavailable until a pinned
+blocking unrelated edits. New mappings must name a catalogue version, and a declared
+dataset or part unless they read the whole benchmark. Legacy entries with an empty version remain unavailable until a pinned
 version is selected; runs also need that recorded identity. Negative or nonfinite weights, duplicate identical
-entries and all-zero Overall weights are refused.
+entries and a family with no weighted row among those that have a benchmark are refused.
 
 **Reset to defaults** asks in place before resetting mappings and weights. Cancel and failed writes preserve the
 previous document.

@@ -31,7 +31,7 @@ class Cache:
                 # A writer may have changed the file while its parser read it.
                 if hashlib.sha256(target.read_bytes()).hexdigest() != signature[2]:
                     return missing
-            except (OSError, ValueError, TypeError, KeyError):
+            except Exception:                                          # a file of any shape: its counts are unavailable
                 result = missing
             self._entries[path] = (signature, result)
             return dict(result)

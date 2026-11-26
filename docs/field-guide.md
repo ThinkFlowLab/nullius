@@ -325,9 +325,10 @@ Each axis normalizes positive entry weights over available scores. Each family
 its measured axes. The Leaderboard ranks by the family it shows. Missing values are never
 zero. Evidence gives effective shares, configured weights, benchmark versions,
 task coverage and links to each selected run. An all-zero entry column is
-unavailable. All-zero Overall weights are invalid.
+unavailable. Each family needs a positive weight on a row that has a benchmark.
 
-Every row with an Overall is ranked by it; exact ties share competition rank.
+Every row with an Overall is ranked by it; ties, compared to twelve decimals, share
+competition rank.
 Incomplete or unknown coverage of the required verified entries across counted
 axes is listed beside the rank as a note.
 Removed entries and zero weights add no note.
@@ -336,7 +337,8 @@ Average uses available row scores and reports the count. A row comparison uses
 the shown family's shared measured axes for best and weakest differences in percentage
 points. Benchmark-version comparisons are temporary: settings and ranks do not
 change. Missing evidence for a replacement version leaves affected axes and
-Overall differences absent, rather than renormalizing a partial comparison.
+Overall differences absent, rather than renormalizing a partial comparison; a row
+that never measured the benchmark is unchanged.
 Radar segments connect only adjacent measured axes, including wraparound.
 
 Efficiency averages distinct selected real trials, deduplicated across mappings,

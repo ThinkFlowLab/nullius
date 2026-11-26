@@ -30,6 +30,13 @@ class Contributions(unittest.TestCase):
         tied = replace(newer, job_id="aaa")
         self.assertEqual(self.contribution([newer, tied]).run_ids, ("aaa",))
 
+    def test_c3_a_task_with_no_verdict_is_a_miss_once_its_run_has_one(self):
+        mixed = run("mixed", ["resolved"] + ["unknown"] * 4)
+        got = self.contribution([mixed])
+        self.assertEqual((got.score, got.covered), (.2, 5))            # the run's own adjusted rate
+        self.assertEqual(mixed.adjusted_solve_rate, .2)
+        self.assertIsNone(self.contribution([run("blind", ["unknown"] * 2)]).score)   # nothing was passed or failed: unmeasured
+
     def test_c2_attempts_stay_together_without_repeat_pooling(self):
         repeated = run("repeated", [])
         repeated.trials = [trial(str(i), "resolved" if j == 0 else "agent_error", trial_name=f"{i}-{j}")

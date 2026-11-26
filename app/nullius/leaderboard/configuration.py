@@ -87,14 +87,18 @@ def defaults(benchmarks):
 
 def _zero_empty(axes, names):
     """An axis with no benchmark weighs nothing in its family's Overall, unless none of the family has one."""
-    if any(axes[n]["entries"] and axes[n]["weight"] > 0 for n in names):
+    if any(axes[n]["entries"] for n in names):
         for n in names:
             if not axes[n]["entries"]:
                 axes[n]["weight"] = 0
 
 
 def _number(value, label, upper=None):
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0 or (upper is not None and value > upper):
+    try:
+        bad = isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0 or (upper is not None and value > upper)
+    except OverflowError:                                              # an integer no float can hold
+        bad = True
+    if bad:
         raise ValueError(f"{label}: enter a finite number between 0 and {upper}" if upper is not None else f"{label}: enter a finite nonnegative number")
 
 
@@ -135,6 +139,12 @@ def validate(document, benchmarks, *, previous=None, allow_unavailable=False):
         _zero_empty(doc["axes"], names)                                # a row with no benchmark weighs nothing
     if not any(axis["weight"] > 0 for axis in doc["axes"].values()):
         raise ValueError("At least one Weight in Overall must be positive")
+    if not allow_unavailable:
+        # each family has its own Overall: a write leaves none of them without a weighted row that has a benchmark
+        for family, names in FAMILIES.items():
+            mapped = [n for n in names if doc["axes"][n]["entries"]]
+            if mapped and not any(doc["axes"][n]["weight"] > 0 for n in mapped):
+                raise ValueError(f"{family.capitalize()}: at least one row with a benchmark needs a weight above 0")
     return doc
 
 
@@ -161,7 +171,7 @@ def load(path, benchmarks):
         return validate(_upgrade(json.loads(Path(path).read_text())), benchmarks, allow_unavailable=True), ""
     except FileNotFoundError:
         return defaults(benchmarks), ""
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, RecursionError):
         return defaults(benchmarks), "Scoring settings could not be read; defaults are active."
 
 

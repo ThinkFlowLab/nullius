@@ -12,7 +12,7 @@ from tests.test_comparison import job, trial
 from nullius.runs import parse
 from nullius.standard.contract import definitions
 from nullius.standard.runner import job as recorded_job
-from nullius.leaderboard import board, configuration
+from nullius.leaderboard import board, configuration, service
 
 
 class RecordedIdentity(unittest.TestCase):
@@ -101,6 +101,20 @@ def _write_run(root, name, benchmark, dataset, agent="codex", backend="local", o
         (folder / "result.json").write_text(json.dumps(value))
 
 
+class BenchmarkVersions(unittest.TestCase):
+    def test_c13_the_default_version_is_marked_and_only_another_version_is_offered_for_comparison(self):
+        versions = [{"key": "gaia", "label": "GAIA", "_version": v, "_default": "v2", "score": {"kind": "pass"},
+                     "datasets": [{"id": "gaia-validation"}]} for v in ("v1", "v2")]
+        single = {"key": "gsm8k", "label": "GSM8K", "_version": "v1", "_default": "v1", "score": {"kind": "pass"}, "datasets": [{"id": "test"}]}
+        self.assertEqual([(o["key"], o["version"], o["default"]) for o in service.options(versions + [single])],
+                         [("gaia", "v1", False), ("gaia", "v2", True), ("gsm8k", "v1", True)])
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, NULLIUS_HOME=home), \
+                patch.object(service, "catalogue", return_value=([], versions + [single])):
+            document = service.document([])
+        # the defaults read GAIA v2 and GSM8K v1: comparing with either would change nothing
+        self.assertEqual([(v["benchmark"], v["version"]) for v in document["versions"]], [("gaia", "v1")])
+
+
 class RecordedRuns(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
@@ -160,6 +174,10 @@ class DeferredMetrics(unittest.TestCase):
             first.write_text(json.dumps(doc))
             second.write_text("{")
             cache = metrics.Cache()
+            for shape in ("[]", json.dumps({"steps": [{"step_id": 1, "source": "agent", "timestamp": 1764100000}]})):
+                odd = Path(folder) / "odd.json"                        # valid JSON, not a trajectory
+                odd.write_text(shape)
+                self.assertEqual(cache.read(str(odd)), {"steps": None, "calls": None})
             with patch.object(trajectory, "load", wraps=trajectory.load) as load:
                 self.assertEqual(cache.read(str(first)), {"steps": 3, "calls": 2})
                 self.assertEqual(cache.read(str(first)), {"steps": 3, "calls": 2})

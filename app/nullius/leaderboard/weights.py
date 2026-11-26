@@ -15,14 +15,20 @@ def percent(value):
     return f"{100 * value:.1f}".rstrip("0").rstrip(".") + "%" if value is not None else "—"
 
 
+def level(value):
+    """A score as ranks and orders compare it: two means that differ only in their last bits, by the order they
+    were summed in, are the same score."""
+    return round(value, 12) if isinstance(value, float) else value
+
+
 def competition(rows, value):
-    """Competition ranks (1, 1, 3) by a value from full precision; a row without one has no rank."""
-    eligible = sorted((r for r in rows if value(r) is not None), key=lambda r: (-value(r), r["name"], r["key"]))
+    """Competition ranks (1, 1, 3) by a value, compared as ``level`` reads it; a row without one has no rank."""
+    eligible = sorted((r for r in rows if value(r) is not None), key=lambda r: (-level(value(r)), r["name"], r["key"]))
     ranks, previous, assigned = {}, None, None
     for i, row in enumerate(eligible, 1):
-        if value(row) != previous:
+        if level(value(row)) != previous:
             assigned = i
-        ranks[row["key"]], previous = assigned, value(row)
+        ranks[row["key"]], previous = assigned, level(value(row))
     return ranks
 
 
@@ -39,5 +45,5 @@ def rank(rows, sort="overall", descending=True):
         group.sort(key=lambda r: (r["name"], r["key"]))
         present = [r for r in group if r.get(sort) is not None]
         absent = [r for r in group if r.get(sort) is None]
-        result.extend(sorted(present, key=lambda r: r[sort], reverse=descending) + absent)
+        result.extend(sorted(present, key=lambda r: level(r[sort]), reverse=descending) + absent)
     return result

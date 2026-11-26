@@ -38,7 +38,7 @@ def main(argv=None):
                 axis = row["axes"][name]
                 print(f"  {name}: {weights.percent(axis['score'])} · weight {axis['weight']:g} · share {weights.percent(axis['share'])}")
                 for entry in axis["entries"]:
-                    version = f" · {entry['version'] or 'Official'}"
+                    version = f" · {entry.get('version_label') or entry['version'] or 'Official'}"
                     reading = weights.percent(entry["score"]) if entry["score"] is not None else entry["reason"]
                     tasks = f" · {entry['covered']}/{entry['tasks']} tasks" if entry["tasks"] is not None else ""
                     runs = " · runs " + ", ".join(entry["runs"]) if entry["runs"] else ""
