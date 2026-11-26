@@ -226,6 +226,9 @@ def resolve(d: dict, version: Optional[str] = None) -> Optional[dict]:
             return None
         return dict(d, _version=v, _versions=[v], _default=v, _ref=d.get("key"))
     v = version or d.get("default")
+    if v not in vs and version:                         # its name as pages show it (``main``), when one version has it
+        named = [x for x in vs if isinstance(vs[x], dict) and version_name(dict(d, upstream=_version_upstream(d, x), _version=x)) == version]
+        v = named[0] if len(named) == 1 else v
     if v not in vs or not isinstance(vs[v], dict):
         return None
     block = vs[v]
@@ -282,6 +285,13 @@ def version_label(d: dict) -> str:
     return str(d.get("_version") or "")
 
 
+def version_name(d: dict) -> str:
+    """A version as pages and the builder name it: its release tag, else its branch, else its key. ``key@name``
+    names it too when no other version has that name."""
+    up = d.get("upstream") or {}
+    return str(up.get("tag") or (up.get("branch") if up.get("tested") else "") or d.get("_version") or "")
+
+
 def title(d: dict) -> str:
     """Its label, with the version when the file has ``versions`` (``Codex 2.2.2``)."""
     return f"{d['label']} {d['_version']}" if "@" in str(d.get("_ref") or "") else d["label"]
@@ -299,10 +309,14 @@ def version_of(d: dict) -> Optional[str]:
 
 
 def find(others: List[dict], ref: str) -> Optional[dict]:
-    """Among resolved definitions, the one ``ref`` names: ``key@version``, or a
-    bare key for its default version."""
+    """Among resolved definitions, the one ``ref`` names: ``key@version``, a
+    bare key for its default version, or ``key@name`` for the one version so
+    named (``version_name``)."""
+    key, name = split(ref)
+    named = [o for o in others if name and o["key"] == key and version_name(o) == name]
     return next((o for o in others if o.get("_ref") == ref), None) or \
-        next((o for o in others if o["key"] == ref and o.get("_version") == o.get("_default")), None)
+        next((o for o in others if o["key"] == ref and o.get("_version") == o.get("_default")), None) or \
+        (named[0] if len(named) == 1 else None)
 
 
 def job_word(d: dict) -> str:
