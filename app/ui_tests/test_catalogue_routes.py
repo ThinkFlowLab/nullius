@@ -136,10 +136,12 @@ class BenchmarksList(PageCase):
 
     def test_a_card_says_what_it_holds(self):
         swe = visible(self.card("swe-bench-verified"))
-        for fact in ("Coding", "Harbor", "SWE-bench Verified", "Tasks 500", "Dataset 1", "Scored by Tests"):
+        for fact in ("Coding", "SWE-bench Verified", "Tasks 500", "Dataset 1", "Scored by Tests"):
             self.assertIn(fact, swe)
+        self.assertNotIn("Harbor", swe)                                             # what runs it is a filter, not a tag
+        self.assertIn('harbor&#10;"', self.card("swe-bench-verified"))
         memory = visible(self.card("longmemeval"))
-        for fact in ("Nullius", "Tasks each 500", "Datasets 3", "Scored by GPT-4o judge"):
+        for fact in ("Memory", "Tasks each 500", "Datasets 3", "Scored by GPT-4o judge"):
             self.assertIn(fact, memory)
         self.assertNotIn("benchmark.json", memory)                                  # the folder is on the benchmark's page, not its card
         self.assertIn('data-keys="longmemeval longmemeval-s longmemeval-m longmemeval-oracle"', self.card("longmemeval"))
