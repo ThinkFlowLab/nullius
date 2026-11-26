@@ -32,7 +32,7 @@
 #leaderboard-table thead th[data-sorted]::after { position: absolute; top: 50%; transform: translateY(-50%); line-height: 1; margin-left: .25rem; }
 .lb-table [data-col="agent"] { width: 238px; text-align: left; }
 .lb-table [data-col="overall"] { width: 104px; }
-.lb-table [data-col="steps"] { width: 66px; } .lb-table [data-col="time"] { width: 84px; } .lb-table [data-col="calls"] { width: 92px; } .lb-table [data-col="cost"] { width: 72px; }
+.lb-table [data-col="steps"] { width: 66px; } .lb-table [data-col="time"] { width: 84px; } .lb-table [data-col="calls"] { width: 92px; } .lb-table [data-col="cost"] { width: 88px; }
 .lb-table td { text-align: center; white-space: nowrap; color: var(--text-dim); font-variant-numeric: tabular-nums; padding-top: 9px; padding-bottom: 9px; transition: background-color .2s, padding .28s cubic-bezier(.2,.7,.2,1), color .15s ease; }
 /* the board sits on a card, so its pinned cells take the card's colour, and the row's when hovered or chosen */
 #leaderboard-board .table-wrap .grid .sticky-col, #leaderboard-board .table-wrap .grid thead th { background: var(--surface); }
@@ -55,6 +55,8 @@
 .lb-chip { display: inline-block; min-width: 46px; padding: 4px 7px; border-radius: 6px; font-weight: 600; cursor: help; --lb-chip: color-mix(in oklab, var(--lb-chip-hi) calc(var(--lb-t, 0) * 100%), var(--lb-chip-lo)); background: var(--lb-chip); color: var(--lb-chip-text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent); }
 /* the text is white on a dark shade and near black on a light one: the shade's lightness decides, per theme */
 .lb-chip.lb-top { --lb-chip: color-mix(in oklab, var(--accent) calc(60% + var(--lb-t2, 0) * 40%), var(--accent-soft)); color: var(--surface); }
+/* in the light theme the strong chip starts darker, so its white text reads from the first step (4.5:1) */
+:root[data-theme="light"] .lb-chip.lb-top { --lb-chip: color-mix(in oklab, var(--accent) calc(80% + var(--lb-t2, 0) * 20%), var(--accent-soft)); }
 .lb-none { color: var(--text-faint); }
 /* a cell's contents are boxes, so they can slide when their row moves */
 .lb-none, .lb-m { display: inline-block; }
@@ -86,7 +88,9 @@
 .lb-bar-wide { width: 100%; height: 8px; margin: 0 0 18px; border-radius: 4px; }
 .lb-bar-wide i { border-radius: 4px; }
 .lb-kv { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; color: var(--text-dim); font-size: .88rem; }
-.lb-kv > span { white-space: nowrap; }
+/* a line's label wraps inside the card; its value keeps its own width */
+.lb-kv > span { min-width: 0; overflow-wrap: anywhere; }
+.lb-kv > b { flex: none; max-width: 62%; }
 .lb-kv .lb-up { color: var(--lb-good); }
 .lb-kv .lb-down { color: var(--bad); }
 .lb-kv b { color: var(--text); font-weight: 600; text-align: right; }
@@ -226,6 +230,7 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
 .lb-cell { min-width: 0; }
 .lb-cell .ui-select-trigger { width: 100%; }
 .lb-cell.lb-none { color: var(--text-faint); text-align: center; }
+.lb-cell.lb-fixed { padding: 0 12px; overflow-wrap: anywhere; }
 .lb-weight { display: grid; grid-template-columns: auto 58px; justify-content: start; gap: 8px; align-items: center; }
 .lb-weight output { text-align: left; }
 .lb-reset { display: flex; justify-content: flex-end; margin: 0 0 16px; }
@@ -237,19 +242,29 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
   /* #, Agent and Overall fill a phone's width exactly: the first score is a sideways scroll away, Overall never cut */
   .lb-table :is(th, td) { padding-left: .6rem; padding-right: .6rem; }
   .lb-table [data-col="rank"] { width: 44px; }
-  .lb-table [data-col="agent"] { position: static; width: 168px; }
+  #leaderboard-table [data-col="agent"] { position: static; width: 168px; box-shadow: none; }
   .lb-table [data-col="overall"] { width: 84px; }
   .lb-picks .lb-pick { flex: 1 1 100%; }
   .lb-picks select, .lb-picks .ui-select-trigger { flex: 1; width: auto; }
   .lb-picks > .muted { display: none; }
   .lb-srow { grid-template-columns: 96px minmax(0, 1fr) 40px; }
-  .lb-axis { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'name weight' 'entries entries'; gap: 0 10px; }
+  .lb-complete-count { display: none; }
+}
+/* a scoring row lays out by its card's width, whatever the window's and the rail's: too narrow for a row's name beside
+   its benchmarks, they go under it; narrower still, each benchmark stacks */
+.lb-axes { container-type: inline-size; }
+@container (max-width: 800px) {
+  .lb-axis { grid-template-areas: 'name weight' 'entries entries'; }
+  .lb-axis-head > span { display: none; }
+  .lb-axis-head > .lb-entry { grid-column: 1 / -1; }
+}
+@container (max-width: 640px) {
+  .lb-axis { grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; }
   .lb-axis-head { display: none; }
   .lb-entry { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding-bottom: 8px; border-bottom: 1px dashed var(--border-soft); }
   .lb-entry > .lb-none { display: none; }
   .lb-entry > :first-child { grid-column: 1 / -1; }
   .lb-weight { grid-template-columns: auto 90px; }
-  .lb-complete-count { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .lb-medal, .lb-medal *, .lb-point, .lb-bar i, .lb-table, .lb-table th, .lb-table td, .lb-track > *, .lb-dot .lb-logo { animation: none !important; transition: none !important; }

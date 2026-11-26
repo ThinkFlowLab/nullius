@@ -7,7 +7,7 @@
 {% block body %}
 {% set actions %}<a class="btn ghost lb-head-link" id="lb-switch" href="{{ url_for('leaderboard') if view == 'scoring' else url_for('scoring_page') }}">{{ 'Leaderboard' if view == 'scoring' else 'Scoring settings' }}</a>{% endset %}
 {{ page_head('Scoring settings' if view == 'scoring' else 'Leaderboard', actions=actions, id='lb-title') }}
-{% if board.warning %}<p role="alert">{{ board.warning }}</p>{% endif %}
+{% if board.warning %}<p role="alert" id="lb-warning">{{ board.warning }}</p>{% endif %}
 <div id="lb-board-view"{{ ' hidden' if view == 'scoring' }}>
 {% if board.empty %}<p id="lb-empty">{{ board.empty }}</p>{% endif %}
 <section class="lb-panel" id="leaderboard-board">

@@ -25,7 +25,10 @@
      Each family has its own Overall, so each needs a weighted row among those that have a benchmark. */
   function check() {
     form.querySelectorAll('input').forEach(n=>{n.setCustomValidity('');n.setAttribute('aria-invalid',String(!n.checkValidity()));});
-    if(!form.checkValidity()||Object.values(draft.axes).some(a=>!number(a.weight)||a.entries.some(e=>!number(e.weight))))return {ok:false,message:''};
+    /* a weight that is wrong is marked in place, and named with its row: the row may be folded */
+    const wrong=[...form.querySelectorAll('input.lb-input')].find(n=>!n.disabled&&!n.checkValidity())?.closest('[data-scoring-axis]')?.dataset.scoringAxis
+      ||Object.entries(draft.axes).find(([,a])=>!number(a.weight)||a.entries.some(e=>!number(e.weight)))?.[0];
+    if(wrong)return {ok:false,message:`${wrong}: enter a weight of 0 or more.`};
     for(const [name,axis] of Object.entries(draft.axes)){const seen=new Set();for(const e of axis.entries){if(seen.has(identity(e)))return {ok:false,message:`${name}: ${labelOf(e.benchmark)} is listed twice. Change or remove one.`};seen.add(identity(e));}}
     for(const family of families){const mapped=family.names.filter(n=>draft.axes[n].entries.length);if(mapped.length&&!mapped.some(n=>draft.axes[n].weight>0))return {ok:false,message:`${family.title}: give at least one row a weight above 0.`};}
     if(!Object.values(draft.axes).some(a=>a.weight>0))return {ok:false,message:'Give at least one row a weight above 0.'};
@@ -65,14 +68,15 @@
     if(reset){resetting=true;form.querySelector('fieldset').disabled=true;}
     let failed=false;
     try {
-      const response=await nulliusFetch('/api/scoring',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':form.elements.csrf.value,'If-Match':revision},body:JSON.stringify(body)});
+      const response=await nulliusFetch('/api/scoring',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':form.elements.csrf.value,'If-Match':revision},body:JSON.stringify(body),keepalive:true});
       const result=await response.json().catch(()=>({}));
       if(!response.ok||!result.revision){const refused=new Error(result.error||FAILED);refused.kind=response.status===409?'conflict':'error';throw refused;}
       revision=result.revision;if(reset){draft=result.settings;resetting=false;render();document.getElementById('reset-confirm').hidden=true;document.getElementById('reset-ask').hidden=false;}
       report('Scoring saved');window.nulliusNotify('Scoring saved',{key:'scoring'});
+      document.getElementById('lb-warning')?.remove();              // the file that could not be read has been rewritten
       document.dispatchEvent(new Event('leaderboard:rescored'));
     } catch(error) {dirty=true;failed=true;report(error.kind?error.message:FAILED,error.kind||'error');}
-    finally {writing=false;if(reset){form.querySelector('fieldset').disabled=!writable;}}
+    finally {writing=false;if(reset){form.querySelector('fieldset').disabled=false;}}
     if(queued){queued=false;save(true);}
     else if(!failed&&dirty&&check().ok)save();
   }
@@ -84,7 +88,9 @@
         const n=index+1, source=select(choices,entry.benchmark,value=>{axis.entries[index]={benchmark:value,dataset:'',version:versionOf(value).version,metric:'Score',weight:entry.weight};},`${name}, benchmark ${n}`);
         line.append(cell(source));
         const versions=data.options.filter(o=>o.key===entry.benchmark), bench=versions.find(o=>o.version===entry.version), sets=bench?.datasets||[], metrics=bench?.metrics||['Score'];
-        line.append(sets.length||entry.dataset?cell(select([['','Whole benchmark'],...sets.map(d=>[d.id,d.label])],entry.dataset,v=>entry.dataset=v,`${name}, dataset ${n}`)):none());
+        /* one dataset is the whole benchmark: a fixed value, not a choice between two equal ones */
+        const only=sets.length===1&&(!entry.dataset||entry.dataset===sets[0].id);
+        line.append(only?el('span',sets[0].label,{class:'lb-cell lb-fixed small muted'}):sets.length||entry.dataset?cell(select([['','Whole benchmark'],...sets.map(d=>[d.id,d.label])],entry.dataset,v=>entry.dataset=v,`${name}, dataset ${n}`)):none());
         line.append(versions.length>1||!bench?cell(select(versions.map(v=>[v.version,v.version_label||'–']),entry.version,v=>entry.version=v,`${name}, version ${n}`)):none());
         line.append(metrics.length>1||entry.metric!=='Score'?cell(select(metrics.map(m=>[m,m]),entry.metric,v=>entry.metric=v,`${name}, metric ${n}`)):none());
         line.append(cell(input(entry.weight,v=>entry.weight=v,{required:'','aria-label':`${name}, weight ${n}`})),remove(`Remove benchmark ${n} from ${name}`,()=>{axis.entries.splice(index,1);if(!axis.entries.length)axis.weight=0;render();edited();(container.querySelectorAll('.lb-entry > .lb-icon')[index]||section.querySelector('[data-add-entry]')).focus();}));
@@ -101,6 +107,8 @@
         if(!axis.entries.length&&!axis.weight)axis.weight=data.overall?.[name]||0;
         axis.entries.push(fresh);render();edited();};
     });overview();
+    /* a viewer who may not write still opens every row: only what edits is locked */
+    if(!writable)form.querySelectorAll('input:not([type=hidden]),select,button:not(.lb-fold)').forEach(n=>{n.disabled=true;});
   }
   /* each axis folds its benchmarks away; rows open folded, the overview open */
   form.querySelectorAll('.lb-fold').forEach(b=>b.onclick=()=>{const open=b.getAttribute('aria-expanded')!=='true';b.setAttribute('aria-expanded',String(open));window.NulliusDisclosure.setHidden(document.getElementById(b.getAttribute('aria-controls')),open);});
@@ -109,6 +117,8 @@
   document.getElementById('reset-yes').onclick=()=>save(true);
   retry.onclick=()=>bar.dataset.kind==='conflict'?location.reload():save(resetting);
   form.onsubmit=e=>e.preventDefault();render();
+  /* an edit made just before leaving the page is still sent: the request outlives the page */
+  addEventListener('pagehide',()=>{if(dirty&&!writing&&check().ok){clearTimeout(timer);save();}});
 
   /* the switch between the two views: no page load; the address follows, so a reload or Back lands on the same view */
   const views={board:document.getElementById('lb-board-view'),scoring:form}, link=document.getElementById('lb-switch'), title=document.getElementById('lb-title');

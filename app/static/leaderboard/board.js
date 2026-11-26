@@ -6,9 +6,11 @@
   const motion=window.LeaderboardMotion;
   const percent = v => v == null ? '–' : `${Number((v * 100).toFixed(1))}%`;
   const whole = v => v == null ? '–' : `${Math.round(v * 100)}%`;
-  /* a time is rounded to the second before it is split, so 119.6 s reads 2m 00s; a cost that rounds to nothing says so */
+  /* a time is rounded to the second before it is split, so 119.6 s reads 2m 00s */
   const minutes = s => { const t=Math.round(s); return `${Math.floor(t/60)}m ${String(t%60).padStart(2,'0')}s`; };
-  const measure = (field,v) => v == null ? '–' : field==='cost' ? (v>0&&v<.005 ? '<$0.01' : `$${v.toFixed(2)}`) : field==='time' ? minutes(v) : String(Math.round(v));
+  /* a cost keeps two figures below ten cents, so $0.0042 and $0.0078 read apart */
+  const cost = v => { if (v >= .1 || v === 0) return `$${v.toFixed(2)}`; if (v < .0001) return '<$0.0001'; const p=Number(v.toPrecision(2)); return p >= .1 ? `$${p.toFixed(2)}` : `$${p}`; };
+  const measure = (field,v) => v == null ? '–' : field==='cost' ? cost(v) : field==='time' ? minutes(v) : String(Math.round(v));
   /* a score as a column sorts it: two means that differ only in their last bits are the same score */
   const level = v => v == null ? '' : Number(v.toFixed(12));
   const element = (tag, text, attrs = {}) => { const e = document.createElement(tag); if (text != null) e.textContent = text; Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k,v)); return e; };
@@ -24,14 +26,25 @@
   const setup = r => data.rows.filter(v=>v.agent===r.agent&&v.version===r.version).length>1 ? [r.identity.model,r.identity.effort].filter(Boolean).join(' ') : '';
   const label = r => [r.name, new Set(data.rows.filter(v=>v.agent===r.agent).map(v=>v.version)).size>1 ? r.version_label : '', setup(r)].filter(Boolean).join(' ');
   const compared = axis => versus === 'average' ? fieldAverage(axis) : versus.startsWith('version:') ? projection?.rows.find(r=>r.key===selected)?.axes[axis]?.score : row(versus)?.axes[axis]?.score;
-  const comparedName = () => versus === 'average' ? null : versus.startsWith('version:') ? 'benchmark version' : row(versus) ? label(row(versus)) : null;
+  const versionKey = v => 'version:'+JSON.stringify([v.benchmark,v.version]);
+  const comparedName = () => versus === 'average' ? null : versus.startsWith('version:') ? (data.versions.find(v=>versionKey(v)===versus)?.label || 'benchmark version') : row(versus) ? label(row(versus)) : null;
   /* a difference that rounds to nothing is 0.0, neither up nor down */
   const signed = v => { const n=Math.abs(v*100).toFixed(1); return Number(n) ? `${v < 0 ? '−' : '+'}${n}` : '0.0'; };
   const pop = document.getElementById('lb-evidence');
+  let shownFor = null;
   function dismiss() { pop.hidden = true; }
+  /* an open card stays true to the page: its score may have been drawn again, changed or hidden */
+  function settle() {
+    if (pop.hidden) return;
+    let target=focusBefore;
+    if (!target?.isConnected && shownFor?.row) target=table.querySelector(`tr[data-key="${CSS.escape(shownFor.row)}"] [data-axis="${CSS.escape(shownFor.axis)}"]`);
+    if (!target?.isConnected || !target.getClientRects().length) { pinned=false; dismiss(); return; }
+    evidence(target);
+  }
   function evidence(target) {
     const current = row(target.closest('tr')?.dataset.key || selected); if (!current) return;
     const axisName = target.dataset.axis; if (!axisName) return;
+    shownFor = {row: target.closest('tr')?.dataset.key || '', axis: axisName};
     /* a score's evidence: what it is made of, each part's share, score and what it adds, and the total */
     const shareOf=v=>v==null?'–':v.toFixed(2), adds=(score,share)=>score==null||!share?'–':(score*share*100).toFixed(1);
     const scoreCell=(score,reason)=>{const td=element('td',null,{class:'lb-ev-score'}),box=element('span',null,{class:'lb-ev-scorebox'});td.append(box);if(score==null){box.append(element('span',reason||'not run',{class:'muted'}));return td;}const bar=element('span',null,{class:'lb-ev-bar'}),fill=element('i');fill.style.width=`${score*100}%`;bar.append(fill);box.append(bar,element('span',whole(score),{class:'lb-ev-pct'}));return td;};
@@ -41,7 +54,7 @@
     const line=(label,sub,share,score,reason)=>{const tr=element('tr'),name=element('td');name.append(...label);if(sub.length){const small=element('small');small.append(...sub);name.append(small);}tr.append(name,element('td',shareOf(share),{class:'lb-ev-num'}),scoreCell(score,reason),element('td',adds(score,share),{class:'lb-ev-num'}));body.append(tr);};
     const total=(label,score,share)=>{const foot=element('tfoot'),tr=element('tr');tr.append(element('td',label),element('td',shareOf(share),{class:'lb-ev-num'}),element('td',score==null?'–':percent(score),{class:'lb-ev-num'}),element('td'));foot.append(tr);table.append(foot);};
     const field=axisName==='Overall'?null:fieldAverage(axisName);
-    pop.replaceChildren(element('strong', `${axisName} · ${current.name}`));
+    pop.replaceChildren(element('strong', `${axisName} · ${label(current)}`));
     if (axisName === 'Overall') {
       pop.append(element('p',`Overall is the weighted mean of the ${family} measured`));
       const parts=data[family].map(name=>[name,current.axes[name]]).filter(([,a]) => a.weight > 0);
@@ -70,6 +83,7 @@
   /* the card never covers what it explains: a radar's whole chart, beside it, else the score itself: below it, else
      above, else beside it; only a window too small for any overlaps */
   function place(target) {
+    pop.style.maxHeight='';
     const box = target.getBoundingClientRect(), w=pop.offsetWidth, h=pop.offsetHeight, gap=8, edge=12;
     const clamp=(v,lo,hi)=>Math.max(lo,Math.min(v,hi));
     const chart=target.closest('[data-chart^="radars-"]')?.querySelector('svg')?.getBoundingClientRect();
@@ -85,13 +99,18 @@
       top=clamp(box.top+box.height/2-h/2,edge,innerHeight-h-edge);
       if (innerWidth-box.right-gap-edge>=w) left=box.right+gap;
       else if (box.left-gap-edge>=w) left=box.left-gap-w;
-      else top=clamp(box.bottom+gap,edge,innerHeight-h-edge);
+      else {
+        /* no room beside either: the larger of the room below and above, the card scrolling inside it */
+        const below=innerHeight-box.bottom-gap-edge, above=box.top-gap-edge, room=Math.max(below,above);
+        if (room>=140) { pop.style.maxHeight=`${room}px`; top=below>=above ? box.bottom+gap : box.top-gap-room; }
+        else top=clamp(box.bottom+gap,edge,innerHeight-h-edge);
+      }
     }
     pop.style.left=`${left}px`;pop.style.top=`${top}px`;
   }
   const back = () => { returningFocus=true; focusBefore?.focus(); returningFocus=false; };
   /* Escape closes an open card; focus returns to its score only when it was inside the card */
-  document.addEventListener('keydown', e => { if (e.key !== 'Escape' || pop.hidden) return; if (pop.contains(document.activeElement)) back(); pinned=false; dismiss(); });
+  document.addEventListener('keydown', e => { if (e.key !== 'Escape' || pop.hidden) return; const inside=pop.contains(document.activeElement); pinned=false; dismiss(); if (inside) back(); });
   /* Enter on a score goes into its card's links; Tab past the last of them goes on to what follows the score, Shift+Tab
      before the first back to the score */
   document.addEventListener('keydown', e => {
@@ -101,6 +120,8 @@
     else if (e.key==='Tab' && e.shiftKey && at===links[0]) { e.preventDefault(); back(); }
     else if (e.key==='Tab' && !e.shiftKey && at===links.at(-1)) back();   // not prevented: the browser's own Tab then leaves the score
   });
+  /* a strip's dot is a button: Enter and Space choose its agent, as a click does */
+  document.addEventListener('keydown', e => { const dot=e.target.closest?.('.lb-track [data-select]'); if (dot && (e.key==='Enter' || e.key===' ')) { e.preventDefault(); choose(dot.dataset.select); } });
   /* the card follows its score as the page scrolls or resizes, and closes once the score is out of sight */
   const track = e => {
     if (pop.hidden || (e.target instanceof Node && pop.contains(e.target))) return;
@@ -177,7 +198,7 @@
     card();
   });
   function follow() {
-    const first=scored().sort((a,b)=>(a.rank??1e9)-(b.rank??1e9))[0];
+    const first=scored().sort((a,b)=>(a.rank??1e9)-(b.rank??1e9))[0]||data.rows.find(shown);
     if(versus!=='average'&&!versus.startsWith('version:')&&row(versus)&&!shown(row(versus))){versus='average';document.querySelectorAll('[data-vs-select]').forEach(v=>setSelect(v,versus));}
     if(row(selected)&&!shown(row(selected))&&first)choose(first.key);else draw();
   }
@@ -193,6 +214,7 @@
       tr.querySelector('[data-col="rank"]').replaceChildren(medal(shownRank(r)));
       tr.querySelector('[data-col="rank"]').dataset.sort=shownRank(r) || '';
       tr.querySelector('[data-name]').textContent = [r.name,setup(r)].filter(Boolean).join(' · ');
+      tr.dataset.search = [r.name,setup(r),r.company,r.version_label].filter(Boolean).join(' ');
       const o=tr.querySelector('[data-col="overall"]');overall(o,r);o.dataset.sort=level(r.overall);
       data.axes.forEach(name=>{const cell=tr.querySelector(`[data-col="${name}"]`),a=r.axes[name];chip(cell,a.score,name);cell.dataset.sort=level(a.score);});
       for(const [field,m] of Object.entries(r.metrics)) { const cell=tr.querySelector(`[data-col="${field}"]`);cell.replaceChildren(element('span',measure(field,m.value),{class:'lb-m'}));cell.dataset.sort=m.value??'';cell.title=`${m.count} observed`; }
@@ -203,6 +225,7 @@
     applyFamily();
     const again=focusAxis&&focusRow?table.querySelector(`tr[data-key="${CSS.escape(focusRow)}"] [data-axis="${CSS.escape(focusAxis)}"]`):focused;
     if(again?.isConnected&&document.activeElement!==again)again.focus({preventScroll:true});
+    settle();
   }
   const tools=document.getElementById(`${table.id}-tools`);
   /* what the viewer chose for each score column, kept apart from the toolkit's list of the columns then shown */
@@ -234,7 +257,7 @@
   const ruler=document.createElement('canvas').getContext('2d');
   function columnWidth(th) {
     /* on a phone #, Agent and Overall fill the card's width exactly, so Overall is never cut */
-    const phone=innerWidth<=700, fixed={rank:phone?44:48,agent:phone?168:238,overall:phone?84:104,steps:66,time:84,calls:92,cost:72};
+    const phone=innerWidth<=700, fixed={rank:phone?44:48,agent:phone?168:238,overall:phone?84:104,steps:66,time:84,calls:92,cost:88};
     if(fixed[th.dataset.col])return fixed[th.dataset.col];
     /* a score column is as wide as its name, measured in the header's own font */
     const style=getComputedStyle(th);ruler.font=`${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
@@ -307,10 +330,11 @@
     const frame={x:PL.l,y:PL.t,width:PL.r-PL.l,height:PL.b-PL.t,rx:6};
     plot.append(svg('rect',{...frame,fill:'url(#lb-better)','data-node':'tint-a'}),svg('rect',{...frame,fill:'url(#lb-worse)','data-node':'tint-b'}));
     if(!points.length){plot.append(svg('text',{x:(PL.l+PL.r)/2,y:(PL.t+PL.b)/2,'text-anchor':'middle'},`No ${time?'time':'cost'} recorded yet`));motion.morph(live,plot);return;}
-    const fx=fit(points.map(x),time?[.1,.2,.5,1,2,5,10,20,30,60]:[.01,.02,.05,.1,.2,.5,1,2,5],7,0), fy=fit(points.map(r=>r.overall*100),[1,2,5,10,20],6,0);
+    const fx=fit(points.map(x),time?[.1,.2,.5,1,2,5,10,20,30,60]:[.001,.002,.005,.01,.02,.05,.1,.2,.5,1,2,5],7,0), fy=fit(points.map(r=>r.overall*100),[1,2,5,10,20],6,0);
     fy.hi=Math.min(100,fy.hi);
-    const X=v=>PL.l+(v-fx.lo)/((fx.hi-fx.lo)||1)*(PL.r-PL.l), Y=v=>PL.b-(v*100-fy.lo)/((fy.hi-fy.lo)||1)*(PL.b-PL.t);
-    const places=q=>q<.1?2:q<1?1:0;
+    /* the axes end a logo's half short of the frame, so a point at 0% or 100%, or at no time, stays whole inside it */
+    const IN=17, X=v=>PL.l+IN+(v-fx.lo)/((fx.hi-fx.lo)||1)*(PL.r-PL.l-2*IN), Y=v=>PL.b-IN-(v*100-fy.lo)/((fy.hi-fy.lo)||1)*(PL.b-PL.t-2*IN);
+    const places=q=>q<.01?3:q<.1?2:q<1?1:0;
     for(let i=0,v;(v=fy.lo+i*fy.step)<=fy.hi+1e-6;i++)plot.append(svg('line',{x1:PL.l,x2:PL.r,y1:Y(v/100),y2:Y(v/100),class:'lb-grid','data-node':'gy'+i}),svg('text',{x:PL.l-8,y:Y(v/100)+4,'text-anchor':'end','data-node':'ty'+i},`${v}%`));
     for(let i=0,v;(v=fx.lo+i*fx.step)<=fx.hi+1e-6;i++)plot.append(svg('line',{x1:X(v),x2:X(v),y1:PL.t,y2:PL.b,class:'lb-grid','data-node':'gx'+i}),svg('text',{x:X(v),y:PL.b+18,'text-anchor':'middle','data-node':'tx'+i},time?v.toFixed(places(fx.step)):'$'+v.toFixed(Math.max(1,places(fx.step)))));
     plot.append(svg('text',{x:PL.l+10,y:PL.t+20,class:'lb-better','data-node':'better'},'BETTER'),svg('text',{x:PL.l-34,y:PL.t-14,'data-node':'ylabel'},'Overall'),svg('text',{x:(PL.l+PL.r)/2,y:PL.b+36,'text-anchor':'middle','data-node':'xlabel'},`${time?'Minutes':'Cost'} per task`));
@@ -430,9 +454,10 @@
     const url=marks[current.key];
     if(url&&!url.includes('#'))mark.append(element('img',null,{src:url,alt:''}));
     else if(url){const icon=svg('svg',{viewBox:'0 0 24 24','aria-hidden':'true'});icon.append(svg('use',{href:url}));mark.append(icon);}
-    name.append(element('h2',current.name),element('small',[current.company,current.version_label].filter(Boolean).join(' · ')));who.append(mark,name);
-    const ranked=onBoard?onBoard.size:data.rows.filter(r=>r.rank).length;
-    const figure=element('div',null,{class:'lb-figure'});figure.append(element('span',current.overall==null?'–':`${(current.overall*100).toFixed(1)}%`,{class:'lb-fig'}),element('span',shownRank(current)?`rank ${shownRank(current)} of ${ranked}`:'not ranked',{class:'muted'}));
+    name.append(element('h2',current.name),element('small',[current.company,current.version_label,setup(current)].filter(Boolean).join(' · ')));who.append(mark,name);
+    /* an agent the filter left out of the board keeps its standing among all */
+    const on=shown(current), rank=on?shownRank(current):current.rank, ranked=on&&onBoard?onBoard.size:data.rows.filter(r=>r.rank).length;
+    const figure=element('div',null,{class:'lb-figure'});figure.append(element('span',current.overall==null?'–':`${(current.overall*100).toFixed(1)}%`,{class:'lb-fig'}),element('span',rank?`rank ${rank} of ${ranked}`:'not ranked',{class:'muted'}));
     const bar=element('span',null,{class:'lb-bar lb-bar-wide'}),fill=element('i');fill.style.width=`${(current.overall||0)*100}%`;bar.append(fill);
     const against=comparedName()||'the field';
     const differences=data[family].map(name=>({name,d:current.axes[name].score!=null&&compared(name)!=null?current.axes[name].score-compared(name):null})).filter(v=>v.d!=null).sort((a,b)=>b.d-a.d);
@@ -452,14 +477,15 @@
   function pickers() {
     const rows=scored(), current=row(selected), agents=current&&!rows.includes(current)?[current,...rows]:rows;
     const option=r=>element('option',label(r),{value:r.key});
-    const versions=data.versions.map(v=>element('option',`Same agent: ${v.label}`,{value:'version:'+JSON.stringify([v.benchmark,v.version])}));
-    if(versus!=='average'&&!rows.some(r=>r.key===versus)&&!versions.some(o=>o.value===versus)){versus='average';projection=null;}
+    const versions=data.versions.map(v=>element('option',`Same agent: ${v.label}`,{value:versionKey(v)})), others=rows.filter(r=>r.key!==selected);
+    if(versus!=='average'&&!others.some(r=>r.key===versus)&&!versions.some(o=>o.value===versus)){versus='average';projection=null;}
     document.querySelectorAll('[data-agent-select]').forEach(s=>{s.replaceChildren(...agents.map(option));setSelect(s,selected);});
-    document.querySelectorAll('[data-vs-select]').forEach(s=>{s.replaceChildren(element('option','Average',{value:'average'}),...rows.map(option),...versions.map(o=>o.cloneNode(true)));setSelect(s,versus);});
+    document.querySelectorAll('[data-vs-select]').forEach(s=>{s.replaceChildren(element('option','Average',{value:'average'}),...others.map(option),...versions.map(o=>o.cloneNode(true)));setSelect(s,versus);});
   }
   function draw() {
     if(!row(selected))return;
     pickers();swatches();card();drawScatter();for(const group of ['domains','capabilities']){strips(group);radar(group);}
+    settle();
   }
   function press(group,attr,value){document.querySelectorAll(`#${group} [${attr}]`).forEach(b=>b.setAttribute('aria-pressed',String(b.getAttribute(attr)===value)));}
   /* switching families fades what the changing columns hold, never the cells, so a row's colour and Overall stay put */
@@ -490,7 +516,7 @@
   /* each save fetches the new board at once, so it is ready when the board is shown; it is drawn then, at its real size */
   let fresh=null;
   document.addEventListener('leaderboard:rescored',()=>{fresh=null;fetchBoard().then(got=>{if(!got)return;if(table.getClientRects().length)apply(got);else fresh=got;}).catch(()=>{});});
-  document.addEventListener('leaderboard:view',e=>{if(e.detail.view!=='board')return;if(fresh){const got=fresh;fresh=null;apply(got);}document.querySelectorAll('[data-chart^="radars-"] svg').forEach(pills);});
+  document.addEventListener('leaderboard:view',e=>{settle();if(e.detail.view!=='board')return;if(fresh){const got=fresh;fresh=null;apply(got);}document.querySelectorAll('[data-chart^="radars-"] svg').forEach(pills);});
   tools?.addEventListener('change',e=>{
     const box=e.target;if(!box.matches('input[data-col]')||passing)return;
     if(data.axes.includes(box.dataset.col)){try{localStorage.setItem(table.id+'.axes',JSON.stringify({...choices(),[box.dataset.col]:box.checked}));}catch{}}

@@ -155,6 +155,10 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertEqual(self.page.evaluate(gap), before)              # the card follows its score
         self.page.mouse.wheel(0, 3000)
         expect(evidence).to_be_hidden()                                # and closes once the score is out of sight
+        self.page.mouse.wheel(0, -3000)
+        cell.click()
+        self.page.evaluate("document.querySelector('[data-family=\"domains\"]').click()")
+        expect(evidence).to_be_hidden()                                # a card for a column that left goes with it
         self.assertFalse(self.errors)
 
     def test_a_family_switch_drops_a_sort_that_leaves_and_menus_list_the_shown_columns(self):
@@ -213,11 +217,29 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertEqual(len(options), len(set(options)))               # no two rows read the same
         self.assertEqual([o for o in options if o.startswith('Codex')], ['Codex gpt-a', 'Codex gpt-b'])
         first = self.page.locator('tbody tr:visible').first
-        self.assertEqual((first.locator('[data-col="time"]').inner_text(), first.locator('[data-col="cost"]').inner_text()), ('2m 00s', '<$0.01'))
+        self.assertEqual((first.locator('[data-col="time"]').inner_text(), first.locator('[data-col="cost"]').inner_text()), ('2m 00s', '$0.004'))
+        versus = self.page.locator('[data-vs-select]').first.locator('option').all_inner_texts()
+        self.assertNotIn('Codex gpt-a', versus)                         # the chosen agent is not its own comparison
+        self.assertIn('Codex gpt-b', versus)
+        search = self.page.locator('#leaderboard-table-tools [data-search]')
+        search.fill('gpt-b')                                            # a row is found by what its name shows
+        expect(self.page.locator('tbody tr:visible')).to_have_count(1)
+        search.fill('')
+        dot = self.page.locator('[data-chart="strips-capabilities"] i[data-select]:not(.lb-me)').first
+        chosen = dot.get_attribute('aria-label')
+        dot.focus()
+        self.page.keyboard.press('Enter')                               # a strip's dot answers the keyboard
+        expect(self.page.locator('[data-chart="strips-capabilities"] i.lb-me').first).to_have_attribute('aria-label', chosen)
         # choosing a row that has no score shows that row in the pickers too
         self.page.locator('tbody tr', has_text='DigitalMate').locator('.lb-agent').click()
         expect(self.page.locator('#lb-card h2')).to_have_text('DigitalMate')
         expect(self.page.locator('[data-agent-select]').first.locator('xpath=following-sibling::button[1]')).to_have_text('DigitalMate')
+        # a filter that leaves no scored agent: the card follows the board, to an agent still on it
+        self.page.locator('tbody tr:visible').first.locator('.lb-agent').click()
+        self.page.evaluate("document.querySelectorAll('[data-filter-menu=\"status\"] input').forEach(box=>{if(box.dataset.value!=='no-run'){box.checked=false;box.dispatchEvent(new Event('change',{bubbles:true}));}})")
+        shown = self.page.locator('tbody tr:visible [data-name]').first.inner_text()
+        expect(self.page.locator('#lb-card h2')).to_have_text(shown)
+        expect(self.page.locator('#lb-card .lb-figure .muted')).to_have_text('not ranked')
         self.assertFalse(self.errors)
 
     def test_a_version_comparison_reads_the_shown_family_s_overall(self):
@@ -236,7 +258,11 @@ class LeaderboardBrowser(unittest.TestCase):
         with self.page.expect_response(lambda r: '/api/leaderboard/comparison' in r.url):
             self.page.evaluate("version=>{const s=document.querySelector('[data-vs-select]');s.value=[...s.options].find(o=>o.value.includes(version)).value;s.dispatchEvent(new Event('change'));}", other)
         # the other version scores Work 50%: the Domains Overall is compared with the Domains Overall
-        expect(self.page.locator('#lb-card .lb-kv').first).to_have_text('Overall against benchmark version+50.0')
+        line = self.page.locator('#lb-card .lb-kv').first
+        expect(line).to_contain_text('Overall against OSWorld1')         # the version is named
+        expect(line.locator('b')).to_have_text('+50.0')
+        self.page.set_viewport_size({"width": 1024, "height": 900})
+        self.assertEqual(self.page.evaluate("(()=>{const card=document.getElementById('lb-card').getBoundingClientRect();return [...document.querySelectorAll('#lb-card *')].filter(n=>n.getBoundingClientRect().right>card.right+.5).length+document.documentElement.scrollWidth-document.documentElement.clientWidth})()"), 0)
         self.assertFalse(self.errors)
 
     def test_logo_keyboard_selection_keeps_node_focus_and_morphs_radar(self):
@@ -314,6 +340,24 @@ class LeaderboardBrowser(unittest.TestCase):
         self.open('/scoring')
         saved = lambda r: r.url.endswith('/api/scoring') and r.request.method == 'POST' and r.status == 200
         bar, retry = self.page.locator('.lb-savebar'), self.page.locator('[data-settings-retry]')
+        # a wrong weight is named with its row, so it is found when the row is folded
+        self.page.emulate_media(reduced_motion='reduce')
+        retrieval = self.page.locator('[data-scoring-axis="Retrieval"]')
+        retrieval.locator('.lb-fold').click()
+        weight = retrieval.locator('[data-entries] input').first
+        kept = weight.input_value()
+        weight.fill('')
+        retrieval.locator('.lb-fold').click()
+        self.page.locator('[data-overall="Safety"]').fill('0.5')
+        expect(bar).to_contain_text('Retrieval')
+        self.assertEqual(self.posts, [])
+        retrieval.locator('.lb-fold').click()
+        with self.page.expect_response(saved):
+            weight.fill(kept)
+        expect(bar).to_be_hidden()
+        # a benchmark with one dataset reads it as a fixed value
+        humaneval = self.page.locator('[data-scoring-axis="Execution"] .lb-entry', has=self.page.locator('.lb-fixed', has_text='HumanEval'))
+        expect(humaneval).to_have_count(1)
         row = self.page.locator('[data-scoring-axis="Memory"]')
         row.locator('.lb-fold').click()
         for _ in range(2):                                             # a second new row reads another benchmark
@@ -368,6 +412,36 @@ class LeaderboardBrowser(unittest.TestCase):
         expect(self.page.locator('[data-overall="Retrieval"]')).to_have_value(default)
         self.assertFalse(self.errors)
 
+    def test_scoring_rows_stay_in_their_card_and_a_reader_can_open_them(self):
+        self.page.emulate_media(reduced_motion='reduce')
+        past = ("(()=>{const card=document.querySelector('section.lb-axes').getBoundingClientRect();"
+                "return [...document.querySelectorAll('section.lb-axes .lb-axis *')].filter(n=>n.offsetParent&&n.getBoundingClientRect().right>card.right+.5).length"
+                "+document.documentElement.scrollWidth-document.documentElement.clientWidth})()")
+        for width in (820, 1024, 1280):
+            self.page.set_viewport_size({"width": width, "height": 900})
+            self.open('/scoring')
+            self.page.locator('[data-scoring-axis="Execution"] .lb-fold').click()
+            self.assertEqual(self.page.evaluate(past), 0, width)
+        # a viewer who may not write still opens a row to read it
+        with patch.object(web.shared, "_local_client", return_value=False):
+            self.open('/scoring')
+            fold = self.page.locator('[data-scoring-axis="Retrieval"] .lb-fold')
+            fold.click()
+            expect(fold).to_have_attribute('aria-expanded', 'true')
+            expect(self.page.locator('[data-scoring-axis="Retrieval"] [data-entries] input').first).to_be_disabled()
+            expect(self.page.locator('[data-overall="Retrieval"]')).to_be_disabled()
+        self.assertFalse(self.errors)
+
+    def test_the_warning_about_an_unreadable_file_goes_once_a_save_rewrites_it(self):
+        configuration.location().write_text("{")
+        self.open('/scoring')
+        warning = self.page.locator('#lb-warning')
+        expect(warning).to_be_visible()
+        with self.page.expect_response(lambda r: r.url.endswith('/api/scoring') and r.status == 200):
+            self.page.locator('[data-overall="Retrieval"]').fill('0.3')
+        expect(warning).to_have_count(0)
+        self.assertFalse(self.errors)
+
     def test_a_changed_select_keeps_the_keyboard_focus(self):
         self.page.emulate_media(reduced_motion='reduce')               # the row opens at once: a menu opened while it slides closes
         self.open('/scoring')
@@ -390,6 +464,22 @@ class LeaderboardBrowser(unittest.TestCase):
         # Overall is whole before any sideways scroll, and no name is cut
         self.assertLessEqual(self.page.locator('tbody td[data-col="overall"]').first.evaluate("o=>o.getBoundingClientRect().right-o.closest('.table-wrap').getBoundingClientRect().right"), .5)
         self.assertEqual(self.page.locator('.lb-who b').evaluate_all("n=>n.filter(b=>b.scrollWidth>b.clientWidth+1).length"), 0)
+        # only # stays pinned: Agent scrolls away with the scores
+        self.assertEqual([self.page.locator(f'tbody td[data-col="{col}"]').first.evaluate("c=>getComputedStyle(c).position") for col in ("rank", "agent")], ["sticky", "static"])
+        self.assertFalse(self.errors)
+
+    def test_a_strong_chip_keeps_its_text_readable_in_both_themes(self):
+        self.open('/leaderboard')
+        contrast = """score=>{const lum=c=>{const v=c.map(x=>{x/=255;return x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4)});return .2126*v[0]+.7152*v[1]+.0722*v[2]};
+          const rgb=color=>{const k=document.createElement('canvas');k.width=k.height=1;const x=k.getContext('2d');x.fillStyle=color;x.fillRect(0,0,1,1);return [...x.getImageData(0,0,1,1).data].slice(0,3)};
+          const chip=document.createElement('span');chip.className='lb-chip lb-top';chip.style.setProperty('--lb-t2',Math.max(0,(score-.6)/.4).toFixed(3));
+          document.querySelector('#leaderboard-table tbody td[data-col="overall"]').append(chip);
+          const style=getComputedStyle(chip),a=lum(rgb(style.backgroundColor)),b=lum(rgb(style.color));chip.remove();
+          return (Math.max(a,b)+.05)/(Math.min(a,b)+.05)}"""
+        for theme in ('dark', 'light'):
+            self.page.evaluate("t=>document.documentElement.dataset.theme=t", theme)
+            for score in (.6, .7, .85, 1):
+                self.assertGreaterEqual(self.page.evaluate(contrast, score), 4.5, (theme, score))
         self.assertFalse(self.errors)
 
     def test_medals_for_the_first_four_ranks_then_plain_numbers(self):
