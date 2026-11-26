@@ -66,8 +66,7 @@ Food delivery, in-store and travel requests from a simulated user, with up to 66
 ## Nullius limitations
 
 - Another agent gets the upstream's prompt plus two lines from Nullius: where its tools are, and that its last message in a turn goes to the user.
-- With another agent, a judge that fails is the task's error: the upstream's restart of the conversation is not followed.
-- With another agent, one empty final message ends the conversation. The upstream asks its own agent 3 times.
+- With another agent, a judge call that fails gives the task an error, not a score. With its own agent, VitaBench plays the whole task again instead.
 
 ## Cite
 
