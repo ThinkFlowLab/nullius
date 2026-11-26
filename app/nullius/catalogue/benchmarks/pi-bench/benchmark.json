@@ -1,0 +1,102 @@
+{
+  "key": "pi-bench",
+  "title": "Pi-Bench",
+  "category": "General assistance",
+  "domain": "Long-horizon personal-assistant work for five role personas: research, marketing, pharmacy, legal training and finance, with hidden intents and a persistent workspace.",
+  "scoring": "COMP + PROC",
+  "harness": [
+    "standard"
+  ],
+  "origin": "official",
+  "good_to_know": [
+    "A unit is one persona; its 20 tasks run in the upstream's episode order, share a workspace and use earlier tasks' artifacts. Run all five personas for the 100-task benchmark.",
+    "The user is the upstream's hidden-intent simulator: it probes for requirements the opening request does not state, so several turns per task are normal.",
+    "The reward is COMP, the upstream checklist score; PROC, the hidden-intent coverage score, is reported beside it in the job.",
+    "The persona's AppWorld tools come from the official image, one container per unit. The image's own nanobot harness is not used.",
+    "Pull zzzhr97/pi-bench:latest before a run: it supplies AppWorld for the tools. A machine without Docker can answer text-only turns but cannot use the persona's apps.",
+    "Pi-Bench declares a simulated user and a judge, so a provider key is needed before any run, including the nop control.",
+    "Scoring runs an LLM judge over every task's trace; give the score phase time with --timeout score=3600 when a full persona is evaluated."
+  ],
+  "upstream_limitations": [
+    "The official harness ships its own nanobot agent and a Docker image; it exposes no interface for an arbitrary agent. This entry substitutes the Nullius agent under test and uses the image only for AppWorld.",
+    "Twenty-four tasks declare AppWorld tool use; the rest still run in an AppWorld-backed persona and may use the persona's apps.",
+    "The benchmark has no published reference solution, so no oracle control is declared."
+  ],
+  "limitations": [
+    "A unit is a whole persona, not one task: a run reports five units for 100 tasks, and a single persona is a dataset of its own.",
+    "The agent under test must prove AppWorld tools, conversation and a workspace; an agent without the tools port cannot run the tool tasks.",
+    "The official image's harness entrypoint is not used; the driver starts only its AppWorld API and serves the upstream's MCP server, so image-level harness changes are not picked up.",
+    "The official evaluator's own trace and log conventions are reproduced by the driver from the Nullius transcript; tool calls themselves are not rendered, as the upstream trace configuration does not render them."
+  ],
+  "datasets": [
+    {
+      "key": "pi-bench",
+      "title": "All five personas \u00b7 100 tasks",
+      "tasks": 100,
+      "official": "https://github.com/Simplified-Reasoning/Pi-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The upstream's TraceEvaluationRunner: ChecklistEvaluator (COMP) and ProactivenessEvaluator (PROC) over each task's trace and the user simulator's logs.",
+      "notes": "The full benchmark: researcher, marketer, pharmacist, law_trainee and Financier, 20 tasks each."
+    },
+    {
+      "key": "pi-bench-researcher",
+      "title": "Researcher \u00b7 20 tasks",
+      "tasks": 20,
+      "official": "https://github.com/Simplified-Reasoning/Pi-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The upstream's TraceEvaluationRunner over the researcher persona.",
+      "notes": "One persona's 20-task episode."
+    },
+    {
+      "key": "pi-bench-marketer",
+      "title": "Marketer \u00b7 20 tasks",
+      "tasks": 20,
+      "official": "https://github.com/Simplified-Reasoning/Pi-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The upstream's TraceEvaluationRunner over the marketer persona.",
+      "notes": "One persona's 20-task episode."
+    },
+    {
+      "key": "pi-bench-pharmacist",
+      "title": "Pharmacist \u00b7 20 tasks",
+      "tasks": 20,
+      "official": "https://github.com/Simplified-Reasoning/Pi-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The upstream's TraceEvaluationRunner over the pharmacist persona.",
+      "notes": "One persona's 20-task episode."
+    },
+    {
+      "key": "pi-bench-law-trainee",
+      "title": "Law trainee \u00b7 20 tasks",
+      "tasks": 20,
+      "official": "https://github.com/Simplified-Reasoning/Pi-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The upstream's TraceEvaluationRunner over the law_trainee persona.",
+      "notes": "One persona's 20-task episode."
+    },
+    {
+      "key": "pi-bench-financier",
+      "title": "Financier \u00b7 20 tasks",
+      "tasks": 20,
+      "official": "https://github.com/Simplified-Reasoning/Pi-Bench",
+      "source": "GitHub",
+      "registry": "",
+      "hub": "",
+      "verifier": "The upstream's TraceEvaluationRunner over the Financier persona.",
+      "notes": "One persona's 20-task episode."
+    }
+  ],
+  "task_count": 100,
+  "citation": "@misc{zhang2026pibenchevaluatingproactivepersonal,\n  title={$\\pi$-Bench: Evaluating Proactive Personal Assistant Agents in Long-Horizon Workflows},\n  author={Haoran Zhang and Luxin Xu and Zhilin Wang and Runquan Gui and Shunkai Zhang and Haodi Lei and Zihao He and Bingsu He and Chicheng Qin and Tong Zhu and Xiaoye Qu and Yang Yang and Yu Cheng and Yafu Li},\n  year={2026},\n  eprint={2605.14678},\n  archivePrefix={arXiv},\n  primaryClass={cs.AI},\n  url={https://arxiv.org/abs/2605.14678}\n}",
+  "citation_source": "https://github.com/Simplified-Reasoning/Pi-Bench"
+}

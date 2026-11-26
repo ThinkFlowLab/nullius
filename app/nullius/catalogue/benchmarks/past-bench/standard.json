@@ -1,0 +1,122 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "past-bench",
+  "label": "PAST-Bench",
+  "summary": "Cross-session self-evolution: a family of episodes teaches a preference, rule or procedure, then later episodes ask for it in another situation, with the same family run without persistence as the control.",
+  "family": "agent",
+  "needs": [
+    "agent.conversation/v1",
+    "agent.tools/v1",
+    "agent.workspace/v1"
+  ],
+  "upstream": {
+    "repository": "https://github.com/Gen-Verse/PAST-Bench",
+    "tested": "f8223517ae7491e776b69793d9f11e9d074ab42e",
+    "tested_date": "2026-11-23",
+    "license": "Apache-2.0"
+  },
+  "driver": {
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/driver.py"
+    ],
+    "install": {
+      "python": "3.12",
+      "pip": [
+        "pydantic==2.11.7",
+        "pyyaml==6.0.2",
+        "openai==1.109.1",
+        "httpx==0.28.1",
+        "fastapi==0.116.1",
+        "uvicorn==0.35.0",
+        "openpyxl==3.1.5",
+        "python-docx==1.2.0",
+        "python-pptx==1.0.2",
+        "pypdf==5.9.0"
+      ]
+    }
+  },
+  "mcp_servers": {
+    "past": {
+      "command": [
+        "{install}/.venv/bin/python",
+        "{here}/past_mcp.py"
+      ],
+      "summary": "The current episode's own tools: each one the task file's name, schema and mock-service endpoint, on the port the driver gave that service. It reads the driver's current.json for each listing and call, and writes every call and answer to the driver's dispatch log."
+    }
+  },
+  "datasets": [
+    {
+      "id": "past-bench",
+      "label": "All 26 families · persistence on",
+      "units": 26
+    },
+    {
+      "id": "past-bench-nop",
+      "label": "All 26 families · workspace reset per episode (workspace-only control)",
+      "units": 26
+    },
+    {
+      "id": "past-bench-isolated",
+      "label": "Evaluation episodes alone · 60 units, nothing carried over (the control)",
+      "units": 60
+    },
+    {
+      "id": "past-bench-memory",
+      "label": "Memory · 5 families",
+      "units": 5
+    },
+    {
+      "id": "past-bench-procedural",
+      "label": "Procedural reuse · 8 families",
+      "units": 8
+    },
+    {
+      "id": "past-bench-information-gathering",
+      "label": "Information gathering · 6 families",
+      "units": 6
+    },
+    {
+      "id": "past-bench-update",
+      "label": "Update · 7 families",
+      "units": 7
+    },
+    {
+      "id": "past-bench-smoke",
+      "label": "SM01 preference adoption · 1 family",
+      "units": 1
+    },
+    {
+      "id": "past-bench-smoke-isolated",
+      "label": "SM01 evaluation episodes alone · 2 units",
+      "units": 2
+    },
+    {
+      "id": "past-bench-smoke-nop",
+      "label": "SM01 preference adoption · persistence off",
+      "units": 1
+    }
+  ],
+  "units": {
+    "noun": "family",
+    "nouns": "families"
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "No agent runs, so no episode is answered and every family scores nothing."
+    }
+  },
+  "score": {
+    "kind": "score",
+    "says": "Each episode through the publisher's own grader for that episode, and the publisher's own composite: safety × (0.8 × completion + 0.2 × robustness). The family's reward is the mean of its evaluation episodes (eval_near and eval_far); the detail carries the cold baseline, the learn episodes, the control episodes, and the Layer-1 shape: lift (evaluation − cold), reuse (share of evaluation episodes at 0.5 or more), transfer (eval_far ÷ eval_near), and evolve (max(0, lift) × reuse × transfer).",
+    "judge": {
+      "model": "gpt-5.4",
+      "says": "The publishers' own judge prompt and parsing (graders/llm_judge.py), at its default temperature 0, asked for the communication part of an episode's score. Graders that need no judge still call it, so a run needs a judge route."
+    }
+  },
+  "limits": {
+    "turn_seconds": 900,
+    "turns": 32
+  }
+}

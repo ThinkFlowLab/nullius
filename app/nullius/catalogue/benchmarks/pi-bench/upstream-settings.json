@@ -1,0 +1,156 @@
+[
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "model.model",
+    "values": "any chat model",
+    "default": "provider/model-name",
+    "nullius": "not offered - the agent under test brings its own model"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "model.base_url",
+    "values": "an OpenAI-compatible base URL",
+    "default": "${MODEL_BASE_URL}",
+    "nullius": "not offered - the agent under test reaches the Nullius relay itself"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "model.max_tool_iterations",
+    "values": "a whole number",
+    "default": "120",
+    "nullius": "not offered - the agent's own loop sets its iteration bound"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "model.memory_window",
+    "values": "a whole number",
+    "default": "100",
+    "nullius": "not offered - the agent's own memory is outside the benchmark"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "user_agent.model",
+    "values": "any chat model",
+    "default": "gpt-5.4",
+    "nullius": "fixed:gpt-5.4 - the upstream simulator's default, declared as simulator"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "user_agent.temperature",
+    "values": "a decimal",
+    "default": "0.0",
+    "nullius": "fixed:0.0 - the upstream simulator's default"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "user_agent.max_concurrency",
+    "values": "a whole number",
+    "default": "32",
+    "nullius": "fixed:8 - the simulator's calls are serialized by the conversation"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "judger.model",
+    "values": "any chat model",
+    "default": "gpt-5.4",
+    "nullius": "fixed:gpt-5.4 - the upstream checklist judge's default, declared as score.judge"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "judger.temperature",
+    "values": "a decimal",
+    "default": "0.0",
+    "nullius": "fixed:0.0 - the upstream checklist judge's default"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "judger.reasoning_effort",
+    "values": "null, low, medium, high",
+    "default": "high",
+    "nullius": "fixed:high - the upstream checklist judge's default"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "tools.brave_search_api_key",
+    "values": "a Brave Search API key",
+    "default": "${BRAVE_SEARCH_API_KEY}",
+    "nullius": "not offered - the agent uses its own tools; AppWorld supplies the persona's apps"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "tools.web_search_max_results",
+    "values": "a whole number",
+    "default": "10",
+    "nullius": "not offered - the agent's own web tool decides its result count"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "nanobot.trace_logs_dir",
+    "values": "a directory",
+    "default": "~/.nanobot/trace_logs",
+    "nullius": "fixed:the unit's trace folder - written by the driver in the upstream turn-file shape"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "nanobot.workspace_dir",
+    "values": "a directory",
+    "default": "~/.nanobot/workspace",
+    "nullius": "fixed:the unit workspace - the agent and the upstream user simulator share it"
+  },
+  {
+    "entry": "config/models/example.full.yaml",
+    "setting": "nanobot.heartbeat_enabled",
+    "values": "true, false",
+    "default": "true",
+    "nullius": "not offered - the benchmark's turns drive the session"
+  },
+  {
+    "entry": "src/runtime/model_config.py",
+    "setting": "run.user_id",
+    "values": "one of the five persona ids",
+    "default": "law_trainee",
+    "nullius": "fixed:the dataset's persona - each dataset names one persona"
+  },
+  {
+    "entry": "src/runtime/model_config.py",
+    "setting": "run.task_ids",
+    "values": "a list of task ids",
+    "default": "[] - the episode's order",
+    "nullius": "fixed:the episode order - the upstream runner reads it from the persona's episode.yaml"
+  },
+  {
+    "entry": "src/runtime/model_config.py",
+    "setting": "run.scoring",
+    "values": "checklist, proactiveness, both",
+    "default": "both",
+    "nullius": "fixed:both - the upstream's COMP and PROC"
+  },
+  {
+    "entry": "src/runtime/model_config.py",
+    "setting": "run.turn_timeout",
+    "values": "seconds",
+    "default": "2400.0",
+    "nullius": "fixed:2400 - the upstream simulator's per-turn limit"
+  },
+  {
+    "entry": "src/runtime/model_config.py",
+    "setting": "run.user_mode",
+    "values": "llm, terminal",
+    "default": "llm",
+    "nullius": "fixed:llm - the upstream hidden-intent simulator"
+  },
+  {
+    "entry": "config/bench/evaluation/trace_history.yaml",
+    "setting": "messages.include_assistant_tool_calls",
+    "values": "true, false",
+    "default": "false",
+    "nullius": "fixed:false - the upstream trace configuration renders messages, not tool calls"
+  },
+  {
+    "entry": "src/docker_launcher.py",
+    "setting": "IMAGE_NAME",
+    "values": "a Docker image",
+    "default": "zzzhr97/pi-bench:latest",
+    "nullius": "fixed:zzzhr97/pi-bench:latest - the AppWorld service image, overridable by NULLIUS_PI_BENCH_IMAGE"
+  }
+]

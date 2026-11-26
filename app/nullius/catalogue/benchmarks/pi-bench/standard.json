@@ -1,0 +1,211 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "pi-bench",
+  "label": "Pi-Bench",
+  "summary": "Long-horizon personal-assistant work across five role personas; the upstream's hidden-intent user simulator and checklist/proactiveness evaluators score the whole episode.",
+  "family": "agent",
+  "needs": [
+    "agent.tools/v1",
+    "agent.conversation/v1",
+    "agent.workspace/v1"
+  ],
+  "upstream": {
+    "repository": "https://github.com/Simplified-Reasoning/Pi-Bench",
+    "tested": "4f545be5d289b28ff022d2904d455007358ed3b7",
+    "tested_date": "2026-10-13",
+    "license": "Apache-2.0"
+  },
+  "driver": {
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/driver.py"
+    ],
+    "install": {
+      "python": "3.12",
+      "project": "."
+    }
+  },
+  "mcp_servers": {
+    "appworld": {
+      "command": [
+        "{install}/.venv/bin/python",
+        "{here}/appworld_mcp.py"
+      ],
+      "summary": "The persona's AppWorld tools: the official image's API server and the upstream's own appworld serve mcp stdio, one container per unit."
+    }
+  },
+  "datasets": [
+    {
+      "id": "pi-bench",
+      "label": "All five personas · 100 tasks",
+      "units": 5
+    },
+    {
+      "id": "pi-bench-researcher",
+      "label": "Researcher · 20 tasks",
+      "units": 1
+    },
+    {
+      "id": "pi-bench-marketer",
+      "label": "Marketer · 20 tasks",
+      "units": 1
+    },
+    {
+      "id": "pi-bench-pharmacist",
+      "label": "Pharmacist · 20 tasks",
+      "units": 1
+    },
+    {
+      "id": "pi-bench-law-trainee",
+      "label": "Law trainee · 20 tasks",
+      "units": 1
+    },
+    {
+      "id": "pi-bench-financier",
+      "label": "Financier · 20 tasks",
+      "units": 1
+    }
+  ],
+  "units": {
+    "noun": "persona",
+    "nouns": "personas"
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "Nullius: no agent runs, so no conversation or workspace exists to evaluate and every task scores nothing."
+    }
+  },
+  "simulator": {
+    "model": "gpt-5.4",
+    "says": "the persona: the upstream's own user simulator (src/user_agent/user_agent.py), its hidden-intent satisfaction and targeted-followup prompts, at its default temperature 0"
+  },
+  "score": {
+    "kind": "score",
+    "says": "the upstream's own TraceEvaluationRunner over the episode: ChecklistEvaluator's weighted checklist score is COMP (the reward); ProactivenessEvaluator's hidden-intent coverage is PROC, reported beside it. A task without a checklist contributes to PROC only; a task whose trace the evaluator cannot build is left out, as upstream leaves it out",
+    "judge": {
+      "model": "gpt-5.4",
+      "says": "the upstream's checklist judge: ChecklistEvaluator's own prompt and parsing, at its default temperature 0, asked over each task's rendered trace"
+    }
+  },
+  "limits": {
+    "turn_seconds": 2400,
+    "turns": 600
+  },
+  "proven": {
+    "pi-bench": {
+      "units": {
+        "units": 5,
+        "passed": "5 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/5",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 5,
+        "job": "2026-11-18__20-23-12__pi-bench__pi-bench__prove-nop",
+        "source": "nullius",
+        "judge": "gpt-5.4",
+        "on": "2026-11-18"
+      }
+    },
+    "pi-bench-researcher": {
+      "units": {
+        "units": 1,
+        "passed": "1 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/1",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 1,
+        "job": "2026-11-18__20-23-12__pi-bench__pi-bench-researcher__prove-nop",
+        "source": "nullius",
+        "judge": "gpt-5.4",
+        "on": "2026-11-18"
+      }
+    },
+    "pi-bench-marketer": {
+      "units": {
+        "units": 1,
+        "passed": "1 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/1",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 1,
+        "job": "2026-11-18__20-23-12__pi-bench__pi-bench-marketer__prove-nop",
+        "source": "nullius",
+        "judge": "gpt-5.4",
+        "on": "2026-11-18"
+      }
+    },
+    "pi-bench-pharmacist": {
+      "units": {
+        "units": 1,
+        "passed": "1 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/1",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 1,
+        "job": "2026-11-18__20-23-12__pi-bench__pi-bench-pharmacist__prove-nop",
+        "source": "nullius",
+        "judge": "gpt-5.4",
+        "on": "2026-11-18"
+      }
+    },
+    "pi-bench-law-trainee": {
+      "units": {
+        "units": 1,
+        "passed": "1 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/1",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 1,
+        "job": "2026-11-18__20-23-12__pi-bench__pi-bench-law-trainee__prove-nop",
+        "source": "nullius",
+        "judge": "gpt-5.4",
+        "on": "2026-11-18"
+      }
+    },
+    "pi-bench-financier": {
+      "units": {
+        "units": 1,
+        "passed": "1 ids, the same twice, unique",
+        "on": "2026-11-18"
+      },
+      "nop": {
+        "passed": "0/1",
+        "value": 0.0,
+        "expect": {
+          "at_most": 0.0
+        },
+        "units": 1,
+        "job": "2026-11-18__20-23-12__pi-bench__pi-bench-financier__prove-nop",
+        "source": "nullius",
+        "judge": "gpt-5.4",
+        "on": "2026-11-18"
+      }
+    }
+  }
+}
