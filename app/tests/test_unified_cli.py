@@ -54,6 +54,17 @@ class UnifiedCLI(unittest.TestCase):
                 self.assertIn(command, result.stdout)
         self.assertEqual(list(self.root.iterdir()), [])
 
+    def test_each_command_help_names_the_command_as_typed(self):
+        for command in cli.COMMANDS:
+            if command == "serve":   # needs Flask: the route suite reads its parser
+                continue
+            with self.subTest(command=command):
+                result = self.run_cli(command, "--help")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(result.stdout.startswith(f"usage: nullius {command} "), result.stdout[:80])
+                self.assertNotIn("PYTHONPATH", result.stdout)
+                self.assertNotIn("-m nullius.", result.stdout)
+
     def test_version_uses_distribution_name_and_keeps_command_name(self):
         for missing, expected in ((False, "0.1.0rc1"), (True, "source checkout")):
             with self.subTest(missing=missing):
