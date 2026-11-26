@@ -14,6 +14,7 @@ from html import unescape
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from flask import url_for
 
@@ -94,12 +95,16 @@ class JudgementsOfAnotherWorkspace(unittest.TestCase):
                         self.assertIn(f"workspace={self.b.name}", url_for(rule.endpoint, **dict.fromkeys(rule.arguments, "x")))
 
     def test_the_pages_of_that_record_link_into_no_other_workspace(self):
-        client, kept = web.app.test_client(), f"workspace={self.b.name}"
-        page = unescape(client.get(f"/job/job-y?{kept}").get_data(as_text=True))
-        self.assertNotIn('href="?', page, "a link of the query alone drops the workspace")
-        links = re.findall(r'(?:href|data-results)="(/job/job-y\?[^"]*)"', page)
-        for arg in ("sort=tokens", "outcome=", "view=results"):
-            self.assertTrue([link for link in links if arg in link and kept in link], f"no {arg} link keeps the workspace")
+        at = f"/job/job-y?workspace={self.b.name}"
+        page = web.app.test_client().get(at).get_data(as_text=True)
+        found = re.findall(r'\b(href|action|data-endpoint|data-results|data-live)="([^"]*)"', page)
+        urls = [(attr, urlsplit(urljoin(at, unescape(value)))) for attr, value in found]      # as a browser resolves them
+        record = [(attr, u) for attr, u in urls if "job-y" in u.path.split("/")]
+        for attr, u in record:
+            with self.subTest(attr, url=u.geturl()):
+                self.assertEqual(parse_qs(u.query).get("workspace"), [self.b.name])
+        seen = {attr for attr, _ in record} | {key for _, u in record for key in parse_qs(u.query)}
+        self.assertLessEqual({"href", "data-endpoint", "data-results", "sort", "outcome"}, seen)   # each kind was on the page
 
     def test_a_user_judge_flag_goes_to_the_job_of_that_workspace(self):
         shutil.copytree(JOB, self.tmp / "b" / "job-x")              # B holds a job-x too, as the open workspace does
