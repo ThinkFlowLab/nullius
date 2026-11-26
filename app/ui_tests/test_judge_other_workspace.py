@@ -1,5 +1,6 @@
-"""A job of another workspace, opened with ``?workspace=``, shows and keeps its
-judgements in that workspace's store, not the open one's."""
+"""A job of another workspace, opened with ``?workspace=``, shows the
+judgements that workspace kept for it before, and its new ones go to the
+user's store under the job's identity, into neither workspace."""
 from __future__ import annotations
 
 import os
@@ -9,7 +10,7 @@ import unittest
 from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace as NS
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from flask import url_for
@@ -31,6 +32,7 @@ class JudgementsOfAnotherWorkspace(unittest.TestCase):
         shutil.copytree(JOB, tmp / "a" / "job-x")
         shutil.copytree(JOB, tmp / "b" / "job-y")
         (tmp / "b" / "job-y" / TRIAL / "agent" / "trajectory.json").write_text("{}")
+        stack.enter_context(patch.object(store, "home", return_value=str(tmp / "data")))
         stack.enter_context(patch.object(web.shared, "WS_HOME", str(tmp / "workspaces")))
         stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}, clear=True))
         self.a = workspace.create(web.shared.WS_HOME, [str(tmp / "a")], "A")
@@ -47,28 +49,33 @@ class JudgementsOfAnotherWorkspace(unittest.TestCase):
             self.assertEqual(web.app.test_client().get(self.url).status_code, 200)
         self.assertTrue(seen[0]["judged"], "B's judgement of B's trial is not shown")
 
-    def test_judging_that_trial_writes_into_its_own_workspace(self):
+    def test_judging_that_trial_writes_into_neither_workspace(self):
         rec = {"questions": Q.VERSION, "answers": {"q": {"choice": "x"}}, "judge": {"model": "m"}}
         with web.app.test_request_context(self.url):
             job, trial = web.traces._trial_evidence("job-y", TRIAL)
-            with patch.object(web.judge.batch, "ask_states", return_value=dict(rec)):
-                web.judge.batch.ask_and_store(web.judge.ws_dir(), job.job_id, trial.trial_name, {}, None)
-        self.assertNotIn("judgements", os.listdir(self.a.dir), "a judgement of B's trial was written into A")
-        self.assertIsNotNone(store.load(self.b.dir, "job-y", TRIAL))
+            with patch.object(web.judge.trajectory, "load", return_value=SimpleNamespace(error=None)), \
+                    patch.object(web.judge, "_trial_ids_and_states", return_value={}), \
+                    patch.object(web.judge.batch, "ask_states", return_value=dict(rec)), \
+                    patch.object(trial, "has_trajectory", True):
+                web.judge.judge_trial(job, trial, None)
+        for ws in (self.a, self.b):
+            self.assertNotIn("judgements", os.listdir(ws.dir), f"a judgement was written into {ws.label}")
+        self.assertIsNotNone(store.load(store.home(), job.uid, TRIAL))
 
-    def test_judge_all_and_task_judging_write_into_its_own_workspace(self):
+    def test_judge_all_and_task_judging_write_into_neither_workspace(self):
         rec = {"questions": Q.VERSION, "answers": {"q": {"choice": "x"}}, "judge": {"model": "m"}}
         client = web.app.test_client()
         with client.session_transaction() as sess:
             sess["csrf"] = "t"
         with patch.dict(os.environ, TYPESAFE_API_KEY="ts-fake"), patch.object(web.judge.batch, "ask_states", side_effect=lambda *a, **k: dict(rec)), \
-                patch.object(web.judge.trajectory, "load", lambda path: NS(error=None)), patch.object(web.judge, "_trial_ids_and_states", lambda trial, traj: {}), \
+                patch.object(web.judge.trajectory, "load", lambda path: SimpleNamespace(error=None)), patch.object(web.judge, "_trial_ids_and_states", lambda trial, traj: {}), \
                 patch.object(web.judge, "_task_instruction", lambda trial: "Say hello."):
             for route in ("job", "tasks"):
                 self.assertEqual(client.post(f"/judge/{route}/job-y?workspace={self.b.name}", data={"csrf": "t"}).status_code, 302)
-        self.assertNotIn("judgements", os.listdir(self.a.dir), "Judge all on B's job wrote into A")
-        self.assertIsNotNone(store.load(self.b.dir, "job-y", TRIAL))
-        self.assertTrue(any(k.startswith("task_") for k in os.listdir(Path(self.b.dir) / "judgements")), os.listdir(Path(self.b.dir) / "judgements"))
+        for ws in (self.a, self.b):
+            self.assertNotIn("judgements", os.listdir(ws.dir), f"Judge all on B's job wrote into {ws.label}")
+        for lane in ("judgements", "judgements-tasks"):
+            self.assertTrue(any((Path(store.home()) / lane).rglob("*.json")), f"nothing kept in the profile's {lane}")
 
     def test_the_judge_forms_post_back_to_that_workspace(self):
         with web.app.test_request_context(self.url):
@@ -85,13 +92,15 @@ class JudgementsOfAnotherWorkspace(unittest.TestCase):
         fold = replace(jx, trials=jx.trials + jy.trials)                                # as launches.fold makes it: the first shard's
         t = replace(next(t for t in jy.trials if t.trial_name == TRIAL), has_trajectory=True)
         rec = {"questions": Q.VERSION, "answers": {web.judge.SIDE_QUESTION: {"score": 1}}, "judge": {"model": "m"}}
-        store.save(self.b.dir, "job-y", TRIAL, dict(rec), started=web.judge.started_of(t))
-        self.assertIsNotNone(web.judge.side_of(fold, t, self.b.dir), "the trial page's record is not read")
-        with patch.object(web.judge.trajectory, "load", return_value=unittest.mock.Mock(error=None)), \
-             patch.object(web.judge, "_states_for", return_value={}), patch.object(web.judge.batch, "ask_states", return_value=dict(rec)), \
-             patch.object(web.judge, "side_ids", return_value=["more"]):                # one question still to ask
-            web.judge.judge_side(fold, t, self.b.dir, None)
-        self.assertIsNone(store.load(self.b.dir, "job-x", TRIAL), "saved under the first shard's job")
+        store.save(self.b.dir, "job-y", TRIAL, dict(rec), started=web.judge.started_of(t))   # kept by B before
+        with web.app.test_request_context(self.url):
+            self.assertIsNotNone(web.judge.side_of(fold, t, self.b.name), "the trial page's record is not read")
+            with patch.object(web.judge.trajectory, "load", return_value=unittest.mock.Mock(error=None)), \
+                 patch.object(web.judge, "_states_for", return_value={}), patch.object(web.judge.batch, "ask_states", return_value=dict(rec)), \
+                 patch.object(web.judge, "side_ids", return_value=["more"]):            # one question still to ask
+                web.judge.judge_side(fold, t, self.b.name, None)
+        self.assertIsNone(store.load(store.home(), jx.uid, TRIAL), "saved under the first shard's job")
+        self.assertIsNotNone(store.load(store.home(), jy.uid, TRIAL), "not saved under its own shard's job")
 
     def test_a_job_of_the_open_workspace_keeps_its_store(self):
         with web.app.test_request_context(f"/trial/job-x/{TRIAL}"):

@@ -722,11 +722,14 @@ def looks_like_job_dir(path: str) -> bool:
     )
 
 
-def find_job_dirs(roots) -> list[str]:
+def find_job_dirs(roots, strict=None) -> list[str]:
     """Return every job directory found under the given root paths.
 
     A root may itself be a job dir, or a parent containing job dirs (one level
-    down). Duplicates are dropped in first-seen order.
+    down). Duplicates are dropped in first-seen order. `strict`: for a reader
+    that must know every job (who owns a judgement), a test on a folder's name:
+    OSError when a root, or a folder in one whose name passes, cannot be
+    searched (`uid.searched`), so a hidden job is never taken for none.
     """
     found: list[str] = []
     seen: set[str] = set()
@@ -740,10 +743,17 @@ def find_job_dirs(roots) -> list[str]:
     for root in roots:
         if not os.path.isdir(root):
             continue
+        if strict:
+            try:
+                os.stat(os.path.join(root, "result.json"))
+            except FileNotFoundError:
+                pass
         if looks_like_job_dir(root):
             add(root)
         for name in sorted(os.listdir(root)):
             p = os.path.join(root, name)
+            if strict and strict(name):
+                job_uid.searched(p)
             if os.path.isdir(p) and looks_like_job_dir(p):
                 add(p)
     return found
