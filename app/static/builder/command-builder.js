@@ -242,12 +242,10 @@
   // Every benchmark of both runners in one list, the Benchmarks page's (placeGrid, /new-run/benchmarks); picking one
   // sets the runner that runs it (Nullius when both do).
   const benchmarkStep = rec => {
-    const sb = C.standardBase(rec), b = C.standardBench(rec);
+    const sb = C.standardBase(rec);
     const versions = C.isStandard(rec) && sb && (sb.versions || []).length > 1
       ? `<label class="nb-field ui-field-row"><span class="ui-field-copy">Version of ${esc(sb.label)}<small>Each version pins its own upstream, datasets and proofs.</small></span><select data-std-version>${sb.versions.map(v => `<option value="${esc(v.ref)}" data-origin="${esc(v.origin)}" data-label="${esc(v.choice_label || v.label || v.version)}${v.default ? ' (default)' : ''}" ${v.ref === rec.benchmark || (v.default && rec.benchmark === sb.key) ? 'selected' : ''}>${esc(v.choice_label || v.label || v.version)}${v.origin === 'experiment' ? ' · Experiment' : ' · Official'}${v.default ? ' (default)' : ''}</option>`).join('')}</select></label>` : '';
-    const options = b && C.runsOf(rec).includes('original') ? benchOptions(rec, b, 'setup') : '';
-    return `<div class="nb-sectionhead"><h2>Choose a benchmark.</h2></div><div id="nb-bench-grid"></div>` + versions
-      + (options ? '<div class="nb-sectionhead std-sethead"><h3>Benchmark settings</h3></div>' + options : '');
+    return `<div class="nb-sectionhead"><h2>Choose a benchmark.</h2></div><div id="nb-bench-grid"></div>` + versions;
   };
   // Put the recipe on a runner, keeping the one each runner had: the benchmark follows.
   const toRunner = (target, key) => {
@@ -594,7 +592,7 @@
   }
   // A benchmark's own options (a search, a mode), for the chosen datasets they apply to, and what a value needs of this
   // machine. Those an agent's or capability's run takes ('yours') on the Agent step, with the agents; those only a setup
-  // takes (a retriever, a top-k of the paper's pipeline) on the Benchmark step.
+  // takes (a retriever, a top-k of the paper's pipeline) in the procedure's tab, while it runs.
   // A benchmark with agents of its own: its agent option is each one's own choice, and an option whose `when` names
   // agents is in the tab of each of them (scope 'own', `agent` the one); else the options of `scope`.
   function benchOptions(rec, b, scope = 'yours', agent = null) {
@@ -768,6 +766,7 @@
         + (others.length || setups.length ? '' : note('None yet', 'Bring one in with the /import-standard skill, or by hand: docs/standard.md.'))
         + settingsTabs([
             ...(chosen.length || onSetups.length ? [['shared', 'Every ' + yoursWord, benchOptions(rec, b, 'shared')]] : []),
+            ...(C.runsOf(rec).includes('original') ? [['setup', b.procedure, benchOptions(rec, b, 'setup')]] : []),
             ...(mine.length ? [['yours', agent ? 'Selected agents' : 'Selected capabilities', benchOptions(rec, b)]] : []),
             ...chosen.map(o => [o.key, o.label, o.own ? benchOptions(rec, b, 'own', o) : optionsOf(o)])])
         + (controls.length ? `<div class="nb-sectionhead std-controlshead std-sethead"><h3>Checks</h3></div><div class="nb-pick-grid">${controls.map(controlTile).join('')}</div>` : '')

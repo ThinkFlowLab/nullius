@@ -29,7 +29,7 @@ class StandardBenchmarkSwitch(CompilerCase):
     def test_version_switch_keeps_the_implicit_procedure_and_names_that_version(self):
         out = self.js('const r=C.createStandard("locomo");C.setStandardBenchmark(r,"locomo@full");'
                       'process.stdout.write(JSON.stringify([r.others,C.standardBench(r).procedure,C.standardBench(r).origin]));')
-        self.assertEqual(out, [["original"], "LoCoMo · full (66d303a)", "experiment"])
+        self.assertEqual(out, [["original"], "LoCoMo · full", "experiment"])
 
     def test_a_benchmarks_own_agents_are_its_agents_and_greyed_elsewhere(self):
         out = self.js('const os=C.standardOthers(C.createStandard("osworld1")),g=C.standardOthers(C.createStandard("gsm8k"));'

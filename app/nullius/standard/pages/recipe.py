@@ -146,9 +146,14 @@ def origins(d: dict) -> List[str]:
     return list(dict.fromkeys([every.get(d["_default"]) or definitions.origin_of(d), *every.values()]))
 
 
+def _short(label: str) -> str:
+    """A version's label as the builder names it: without its commit."""
+    return re.sub(r"\s*\([0-9a-f]{7,40}\)$", "", label)
+
+
 def _procedure_label(b: dict) -> str:
     """The selected benchmark version whose own procedure runs by default."""
-    return " · ".join(filter(None, (b["label"], definitions.version_label(b))))
+    return " · ".join(filter(None, (b["label"], _short(definitions.version_label(b) or ""))))
 
 
 def _bench_page(b: dict) -> dict:
@@ -168,7 +173,7 @@ def _bench_page(b: dict) -> dict:
             "version": b["_version"] if versioned else "",
             # its versions, each by the ref a recipe names it with (the bare key: the default)
             "versions": [{"ref": b["key"] if v == b.get("_default") else f"{b['key']}@{v}", "version": v, "default": v == b.get("_default"),
-                          "choice_label": re.sub(r"\s*\([0-9a-f]{7,40}\)$", "", (b.get("_labels") or {}).get(v) or v),
+                          "choice_label": _short((b.get("_labels") or {}).get(v) or v),
                           "label": (b.get("_labels") or {}).get(v) or v, "origin": (b.get("_origins") or {}).get(v) or "official"}
                          for v in b.get("_versions") or []] if versioned else [],
             "environments": {n: {"summary": e.get("summary", ""), "local_ok": bool(e.get("local_ok")), "network": e.get("network"),
@@ -928,22 +933,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             return [STEP["agent"], "Participant", f"{p['agent']['label']} · {p['agent'].get('benchmark_label') or b['label']}'s own"]
         proven = ", ".join(f"{q} {r.get('passed', '')}".strip() for q, r in (o.get("proven") or {}).items() if q in b["needs"])
         return [STEP["agent"], "Agent" if side == "agent" else "Capability", f"{o['label']} · {protocol(o)} · proven {proven}"]
-    def option_step(key: str) -> int:
-        o = (b.get("options") or {})[key]
-        if o.get("limit"):
-            return STEP["limits"]
-        if o.get("step"):
-            return STEP[o["step"]]
-        scopes = o.get("setups") or ["yours"]
-        if not (o.get("when") or {}).get("agent") and not any(s in scopes for s in ("yours", "agent")):
-            return STEP["benchmark"]
-        return STEP["agent"]
-
     out["review"] = [[STEP["benchmark"], "Benchmark", f"{b['label']} · needs {', '.join(b['needs'])}"],
                      [STEP["runner"], "Runner", "Nullius"],
                      [STEP["dataset"], "Datasets" if many else "Dataset",
                       ", ".join(f"{x.get('label') or x['id']}" + (f" · {x['units']} {bench_nouns}" if x.get("units") else "") for x in dss)],
-                     *[[option_step(k), (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
+                     *[[STEP["limits" if (b.get("options") or {})[k].get("limit") else "dataset" if (b.get("options") or {})[k].get("step") else "agent"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
                         _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)")
                         + ("" if all(per_ds[x["id"]].get(k) == v for x in dss) else f" · {', '.join(x.get('label') or x['id'] for x in dss if per_ds[x['id']].get(k) == v)}")]
                        for k, v in dict.fromkeys((k, v) for vals in per_ds.values() for k, v in vals.items())     # a row per value: datasets may differ
