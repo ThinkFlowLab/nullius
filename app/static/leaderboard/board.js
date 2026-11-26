@@ -197,7 +197,7 @@
   const heads=()=>[...table.tHead.rows[0].cells];
   const shownHeads=()=>heads().filter(th=>!th.hidden&&th.style.display!=='none');
   function columnWidth(th) {
-    const fixed={rank:48,agent:innerWidth<=700?152:238,overall:innerWidth<=700?92:104,steps:66,time:84,calls:92,cost:72};
+    const fixed={rank:48,agent:innerWidth<=700?176:238,overall:innerWidth<=700?92:104,steps:66,time:84,calls:92,cost:72};
     return fixed[th.dataset.col]??Math.max(88,Math.round(th.textContent.trim().length*7.4+26));
   }
   /* the columns fill the card exactly: room to spare goes to the score columns alone, so #, Agent, Overall and the
