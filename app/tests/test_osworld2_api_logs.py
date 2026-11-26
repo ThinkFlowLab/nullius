@@ -298,7 +298,10 @@ class Reaper(unittest.TestCase):
         self.run_script("go", failed)
         self.assertEqual(failed, [])
         self.assertTrue(self.packed(3))
-        self.assertEqual(api_logs.restore(self.folder)["restored"], 3)
+        t0 = time.time()
+        while (done := api_logs.restore(self.folder)).get("busy") and time.time() - t0 < LIMIT:
+            time.sleep(0.05)                       # the packer still holds the folder's lock
+        self.assertEqual(done, {"restored": 3, "failed": 0})
         shutil.rmtree(self.folder)                 # and one that failed
         argv = [sys.executable, "-c", SCRIPT + "sys.exit(3)\n", json.dumps([call(i) for i in range(2)]), "go"]
         with self.assertRaises(RuntimeError):

@@ -20,6 +20,9 @@ downstream - the matcher, a run, a kit - sees one version at a time, and a
 version offers exactly the ports it has proven. A file without ``versions``
 is one version, its ``upstream.version``.
 
+Each version is official or an experiment (:func:`origin_of`): another
+source, or someone's fixes (``upstream.origin``, ``upstream.fixes``).
+
 The conformance kits are benchmarks too, kept inside this package
 (``standard/kits/<name>/standard.json``), so a kit is run the way any
 benchmark is.
@@ -100,7 +103,7 @@ from urllib.parse import urlsplit
 
 from nullius.standard.contract import ports
 from nullius import ondisk, paths
-from nullius.catalogue import storage
+from nullius.catalogue import catalog, storage
 from . import names, proofs
 
 STANDARD = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))      # the standard's folder, which holds this one
@@ -237,8 +240,9 @@ def resolve(d: dict, version: Optional[str] = None) -> Optional[dict]:
     out["proven"] = dict(block.get("proven") or {})
     if not bench:                                                     # a benchmark offers nothing: it needs
         out["offers"] = [p for p in ports.PORTS if p in out["proven"]]
-    labels = {x: version_label({"upstream": _version_upstream(d, x), "_version": x}) for x in vs if isinstance(vs[x], dict)}
-    return dict(out, _version=v, _versions=list(vs), _default=d.get("default"), _ref=f"{d.get('key')}@{v}", _labels=labels)
+    every = {x: dict(d, upstream=_version_upstream(d, x), _version=x) for x in vs if isinstance(vs[x], dict)}
+    return dict(out, _version=v, _versions=list(vs), _default=d.get("default"), _ref=f"{d.get('key')}@{v}",
+                _labels={x: version_label(e) for x, e in every.items()}, _origins={x: origin_of(e) for x, e in every.items()})
 
 
 def _version_upstream(d: dict, v: str) -> dict:
@@ -247,7 +251,24 @@ def _version_upstream(d: dict, v: str) -> dict:
     own = (d["versions"][v] or {}).get("upstream") or {}
     if ("repository" in own or "tested" in own) and "tag" not in own:
         up.pop("tag", None)                                           # another repository or commit: the shared tag is not its
+    if own.get("repository", up.get("repository")) != up.get("repository") and "repository" in up:
+        up["origin"] = "experiment"                                   # another source, unless it says its own origin
     return dict(up, **own, version=v)
+
+
+def origin_of(d: dict) -> str:
+    """Where a resolved version comes from (``catalog.ORIGINS``): what its ``upstream.origin`` says, else
+    ``experiment`` when its upstream lists ``fixes``, else its entry's (a benchmark's ``benchmark.json``), else official."""
+    up = d.get("upstream") or {}
+    return up.get("origin") or ("experiment" if up.get("fixes") else d.get("_origin") or "official")
+
+
+
+def fix_parts(fix: str) -> Tuple[str, str, str, str]:
+    """A version's fix as (before, words, url, after): ``WORDS (https://...)`` makes its last
+    few words a link to that address; a fix without one is all ``before``."""
+    m = re.search(r"(\S+(?: \S+){0,3}) \((https://[^\s)]+)\)", fix)
+    return (fix[:m.start()], m.group(1), m.group(2), fix[m.end():]) if m else (fix, "", "", "")
 
 
 def version_label(d: dict) -> str:
@@ -637,6 +658,8 @@ def _host(d: dict) -> List[str]:
         if not _OPTION.match(str(name)) or not isinstance(r, dict):
             bad.append(f"{w}: a plain name -> an object")
             continue
+        if "label" in r and (not isinstance(r["label"], str) or not r["label"].strip()):
+            bad.append(f"{w}.label: its name on a page")
         if not isinstance(r.get("summary"), str) or not r["summary"].strip():
             bad.append(f"{w}.summary: what it is for")
         if not isinstance(r.get("check"), list) or not r["check"] or any(not _PROGRAM.match(str(x)) for x in r["check"]):
@@ -796,6 +819,8 @@ def _upstream(u) -> List[str]:
         bad.append("upstream.tag: a tag of upstream.repository, which is not set")
     if "branch" in u and (not tag_ok(u["branch"]) or "tag" in u or "repository" not in u):
         bad.append("upstream.branch: the branch an untagged tested commit is on (main), with upstream.repository and no tag")
+    if "origin" in u and u["origin"] not in catalog.ORIGINS:
+        bad.append(f"upstream.origin: one of {catalog.ORIGINS}")
     if not u.get("license"):
         bad.append("upstream.license: say it, or 'unknown'")
     return bad
@@ -1260,10 +1285,10 @@ def _setups(s) -> List[str]:
             if "paper" in x and (not isinstance(x["paper"], str) or not x["paper"].strip()):
                 bad.append(f"{w}.paper: where the paper reports its numbers, in a phrase")
             c = x.get("comparable", True)
-            if not isinstance(c, bool) and (not isinstance(c, list) or not c or len(set(c)) != len(c) or any(m not in models for m in c)
-                                            or x.get("default") not in c):
+            if not isinstance(c, bool) and (not isinstance(c, list) or len(set(c)) != len(c) or any(m not in models for m in c)
+                                            or (c and x.get("default") not in c)):
                 bad.append(f"{w}.comparable: false when no served model is the paper's, so its runs compare with each other only; "
-                           "or those of its models whose runs compare with the paper's, its default among them")
+                           "or those of its models whose runs compare with the paper's, its default among them; or [] when none can be run any more")
         else:
             allowed |= {"runs_as"}
             orig = s.get("original") if isinstance(s.get("original"), dict) else None
@@ -1357,6 +1382,8 @@ def setup(bench: dict, which: str, model: str = "", provider: str = "", agent: s
         if provider and provider not in orig["providers"]:
             return None, f"the original runs on " + " or ".join(orig["providers"])
         asked = sent = model
+    elif which == "original" and not paper_models(orig):     # none can be run any more (comparable: [])
+        return None, "Paper models unavailable" + (": choose the model setup for another" if "model" in s else "")
     elif which == "original":
         model = model or orig["default"]
         if model not in orig["models"]:
@@ -1421,7 +1448,7 @@ def _own_entry(bench: dict, key: str, e: dict) -> dict:
     benchmark it runs derived from its folder."""
     return dict(e, schema=KINDS["agent"]["schema"], only_for=[bench.get("key")], benchmark=bench.get("key"),
                 benchmark_label=bench.get("label"), _kind="agent", _here=bench.get("_here", ""),
-                _ref=f"{bench.get('key')}:{key}", _version="", _versions=[""], _default="", **{"from": "benchmark"})
+                _ref=f"{bench.get('key')}:{key}", _version="", _versions=[""], _default="", _origin=origin_of(bench), **{"from": "benchmark"})
 
 
 def own_agents(bench: dict) -> List[dict]:
@@ -1748,10 +1775,22 @@ def _read(path: str, kind: str, key: str) -> Tuple[Optional[dict], List[str]]:
     if bad:
         return None, bad
     d = dict(d, _here=os.path.dirname(path), _kind=kind)
+    if kind == "benchmark":
+        d["_origin"] = _entry_origin(os.path.dirname(path))
     if kind == "agent":                          # where it comes from: the user's catalogue, or the bundle
         user = os.path.realpath(paths.catalogue_dir())
         d["from"] = "yours" if os.path.realpath(path).startswith(user + os.sep) else "bundled"
     return d, []
+
+
+def _entry_origin(folder: str) -> str:
+    """The origin a benchmark's catalogue entry says; official without one that reads."""
+    try:
+        with open(os.path.join(folder, catalog.ENTRY)) as f:
+            origin = catalog.origin_of(json.load(f))
+    except (OSError, ValueError, AttributeError):
+        return "official"
+    return origin if origin in catalog.ORIGINS else "official"
 
 
 def load(kind: str, root: Optional[str] = None, every: bool = False) -> Tuple[List[dict], List[str]]:

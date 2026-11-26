@@ -235,6 +235,12 @@
       {{ field(by['LLM_JUDGE_MODEL'], 'Model', writable, picker='[data-picker]') }}
     </fieldset>
     {% endif %}
+    {% if old_judgements and writable %}
+    <div class="st-card" data-move-judgements-row>
+      <div class="st-row"><span class="st-row-label">In workspaces</span>
+        <span class="st-row-value st-value">{{ old_judgements|sum(attribute=1) }} judgement{{ '' if old_judgements|sum(attribute=1) == 1 else 's' }}<button type="button" class="btn sm" data-move-judgements>Move judgements</button></span></div>
+    </div>
+    {% endif %}
   </section>
 
   {% include "settings/custom_keys.html" %}

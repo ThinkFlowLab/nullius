@@ -244,7 +244,7 @@
   const benchmarkStep = rec => {
     const sb = C.standardBase(rec);
     const versions = C.isStandard(rec) && sb && (sb.versions || []).length > 1
-      ? `<label class="nb-field">Version of ${esc(sb.label)}<select data-std-version>${sb.versions.map(v => `<option value="${esc(v.ref)}" ${v.ref === rec.benchmark || (v.default && rec.benchmark === sb.key) ? 'selected' : ''}>${esc(v.label || v.version)}${v.default ? ' (the default)' : ''}</option>`).join('')}</select><small>Each version pins its own upstream, datasets and proofs.</small></label>` : '';
+      ? `<label class="nb-field">Version of ${esc(sb.label)}<select data-std-version>${sb.versions.map(v => `<option value="${esc(v.ref)}" ${v.ref === rec.benchmark || (v.default && rec.benchmark === sb.key) ? 'selected' : ''}>${esc(v.label || v.version)}${v.origin === 'experiment' ? ' · Experiment' : ' · Official'}${v.default ? ' (the default)' : ''}</option>`).join('')}</select><small>Each version pins its own upstream, datasets and proofs.</small></label>` : '';
     return `<div class="nb-sectionhead"><h2>Choose a benchmark.</h2></div><div id="nb-bench-grid"></div>` + versions;
   };
   // Put the recipe on a runner, keeping the one each runner had: the benchmark follows.
@@ -497,7 +497,7 @@
     const dockerWhy = list.includes('local') && here.docker ? 'Not on this machine: ' + here.docker : '';
     // Review's rule (nullius/standard/pages/recipe.py): a setup's image installs what has an install; nothing else reaches its container
     const cannot = selected.some(o => o.setup) ? optionNeeds(rec).host.filter(n => (b.host || {})[n] && !b.host[n].install.length) : [];
-    const containerWhy = dockerWhy || (cannot.length ? cannot.join(', ') + ' cannot be provided in a container: choose local processes.' : '');
+    const containerWhy = dockerWhy || (cannot.length ? cannot.map(n => b.host[n].label).join(', ') + ' cannot be provided in a container: choose local processes.' : '');
     const agentRun = b && b.family === 'agent' && selected.some(o => !o.control && !o.setup);
     const kind = (v, label, why = '') => `<button type="button" data-std-machines="${v}" aria-pressed="${(v === 'boat') === sandboxes}"${why ? ` disabled aria-disabled="true" title="${esc(why)}"` : ''}>${label}</button>`;
     const machine = (v, t, sub) => machineTile('std-where', v, t, sub, list.includes(v));

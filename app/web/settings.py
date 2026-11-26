@@ -9,7 +9,7 @@ from flask import abort, flash, jsonify, redirect, render_template, request, url
 from nullius import access, constraints, execution, hosts, paths, prerequisites, prices, providers, sandbox, secrets, settings
 from nullius.standard.backends import boat, container
 from nullius.standard.pages import recipe as standard_recipe
-from nullius.judge import client
+from nullius.judge import client, store as judge_store
 
 from .core import app
 from . import shared
@@ -49,7 +49,8 @@ def settings_page():
                            provider_cards=provider_cards({r["name"]: r for r in rows}),
                            ssh_hosts=hosts.scan_ssh_config(), judges=(client.decision_judge(os.environ), client.llm_judge(os.environ)), llm_providers=client.llm_providers(os.environ), decision_providers=client.decision_judge_providers(os.environ),
                            judge_protocols={"DECISION": client.DECISION_PROTOCOLS, "LLM_JUDGE": client.LLM_PROTOCOLS}, protocols=providers.PROTOCOLS, agent_keys=settings.agent_key_names(), reserved_agent_keys=settings.reserved_agent_keys(),
-                           tested={k: _shown(v) for k, v in providers.tests().items() if isinstance(v, dict)})
+                           tested={k: _shown(v) for k, v in providers.tests().items() if isinstance(v, dict)},
+                           old_judgements=judge_store.old_stores(shared.WS_HOME))
 
 
 def _shown(result: dict) -> dict:

@@ -311,9 +311,9 @@ def open_workspace(ws, refresh=False):
     workspace.touch(ws)
 
 
-def close_workspace():
+def close_workspace(save=True):
     ws = STATE["workspace"]
-    if ws is not None:
+    if ws is not None and save:
         ws.closed = True
         workspace.save(ws)
     STATE.update({"workspace": None, "roots": [], "label": "", "job_roots": []})

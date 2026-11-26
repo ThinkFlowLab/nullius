@@ -23,8 +23,8 @@ list, no history.
   than glue.
 - **Reuse before adding**, for example `ondisk`, `redact`, `paths`, `providers`.
 - **No machine attribution** in a commit: no assistant `Co-Authored-By`, session
-  link or generated-by line. A pull request names its agents and models under
-  `## Agents` alone. Human co-authors and existing commits stay.
+  link or generated-by line. A pull request may name its agents and models under
+  `## Agents`, nowhere else. Human co-authors and existing commits stay.
 - **Nothing merges without the owner's word.**
 
 ## Pages and commands
