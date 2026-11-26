@@ -26,9 +26,9 @@
     </ul>
   {% endcall %}
 
-  {#- A card's fields (web/catalogue.py `_card`); the filters are the category's pills, the origin and what runs it dropdowns; a card shows every version's origin, as the builder's does. #}
+  {#- A card's fields (web/catalogue.py `_card`); the filters are the category's pills, the origin and what runs it dropdowns; the origin is a filter and a column, not a card tag. #}
   {% set cols = [dict(key='icon', label='Mark', card='icon', table=false, class='bench-mark'), dict(key='title', label='Name', card='title'),
-                 dict(key='category', label='Category', card='tag', class='cat-tag', filter='pills'), dict(key='origin', label='Origin', card='tag', class='origin-tag', filter='dropdown', filter_icon='origin'),
+                 dict(key='category', label='Category', card='tag', class='cat-tag', filter='pills'), dict(key='origin', label='Origin', class='origin-tag', filter='dropdown', filter_icon='origin'),
                  dict(key='domain', label='Domain', card='text', off=true), dict(key='runs', label='Runs with', card='badge', class='run-tag', filter='dropdown', filter_icon='runner'),
                  dict(key='tasks', label='Tasks', card='stat', type='num'), dict(key='datasets', label='Datasets', card='stat', type='num'),
                  dict(key='scoring', label='Scored by', card='stat', class='word'), dict(key='needs', label='Needs', card='note', icon='wrench', off=true),

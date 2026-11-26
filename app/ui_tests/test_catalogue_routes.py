@@ -59,17 +59,15 @@ class PageCase(unittest.TestCase):
 
 
 class OriginTags(PageCase):
-    """Every benchmark card and page says whether it is official - the
-    publisher's benchmark - or an experiment: a tag
-    beside the category."""
+    """Every benchmark page says whether it is official - the publisher's
+    benchmark - or an experiment, as a tag; the cards are filtered by it."""
 
-    def test_a_card_and_its_page_carry_the_origin(self):
+    def test_a_page_carries_the_origin_and_a_card_is_filtered_by_it(self):
         key = "terminal-bench"
-        self.assertIn('<span class="origin-tag official">Official</span>', self.card(key))
+        self.assertIn('data-f-origin="official&#10;"', self.card(key))                          # filtered by, not tagged
+        self.assertNotIn('origin-tag', self.card(key))
         self.assertIn('<span class="origin-tag official">Official</span>', self.page_html(key))
-        self.assertIn('<span class="origin-tag official">Official</span>', self.card("gaia"))
         self.assertIn('<span class="origin-tag official">Official</span>', self.page_html("gaia"))
-        self.assertIn('<span class="bench-card-tags"><span class="cat-tag">', self.card(key))      # beside the category, on the left
 
     def test_the_list_is_cards_by_default_and_a_table_on_request(self):
         self.assertIn('href="/benchmarks?view=table" aria-label="Table" title="Table" aria-current="false"', self.html)
@@ -131,9 +129,10 @@ class BenchmarksList(PageCase):
         keys = re.findall(r'<a class="card-link" href="/benchmarks/([^"]+)"', self.html)
         self.assertEqual(sorted(keys), sorted(b.key for b in cat.listed_benchmarks))
         self.assertEqual(len(keys), 11)
-        # one catalogue: no shelf per origin, and a card names every version's origin
+        # one catalogue: no shelf per origin; the origin filters the cards, never a tag on them
         self.assertNotIn("data-shelf", self.html)
-        self.assertIn("Experiment", visible(self.card("locomo")))
+        self.assertIn('data-f-origin="official&#10;experiment&#10;"', self.card("locomo"))
+        self.assertNotIn("Experiment", visible(self.card("locomo")))
 
     def test_a_card_says_what_it_holds(self):
         swe = visible(self.card("swe-bench-verified"))
