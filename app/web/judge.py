@@ -520,6 +520,7 @@ def judge_side(job, trial, column, api_key: str, post=None, calibration=None) ->
     when it has them all."""
     if not trial.has_trajectory:
         raise client.JudgeError(0, "this trial has no trajectory to judge")
+    job = shard_of(job, trial, column)
     rec = store.load(store.home(), job_key(job, column), trial.trial_name, started=started_of(trial), old=old_of(job, column),
                      strict=strict(trial))
     have = (rec.get("answers") or {}) if store.is_current(rec) else {}
