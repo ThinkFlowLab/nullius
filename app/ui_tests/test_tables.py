@@ -206,6 +206,19 @@ process.stdout.write(JSON.stringify(out));
         self.assertEqual(got["back"], ["1–10 of 10", False])
         self.assertEqual(got["words"], ["L12", "L15", "L18"])                                       # the failed ones, still filtered
 
+    def test_a_row_asked_for_brings_its_page(self):
+        got = node(LAUNCHES + r'''
+const trs = t.table.tBodies[0].rows, out = {};
+t.per.value = '10'; t.per.dispatch('change');
+t.table.dispatch('table:show', {detail: {row: trs[23]}}); out.third = [t.note(), t.shown().includes('L23')];
+t.table.dispatch('table:show', {detail: {row: trs[25]}}); out.same = t.note();           // already on its page
+t.type('gamma');                                                                          // the odd rows: L24 does not pass
+t.table.dispatch('table:show', {detail: {row: trs[24]}}); out.filtered = t.note();
+t.table.dispatch('table:show', {detail: {row: trs[27]}}); out.among = [t.note(), t.shown().includes('L27')];    // the 14th of 15
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got, {"third": ["21–30 of 30", True], "same": "21–30 of 30", "filtered": "1–10 of 15", "among": ["11–15 of 15", True]})
+
     def test_a_screen_reader_hears_a_change_once_typing_pauses(self):
         got = node(LAUNCHES + r'''
 const out = [];

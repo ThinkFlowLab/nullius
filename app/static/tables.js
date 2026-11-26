@@ -443,7 +443,8 @@ window.NulliusTable = {
      change, not at load, a screen reader hears what shows once the changes
      pause, counted in the live region's data-noun. `drawn` runs after each
      page. Returns first(), to run after a filter or a sort: it
-     shows the first page. */
+     shows the first page. A `table:show` event on the table, its detail.row a
+     row that passes, turns to the page that holds it. */
   pager(table, key, passes = () => true, drawn = () => {}) {
     const bar = document.querySelector(`[data-pager="${CSS.escape(table.id)}"]`), empty = document.querySelector(`[data-empty="${CSS.escape(table.id)}"]`);
     const [per, note, prev, next, live] = ['[data-per]', '[data-note]', '[data-prev]', '[data-next]', '[data-live]'].map(s => bar.querySelector(s));
@@ -470,6 +471,10 @@ window.NulliusTable = {
     });
     prev.addEventListener('click', () => { page--; draw(); });
     next.addEventListener('click', () => { page++; draw(); });
+    table.addEventListener('table:show', e => {
+      const at = [...table.tBodies[0].rows].filter(passes).indexOf(e.detail.row), n = +per.value || 1;
+      if (at >= 0 && +per.value && Math.floor(at / n) !== page) { page = Math.floor(at / n); draw(); }
+    });
     draw();
     return first;
   },

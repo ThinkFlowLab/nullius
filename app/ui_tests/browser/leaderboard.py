@@ -6,6 +6,7 @@ from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -576,6 +577,28 @@ class LeaderboardBrowser(unittest.TestCase):
             self.page.evaluate("t=>document.documentElement.dataset.theme=t", theme)
             for score in (.6, .7, .85, 1):
                 self.assertGreaterEqual(self.page.evaluate(contrast, score), 4.5, (theme, score))
+        self.assertFalse(self.errors)
+
+    def test_an_agent_chosen_outside_the_table_brings_its_row_s_page(self):
+        agents = [r["agent"] for r in service.document([])["rows"]][:6]
+        pin = definitions.version_identity(definitions.get("benchmark", "gaia"))
+        runs = []
+        for agent, passed in zip(agents, (10, 9, 8, 7, 6, 5)):
+            r = job([trial(str(i), "resolved" if i < passed else "agent_error") for i in range(10)], dataset="gaia/gaia-validation", agent=agent, job_id=agent)
+            r.identity = {"agent": agent, "agent_version": definitions.get("agent", agent)["_version"], "benchmark": "gaia", "benchmark_version": pin}
+            runs.append(r)
+        self.jobs[:] = runs
+        self.open('/leaderboard')
+        self.choose('[data-pager="leaderboard-table"] [data-per]', 0)       # five rows a page: the sixth agent is on the second
+        note = self.page.locator('[data-pager="leaderboard-table"] [data-note]')
+        expect(note).to_have_text('1–5 of 8')
+        sixth = self.page.locator('tbody tr[data-sort-group="0"]').nth(5)
+        expect(sixth).to_be_hidden()
+        key = sixth.get_attribute('data-key')
+        self.page.evaluate("key=>{const s=document.querySelector('[data-agent-select]');s.value=key;s.dispatchEvent(new Event('change'));}", key)
+        expect(note).to_have_text('6–8 of 8')                              # the table turned to its page
+        expect(sixth).to_be_visible()
+        expect(sixth).to_have_class(re.compile(r'\blb-sel\b'))
         self.assertFalse(self.errors)
 
     def test_medals_for_the_first_four_ranks_then_plain_numbers(self):

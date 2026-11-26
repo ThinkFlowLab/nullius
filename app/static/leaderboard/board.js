@@ -318,6 +318,9 @@
     if(!row(key)) return; selected=key;
     document.querySelectorAll('[data-agent-select]').forEach(s=>setSelect(s,key));
     table.querySelectorAll('tbody tr').forEach(tr=>tr.classList.toggle('lb-sel',tr.dataset.key===selected));
+    /* chosen in a chart or a picker, an agent's row may be on another page: the table turns to it */
+    const chosen=[...table.tBodies[0].rows].find(tr=>tr.dataset.key===key);
+    if(chosen?.hidden)table.dispatchEvent(new CustomEvent('table:show',{detail:{row:chosen}}));
     draw();
   }
   document.addEventListener('click',e=>{const target=e.target.closest('[data-select]');if(target){choose(target.dataset.select);return;}const tr=e.target.closest('#leaderboard-table tbody tr');if(tr&&!e.target.closest('a'))choose(tr.dataset.key);});
