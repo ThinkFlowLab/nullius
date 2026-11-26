@@ -116,7 +116,7 @@ def validate(document, benchmarks, *, previous=None, allow_unavailable=False):
         if not isinstance(axis, dict) or set(axis) != {"weight", "entries"} or not isinstance(axis["entries"], list):
             raise ValueError(f"{name}: invalid axis")
         _number(axis["weight"], name)
-        seen = set()
+        seen, read = set(), set()
         for entry in axis["entries"]:
             if not isinstance(entry, dict):
                 raise ValueError(f"{name}: invalid entry")
@@ -132,9 +132,13 @@ def validate(document, benchmarks, *, previous=None, allow_unavailable=False):
             if (bench is not None and entry["dataset"] and entry["dataset"] not in {c["id"] for c in scopes.choices(bench)}
                 and not allow_unavailable and identity not in preserved):
                 raise ValueError("Choose a declared dataset or task-name part")
-            if identity in seen:
+            # a benchmark with one dataset is that dataset: a write takes it whole or by its dataset, never both
+            only = bench.get("datasets", []) if bench is not None and not bench.get("task_parts") else []
+            same = (entry["benchmark"], entry["dataset"] or (only[0]["id"] if len(only) == 1 else ""), entry["version"], entry["metric"])
+            if identity in seen or (not allow_unavailable and same in read):
                 raise ValueError(f"{name}: duplicate entry")
             seen.add(identity)
+            read.add(same)
     for names in FAMILIES.values():
         _zero_empty(doc["axes"], names)                                # a row with no benchmark weighs nothing
     if not any(axis["weight"] > 0 for axis in doc["axes"].values()):

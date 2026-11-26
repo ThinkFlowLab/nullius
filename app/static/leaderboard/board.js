@@ -23,7 +23,10 @@
   const fieldAverage = axis => { const v=data.rows.filter(shown).map(r=>r.axes[axis]?.score).filter(x=>x!=null); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null; };
   const scored = () => data.rows.filter(r => r.overall != null && shown(r));
   /* a name says only as much as tells two rows apart: the version when an agent has several, the model when a version has several */
-  const setup = r => data.rows.filter(v=>v.agent===r.agent&&v.version===r.version).length>1 ? [r.identity.model,r.identity.effort].filter(Boolean).join(' ') : '';
+  /* what tells a row from the others of its agent and version: the parts of its setup that differ among them */
+  const part = v => v == null ? '' : typeof v === 'object' ? Object.entries(v).map(([k,x])=>`${k} ${typeof x === 'object' ? JSON.stringify(x) : x}`).join(' ') : String(v);
+  const setup = r => { const twins=data.rows.filter(v=>v.agent===r.agent&&v.version===r.version);
+    return twins.length>1 ? ['model','effort','provider','backend','options','limits'].filter(k=>new Set(twins.map(v=>part(v.identity[k]))).size>1).map(k=>part(r.identity[k])).filter(Boolean).join(' ') : ''; };
   const label = r => [r.name, new Set(data.rows.filter(v=>v.agent===r.agent).map(v=>v.version)).size>1 ? r.version_label : '', setup(r)].filter(Boolean).join(' ');
   const compared = axis => versus === 'average' ? fieldAverage(axis) : versus.startsWith('version:') ? projection?.rows.find(r=>r.key===selected)?.axes[axis]?.score : row(versus)?.axes[axis]?.score;
   const versionKey = v => 'version:'+JSON.stringify([v.benchmark,v.version]);
@@ -39,7 +42,8 @@
     let target=focusBefore;
     if (!target?.isConnected && shownFor?.row) target=table.querySelector(`tr[data-key="${CSS.escape(shownFor.row)}"] [data-axis="${CSS.escape(shownFor.axis)}"]`);
     if (!target?.isConnected || !target.getClientRects().length) { pinned=false; dismiss(); return; }
-    evidence(target);
+    if (pop.contains(document.activeElement)) { focusBefore=target; place(target); }   // a link in use keeps the focus
+    else evidence(target);
   }
   function evidence(target) {
     const current = row(target.closest('tr')?.dataset.key || selected); if (!current) return;
@@ -121,12 +125,15 @@
     else if (e.key==='Tab' && !e.shiftKey && at===links.at(-1)) back();   // not prevented: the browser's own Tab then leaves the score
   });
   /* a strip's dot is a button: Enter and Space choose its agent, as a click does */
-  document.addEventListener('keydown', e => { const dot=e.target.closest?.('.lb-track [data-select]'); if (dot && (e.key==='Enter' || e.key===' ')) { e.preventDefault(); choose(dot.dataset.select); } });
+  document.addEventListener('keydown', e => { const dot=e.target.closest?.('.lb-track [data-select]'); if (dot && (e.key==='Enter' || e.key===' ')) { e.preventDefault(); choose(dot.dataset.select); if (dot.isConnected) dot.focus({preventScroll:true}); } });
   /* the card follows its score as the page scrolls or resizes, and closes once the score is out of sight */
   const track = e => {
     if (pop.hidden || (e.target instanceof Node && pop.contains(e.target))) return;
     const box=focusBefore?.isConnected ? focusBefore.getBoundingClientRect() : null, clip=focusBefore?.closest('.table-wrap')?.getBoundingClientRect();
-    if (!box || !box.width || box.bottom<0 || box.top>innerHeight || box.right<0 || box.left>innerWidth || (clip && (box.right<clip.left || box.left>clip.right))) { pinned=false; dismiss(); }
+    /* in the table a score is out of sight past the table's box, or behind the columns that stay pinned */
+    const held=[...(focusBefore?.closest('tr')?.querySelectorAll('.sticky-col') || [])].filter(c=>!c.contains(focusBefore) && getComputedStyle(c).position==='sticky').map(c=>c.getBoundingClientRect().right);
+    const from=Math.max(clip ? clip.left : -Infinity, ...held);
+    if (!box || !box.width || box.bottom<0 || box.top>innerHeight || box.right<0 || box.left>innerWidth || box.left+box.width/2<from || (clip && box.left>clip.right)) { pinned=false; dismiss(); }
     else place(focusBefore);
   };
   document.addEventListener('scroll', track, true); addEventListener('resize', track);
@@ -243,9 +250,16 @@
   function applyFamily() {
     document.querySelectorAll('[data-family]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.family===family)));
     table.querySelectorAll('[data-col]').forEach(cell=> { if(data.axes.includes(cell.dataset.col)) cell.hidden=!data[family].includes(cell.dataset.col); });
-    /* Columns and Sort by list the shown family's columns alone */
-    tools?.querySelectorAll('input[data-col], input[data-sort-col]').forEach(box=>{const name=box.dataset.col??box.value;if(data.axes.includes(name))box.closest('label').hidden=!data[family].includes(name);});
     size();
+  }
+  /* Columns lists the shown family's score columns; Sort by, the columns the table shows: a sort by a column that
+     leaves, with its family or unticked, goes with it */
+  function menus() {
+    tools?.querySelectorAll('input[data-col]').forEach(box=>{if(data.axes.includes(box.dataset.col))box.closest('label').hidden=!data[family].includes(box.dataset.col);});
+    const showing=new Set(shownHeads().map(th=>th.dataset.col));
+    tools?.querySelectorAll('input[data-sort-col]').forEach(box=>{if(box.value)box.closest('label').hidden=!showing.has(box.value);});
+    const sorted=table.tHead.querySelector('th[data-sorted]')?.dataset.col;
+    if(sorted&&!showing.has(sorted))unsort();
   }
   /* rows in the shown family's ranking: the order Sort by's Default means */
   const ranking=()=>data.rows.forEach(r=>{const tr=[...table.tBodies[0].rows].find(t=>t.dataset.key===r.key);if(tr)table.tBodies[0].append(tr);});
@@ -256,8 +270,10 @@
   const shownHeads=()=>heads().filter(th=>!th.hidden&&th.style.display!=='none');
   const ruler=document.createElement('canvas').getContext('2d');
   function columnWidth(th) {
-    /* on a phone #, Agent and Overall fill the card's width exactly, so Overall is never cut */
-    const phone=innerWidth<=700, fixed={rank:phone?44:48,agent:phone?168:238,overall:phone?84:104,steps:66,time:84,calls:92,cost:88};
+    /* on a phone #, Agent and Overall fill the card's width exactly: Agent takes what the two leave, tighter on a narrow
+       one, so Overall is whole at any width */
+    const phone=innerWidth<=700, room=wrap?.clientWidth||296, tight=phone&&room<290, rank=phone?(tight?36:44):48, overall=phone?(tight?78:84):104;
+    const fixed={rank,agent:phone?Math.max(112,Math.min(168,room-rank-overall)):238,overall,steps:66,time:84,calls:92,cost:88};
     if(fixed[th.dataset.col])return fixed[th.dataset.col];
     /* a score column is as wide as its name, measured in the header's own font */
     const style=getComputedStyle(th);ruler.font=`${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
@@ -274,6 +290,7 @@
     shown.forEach(th=>{th.style.width=`${base.get(th)+(axes.includes(th)?each:0)}px`;});
     if(except)heads().find(th=>th.dataset.col===except).style.width='0px';
     table.style.minWidth=`${total+each*axes.length}px`;
+    if(!except)menus();
   }
   if(wrap){let seen=wrap.clientWidth;new ResizeObserver(()=>{if(wrap.clientWidth&&Math.abs(wrap.clientWidth-seen)>1){seen=wrap.clientWidth;size();}}).observe(wrap);}
   /* a column chosen in Columns grows from nothing and fades in; one taken away fades and narrows to nothing first */
@@ -507,7 +524,12 @@
   async function compareChoice() { const turn=++comparisonGeneration;projection=null;if(versus.startsWith('version:')) {const [benchmark,version]=JSON.parse(versus.slice(8));const response=await nulliusFetch('/api/leaderboard/comparison?'+new URLSearchParams({benchmark,version}));if(response.ok){const result=await response.json();if(turn!==comparisonGeneration)return;projection=result;}}draw();}
   document.querySelectorAll('[data-vs-select]').forEach(s=>{s.onchange=()=>{versus=s.value;document.querySelectorAll('[data-vs-select]').forEach(v=>setSelect(v,versus));compareChoice().catch(()=>{});};});
   document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{metric=b.dataset.metric;press('lb-metric','data-metric',metric);drawScatter();});
-  async function deferred(turn) { const response=await nulliusFetch(`/api/leaderboard/metrics?context=${encodeURIComponent(data.context)}`);if(!response.ok)return;const result=await response.json();if(turn!==generation||result.context!==data.context)return;result.rows.forEach(r=>{const existing=row(r.key);if(existing)existing.metrics=r.metrics;});updateTable();card();drawScatter(); }
+  /* the measures answer for the board they were asked about; when it changed meanwhile (a save landing as the page loaded, a
+     run that wrote a trial), the board is read again, once */
+  let reread=false;
+  async function deferred(turn) { const response=await nulliusFetch(`/api/leaderboard/metrics?context=${encodeURIComponent(data.context)}`);
+    if(response.status===409&&!reread){reread=true;const got=await fetchBoard();if(got)apply(got);return;}
+    if(!response.ok)return;const result=await response.json();if(turn!==generation||result.context!==data.context)return;result.rows.forEach(r=>{const existing=row(r.key);if(existing)existing.metrics=r.metrics;});updateTable();card();drawScatter(); }
   async function fetchBoard(){const turn=++generation;const response=await nulliusFetch('/api/leaderboard');if(!response.ok)return null;const next=await response.json();return turn===generation?{next,turn}:null;}
   /* each family has its own Overall and ranks: the shown family's stand in a row's overall and rank, its ranking orders the rows */
   function useFamily(){data.rows.forEach(r=>{const f=r.families?.[family];if(f){r.overall=f.overall;r.rank=f.rank;}});data.rows.sort((a,b)=>(a.rank??1e9)-(b.rank??1e9)||a.name.localeCompare(b.name)||a.key.localeCompare(b.key));}

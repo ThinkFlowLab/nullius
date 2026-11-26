@@ -19,7 +19,9 @@
   const labelOf=key=>data.options.find(o=>o.key===key)?.label||key;
   /* a benchmark's default version: the one a new row reads */
   const versionOf=key=>data.options.find(o=>o.key===key&&o.default)||data.options.find(o=>o.key===key);
-  const identity=e=>[e.benchmark,e.dataset,e.version,e.metric].join('\n');
+  /* a benchmark with one dataset is that dataset: read whole or by its dataset, it is one entry */
+  const sole=o=>o&&o.datasets.length===1?o.datasets[0].id:'';
+  const identity=e=>[e.benchmark,e.dataset||sole(data.options.find(o=>o.key===e.benchmark&&o.version===e.version)),e.version,e.metric].join('\n');
   const families=[...form.querySelectorAll('section.lb-axes')].map(section=>({title:section.querySelector('h2').textContent,names:names(section)}));
   /* what keeps the draft from being saved: a field marked where it is wrong, or one line saying what to do.
      Each family has its own Overall, so each needs a weighted row among those that have a benchmark. */
@@ -31,6 +33,7 @@
     if(wrong)return {ok:false,message:`${wrong}: enter a weight of 0 or more.`};
     for(const [name,axis] of Object.entries(draft.axes)){const seen=new Set();for(const e of axis.entries){if(seen.has(identity(e)))return {ok:false,message:`${name}: ${labelOf(e.benchmark)} is listed twice. Change or remove one.`};seen.add(identity(e));}}
     for(const family of families){const mapped=family.names.filter(n=>draft.axes[n].entries.length);if(mapped.length&&!mapped.some(n=>draft.axes[n].weight>0))return {ok:false,message:`${family.title}: give at least one row a weight above 0.`};}
+    if(!Object.values(draft.axes).some(a=>a.entries.length))return {ok:false,message:'Add a benchmark to a row.'};
     if(!Object.values(draft.axes).some(a=>a.weight>0))return {ok:false,message:'Give at least one row a weight above 0.'};
     return {ok:true,message:''};
   }
@@ -72,7 +75,8 @@
       const result=await response.json().catch(()=>({}));
       if(!response.ok||!result.revision){const refused=new Error(result.error||FAILED);refused.kind=response.status===409?'conflict':'error';throw refused;}
       revision=result.revision;if(reset){draft=result.settings;resetting=false;render();document.getElementById('reset-confirm').hidden=true;document.getElementById('reset-ask').hidden=false;}
-      report('Scoring saved');window.nulliusNotify('Scoring saved',{key:'scoring'});
+      const now=check().message;report(now||'Scoring saved',now?'invalid':'');   // what the draft typed meanwhile still needs
+      window.nulliusNotify('Scoring saved',{key:'scoring'});
       document.getElementById('lb-warning')?.remove();              // the file that could not be read has been rewritten
       document.dispatchEvent(new Event('leaderboard:rescored'));
     } catch(error) {dirty=true;failed=true;report(error.kind?error.message:FAILED,error.kind||'error');}
@@ -85,7 +89,7 @@
       const name=section.dataset.scoringAxis, axis=draft.axes[name], container=section.querySelector('[data-entries]');container.replaceChildren();
       axis.entries.forEach((entry,index)=>{
         const line=el('div',null,{class:'lb-entry'}), choices=[...new Map(data.options.map(o=>[o.key,o.label])).entries()];
-        const n=index+1, source=select(choices,entry.benchmark,value=>{axis.entries[index]={benchmark:value,dataset:'',version:versionOf(value).version,metric:'Score',weight:entry.weight};},`${name}, benchmark ${n}`);
+        const n=index+1, source=select(choices,entry.benchmark,value=>{axis.entries[index]={benchmark:value,dataset:sole(versionOf(value)),version:versionOf(value).version,metric:'Score',weight:entry.weight};},`${name}, benchmark ${n}`);
         line.append(cell(source));
         const versions=data.options.filter(o=>o.key===entry.benchmark), bench=versions.find(o=>o.version===entry.version), sets=bench?.datasets||[], metrics=bench?.metrics||['Score'];
         /* one dataset is the whole benchmark: a fixed value, not a choice between two equal ones */
@@ -99,10 +103,12 @@
       section.querySelector('[data-count]').textContent=axis.entries.length;
       const weight=section.querySelector('[data-overall]');if(weight){weight.value=axis.weight;weight.disabled=!axis.entries.length;weight.title=axis.entries.length?'':'Add a benchmark first';weight.oninput=()=>{axis.weight=weight.value===''?null:Number(weight.value);edited();};}
       section.querySelector('[data-add-entry]').onclick=()=>{
-        /* a new row reads the first benchmark the axis does not list yet, as a whole; when it lists them all, the first */
-        const whole=o=>({benchmark:o.key,dataset:'',version:o.version,metric:'Score',weight:1}), listed=new Set(axis.entries.map(identity));
-        const firsts=[...new Set(data.options.map(o=>o.key))].map(versionOf), fresh=firsts.map(whole).find(e=>!listed.has(identity(e)))||(firsts[0]&&whole(firsts[0]));
-        if(!fresh)return;
+        /* a new row reads the first benchmark the axis does not name yet, as a whole; when it names them all, the first it
+           does not list whole, else the first */
+        const whole=o=>({benchmark:o.key,dataset:sole(o),version:o.version,metric:'Score',weight:1}), listed=new Set(axis.entries.map(identity)), named=new Set(axis.entries.map(e=>e.benchmark));
+        const firsts=[...new Set(data.options.map(o=>o.key))].map(versionOf), pick=firsts.find(o=>!named.has(o.key))||firsts.find(o=>!listed.has(identity(whole(o))))||firsts[0];
+        if(!pick)return;
+        const fresh=whole(pick);
         /* an empty axis weighs 0 in Overall; its first benchmark brings back the axis's standard weight */
         if(!axis.entries.length&&!axis.weight)axis.weight=data.overall?.[name]||0;
         axis.entries.push(fresh);render();edited();};
@@ -113,7 +119,7 @@
   /* each axis folds its benchmarks away; rows open folded, the overview open */
   form.querySelectorAll('.lb-fold').forEach(b=>b.onclick=()=>{const open=b.getAttribute('aria-expanded')!=='true';b.setAttribute('aria-expanded',String(open));window.NulliusDisclosure.setHidden(document.getElementById(b.getAttribute('aria-controls')),open);});
   document.getElementById('reset-ask').onclick=()=>{document.getElementById('reset-confirm').hidden=false;document.getElementById('reset-ask').hidden=true;document.getElementById('reset-no').focus();};
-  document.getElementById('reset-no').onclick=()=>{resetting=false;document.getElementById('reset-confirm').hidden=true;document.getElementById('reset-ask').hidden=false;document.getElementById('reset-ask').focus();};
+  document.getElementById('reset-no').onclick=()=>{resetting=false;queued=false;document.getElementById('reset-confirm').hidden=true;document.getElementById('reset-ask').hidden=false;document.getElementById('reset-ask').focus();};
   document.getElementById('reset-yes').onclick=()=>save(true);
   retry.onclick=()=>bar.dataset.kind==='conflict'?location.reload():save(resetting);
   form.onsubmit=e=>e.preventDefault();render();

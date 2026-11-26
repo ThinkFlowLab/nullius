@@ -242,13 +242,20 @@ tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
   /* #, Agent and Overall fill a phone's width exactly: the first score is a sideways scroll away, Overall never cut */
   .lb-table :is(th, td) { padding-left: .6rem; padding-right: .6rem; }
   .lb-table [data-col="rank"] { width: 44px; }
-  #leaderboard-table [data-col="agent"] { position: static; width: 168px; box-shadow: none; }
+  #leaderboard-table [data-col="agent"] { position: relative; left: auto; width: 168px; box-shadow: none; }
   .lb-table [data-col="overall"] { width: 84px; }
   .lb-picks .lb-pick { flex: 1 1 100%; }
   .lb-picks select, .lb-picks .ui-select-trigger { flex: 1; width: auto; }
   .lb-picks > .muted { display: none; }
   .lb-srow { grid-template-columns: 96px minmax(0, 1fr) 40px; }
   .lb-complete-count { display: none; }
+}
+@media (max-width: 380px) {
+  /* a narrow phone: tighter cells and a smaller logo keep Overall whole and a name on one line */
+  .lb-table [data-col="rank"] { padding-left: .2rem; padding-right: .2rem; }
+  #leaderboard-table td[data-col="agent"] { padding-right: .3rem; }
+  .lb-agent { gap: 8px; }
+  .lb-agent .lb-mark { width: 24px; height: 24px; }
 }
 /* a scoring row lays out by its card's width, whatever the window's and the rail's: too narrow for a row's name beside
    its benchmarks, they go under it; narrower still, each benchmark stacks */

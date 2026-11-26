@@ -81,6 +81,12 @@ class ConfigurationExamples(unittest.TestCase):
         draft["axes"]["Retrieval"]["entries"] *= 2
         with self.assertRaises(ValueError):
             configuration.save(self.path, draft, self.benchmarks)
+        # GAIA has one dataset here: read whole or by that dataset it is one entry, and a write takes it once
+        draft = copy.deepcopy(self.defaults)
+        draft["axes"]["Retrieval"]["entries"].append(dict(draft["axes"]["Retrieval"]["entries"][0], dataset=""))
+        with self.assertRaises(ValueError):
+            configuration.save(self.path, draft, self.benchmarks)
+        self.assertEqual(self.path.read_bytes(), before)
         # a family whose every row with a benchmark weighs 0 would have no Overall: a write refuses it,
         # a file that already holds it still reads
         draft = copy.deepcopy(self.defaults)
