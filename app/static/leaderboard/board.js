@@ -313,15 +313,15 @@
     const container=document.querySelector(`[data-chart="radars-${group}"]`), names=data[group], current=row(selected);if(!current)return;
     const cx=200, cy=160, n=names.length, at=(i,v)=>{const a=-Math.PI/2+i*2*Math.PI/n;return [cx+Math.cos(a)*v*110,cy+Math.sin(a)*v*110];};
     const points=list=>list.map(p=>p.map(v=>v.toFixed(1)).join(',')).join(' ');
-    const plot=svg('svg',{viewBox:'-40 -5 480 345',role:'group','aria-label':`${group} profile`,'data-cx':cx,'data-cy':cy});
+    const plot=svg('svg',{viewBox:'-60 -14 520 362',role:'group','aria-label':`${group} profile`,'data-cx':cx,'data-cy':cy});
     for(const v of [.5,1])plot.append(svg('polygon',{points:points(names.map((_,i)=>at(i,v))),class:'lb-ring','data-node':'ring'+v}));
     names.forEach((name,i)=>{
-      const [ex,ey]=at(i,1),[lx,ly]=at(i,1.18),anchor=lx<cx-10?'end':lx>cx+10?'start':'middle';
+      const [ex,ey]=at(i,1),[lx,ly]=at(i,1.27),anchor=lx<cx-10?'end':lx>cx+10?'start':'middle';
       plot.append(svg('line',{x1:cx,y1:cy,x2:ex,y2:ey,class:'lb-ring','data-node':'spoke'+i}));
       const text=svg('text',{x:lx,y:ly-4,'text-anchor':anchor,tabindex:0,'data-axis':name,'data-node':'label:'+name,class:'lb-axis-label'});
       text.append(document.createTextNode(name),svg('tspan',{x:lx,dy:15,class:'lb-me'},whole(current.axes[name].score)));
       const v=compared(name);if(versus!=='average'&&v!=null)text.append(svg('tspan',{dx:5,class:'lb-versus'},whole(v)));
-      plot.append(text);
+      const label=svg('g',{class:'lb-label','data-node':'pill:'+name});label.append(svg('rect',{class:'lb-pill',rx:7}),text);plot.append(label);
     });
     const series=(value,comparison)=>names.forEach((name,i)=>{
       const a=value(name),j=(i+1)%n,b=value(names[j]);
@@ -340,6 +340,14 @@
     const live=container.querySelector('svg');
     if(live){live.classList.toggle('lb-versus-agent',versus!=='average');motion.morph(live,plot);}
     else {container.append(plot);motion.reveal(plot,'radars');}
+    pills(container.querySelector('svg'));
+  }
+  /* a label's hover pill is sized on the drawn text; a hidden board has none to measure, so it is sized again once shown */
+  function pills(plot) {
+    plot?.querySelectorAll('.lb-label').forEach(g=>{
+      const b=g.querySelector('text').getBBox(), r=g.querySelector('rect');if(!b.width)return;
+      Object.entries({x:b.x-9,y:b.y-5,width:b.width+18,height:b.height+10}).forEach(([k,v])=>r.setAttribute(k,v.toFixed(1)));
+    });
   }
   function swatches() {
     const agent=versus!=='average';
@@ -405,7 +413,7 @@
   /* each save fetches the new board at once, so it is ready when the board is shown; it is drawn then, at its real size */
   let fresh=null;
   document.addEventListener('leaderboard:rescored',()=>{fresh=null;fetchBoard(data.all_scores?'1':'0').then(got=>{if(!got)return;if(table.getClientRects().length)apply(got);else fresh=got;}).catch(()=>{});});
-  document.addEventListener('leaderboard:view',e=>{if(e.detail.view==='board'&&fresh){const got=fresh;fresh=null;apply(got);}});
+  document.addEventListener('leaderboard:view',e=>{if(e.detail.view!=='board')return;if(fresh){const got=fresh;fresh=null;apply(got);}document.querySelectorAll('[data-chart^="radars-"] svg').forEach(pills);});
   document.getElementById(`${table.id}-tools`)?.addEventListener('change',e=>{
     const box=e.target;if(!box.matches('input[data-col]')||passing)return;
     if(!box.checked){e.stopPropagation();shrink(box);}
