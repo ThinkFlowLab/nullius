@@ -1,6 +1,19 @@
 // Keep real selects as form/state owners; render a consistent, keyboard-accessible menu.
 (() => {
   const controls = new Map(); let active = null, serial = 0, scheduled = false;
+  function optionLabel(target, option) {
+    target.textContent = option?.dataset.label || option?.textContent || 'Select…';
+    const origin = option?.dataset.origin;
+    if (!['official', 'experiment'].includes(origin)) return;
+    const label = document.createElement('span');
+    label.className = 'ui-option-label';
+    label.textContent = target.textContent;
+    const tag = document.createElement('span');
+    tag.className = 'origin-tag ' + origin;
+    tag.textContent = origin === 'experiment' ? 'Experiment' : 'Official';
+    label.append(' ', tag);
+    target.replaceChildren(label);
+  }
   function close(focus = false) {
     if (!active) return;
     const {menu, button} = active; active = null; menu.remove();
@@ -18,7 +31,7 @@
       const row = document.createElement('div'); row.className = 'ui-select-option'; row.id = menu.id + '-' + index;
       row.setAttribute('role', 'option'); row.setAttribute('aria-selected', String(option.selected));
       row.setAttribute('aria-disabled', String(option.disabled || option.parentElement.disabled === true));
-      row.textContent = option.textContent; row.dataset.index = index;
+      optionLabel(row, option); row.dataset.index = index;
       row.addEventListener('pointerdown', event => event.preventDefault());
       row.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); choose(index); });
       menu.append(row); rows.push(row);
@@ -90,8 +103,12 @@
         select.addEventListener('invalid', e => { e.preventDefault(); button.focus(); button.setAttribute('aria-invalid', 'true'); });
         select.addEventListener('change', () => { button.removeAttribute('aria-invalid'); scan(); });
       }
-      const text = select.selectedOptions[0]?.textContent || 'Select…';
-      if (button.textContent !== text) button.textContent = text;
+      const option = select.selectedOptions[0];
+      const signature = JSON.stringify([option?.textContent, option?.dataset.label, option?.dataset.origin]);
+      if (button.dataset.optionLabel !== signature) {
+        optionLabel(button, option);
+        button.dataset.optionLabel = signature;
+      }
       if (button.disabled !== select.disabled) button.disabled = select.disabled;
       if (button.hidden !== select.hidden) button.hidden = select.hidden;
     });

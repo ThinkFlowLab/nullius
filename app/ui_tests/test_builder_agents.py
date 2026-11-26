@@ -38,15 +38,12 @@ class AgentGrid(unittest.TestCase):
             with self.subTest(b["key"]):
                 _, cards = self.grid(b["key"])
                 fits = {k: v for k, v in st["fits"][b["key"]].items() if k in offered}
-                self.assertEqual({k for k in cards if k != "original"}, set(fits))
+                self.assertEqual(set(cards), set(fits))
                 self.assertEqual({k for k, c in cards.items() if " disabled" in c[:c.index("</button>")]}, {k for k, v in fits.items() if v})
 
-    def test_a_benchmark_without_own_agents_keeps_its_original_and_greys_osworlds(self):
+    def test_the_version_procedure_is_implicit_and_other_benchmarks_agents_are_disabled(self):
         _, cards = self.grid("gsm8k")
-        self.assertEqual(list(cards)[0], "original")
-        self.assertIn(">No agent · Original</button>", cards["original"])
-        self.assertIn('<span class="std-tag">As published</span>', cards["original"])            # how it runs, not a protocol
-        self.assertIn('data-f-protocol=""', cards["original"])
+        self.assertNotIn("original", cards)
         html, _ = self.grid("gsm8k")
         self.assertNotIn('data-value="reference"', html)
         for k, c in cards.items():

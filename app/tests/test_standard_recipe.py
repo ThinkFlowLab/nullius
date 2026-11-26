@@ -38,6 +38,15 @@ def a_recipe(**kw):
 
 
 class Compile(unittest.TestCase):
+    def test_procedure_settings_in_review_return_to_benchmark(self):
+        bundled = {k: definitions.load(k)[0] for k in ("benchmark", "agent", "capability")}
+        b = definitions.find(bundled["benchmark"], "locomo")
+        out = recipe.compile(a_recipe(benchmark="locomo", dataset=b["datasets"][0]["id"],
+                                      other="original", model_choice="any"), bundled)
+        rows = {row[1]: row[0] for row in out["review"]}
+        self.assertEqual(rows["Retrieval"], recipe.STEP["benchmark"])
+        self.assertNotIn("Procedure", rows)
+
     def test_time_limits_are_forced_in_seconds_on_every_job_and_turns_only_on_a_conversation(self):
         out = recipe.compile(a_recipe(timeouts={"agent": 30, "verify": 1.5, "setup": ""}, turns=40), defs())
         self.assertEqual(out["errors"], [])

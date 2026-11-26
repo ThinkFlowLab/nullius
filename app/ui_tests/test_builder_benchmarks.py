@@ -39,6 +39,8 @@ class BenchmarkGrid(unittest.TestCase):
         self.assertIn('<dt>Tasks</dt><dd>1,319</dd>', cards["gsm8k"])
         self.assertIn('<span class="cat-tag">Math</span>', cards["gsm8k"])
         self.assertIn('<span class="origin-tag official">Official</span>', cards["gsm8k"])
+        self.assertIn('<span class="origin-tag official">Official</span>', cards["locomo"])
+        self.assertIn('<span class="origin-tag experiment">Experiment</span>', cards["locomo"])
         self.assertIn('title="Real-world questions', cards["gaia"])                                 # its domain, as its tooltip
 
         html = self.get("/new-run/benchmarks?view=table")

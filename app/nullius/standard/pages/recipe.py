@@ -146,6 +146,11 @@ def origins(d: dict) -> List[str]:
     return list(dict.fromkeys([every.get(d["_default"]) or definitions.origin_of(d), *every.values()]))
 
 
+def _procedure_label(b: dict) -> str:
+    """The selected benchmark version whose own procedure runs by default."""
+    return " · ".join(filter(None, (b["label"], definitions.version_label(b))))
+
+
 def _bench_page(b: dict) -> dict:
     """A benchmark as a page shows it. ``controls``: the ones it declares,
     each with who wrote it and where it comes from - what the builder offers
@@ -157,10 +162,13 @@ def _bench_page(b: dict) -> dict:
                 for c in (definitions.control(b, w) for w in definitions.CONTROLS) if c]
     versioned = definitions.version_of(b) is not None
     return {"key": b["key"], "label": b["label"], "summary": b["summary"], "family": b["family"], "kind": _capability_kind(b),
+            "procedure": _procedure_label(b),
+            "origin": definitions.origin_of(b),
             "ref": definitions.ref_of(b) if "_version" in b else b["key"],
             "version": b["_version"] if versioned else "",
             # its versions, each by the ref a recipe names it with (the bare key: the default)
             "versions": [{"ref": b["key"] if v == b.get("_default") else f"{b['key']}@{v}", "version": v, "default": v == b.get("_default"),
+                          "choice_label": re.sub(r"\s*\([0-9a-f]{7,40}\)$", "", (b.get("_labels") or {}).get(v) or v),
                           "label": (b.get("_labels") or {}).get(v) or v, "origin": (b.get("_origins") or {}).get(v) or "official"}
                          for v in b.get("_versions") or []] if versioned else [],
             "environments": {n: {"summary": e.get("summary", ""), "local_ok": bool(e.get("local_ok")), "network": e.get("network"),
@@ -482,7 +490,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         control = ref in definitions.CONTROLS
         given, opts = {}, {}
         if ref == "model":
-            add("agent", "Choose Original, then choose the model on the Model step.")
+            add("agent", "Use the selected benchmark version's procedure, then choose the model on the Model step.")
             continue
         own = definitions.own_agent(base, ref) if ":" in ref else None
         if ":" in ref and own is None:
@@ -918,17 +926,24 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             return [STEP["agent"], "Check", f"{o['label']} ({o['key']}) · {o['source']} · {o['from']}"]
         if p.get("agent"):
             return [STEP["agent"], "Participant", f"{p['agent']['label']} · {p['agent'].get('benchmark_label') or b['label']}'s own"]
-        if p.get("setup"):
-            original = (b.get("setups") or {}).get("original") or {}
-            label = original.get("reference_agent") or ("No agent · Original" if side == "agent" else "Original " + (_bench_page(b)["kind"] or "capability"))
-            return [STEP["agent"], "Participant", label]
         proven = ", ".join(f"{q} {r.get('passed', '')}".strip() for q, r in (o.get("proven") or {}).items() if q in b["needs"])
         return [STEP["agent"], "Agent" if side == "agent" else "Capability", f"{o['label']} · {protocol(o)} · proven {proven}"]
+    def option_step(key: str) -> int:
+        o = (b.get("options") or {})[key]
+        if o.get("limit"):
+            return STEP["limits"]
+        if o.get("step"):
+            return STEP[o["step"]]
+        scopes = o.get("setups") or ["yours"]
+        if not (o.get("when") or {}).get("agent") and not any(s in scopes for s in ("yours", "agent")):
+            return STEP["benchmark"]
+        return STEP["agent"]
+
     out["review"] = [[STEP["benchmark"], "Benchmark", f"{b['label']} · needs {', '.join(b['needs'])}"],
                      [STEP["runner"], "Runner", "Nullius"],
                      [STEP["dataset"], "Datasets" if many else "Dataset",
                       ", ".join(f"{x.get('label') or x['id']}" + (f" · {x['units']} {bench_nouns}" if x.get("units") else "") for x in dss)],
-                     *[[STEP["limits" if (b.get("options") or {})[k].get("limit") else "dataset" if (b.get("options") or {})[k].get("step") else "agent"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
+                     *[[option_step(k), (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
                         _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)")
                         + ("" if all(per_ds[x["id"]].get(k) == v for x in dss) else f" · {', '.join(x.get('label') or x['id'] for x in dss if per_ds[x['id']].get(k) == v)}")]
                        for k, v in dict.fromkeys((k, v) for vals in per_ds.values() for k, v in vals.items())     # a row per value: datasets may differ
@@ -936,7 +951,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                        and not ((b.get("options") or {})[k].get("when") or {}).get("agent")
                        or "agent" in ((b.get("options") or {})[k].get("when") or {}) and any(      # one of its own agents' settings: that agent's
                            p.get("agent") and p["agent"]["start"]["driver"]["agent"] in b["options"][k]["when"]["agent"] for p in picks)],
-                     *[row(p) for p in picks],
+                     *[row(p) for p in picks if not p.get("setup") or p.get("agent")],
                      *[[STEP["agent"], "Options" + (f" of {p['o']['label']}" if several else ""),
                         ", ".join(f"{(p['o'].get('options') or {}).get(k, {}).get('label') or k.replace('_', ' ').capitalize()} {v}" + ("" if k in p["given"] else " (its default)") for k, v in p["opts"].items())]
                        for p in picks if p["opts"]],

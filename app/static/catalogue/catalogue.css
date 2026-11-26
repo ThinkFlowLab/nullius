@@ -366,25 +366,9 @@ dialog.std-how::backdrop { background: rgba(0, 0, 0, .45); }
 .bench-card-setup { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; font-size: .78rem; color: var(--text-dim); }
 a.std-need { font-size: .78rem; color: var(--text-dim); text-decoration: underline dotted; }
 
-.std-setups { --setup-padding: 22px; }
-.std-setup-list { display: grid; gap: 0; }
-.std-setup-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 24px; padding: 20px 0; border-top: 1px solid var(--border-soft); }
-.std-setup-row h3 { margin: 0; font-size: 16px; text-transform: none; letter-spacing: normal; }
-.std-setup-meta { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px 24px; font-size: 14px; }
-.std-setup-meta b { color: var(--text-dim); font-weight: 400; margin-right: 6px; }
-.std-setup-detail { margin: 0 calc(-1 * var(--setup-padding)) calc(-1 * var(--setup-padding)); border-top: 1px solid var(--border-soft); border-radius: 0 0 12px 12px; overflow: hidden; font-size: 14px; color: var(--text-dim); }
-.std-setup-detail summary { display: flex; align-items: center; gap: 12px; padding: 18px var(--setup-padding); cursor: pointer; list-style: none; color: var(--text-dim); transition: background .16s, color .16s; }
-.std-setup-detail summary::-webkit-details-marker { display: none; }
-.std-setup-detail summary:hover { background: var(--surface-2); color: var(--text); }
-.std-setup-detail summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
-.std-setup-description { padding: 0 var(--setup-padding) 20px calc(var(--setup-padding) + 30px); line-height: 1.75; }
-.std-setup-detail p { margin: 0 0 10px; }
-.std-setup-detail small { display: block; overflow-wrap: anywhere; }
 .std-fixed-dataset { display: grid; align-content: start; gap: 8px; font-size: 14px; }
 .std-fixed-dataset span { color: var(--text-dim); font-size: 12px; }
 .std-fixed-dataset b { font-weight: 400; padding: 8px 0; }
-@media (max-width: 760px) { .std-setup-row { grid-template-columns: 1fr; gap: 10px; } .std-setup-meta { justify-content: flex-start; } }
-@media (max-width: 640px) { .std-setups { --setup-padding: 16px; } }
 
 
 .std-mark:has(.agent-logo) { background: transparent; border-radius: 0; color: var(--text); }
