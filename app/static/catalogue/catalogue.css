@@ -348,10 +348,11 @@ dialog.std-how::backdrop { background: rgba(0, 0, 0, .45); }
 /* a card's runners sit on their own row above its numbers, so every card's rows line up whatever it holds */
 .bench-card-runs { margin-top: auto; }
 .bench-card-runs + .bench-stats { margin-top: 0; }
-/* a clamped description keeps its three lines, so the tag under it lines up across a row and the numbers sit at the bottom */
+/* a clamped description keeps its three lines, so the tag and the numbers under it line up across a row, whatever
+   wraps below them; a foot with no numbers above it sits at the bottom */
 .bench-card-domain.std-clamp { min-height: 4.5em; }
-.bench-card-domain + .bench-card-runs { margin-top: 0; }
-.bench-card-domain + .bench-card-runs + .bench-stats, .bench-card-domain + .bench-card-runs ~ .bench-card-foot:not(.bench-stats ~ *) { margin-top: auto; }
+.bench-card-domain + .bench-card-runs, .bench-card-domain + .bench-card-runs + .bench-stats { margin-top: 0; }
+.bench-card-domain + .bench-card-runs ~ .bench-card-foot:not(.bench-stats ~ *) { margin-top: auto; }
 /* A benchmark's own options: each value on a line, its tags (what it needs), its line; then the machine setup some need. */
 .std-optname { font-size: 15px; margin: 18px 0 4px; }
 .std-optname small { font-weight: 400; color: var(--text-dim); font-size: 12px; margin-left: 6px; }
