@@ -30,6 +30,7 @@ AGENT_NEEDS = {"cursor-cli": ["CURSOR_API_KEY"], "copilot-cli": ["COPILOT_GITHUB
 from . import shared
 from . import execute
 from . import catalogue
+from .agents import ORIGINS, origin_tag
 
 
 @app.route("/new-run")
@@ -70,14 +71,13 @@ def new_run_benchmarks():
     (``catalogue.benchmark_cards``) as single-choice pick cards (templates/builder/benchmarks.html), or rows with
     ?view=table."""
     cat = shared._catalog_cached()
-    # a community benchmark says so
     # a benchmark with versions carries each one's Tasks (the default's under ""), for the builder to show the chosen one's
     items = [dict(i, pick={"value": i["key"], "one": True}, id="pick-bench-" + i["key"], title={"text": i["title"], "title": i["domain"]},
-                  origin=i["origin"] if i["shelf"] != "official" else None,
+                  origin=i["default_origin"],
                   data={"tasks": json.dumps({"": i["tasks"], **i["versions"]})} if i["versions"] else None)
              for i in catalogue.benchmark_cards(cat)]
     every = catalogue.benchmark_choices(cat)
-    choices = {k: [(v, t) for v, t in every[k] if any(v in _values(i[k]) for i in items)] for k in ("category", "evaluates", "runs")}
+    choices = {k: [(v, t) for v, t in every[k] if any(v in _values(i[k]) for i in items)] for k in ("category", "evaluates", "runs", "origin")}
     return render_template("builder/benchmarks.html", items=items, choices={k: v for k, v in choices.items() if len(v) > 1},
                            layout="table" if request.args.get("view") == "table" else "cards")
 
@@ -108,6 +108,7 @@ def new_run_agents():
                             if any(i["protocol"] and i["protocol"]["value"] == p for i in items)],
                "fit": [(v, t) for v, t in (("fit", "Can run it"), ("unfit", "Cannot")) if any(i["fit"]["value"] == v for i in items)],
                "from": [(k, v) for k, v in names.items() if any(i["from"]["value"] == k for i in items)],
+               "origin": [(o, t) for o, t in ORIGINS.items() if any(i["origin"]["value"] == o for i in items)],
                "proves": [(p, s.get("label") or p) for p, s in ports.PORTS.items() if any(x["value"] == p for i in items for x in i["proves"])]}
     # a filter only where its cards differ
     return render_template("builder/agents.html", items=items, kind=kind, choices={k: v for k, v in choices.items() if len(v) > 1},
@@ -119,7 +120,7 @@ def _setup_card(b: dict, key: str) -> dict:
     x = b["setups"][key]
     title = x.get("reference_agent") or ("No agent · Original" if b["family"] == "agent" else "Original " + _kind_of(b))
     return {"pick": {"value": key}, "id": "pick-" + key, "icon": "#i-origin", "title": {"text": title, "title": x.get("summary", "")},
-            "search": " ".join([title, b["label"], "as published"]), "published": "As published", "protocol": "",
+            "search": " ".join([title, b["label"], "as published"]), "published": "As published", "origin": origin_tag("benchmark"), "protocol": "",
             "fit": {"text": "Can run it", "value": "fit"}, "from": {"text": b["label"], "value": "benchmark"},
             "proves": [], "ticks": [], "alert": None}
 
@@ -151,6 +152,7 @@ def _pick_card(b: dict, e: dict) -> dict:
             "icon": agent_mark_url(d["key"]) if b["family"] == "agent" else "", "title": {"text": title, "title": d.get("summary", "")},
             "search": " ".join([title, d["key"], version, e["protocol"], d.get("summary", "")]),
             "protocol": {"text": e["protocol"], "value": e["protocol"]}, "published": "",
+            "origin": origin_tag("benchmark" if d.get("benchmark") else definitions.origin_of(d)),
             "fit": {"text": "Cannot" if why else "Can run it", "value": "unfit" if why else "fit"}, "from": there,
             "proves": [{"text": r["label"], "value": r["port"]} for r in rows.values()],
             "ticks": ticks,

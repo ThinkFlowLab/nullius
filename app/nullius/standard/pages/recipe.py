@@ -123,20 +123,28 @@ def _capability_kind(b: dict) -> str:
 def benchmarks(cat) -> List[dict]:
     """The benchmarks the Benchmarks page and the builder's Benchmark step list: each of the catalogue's listed
     entries (``Catalog.listed_benchmarks``, whichever runner runs it) as ``b``, with its ``datasets``, its ``tasks``
-    and their ``unit`` (``Catalog.tasks_of``), what some of its options need of a machine (``host``, None for nothing),
+    and their ``unit`` (``Catalog.tasks_of``), what some of its options need of a machine (``host``, by label, None for nothing),
     what it is run with: ``family`` agent or capability (a benchmark only Harbor runs runs agents) and, for a
-    capability, its ``kind``; and ``versions``, another version's tasks and unit by version."""
+    capability, its ``kind``; ``versions``, another version's tasks and unit by version; and ``origins``, its versions'
+    origins, each once, the default version's first."""
     defs = {d["key"]: d for d in definitions.load("benchmark")[0]}
     out = []
     for b in cat.listed_benchmarks:
         d = defs.get(b.key) or {}
         tasks, unit = cat.tasks_of(b)
         out.append({"b": b, "datasets": cat.datasets_of(b), "tasks": tasks, "unit": unit,
-                    "host": sorted(d["host"]) if d.get("host") else None,
+                    "host": [hostreq.label(d, n) for n in sorted(d["host"])] if d.get("host") else None,
                     "family": d.get("family") or "agent", "kind": _capability_kind(d),
+                    "origins": origins(d) if d else [b.origin],
                     # another version's tasks, when its datasets count differently (``Catalog.in_version``)
                     "versions": {v: cat.tasks_of(b, cat.in_version(b, v)[1]) for v in b.versions}})
     return out
+
+
+def origins(d: dict) -> List[str]:
+    """The origins of a definition's versions, each once, its default version's first."""
+    every = d.get("_origins") or {}
+    return list(dict.fromkeys([every.get(d["_default"]) or definitions.origin_of(d), *every.values()]))
 
 
 def _bench_page(b: dict) -> dict:
@@ -155,7 +163,7 @@ def _bench_page(b: dict) -> dict:
             "version": b["_version"] if versioned else "",
             # its versions, each by the ref a recipe names it with (the bare key: the default)
             "versions": [{"ref": b["key"] if v == b.get("_default") else f"{b['key']}@{v}", "version": v, "default": v == b.get("_default"),
-                          "label": (b.get("_labels") or {}).get(v) or v}
+                          "label": (b.get("_labels") or {}).get(v) or v, "origin": (b.get("_origins") or {}).get(v) or "official"}
                          for v in b.get("_versions") or []] if versioned else [],
             "environments": {n: {"summary": e.get("summary", ""), "local_ok": bool(e.get("local_ok")), "network": e.get("network"),
                                  "needs_secrets": [{"name": s["name"], "to": s["to"], "kind": s.get("kind") or "value",
@@ -170,7 +178,7 @@ def _bench_page(b: dict) -> dict:
             # One Original procedure, with separate reference-participant and paper-model metadata.
             "setups": [{"key": k, "label": definitions.setup_label(b, k), "summary": x["summary"],
                         "reference_agent": x.get("reference_agent", ""), "turn_seconds": x.get("turn_seconds"),
-                        "comparable": k == "original" and b["setups"]["original"].get("comparable", True) is not False, "units": (b["setups"]["original"].get("units") or b.get("units") or {}),
+                        "comparable": k == "original" and b["setups"]["original"].get("comparable", True) not in (False, []), "units": (b["setups"]["original"].get("units") or b.get("units") or {}),
                         **({"models": definitions.paper_models(x), "default": x["default"], "providers": list(x["providers"]),
                             "sent": {p: {m: pre + (x.get("served_as") or {}).get(m, m) for m in definitions.paper_models(x)}
                                      for p, pre in x["providers"].items()}}
@@ -191,7 +199,7 @@ def _bench_page(b: dict) -> dict:
                             **({"values": o["values"]} if "values" in o else {"pattern": o["pattern"], "example": o.get("example")}), "default": o.get("default"), "about": o.get("about") or {}, "names": o.get("names") or {}, "needs": o.get("needs") or {}, "when": o.get("when") or {},
                             "limit": bool(o.get("limit")), "step": o.get("step") or "", "by": o.get("by") or {}, "yours": o.get("yours") or ""}
                         for n, o in (b.get("options") or {}).items()},
-            "host": {n: {"label": r.get("label") or n, "summary": r["summary"], "check": r["check"], "install": hostreq.install_lines(b, [n]), "needed_by": r["needed_by"]}
+            "host": {n: {"label": hostreq.label(b, n), "summary": r["summary"], "check": r["check"], "install": hostreq.install_lines(b, [n]), "needed_by": r["needed_by"]}
                      for n, r in hostreq.all_of(b).items()},
             "datasets": [{"id": d["id"], "label": d.get("label") or d["id"], "summary": d.get("summary", ""), "units": d.get("units"),
                           "environment": d.get("environment") or "",
@@ -929,13 +937,13 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if backend == "container" and any(p.get("setup") for p in picks):
         # a container setup's image installs what has an install; nothing else reaches its container
         imaged = hostreq.in_image(b, on_host)
-        cannot = [r.get("label") or n for n, r in hostreq.requirements(b, on_host).items() if n not in imaged]
+        cannot = [hostreq.label(b, n) for n in hostreq.requirements(b, on_host) if n not in imaged]
         if cannot:
             add("where", f"{', '.join(cannot)} cannot be provided in a container: choose local processes.")
         if all(p.get("setup") for p in picks):
             on_host = []                 # an agent's or a check's driver still runs on the machine
     reqs = hostreq.requirements(b, on_host)
-    out["host"] = {"benchmark": b["key"], "needs": [{"name": n, "label": r.get("label") or n, "summary": r["summary"], "check": r["check"],
+    out["host"] = {"benchmark": b["key"], "needs": [{"name": n, "label": hostreq.label(b, n), "summary": r["summary"], "check": r["check"],
                                                   **({"gpu_memory_mb": r["gpu_memory_mb"]} if "gpu_memory_mb" in r else {})}
                                                  for n, r in reqs.items()],
                    "check": [p for r in reqs.values() for p in r["check"]], "install": hostreq.install_lines(b, list(reqs))}

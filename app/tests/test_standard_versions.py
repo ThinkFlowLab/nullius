@@ -355,6 +355,11 @@ class ForkVersion(unittest.TestCase):
         self.assertEqual((fork["upstream"]["repository"], fork["upstream"]["tested"]), (self.fork, self.fixed))
         self.assertNotIn("tag", fork["upstream"])                                  # the published tag is not the fork's
         self.assertEqual(fork["_ref"], "toy@fork")
+        self.assertEqual(fork["_origins"], {"1": "official", "fork": "experiment"})
+        for upstream, said in (({"origin": "official"}, "official"), ({"fixes": ["one"]}, "experiment"), ({}, "experiment")):
+            got = definitions.resolve(dict(self.bench({}, upstream), _origin="experiment"), "fork")      # else its entry's
+            self.assertEqual(definitions.origin_of(got), said)
+        self.assertIn("upstream.origin: one of ('official', 'experiment')", definitions._upstream({"license": "MIT", "origin": "community"}))
         tagged = definitions.resolve(self.bench({"repository": self.upstream, "tag": "v1.0.0", "tested": self.published},
                                                 {"repository": self.fork, "tag": "fix-1", "tested": self.fixed}), "fork")
         self.assertEqual(tagged["upstream"]["tag"], "fix-1")

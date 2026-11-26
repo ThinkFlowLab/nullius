@@ -174,6 +174,7 @@
   },
   "host": {
     "cuda_gpu": {
+      "label": "NVIDIA GPU",
       "summary": "An NVIDIA GPU with CUDA, for LoCoMo's retrievers: the upstream loads their encoders with .cuda(). Its driver's nvidia-smi on PATH; the driver's own torch (2.0.1, CUDA 11.7) brings the rest.",
       "check": [
         "nvidia-smi"
@@ -182,7 +183,7 @@
   },
   "setups": {
     "original": {
-      "summary": "LoCoMo's question answering as the paper ran it: its own task_eval/evaluate_qa.py on a whole conversation - the conversation in the prompt, cut to the reader's window, its questions 20 a call (10 for the gpt-3.5-turbo windows), or, with retrieval, the top-k of a database its own code builds, one question a call, as its RAG rows ran with gpt-3.5-turbo - its prompts, temperature 0 and token budget, scored by its own eval_question_answering, the mean token F1 over the conversation's questions of categories 1 to 4.",
+      "summary": "LoCoMo's question answering as the paper ran it: its own task_eval/evaluate_qa.py on a whole conversation - the conversation in the prompt, cut to the reader's window, its questions 20 a call (10 for the gpt-3.5-turbo windows), or, with retrieval, the top-k of a database its own code builds, one question a call, as its RAG rows ran with gpt-3.5-turbo - its prompts, temperature 0 and token budget, scored by its own eval_question_answering, the mean over the conversation's questions.",
       "models": [
         "gpt-4-turbo",
         "gpt-3.5-turbo",
@@ -192,6 +193,7 @@
         "gpt-3.5-turbo-4k"
       ],
       "default": "gpt-4-turbo",
+      "comparable": [],
       "served_as": {
         "gpt-3.5-turbo-16k": "gpt-3.5-turbo",
         "gpt-3.5-turbo-12k": "gpt-3.5-turbo",
@@ -214,6 +216,50 @@
     "model": {
       "summary": "The same pipeline with any model in the reader's place: LoCoMo's code asks for gpt-4-turbo - its 128k window, 20 questions a call, its token budget - and the relay sends the model chosen; with retrieval, the observations and summaries its code writes are asked of the model chosen too. Its scores compare with other runs of this setup, not with the paper.",
       "runs_as": "gpt-4-turbo"
+    }
+  },
+  "default": "3eb6f2c",
+  "versions": {
+    "3eb6f2c": {
+      "upstream": {
+        "branch": "main"
+      }
+    },
+    "full": {
+      "upstream": {
+        "repository": "https://github.com/aitianshi/locomo",
+        "branch": "full",
+        "tested": "66d303a5505b5a26b211e7542ad5dc582033239d",
+        "tested_date": "2026-11-25",
+        "origin": "experiment",
+        "fixes": [
+          "The 446 adversarial questions are asked and scored too, 1,986 in all, with LoCoMo's open pull request #41 (https://github.com/snap-research/locomo/pull/41)."
+        ]
+      },
+      "datasets": [
+        {
+          "id": "locomo10",
+          "label": "LoCoMo-10",
+          "path": "data/locomo10.json",
+          "sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+          "units": 1986
+        }
+      ],
+      "controls": {
+        "nop": {
+          "source": "nullius",
+          "from": "Nullius: no capability runs and nothing is recalled; the answer is empty."
+        },
+        "oracle": {
+          "source": "nullius",
+          "from": "Nullius, from the authors' answers: the question's answer field in the authors' locomo10.json, as their evaluation scores against it (task_eval/evaluation.py): for a category-3 question, the part before the first ';' - in 11 of them the field goes on with the authors' reasoning, which their scorer cuts off. For a category-5 question, 'Not mentioned in the conversation', the choice their scorer looks for. Given to the scorer as the answer.",
+          "in_prompt": "A comparison question names its answer among the options it offers ('A or B?'), with the other option beside it."
+        }
+      },
+      "score": {
+        "kind": "score",
+        "says": "token F1 of the answer against the reference, by LoCoMo's own eval_question_answering (task_eval/evaluation.py), category 5 scored 1 when the answer says it is not mentioned, else 0: its normalisation and Porter stemming, category 1 by comma-separated parts, category 3 against the reference's part before the first ';' (categories 1 to 5)"
+      }
     }
   }
 }

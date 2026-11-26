@@ -96,7 +96,7 @@
   {"entry": "data/locomo10.json", "setting": "question categories 1 to 4", "values": "1,540 questions: multi-hop, temporal, open-domain, single-hop", "default": "",
    "nullius": "dataset:locomo10"},
   {"entry": "data/locomo10.json", "setting": "question category 5 (adversarial)", "values": "446 questions", "default": "",
-   "nullius": "not offered - the published file gives them adversarial_answer and no answer, and get_gpt_answers formats qa['answer'] into the question (a KeyError), so as published they cannot be asked; its option order is also drawn by an unseeded random.random"},
+   "nullius": "not offered - the published file gives them adversarial_answer and no answer, and get_gpt_answers formats qa['answer'] into the question (a KeyError), so as published they cannot be asked; its option order is also drawn by an unseeded random.random. The full version has them, from a fork with the upstream's open pull request 41"},
   {"entry": "data/locomo10.json", "setting": "event_summary (event summarization task)", "values": "annotated events per speaker and session", "default": "",
    "nullius": "not offered - the README's event summarization evaluation is 'Coming soon!': there is no code to run"},
   {"entry": "README.MD", "setting": "multimodal dialog generation (MiniGPT-5)", "values": "", "default": "",

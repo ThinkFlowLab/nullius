@@ -355,6 +355,7 @@
   },
   "host": {
     "sandbox": {
+      "label": "Sandbox runtime",
       "summary": "Anthropic's sandbox-runtime, which the upstream runs the agent's read-only shell in, with the programs it needs on Linux (ripgrep, bubblewrap, socat): installed on the machine the benchmark's driver runs on, whatever the backend.",
       "check": [
         "srt",

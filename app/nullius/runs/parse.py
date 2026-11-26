@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 
 from nullius.runs import verifier
 from nullius.runs import classify
+from nullius.runs import uid as job_uid
 from nullius.redact import redact
 
 # What a trace document in a trial's `agent/` may be called: the producer's own
@@ -31,7 +32,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "20"
+SCHEMA = "22"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness, so a limit the run survived leaves nothing in result.json —
@@ -345,6 +346,14 @@ class Trial:
         return self.ended_label if len(self.ended_label) > ENDED_CHARS else ""
 
     @property
+    def key(self) -> str:
+        """The trial within its job's identity (Job.uid): its name; a try under
+        ``retried/``, the name of the attempt it is a try of."""
+        if os.path.basename(os.path.dirname(self.dir)) == "retried":
+            return re.sub(r"\.try-\d+$", "", self.trial_name)
+        return self.trial_name
+
+    @property
     def dur_phases(self) -> float:
         """Sum of the four phases Harbor breaks out."""
         return sum(
@@ -452,6 +461,10 @@ class Job:
     launch_id: str = ""
     # Source job names explicitly recorded by standard merge.
     merged_from: list[str] = field(default_factory=list)
+    # The job's identity wherever its folder is (nullius.runs.uid), and whether it was
+    # "declared" by its producer, "derived" from its files or is "pending" ("" uid).
+    uid: str = ""
+    uid_source: str = ""
     # The task set a Nullius standard job ran (config ``standard.task_set``): its name, its label (its name for a
     # job from before labels) and id, its benchmark, and ``units``, its number of ids. {} for every other job.
     task_set: dict = field(default_factory=dict)
@@ -1232,6 +1245,7 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
     harbor = lock.get("harbor") if isinstance(lock.get("harbor"), dict) else {}
     job.harbor_version = str(harbor.get("version") or "")
     job.harbor_editable = harbor.get("is_editable") if isinstance(harbor.get("is_editable"), bool) else None
+    job.uid, job.uid_source = job_uid.of(job_dir, cfg, res)
     return job
 
 
