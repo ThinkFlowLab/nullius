@@ -8,7 +8,7 @@
 #leaderboard-table :is(th, td):not([data-col=rank], [data-col=agent], [data-col=steps], [data-col=time], [data-col=calls], [data-col=cost]) { text-align: center; }
 #leaderboard-table td { vertical-align: middle; }
 .lb-panel h2 { font-size: 1.25rem; font-weight: 600; margin: 0; }
-.lb-panel h3 { font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; font-weight: 500; color: var(--text-dim); margin: 0 0 8px; }
+.lb-panel h3 { font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 500; color: var(--text-dim); margin: 0 0 8px; }
 .lb-head { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .lb-two { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); margin: 0 0 24px; }
 .lb-two > .lb-panel { margin: 0; }
@@ -141,7 +141,7 @@
 .lb-dot.lb-point { transform: none; }
 
 /* score evidence */
-.lb-evidence { position: fixed; z-index: 100; width: max-content; max-width: min(560px, calc(100vw - 24px)); max-height: min(480px, calc(100vh - 24px)); overflow: auto; padding: 18px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font-size: .8rem; box-shadow: 0 8px 24px color-mix(in srgb, #000 30%, transparent); }
+.lb-evidence { position: fixed; z-index: 100; width: max-content; max-width: min(560px, calc(100vw - 24px)); max-height: min(640px, calc(100vh - 24px)); overflow: auto; padding: 18px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font-size: .8rem; box-shadow: 0 8px 24px color-mix(in srgb, #000 30%, transparent); }
 .lb-evidence > strong { display: block; font-size: .95rem; font-weight: 600; }
 .lb-evidence p { margin: .3rem 0 0; color: var(--text-faint); font-size: .76rem; }
 .lb-ev-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: .8rem; }
