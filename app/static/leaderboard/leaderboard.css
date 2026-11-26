@@ -1,6 +1,6 @@
 .lb-head-link { min-width: 10rem; justify-content: center; }
-:root { --lb-heat-lo: #232934; --lb-heat-hi: #1f5fb4; --lb-heat-top: #6fb0ff; --lb-chip-text: #fff; --lb-peak-ink: #071628; --lb-grey: #767a82; --lb-good: #5fae74; --lb-warn: #e5b451; }
-:root[data-theme="light"] { --lb-heat-lo: #e3e9f1; --lb-heat-hi: #3a76c4; --lb-heat-top: #0d3a75; --lb-chip-text: var(--text); --lb-peak-ink: #fff; --lb-grey: #9aa1ab; --lb-good: #3f8f55; --lb-warn: #8a6100; }
+:root { --lb-chip-lo: .30; --lb-chip-hi: .80; --lb-chip-text: #fff; --lb-grey: #767a82; --lb-good: #5fae74; --lb-warn: #e5b451; }
+:root[data-theme="light"] { --lb-chip-lo: .90; --lb-chip-hi: .42; --lb-chip-text: #14253d; --lb-grey: #9aa1ab; --lb-good: #3f8f55; --lb-warn: #8a6100; }
 
 /* cards: the board, the scatter, the agent, the strips and the radars */
 .lb-panel { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 16px; margin: 0 0 16px; min-width: 0; }
@@ -51,12 +51,15 @@
 .lb-overall { display: inline-block; font-weight: 600; color: var(--text); padding: 2px 5px; border: 1.5px solid transparent; cursor: help; }
 .lb-bar { display: block; height: 4px; width: 68px; margin: 4px auto 0; border-radius: 2px; background: var(--surface-2); }
 .lb-bar i { display: block; height: 100%; border-radius: 2px; background: var(--accent); transition: width .32s cubic-bezier(.2,.7,.2,1); }
-.lb-chip { display: inline-block; min-width: 46px; padding: 4px 7px; border-radius: 6px; font-weight: 600; cursor: help; color: var(--lb-chip-text); background: color-mix(in oklab, var(--lb-heat-top) var(--lb-top, 0%), color-mix(in oklab, var(--lb-heat-hi) var(--lb-heat), var(--lb-heat-lo))); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent); }
-.lb-chip.lb-hot { color: #fff; }
-.lb-chip.lb-peak { color: var(--lb-peak-ink); }
+.lb-chip { display: inline-block; min-width: 46px; padding: 4px 7px; border-radius: 6px; font-weight: 600; cursor: help; --lb-chip: oklch(calc(var(--lb-chip-lo) + (var(--lb-chip-hi) - var(--lb-chip-lo)) * var(--lb-t, 0)) .13 255); background: var(--lb-chip); color: var(--lb-chip-text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent); }
 .lb-unverified { border: 1.5px dashed var(--lb-warn); }
 .lb-chip.lb-unverified { box-shadow: none; }
+/* the text is white on a dark shade and near black on a light one: the shade's lightness decides, per theme */
+:root:not([data-theme="light"]) .lb-chip.lb-ink-dark { color: #08172b; }
+:root[data-theme="light"] .lb-chip.lb-ink-light { color: #fff; }
 .lb-none { color: var(--text-faint); }
+/* a cell's contents are boxes, so they can slide when their row moves */
+.lb-none, .lb-m { display: inline-block; }
 
 /* the scatter */
 .lb-scroll { overflow-x: auto; scrollbar-width: thin; }

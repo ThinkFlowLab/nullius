@@ -214,7 +214,7 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertEqual(medals.evaluate_all("e=>e.map(m=>m.getAttribute('aria-label'))"),
                          ["Rank 1, gold", "Rank 1, gold", "Rank 3, bronze", "Rank 4, chocolate"])
         self.assertEqual(self.page.get_by_role('img', name='Rank 4, chocolate').count(), 1)
-        self.assertEqual(medals.evaluate_all("e=>e.map(m=>[m.querySelectorAll('.lb-leaf').length, !!m.querySelector('mask')])"), [[12, False]] * 3 + [[12, True]])
+        self.assertEqual(medals.evaluate_all("e=>e.map(m=>[m.querySelectorAll('.lb-leaf').length, !!m.querySelector('mask')])"), [[8, False]] * 3 + [[8, True]])
         names = ('gold', 'silver', 'bronze', 'chocolate')
         tokens = {}
         for theme in ('dark', 'light'):

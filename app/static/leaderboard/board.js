@@ -63,9 +63,9 @@
     const span=element('span',null,{class:`lb-medal lb-medal-${rank}`,role:'img','aria-label':`Rank ${rank}, ${names[rank-1]}`});
     span.append(laurel(rank));return span;
   }
-  /* a laurel medal: the rank on a struck disc inside a wreath of twelve leaves; the 4th, chocolate, has a bite out of
+  /* a laurel medal: the rank on a struck disc inside a wreath of eight leaves; the 4th, chocolate, has a bite out of
      its upper right and two crumbs. Its colours are its metal's own, the same in both themes. */
-  const METAL={1:['#fff1b8','#e8c24a','#9a6b12','#4a3205'],2:['#ffffff','#c9d0d8','#7d8792','#2c3239'],3:['#ffd9b5','#d68a4c','#8a4a1c','#3a1d08'],4:['#a8714c','#6e4027','#3e2112','#f4dcc6']};
+  const METAL={1:['#fff1b8','#e8c24a','#9a6b12','#4a3205'],2:['#ffffff','#dde3ea','#8f9aa6','#232a31'],3:['#ffd9b5','#d68a4c','#8a4a1c','#3a1d08'],4:['#a8714c','#6e4027','#3e2112','#f4dcc6']};
   let medals=0;
   function laurel(rank) {
     const [light,mid,dark,ink]=METAL[rank], id=`lb-medal-${++medals}`, plot=svg('svg',{'aria-hidden':'true',viewBox:'0 0 40 48'}), defs=svg('defs');
@@ -73,24 +73,26 @@
     [[0,light],[.55,mid],[1,dark]].forEach(([at,color])=>shade.append(svg('stop',{offset:at,'stop-color':color})));defs.append(shade);
     const body=svg('g');
     if(rank===4){const mask=svg('mask',{id:id+'-bite'});mask.append(svg('rect',{x:-10,y:-10,width:60,height:68,fill:'#fff'}),svg('circle',{cx:31,cy:15,r:4}),svg('circle',{cx:34.6,cy:20,r:3.7}),svg('circle',{cx:26.8,cy:12,r:2.4}));defs.append(mask);body.setAttribute('mask',`url(#${id}-bite)`);}
-    for(const side of [-1,1])for(let i=0;i<6;i++){
-      const deg=122+i*22,a=deg*Math.PI/180,x=20+Math.cos(a)*15.2,y=25+Math.sin(a)*15.2;
+    for(const side of [-1,1])for(let i=0;i<4;i++){
+      const deg=124+i*30,a=deg*Math.PI/180,x=20+Math.cos(a)*15.6,y=25+Math.sin(a)*15.6;
       const leaf=svg('g',{transform:`translate(${(side<0?x:40-x).toFixed(1)} ${y.toFixed(1)}) rotate(${side<0?deg+110:-(deg+110)})`});
-      const blade=svg('ellipse',{class:'lb-leaf',cx:0,cy:0,rx:2.1,ry:4.3,fill:i%2?mid:dark});blade.style.setProperty('--i',i);leaf.append(blade);body.append(leaf);
+      const blade=svg('ellipse',{class:'lb-leaf',cx:0,cy:0,rx:2.9,ry:5.2,fill:i%2?mid:dark});blade.style.setProperty('--i',i);leaf.append(blade);body.append(leaf);
     }
-    body.append(svg('circle',{class:'lb-disc',cx:20,cy:26,r:10,fill:`url(#${id}-disc)`,stroke:dark}));
-    plot.append(defs,body,svg('path',{d:'M14 41l6-3 6 3',fill:'none',stroke:dark,'stroke-width':1.6,'stroke-linecap':'round'}),svg('text',{x:20,y:31,'text-anchor':'middle','font-size':13,'font-weight':800,fill:ink},rank));
+    body.append(svg('circle',{class:'lb-disc',cx:20,cy:25,r:12,'stroke-width':1.4,fill:`url(#${id}-disc)`,stroke:dark}));
+    plot.append(defs,body,svg('path',{d:'M14 41l6-3 6 3',fill:'none',stroke:dark,'stroke-width':1.6,'stroke-linecap':'round'}),svg('text',{x:20,y:30.6,'text-anchor':'middle','font-size':16,'font-weight':800,fill:ink},rank));
     if(rank===4)plot.append(svg('circle',{cx:36,cy:26,r:1,fill:mid}),svg('circle',{cx:33.8,cy:29.4,r:.75,fill:mid}));
     return plot;
   }
-  /* a score's chip: its shade climbs from the surface at 40% to the series colour at 82%, then to a brighter one at
-     100%, so close high scores still read apart */
-  const heat = v => Math.max(0,Math.min(1,(v-.4)/.6));
+  /* a score's chip: one blue whose perceived lightness moves in even steps from 50% to 100%, so every point of
+     score is the same step of shade; at or below 50% it is the darkest */
+  const heat = v => Math.max(0,Math.min(1,(v-.5)/.5));
   function chip(cell, value, unverified, axis) {
     cell.replaceChildren();
     if (value == null) { cell.append(element('span','–',{class:'lb-none'})); return; }
-    const t=heat(value), span=element('span',whole(value),{class:`lb-chip${t>.85?' lb-peak':t>.5?' lb-hot':''}${unverified?' lb-unverified':''}`,tabindex:'0','data-axis':axis});
-    span.style.setProperty('--lb-heat',`${Math.round(Math.min(1,t/.7)*100)}%`);span.style.setProperty('--lb-top',`${Math.round(Math.max(0,(t-.7)/.3)*100)}%`);cell.append(span);
+    /* lightness runs .30 to .80 in the dark theme and .90 to .42 in the light one; past .62 dark text reads best */
+    const t=heat(value), ink=`${.30+.50*t>.62?' lb-ink-dark':''}${.90-.48*t<.62?' lb-ink-light':''}`;
+    const span=element('span',whole(value),{class:`lb-chip${ink}${unverified?' lb-unverified':''}`,tabindex:'0','data-axis':axis});
+    span.style.setProperty('--lb-t',t.toFixed(3));cell.append(span);
   }
   function overall(cell, r) {
     cell.replaceChildren();
@@ -124,7 +126,7 @@
       tr.querySelector('[data-name]').textContent = r.name + (same ? ' · '+[r.identity.model,r.identity.effort].filter(Boolean).join(' ') : '');
       const o=tr.querySelector('[data-col="overall"]');overall(o,r);o.dataset.sort=r.overall??'';
       data.axes.forEach(name=>{const cell=tr.querySelector(`[data-col="${name}"]`),a=r.axes[name];chip(cell,a.score,a.unverified,name);cell.dataset.sort=a.score??'';});
-      for(const [field,m] of Object.entries(r.metrics)) { const cell=tr.querySelector(`[data-col="${field}"]`);cell.textContent=measure(field,m.value);cell.dataset.sort=m.value??'';cell.title=`${m.count} observed`; }
+      for(const [field,m] of Object.entries(r.metrics)) { const cell=tr.querySelector(`[data-col="${field}"]`);cell.replaceChildren(element('span',measure(field,m.value),{class:'lb-m'}));cell.dataset.sort=m.value??'';cell.title=`${m.count} observed`; }
       table.tBodies[0].append(tr);
     });
     let explicit=false;try {explicit=localStorage.getItem(table.id+'.cols')!==null;} catch {}

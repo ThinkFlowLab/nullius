@@ -101,10 +101,19 @@ window.LeaderboardMotion = (() => {
         const next=measure(),now=box.offsetHeight;ease(height,now);height=now;
         /* nothing in a table is moved by a transform, which some engines draw blank: a row that moved, a cell that
            appears or one whose text changed fades in where it now is */
+        /* a cell's contents may move, never the cell: a row that moved slides what it holds from where it was, a row
+           that comes back fades and drops what it holds in */
+        const arriving=new Set();
+        const slide=(row,frames,duration)=>{if(reduced.matches)return;[...row.cells].forEach(cell=>[...cell.children].forEach(child=>child.animate(frames,{duration,easing:'cubic-bezier(.2,.7,.2,1)'})));};
         next.forEach(({rect,text},node)=>{
           const old=previous.get(node);if(!old||!rect.width||!rect.height)return;
+          if(node.tagName==='TD'&&arriving.has(node.parentElement))return;
           const appeared=!old.rect.width||!old.rect.height;
-          if(node.tagName==='TR'){if(!appeared&&Math.abs(old.rect.y-rect.y)>.5)[...node.cells].forEach(cell=>contents(cell,true,260));return;}
+          if(node.tagName==='TR'){
+            if(appeared){arriving.add(node);slide(node,[{opacity:0,transform:'translateY(-10px)'},{opacity:1,transform:'none'}],320);}
+            else{const dy=old.rect.y-rect.y;if(Math.abs(dy)>.5)slide(node,[{transform:`translateY(${dy}px)`},{transform:'none'}],320);}
+            return;
+          }
           if(appeared||old.text!==text)contents(node);
         });previous=next;
       });
