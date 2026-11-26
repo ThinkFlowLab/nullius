@@ -182,7 +182,7 @@
   },
   "setups": {
     "original": {
-      "summary": "LoCoMo's question answering as the paper ran it: its own task_eval/evaluate_qa.py on a whole conversation - the conversation in the prompt, cut to the reader's window, its questions 20 a call (10 for the gpt-3.5-turbo windows), or, with retrieval, the top-k of a database its own code builds, one question a call, as its RAG rows ran with gpt-3.5-turbo - its prompts, temperature 0 and token budget, scored by its own eval_question_answering, the mean over the conversation's questions.",
+      "summary": "LoCoMo runs its own task_eval/evaluate_qa.py as in the paper, with its prompts, temperature 0 and token budget.\n\nWithout retrieval, the prompt contains the whole conversation cut to the reader's window, with 20 questions per call (10 for the gpt-3.5-turbo windows). With retrieval, it contains the top-k entries from a database LoCoMo's own code builds, with one question per call, as in the paper's gpt-3.5-turbo RAG rows.\n\nIts own eval_question_answering scores the answers and takes the mean over the conversation's questions.",
       "models": [
         "gpt-4-turbo",
         "gpt-3.5-turbo",

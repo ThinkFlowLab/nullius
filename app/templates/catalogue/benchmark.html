@@ -33,13 +33,28 @@
   <div class="bench-body">
     <div class="bench-main">
       {% if versions %}
-      {#- Each version is the whole page once: its pin, proofs, setup, options, tasks and limitations. A click swaps them in place. -#}
+      {#- Each version is the whole page once: its pin, proofs, overview, options, tasks and limitations. A click swaps them in place. -#}
       <nav class="std-versions" aria-label="Versions">
         <span>Versions</span>
-        {% for x in versions %}<a href="{{ url_for('benchmark_page', key=b.key, v=x.version) }}"{% if x.current %} aria-current="page"{% endif %} data-ref="{{ x.ref }}"><b>{{ x.label or x.version }}</b><small>{{ x.proven }}/{{ x.checks }} proven{{ ' · default' if x.default else '' }} · {{ x.origin|capitalize }}</small></a>{% endfor %}
+        {% for x in versions %}<a href="{{ url_for('benchmark_page', key=b.key, v=x.version) }}"{% if x.current %} aria-current="page"{% endif %} data-ref="{{ x.ref }}">{% set name = x.choice_label or x.label or x.version %}<b{% if (x.label or x.version) != name %} title="{{ x.label }}"{% endif %}>{{ name }}</b><small>{{ x.proven }}/{{ x.checks }} proven{{ ' · default' if x.default else '' }} <span class="origin-tag {{ x.origin }}">{{ x.origin|capitalize }}</span></small></a>{% endfor %}
       </nav>
       {% endif %}
       {%- macro vattr(y, cls='') %} class="{{ (cls ~ ' std-version')|trim }}"{% if y.version %} data-version="{{ y.version }}"{% endif %}{% if not y.current %} hidden{% endif %}{% endmacro %}
+
+      {% if std and std.setups %}
+      <section class="bench-section" id="overview" aria-labelledby="overview-title">
+        <h2 id="overview-title">Overview</h2>
+        {% for y in views %}
+        {% if y.std and y.std.setups %}
+        <div{{ vattr(y) }}>
+          {% for paragraph in y.std.setups[0].summary.split('\n\n') %}
+          <p>{{ paragraph }}</p>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+      </section>
+      {% endif %}
 
       {% if std %}
       {#- The standard's proofs of it, per dataset (standard/proofs/prove.py): its controls as chips, their source in the title, then its units and leak checks; and Prove it, cli prove as a run. -#}
@@ -102,23 +117,6 @@
         </details>
         {% endif %}
       {%- endmacro %}
-      {%- if std.setups %}
-      <section class="bench-section std-setups" id="setups" aria-labelledby="setups-title">
-        <h2 id="setups-title">Setup</h2>
-        <div class="std-setup-list"><div class="std-setup-row">
-          <h3>Original</h3>
-          <div class="std-setup-meta"><span><b>Model</b> Choose in the run builder</span></div>
-        </div></div>
-          <details class="std-setup-detail"><summary>How it runs</summary>
-            {% for y in views %}
-            <div{{ vattr(y, 'std-setup-description') }}>
-            <p>{{ y.std.setups[0].summary }}</p>
-            <small class="mono">{{ y.std.ref }}:original</small>
-            </div>
-            {% endfor %}
-          </details>
-      </section>
-      {%- endif %}
       <section class="bench-section std-proofs" id="standard" aria-labelledby="standard-title">
         <h2 id="standard-title">Proofs</h2>
         {% for x in views %}
@@ -207,7 +205,7 @@
       {% endif %}
 
       {% for y in views %}{% set sfx = '' if y.default else '-' ~ y.version %}
-      <div{{ vattr(y) }}>
+      <div{{ vattr(y, 'bench-notes') }}>
       {% if y.changes %}
       <section class="bench-section" aria-labelledby="changes{{ sfx }}">
         <h2 id="changes{{ sfx }}">Changes from official</h2>
@@ -220,21 +218,17 @@
         <ul class="bench-list">{% for note in y.b.good_to_know %}<li>{{ note }}</li>{% endfor %}</ul>
       </section>
       {% endif %}
-      {% if y.b.upstream_limitations or y.b.limitations %}
-      <div class="bench-cols one">
-        {% if y.b.upstream_limitations %}
-        <section class="bench-section" aria-labelledby="upstream-limitations{{ sfx }}">
-          <h2 id="upstream-limitations{{ sfx }}">Upstream limitations</h2>
-          <ul class="bench-list">{% for l in y.b.upstream_limitations %}<li>{{ l }}</li>{% endfor %}</ul>
-        </section>
-        {% endif %}
-        {% if y.b.limitations %}
-        <section class="bench-section" aria-labelledby="limitations{{ sfx }}">
-          <h2 id="limitations{{ sfx }}">Nullius limitations</h2>
-          <ul class="bench-list">{% for l in y.b.limitations %}<li>{{ l }}</li>{% endfor %}</ul>
-        </section>
-        {% endif %}
-      </div>
+      {% if y.b.upstream_limitations %}
+      <section class="bench-section" aria-labelledby="upstream-limitations{{ sfx }}">
+        <h2 id="upstream-limitations{{ sfx }}">Upstream limitations</h2>
+        <ul class="bench-list">{% for l in y.b.upstream_limitations %}<li>{{ l }}</li>{% endfor %}</ul>
+      </section>
+      {% endif %}
+      {% if y.b.limitations %}
+      <section class="bench-section" aria-labelledby="limitations{{ sfx }}">
+        <h2 id="limitations{{ sfx }}">Nullius limitations</h2>
+        <ul class="bench-list">{% for l in y.b.limitations %}<li>{{ l }}</li>{% endfor %}</ul>
+      </section>
       {% endif %}
       </div>
       {% endfor %}
@@ -275,7 +269,7 @@
       {% endif %}
       {%- if b.published %}
       {#- A Harbor benchmark runs as published through Harbor's own agent for it, on any model. -#}
-      <section class="bench-section std-setups" id="published" aria-labelledby="published-title">
+      <section class="bench-section" id="published" aria-labelledby="published-title">
         <h2 id="published-title">As published</h2>
         <p>Harbor's <span class="mono">{{ b.published.agent }}</span>: {{ b.published.says }}</p>
       </section>
