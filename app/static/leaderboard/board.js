@@ -62,9 +62,16 @@
     }
     if(body.children.length)pop.append(table);
     focusBefore = target; pop.hidden = false;
-    /* the card never covers what it explains: below it, else above, else beside it; only a window too small for any overlaps */
+    /* the card never covers what it explains: a radar's whole chart, beside it, else the score itself: below it, else
+       above, else beside it; only a window too small for any overlaps */
     const box = target.getBoundingClientRect(), w=pop.offsetWidth, h=pop.offsetHeight, gap=8, edge=12;
     const clamp=(v,lo,hi)=>Math.max(lo,Math.min(v,hi));
+    const chart=target.closest('[data-chart^="radars-"]')?.querySelector('svg')?.getBoundingClientRect();
+    if (chart) {
+      const top=clamp(box.top+box.height/2-h/2,edge,innerHeight-h-edge);
+      const side=innerWidth-chart.right-gap-edge>=w?chart.right+gap:chart.left-gap-edge>=w?chart.left-gap-w:null;
+      if (side!=null) {pop.style.left=`${side}px`;pop.style.top=`${top}px`;return;}
+    }
     let left=clamp(box.left,edge,innerWidth-w-edge), top;
     if (innerHeight-box.bottom-gap-edge>=h) top=box.bottom+gap;
     else if (box.top-gap-edge>=h) top=box.top-gap-h;
