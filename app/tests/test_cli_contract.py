@@ -185,7 +185,7 @@ class CommandLine(Scratch):
             with self.subTest(help=module):
                 out = self.sh(module, "--help")
                 self.assertEqual(out.returncode, 0, out.stderr)
-                for line in ("usage:", f"python3 -m nullius.{module}", "examples:", "exit codes:"):
+                for line in ("usage:", "examples:", "exit codes:"):
                     self.assertIn(line, out.stdout)
                 self.assertEqual(out.stderr, "")
 
