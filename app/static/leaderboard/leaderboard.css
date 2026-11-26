@@ -123,12 +123,12 @@
 .lb-track em { width: 11px; height: 11px; margin: -5.5px; transform: rotate(45deg); background: var(--series-2); box-shadow: 0 0 0 2px var(--surface); pointer-events: none; z-index: 3; }
 
 /* radars */
-.lb-chart-pair svg { display: block; width: 100%; max-height: 360px; overflow: visible; }
+.lb-chart-pair svg { display: block; width: 100%; max-height: 400px; overflow: visible; }
 .lb-ring { fill: none; stroke: var(--border-soft); }
 .lb-axis-label { cursor: help; outline: none; }
 .lb-axis-label:focus-visible { text-decoration: underline; }
-.lb-chart-pair svg text.lb-axis-label { font-size: 13.5px; }
-.lb-chart-pair svg .lb-axis-label .lb-me { font-size: 15px; }
+.lb-chart-pair svg text.lb-axis-label { font-size: 14.5px; }
+.lb-chart-pair svg .lb-axis-label .lb-me { font-size: 16px; }
 .lb-pill { fill: color-mix(in oklab, var(--accent) 16%, transparent); stroke: color-mix(in oklab, var(--accent) 28%, transparent); opacity: 0; cursor: help; transition: opacity 150ms; }
 .lb-label:is(:hover, :focus-within) .lb-pill { opacity: 1; }
 .lb-chart-pair svg .lb-label:is(:hover, :focus-within) text { fill: var(--accent); }

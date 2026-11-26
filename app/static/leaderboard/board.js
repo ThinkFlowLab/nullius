@@ -311,15 +311,18 @@
   /* radars: rings at half and whole, a spoke per axis, the chosen agent filled, the comparison dashed */
   function radar(group) {
     const container=document.querySelector(`[data-chart="radars-${group}"]`), names=data[group], current=row(selected);if(!current)return;
-    const cx=200, cy=160, n=names.length, at=(i,v)=>{const a=-Math.PI/2+i*2*Math.PI/n;return [cx+Math.cos(a)*v*110,cy+Math.sin(a)*v*110];};
+    const cx=200, cy=178, R=126, n=names.length, at=(i,v)=>{const a=-Math.PI/2+i*2*Math.PI/n;return [cx+Math.cos(a)*v*R,cy+Math.sin(a)*v*R];};
     const points=list=>list.map(p=>p.map(v=>v.toFixed(1)).join(',')).join(' ');
-    const plot=svg('svg',{viewBox:'-70 -20 540 378',role:'group','aria-label':`${group} profile`,'data-cx':cx,'data-cy':cy});
+    const plot=svg('svg',{viewBox:'-72 -16 544 386',role:'group','aria-label':`${group} profile`,'data-cx':cx,'data-cy':cy});
     for(const v of [.5,1])plot.append(svg('polygon',{points:points(names.map((_,i)=>at(i,v))),class:'lb-ring','data-node':'ring'+v}));
     names.forEach((name,i)=>{
-      const [ex,ey]=at(i,1),[lx,ly]=at(i,1.27),anchor=lx<cx-10?'end':lx>cx+10?'start':'middle';
+      /* a label's nearest edge sits the same gap from its corner whichever way it faces: above a corner it ends there,
+         below it starts there, beside it it is centred on it */
+      const [ex,ey]=at(i,1),ux=(ex-cx)/R,uy=(ey-cy)/R,lx=ex+ux*14,anchor=ux<-.2?'end':ux>.2?'start':'middle';
+      const block=36, top=ey+uy*14-(uy<-.3?block:uy>.3?0:block/2), ly=top+14+4;
       plot.append(svg('line',{x1:cx,y1:cy,x2:ex,y2:ey,class:'lb-ring','data-node':'spoke'+i}));
       const text=svg('text',{x:lx,y:ly-4,'text-anchor':anchor,tabindex:0,'data-axis':name,'data-node':'label:'+name,class:'lb-axis-label'});
-      text.append(document.createTextNode(name),svg('tspan',{x:lx,dy:18,class:'lb-me'},whole(current.axes[name].score)));
+      text.append(document.createTextNode(name),svg('tspan',{x:lx,dy:19,class:'lb-me'},whole(current.axes[name].score)));
       const v=compared(name);if(versus!=='average'&&v!=null)text.append(svg('tspan',{dx:5,class:'lb-versus'},whole(v)));
       const label=svg('g',{class:'lb-label','data-node':'pill:'+name});label.append(svg('rect',{class:'lb-pill',rx:8,'data-axis':name}),text);plot.append(label);
     });
