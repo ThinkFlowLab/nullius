@@ -90,6 +90,23 @@ def write_shard(root, name, units, index, of, *, total=10, launch="L1", model="g
     return d
 
 
+class JobFiles(unittest.TestCase):
+    """A job's config.json and result.json are read while a run goes on: a write that fails leaves the last whole one."""
+
+    def test_a_write_that_fails_leaves_the_file_as_it_was(self):
+        tmp = tempfile.mkdtemp(prefix="nullius-jobfiles-"); self.addCleanup(shutil.rmtree, tmp, True)
+        d = write_shard(tmp, "j", ["u-1"], 1, 1)
+        files = [os.path.join(d, n) for n in ("config.json", "result.json")]
+        before = [open(p).read() for p in files]
+        with self.assertRaises(TypeError):
+            job.write_result(d, "j", 0.0, 1.0, [], 1, budget={"cap": object()})
+        with self.assertRaises(TypeError):
+            job.write_config(d, job="j", bench=BENCH, other=AGENT, model="m", provider="openai", dataset="all", units=["u-1"],
+                             concurrency=1, granted=True, options={"bad": object()})
+        self.assertEqual([open(p).read() for p in files], before)
+        self.assertEqual(sorted(n for n in os.listdir(d) if not os.path.isdir(os.path.join(d, n))), ["config.json", "result.json"])
+
+
 class Merge(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="nullius-merge-"); self.addCleanup(shutil.rmtree, self.tmp, True)
@@ -106,6 +123,8 @@ class Merge(unittest.TestCase):
         self.assertEqual(got["notes"], [])
         j = parse.parse_job(got["out"])
         self.assertEqual((j.job_id, j.n_tasks, j.n_total_trials, len(j.trials)), ("run", 10, 10, 10))
+        # a merge is a job of its own: a new identity, none of its shards'
+        self.assertEqual((j.uid_source, len({parse.parse_job(d).uid for d in dirs} | {j.uid})), ("declared", 4))
         self.assertEqual(sorted(t.trial_name for t in j.trials), sorted(f"t-{i}__u{i:04d}" for i in range(10)))
         self.assertEqual(sum(1 for t in j.trials if t.reward == 1.0), 5)                  # the odd ones pass; t-4 ended in an error
         self.assertEqual(j.n_errored_trials, 1)
@@ -122,6 +141,19 @@ class Merge(unittest.TestCase):
         self.assertEqual(read((os.path.join(src, "result.json")))["standard"]["job"], f"run-shard-{shard.of('t-1', 3)}of3")
         self.assertTrue(os.path.samefile(os.path.join(src, "workspace", "solution.py"),
                                          os.path.join(got["out"], "t-1__u0001", "workspace", "solution.py")))
+
+    def test_the_merged_jobs_config_is_whole_before_its_result_is_written(self):
+        seen = []
+        real = merge.ondisk.write_whole
+
+        def write_whole(path, data, mode=None):
+            if os.path.basename(path) == "result.json" and os.path.dirname(path) == out:
+                seen.append(read(os.path.join(out, "config.json"))["standard"].get("uuid"))
+            return real(path, data, mode)
+        out = os.path.join(self.tmp, "out", "run")
+        with patch.object(merge.ondisk, "write_whole", write_whole):
+            merge.merge(self.shards(), out)
+        self.assertEqual(seen, [read(os.path.join(out, "config.json"))["standard"]["uuid"]])
 
     def retried(self, dirs, retries=1):
         """The launch allowed each attempt one retry, and the first shard's first attempt took it: its try

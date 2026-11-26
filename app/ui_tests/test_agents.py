@@ -136,20 +136,20 @@ class Tabs(unittest.TestCase):
         self.assertNotIn("agent.task/v1", card[card.index(">"):card.index("</article>")])   # the detail is on its page
         self.assertEqual(self.get("/agents/nope").status_code, 404)
 
-    def test_a_benchmarks_own_agents_are_listed_behind_the_from_filter(self):
+    def test_a_benchmarks_own_agents_are_listed_behind_the_origin_filter(self):
         with patch.object(definitions, "load", _LOAD):
             html = self.get("/agents").get_data(as_text=True)
             table = self.get("/agents?view=table").get_data(as_text=True)
-        menu = html[html.index('data-filter-menu="from"'):]
+        menu = html[html.index('data-filter-menu="origin"'):]
         menu = menu[:menu.index("</fieldset>")]
-        self.assertIn('data-value="bundled" checked> Nullius', menu)
+        self.assertIn('data-value="official" checked> Official', menu)
         self.assertIn('data-value="benchmark"> A benchmark&#39;s own', menu)     # one click away, off by default
         card = html[html.index('id="osworld1-openai-cua"'):]
         card = card[:card.index("</article>")]
-        self.assertIn('data-f-from="benchmark&#10;"', card)
+        self.assertIn('data-f-origin="benchmark&#10;"', card)
         self.assertIn('href="/benchmarks/osworld1"', card)
         self.assertIn('<div class="bench-card-setup">computer-use-preview</div>', card)
-        self.assertIn('<div class="bench-card-runs run-tags" role="group" aria-label="Kind, Uses, Example"><span class="std-tag">Computer use</span></div>', card)
+        self.assertIn('<div class="bench-card-runs run-tags" role="group" aria-label="Kind, Origin, Uses, Example"><span class="origin-tag benchmark">A benchmark&#39;s own</span><span class="std-tag">Computer use</span></div>', card)
         self.assertIn('<div class="bench-card-foot"><span class="bench-card-tags"><span class="std-tag">Its own script</span></span>'
                       '<span class="bench-harness">OSWorld1</span></div>', card)                   # the builder's foot: its protocol, where it comes from
         self.assertNotIn("Ports proven", card)
@@ -169,8 +169,8 @@ class Tabs(unittest.TestCase):
                                                                           "evocua", "autoglm", "autoglm-v", "mano", "muse-spark")]))
         self.assertNotIn("osworld1", dict(cards)["osworld2-m3"].split("&#10;"))         # another benchmark's own runs it alone
         own = html[html.index('id="osworld1-m3"'):]
-        self.assertIn('data-unless-from="runs_on"', own[:own.index(">")])                     # Runs on its benchmark shows it, whatever From says
-        self.assertNotIn("data-unless-from", html[html.index('id="codex"'):][:200])
+        self.assertIn('data-unless-origin="runs_on"', own[:own.index(">")])                     # Runs on its benchmark shows it, whatever Origin says
+        self.assertNotIn("data-unless-origin", html[html.index('id="codex"'):][:200])
         # the count the card shows and the filter read one record
         card = html[html.index('id="codex"'):]
         n = card[:card.index(">")].split('data-f-runs_on="', 1)[1].split('"', 1)[0].count("&#10;")
@@ -306,7 +306,7 @@ class Tabs(unittest.TestCase):
         d = json.loads(path.read_text())
         proven = d.pop("proven"); d.pop("offers")
         d["default"], d["upstream"] = "1.0", {"license": "MIT"}
-        d["versions"] = {"2.0": {"install": {"npm": ["fake-acp@2.0"]}, "proven": {}},
+        d["versions"] = {"2.0": {"upstream": {"origin": "experiment"}, "install": {"npm": ["fake-acp@2.0"]}, "proven": {}},
                          "1.0": {"install": {"npm": ["fake-acp@1.0"]}, "proven": proven}}
         path.write_text(json.dumps(d))
         self.stack.enter_context(patch.object(definitions, "load", lambda kind, root_=None, every=False: _LOAD(kind, str(root), every=every)))
@@ -327,14 +327,16 @@ class Tabs(unittest.TestCase):
         self.versioned()
         html = self.get("/agents").get_data(as_text=True)
         self.assertEqual(html.count('id="fake"'), 1)
+        self.assertIn('data-f-origin="official&#10;experiment&#10;"', html)
+        self.assertIn('data-filter-menu="origin"', html)
         self.assertIn('Fake agent</a> 1.0</span>', html)                                     # its default version beside its name
         self.assertIn("v1.0 · 2 versions", self.get("/agents?view=table").get_data(as_text=True))
         html = self.get("/agents/fake").get_data(as_text=True)                          # the default
         self.assertIn('<nav class="std-versions"', html)
-        self.assertIn('href="/agents/fake?v=1.0" aria-current="page"><b>1.0</b><small>2/7 proven · default</small>', html)
+        self.assertIn('href="/agents/fake?v=1.0" aria-current="page"><b>1.0</b><small>2/7 proven · default · Official</small>', html)
         self.assertIn('href="/new-run?standard=fakebench&amp;other=fake@1.0"', html)
         html = self.get("/agents/fake?v=2.0").get_data(as_text=True)
-        self.assertIn('aria-current="page"><b>2.0</b><small>0/7 proven</small>', html)
+        self.assertIn('aria-current="page"><b>2.0</b><small>0/7 proven · Experiment</small>', html)
         self.assertIn("which Fake agent 2.0 does not offer", html)                       # its own proofs, none yet
         self.assertIn('<input type="hidden" name="version" value="2.0">', html)
         self.assertEqual(self.get("/agents/fake?v=9").status_code, 404)

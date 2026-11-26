@@ -24,6 +24,11 @@ def requirements(bench: dict, names: List[str]) -> Dict[str, dict]:
     return {n: h[n] for n in names if n in h}
 
 
+def label(bench: dict, name: str) -> str:
+    """A requirement's name as a page shows it: its ``label``, else its key."""
+    return ((bench.get("host") or {}).get(name) or {}).get("label") or name
+
+
 def in_image(bench: dict, names: List[str]) -> List[str]:
     """The named requirements a Docker Original setup's image installs (its
     ``install``); the rest, a GPU above all, no image can provide."""

@@ -187,6 +187,15 @@ class Write(Catalogue):
         self.assertEqual(definitions.problems(dict(raw, _here=os.path.dirname(self.root)), "agent"), [])
         self.assertEqual(match.fit(BENCH, definitions.get("agent", "flat", self.root)), [])
 
+    def test_new_version_is_not_stopped_by_a_leftover_temporary_name(self):
+        self.new_version("bot", "1.1.0")
+        path = os.path.join(self.user, "agents", "bot", "agent.json")
+        os.makedirs(path + ".part")                                  # another writer's name: never this write's own
+        self.new_version("bot", "1.2.0")
+        self.assertEqual(list(self.read("bot", user=True)["versions"])[:2], ["1.2.0", "1.1.0"])
+        with open(path) as f:
+            self.assertTrue(f.read().endswith("}\n"))
+
     def test_new_version_copies_the_default_and_refuses_a_duplicate(self):
         self.new_version("bot", "1.1.0")
         self.assertEqual(self.read("bot", user=True)["versions"]["1.1.0"],
@@ -346,6 +355,11 @@ class ForkVersion(unittest.TestCase):
         self.assertEqual((fork["upstream"]["repository"], fork["upstream"]["tested"]), (self.fork, self.fixed))
         self.assertNotIn("tag", fork["upstream"])                                  # the published tag is not the fork's
         self.assertEqual(fork["_ref"], "toy@fork")
+        self.assertEqual(fork["_origins"], {"1": "official", "fork": "experiment"})
+        for upstream, said in (({"origin": "official"}, "official"), ({"fixes": ["one"]}, "experiment"), ({}, "experiment")):
+            got = definitions.resolve(dict(self.bench({}, upstream), _origin="experiment"), "fork")      # else its entry's
+            self.assertEqual(definitions.origin_of(got), said)
+        self.assertIn("upstream.origin: one of ('official', 'experiment')", definitions._upstream({"license": "MIT", "origin": "community"}))
         tagged = definitions.resolve(self.bench({"repository": self.upstream, "tag": "v1.0.0", "tested": self.published},
                                                 {"repository": self.fork, "tag": "fix-1", "tested": self.fixed}), "fork")
         self.assertEqual(tagged["upstream"]["tag"], "fix-1")

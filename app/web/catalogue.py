@@ -57,7 +57,8 @@ def _card(row, sheet) -> dict:
     b, ds, tasks, unit, needs = row["b"], row["datasets"], row["tasks"], row["unit"], row["host"]
     return {"key": b.key, "href": url_for("benchmark_page", key=b.key), "shelf": b.origin, "keys": " ".join([b.key, *b.datasets]),
             "search": " ".join([b.title, b.category, b.key, *(d.title for d in ds), *b.datasets]),
-            "category": b.category, "origin": {"text": b.label, "class": b.origin, "value": b.origin},
+            "category": b.category, "origin": [{"text": o.capitalize(), "class": o, "value": o} for o in row["origins"]],
+            "default_origin": {"text": b.label, "class": b.origin, "value": b.origin},
             "icon": sheet and f"{sheet}#bm-{b.key}", "title": b.title, "domain": b.domain,
             "runs": [{"text": label, "class": "rt-" + way, "title": "Runs with " + name, "value": way}
                      for way, (label, name) in RUNS_WITH.items() if way in b.harness],
@@ -101,7 +102,8 @@ def benchmark_page(key):
         vb, vds = cat.in_version(b, x["version"]) if x["version"] and not x["default"] else (b, cat.datasets_of(b))
         # where each dataset's data comes from, one row per way it runs - each fetched by its harness, never by hand
         std_def = standard_definitions.find(every, x["ref"]) if std else None
-        views.append(dict(x, std=page, b=vb, ds=vds, tasks=cat.tasks_of(vb, vds),
+        views.append(dict(x, std=page, b=vb, origin=standard_definitions.origin_of(std_def) if std_def else b.origin, ds=vds,
+                          changes=[standard_definitions.fix_parts(f) for f in (std_def or {}).get("upstream", {}).get("fixes") or []], tasks=cat.tasks_of(vb, vds),
                           data={d.key: sources.of(d, b.harness, std_def, only=len(vds) == 1) for d in vds},
                           current=(x["version"] == v) if v else x["default"], **(_proven(page) if page else {})))
     shown = next(x for x in views if x["current"])

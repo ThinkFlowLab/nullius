@@ -1,16 +1,21 @@
 """Opening a workspace again over an unchanged ATIF or OpenTelemetry source
 leaves the converted job as it was, so its cached parse is used; a changed
-source is converted and parsed again."""
+source is converted and parsed again. Each source has a folder and an
+identity of its own, whatever its basename."""
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
 
 from nullius import importers, workspace
+from nullius.importers import atif, otel
+from nullius.runs import parse
 from tests.harnesses.test_atif import minimal, write_doc
 from tests.test_cli_contract import otlp_doc
 
@@ -60,6 +65,238 @@ class UnchangedSource(unittest.TestCase):
         edited["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["attributes"] = [
             {"key": "k", "value": {"stringValue": "v"}}]
         self.check(lambda: write_doc(self.src, "export.json", edited))
+
+
+
+def trials(job_dir):
+    return sorted(n for n in os.listdir(job_dir) if os.path.isdir(os.path.join(job_dir, n)))
+
+
+def forget_id(job_dir, **changes):
+    """The job as a conversion from before ids wrote it, with *changes* to its config."""
+    path = os.path.join(job_dir, "config.json")
+    with open(path) as fh:
+        cfg = json.load(fh)
+    del cfg["nullius"]
+    cfg.update(changes)
+    with open(path, "w") as fh:
+        json.dump(cfg, fh, indent=2)
+
+
+class OneFolderPerSource(unittest.TestCase):
+    """Two sources of one basename, ``a/run`` and ``b/run``, in one imports folder."""
+
+    SOURCES = {"atif": lambda d, n: write_doc(d, f"{n}.json", minimal()),
+               "otel": lambda d, n: write_doc(d, f"{n}.json", otlp_doc())}
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="nullius-import-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def sources(self, fmt):
+        a, b, out = (str(self.tmp / fmt / p) for p in ("a/run", "b/run", "imported"))
+        self.SOURCES[fmt](a, "one")
+        self.SOURCES[fmt](b, "two")
+        return a, b, out
+
+    def test_two_sources_of_one_basename_get_two_folders_and_two_identities(self):
+        for fmt in self.SOURCES:
+            with self.subTest(fmt):
+                a, b, out = self.sources(fmt)
+                [ja], [jb] = open_again(a, out), open_again(b, out)
+                self.assertNotEqual(ja, jb)
+                ua, ub = parse.parse_job(ja), parse.parse_job(jb)
+                self.assertEqual((ua.uid_source, ub.uid_source), ("declared", "declared"))
+                self.assertNotEqual(ua.uid, ub.uid)
+                kept, before = trials(ja), mtimes(jb)
+                time.sleep(0.05)
+                self.assertEqual(open_again(a, out), [ja])               # reconverted: its own folder
+                self.assertEqual((parse.parse_job(ja).uid, trials(ja)), (ua.uid, kept))
+                self.assertEqual(mtimes(jb), before)                     # the other's untouched
+
+    def test_one_source_in_two_workspaces_has_one_identity(self):
+        for fmt in self.SOURCES:
+            with self.subTest(fmt):
+                a, _, out = self.sources(fmt)
+                [one], [two] = open_again(a, out), open_again(a, out + "-elsewhere")
+                self.assertEqual(parse.parse_job(one).uid, parse.parse_job(two).uid)
+                copy = str(self.tmp / fmt / "copied")                    # a copied job keeps it
+                shutil.copytree(one, copy)
+                self.assertEqual(parse.parse_job(copy).uid, parse.parse_job(one).uid)
+
+    def test_a_conversion_from_before_ids_keeps_its_folder_and_identity(self):
+        for fmt in self.SOURCES:
+            with self.subTest(fmt):
+                a, b, out = self.sources(fmt)
+                [ja] = open_again(a, out)
+                cfg_path = os.path.join(ja, "config.json")
+                link = str(self.tmp / fmt / "link")                      # recorded as typed, through a link
+                os.symlink(a, link)
+                forget_id(ja, **{"atif": {"command": f"python3 -m nullius.importers.cli {link}"},
+                                 "otel": {"datasets": [{"name": "otel", "path": link, "n_tasks": 1}]}}[fmt])
+                old = parse.parse_job(ja)
+                self.assertEqual(old.uid_source, "derived")
+                self.assertEqual(open_again(a, out), [ja])               # reconverted where it was, no id gained
+                with open(cfg_path) as fh:
+                    self.assertNotIn("nullius", json.load(fh))
+                self.assertEqual(parse.parse_job(ja).uid, old.uid)
+                [jb] = open_again(b, out)                                # another source: not that folder
+                self.assertNotEqual(jb, ja)
+                self.assertEqual(parse.parse_job(ja).uid, old.uid)
+
+    def test_a_conversion_from_before_ids_with_names_of_colliding_paths_keeps_its_folder(self):
+        src, out = self.tmp / "x" / "run", str(self.tmp / "imported")
+        write_doc(str(src / "a"), "b.json", minimal())
+        write_doc(str(src), "a__b.json", minimal())
+        [job] = atif.convert(str(src), out)
+        self.assertEqual(len([t for t in trials(job) if t.startswith("a__b__")]), 2)
+        forget_id(job, command="python3 -m nullius.importers.cli run")
+        uid = parse.parse_job(job).uid
+        self.assertEqual(atif.convert(str(src), out), [job])
+        self.assertEqual(parse.parse_job(job).uid, uid)
+
+    def test_one_path_in_two_formats_is_two_sources(self):
+        src, out = str(self.tmp / "both"), str(self.tmp / "imported")
+        write_doc(src, "export.json", otlp_doc())
+        [jo] = otel.convert(src, out)
+        kept, uo = trials(jo), parse.parse_job(jo).uid
+        write_doc(src, "atif.json", minimal())
+        [ja] = atif.convert(src, out)
+        self.assertNotEqual(ja, jo)
+        self.assertNotEqual(parse.parse_job(ja).uid, uo)
+        self.assertEqual((trials(jo), parse.parse_job(jo).uid), (kept, uo))
+
+    def test_a_named_folder_of_another_source_is_refused(self):
+        for legacy, parent in ((False, False), (True, False), (True, True)):
+            with self.subTest(legacy=legacy, parent=parent):
+                a, b, out = self.sources("atif")
+                [ja] = atif.convert(a, out, job_name="mine")
+                if parent:                                               # every old trial is under it too
+                    b = os.path.dirname(a)
+                    forget_id(ja, command="python3 -m nullius.importers.cli a/run")
+                elif legacy:
+                    forget_id(ja)
+                before = mtimes(ja)
+                with self.assertRaises(SystemExit):
+                    atif.convert(b, out, job_name="mine")
+                self.assertEqual(mtimes(ja), before)
+                self.assertEqual(atif.convert(a, out, job_name="mine"), [ja])    # its own source still may
+                shutil.rmtree(self.tmp / "atif")
+
+    def test_a_folder_from_before_ids_not_shown_to_be_the_source_is_never_reused(self):
+        def unreadable(job_dir):
+            with open(os.path.join(job_dir, "config.json"), "w") as fh:
+                fh.write("{")
+        cases = {"another format": (atif, forget_id),
+                 "no recorded path": (otel, lambda j: forget_id(j, datasets=[])),
+                 "a relative path": (otel, lambda j: forget_id(j, datasets=[{"name": "otel", "path": "a/run"}])),
+                 "an unreadable config": (otel, unreadable)}
+        for case, (module, change) in cases.items():
+            with self.subTest(case):
+                shutil.rmtree(self.tmp / "otel", True)
+                a, b, out = self.sources("otel")
+                if module is atif:
+                    b = str(self.tmp / "atif-src")
+                    write_doc(b, "one.json", minimal())
+                name = f"{module.NAME}__{os.path.basename(b)}"           # the name b would take
+                [jo] = otel.convert(a, out, job_name=name)
+                change(jo)
+                before = mtimes(jo)
+                with self.assertRaises(SystemExit):
+                    module.convert(b, out, job_name=name)
+                self.assertEqual(mtimes(jo), before)                     # its trials untouched
+                [jb] = module.convert(b, out)                            # an automatic name: a folder of its own
+                self.assertNotEqual(jb, jo)
+                self.assertEqual(mtimes(jo), before)
+
+    def test_a_refresh_replaces_the_config_whole(self):
+        for fmt, module in (("atif", atif), ("otel", otel)):
+            with self.subTest(fmt):
+                a, _, out = self.sources(fmt)
+                [job] = module.convert(a, out)
+                path = os.path.join(job, "config.json")
+                Path(path).write_text(json.dumps(json.loads(Path(path).read_text())))   # to be written again
+                with open(path, encoding="utf-8") as held:                      # a reader mid-refresh
+                    before = held.read()
+                    module.convert(a, out)
+                    held.seek(0)
+                    self.assertEqual(held.read(), before)
+                self.assertNotEqual(Path(job, "config.json").read_text(), before)
+
+    def test_two_first_conversions_at_once_take_two_folders(self):
+        a, b, out = self.sources("otel")
+        real = importers.place
+
+        def slow(*args, **kwargs):
+            got = real(*args, **kwargs)
+            time.sleep(0.2)                                              # the other conversion's turn
+            return got
+        importers.place = slow
+        self.addCleanup(setattr, importers, "place", real)
+        done = {}
+        threads = [threading.Thread(target=lambda r: done.update({r: otel.convert(r, out)[0]}), args=(r,))
+                   for r in (a, b)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertNotEqual(done[a], done[b])
+        self.assertTrue(trials(done[a]) and trials(done[b]))
+
+    def test_a_conversion_never_publishes_a_source_older_than_one_published_meanwhile(self):
+        def another_trace():
+            doc = otlp_doc()
+            doc["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["traceId"] = "1" * 32
+            return doc
+        later = {"atif": minimal, "otel": another_trace}
+        for fmt, module, read in (("atif", atif, "_read_all"), ("otel", otel, "_read")):
+            with self.subTest(fmt):
+                a, _, out = self.sources(fmt)
+                real, paused, resume = getattr(module, read), threading.Event(), threading.Event()
+
+                def pausing(root):
+                    got = real(root)
+                    if threading.current_thread().name == "first" and not paused.is_set():
+                        paused.set()                                     # the first has read the source
+                        resume.wait(10)
+                    return got
+                setattr(module, read, pausing)
+                self.addCleanup(setattr, module, read, real)
+                first = threading.Thread(target=module.convert, args=(a, out), name="first")
+                first.start()
+                self.assertTrue(paused.wait(10))
+                write_doc(a, "later.json", later[fmt]())                 # the source grows, and is converted
+                [job] = module.convert(a, out)
+                published = trials(job)
+                resume.set()
+                first.join(10)
+                self.assertEqual(len(published), 2)
+                self.assertEqual(trials(job), published)                 # the first's older read is not published
+                setattr(module, read, real)
+
+    def test_conversions_from_before_ids_of_two_sources_of_one_basename_differ(self):
+        for fmt in self.SOURCES:
+            with self.subTest(fmt):
+                a, b, out = self.sources(fmt)
+                [ja], [jb] = open_again(a, out), open_again(b, out + "-elsewhere")
+                self.assertEqual(os.path.basename(ja), os.path.basename(jb))
+                forget_id(ja)
+                forget_id(jb)
+                self.assertNotEqual(parse.parse_job(ja).uid, parse.parse_job(jb).uid)
+
+    def test_a_relative_root_is_its_real_path_from_any_directory(self):
+        a, _, out = self.sources("atif")
+        here = os.getcwd()
+        self.addCleanup(os.chdir, here)
+        os.chdir(self.tmp / "atif")
+        [ja] = atif.convert("a/run", out)
+        with open(os.path.join(ja, "config.json")) as fh:
+            self.assertIn(os.path.realpath(a), json.load(fh)["command"])
+        forget_id(ja, command="python3 -m nullius.importers.cli a/run")   # an older one, recorded as typed
+        uid = parse.parse_job(ja).uid
+        os.chdir(self.tmp)
+        self.assertEqual(atif.convert(a, out), [ja])
+        self.assertEqual(parse.parse_job(ja).uid, uid)                   # its identity's inputs kept
 
 
 if __name__ == "__main__":

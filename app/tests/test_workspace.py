@@ -237,6 +237,15 @@ class Cache(unittest.TestCase):
             workspace.SCHEMA = old
         self.assertFalse(from_cache)
 
+    def test_a_cache_of_another_field_set_is_not_current(self):
+        """Two changes that each add a field and bump parse.SCHEMA to one value: a cache
+        written by one is not read as current by the other, whose new field would read blank."""
+        with patch.object(workspace, "_JOB_FIELDS", tuple(n for n in workspace._JOB_FIELDS if n != "uid")):
+            workspace.load_job(self.ws, self.job_dir)
+        job, from_cache = workspace.load_job(self.ws, self.job_dir)
+        self.assertFalse(from_cache)
+        self.assertEqual(job.uid, parse.parse_job(self.job_dir).uid)
+
     def test_two_requests_writing_the_same_cache_at_once_both_return(self):
         """The job page and its /live poll both re-parse a job whose files keep
         changing, and both wrote the cache through one shared `<hash>.json.tmp`:

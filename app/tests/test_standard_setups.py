@@ -141,6 +141,12 @@ class Choosing(unittest.TestCase):
         self.assertTrue(any("side_models" in p for p in definitions.problems(
             dict(self.b, setups={"original": dict(SETUPS["original"], side_models=["x", "x"])}), "benchmark")))
 
+    def test_paper_models_none_of_which_can_run_refuse_the_original_and_leave_the_model_setup(self):
+        b = dict(self.b, setups=dict(SETUPS, original=dict(SETUPS["original"], comparable=[])))
+        for model in ("", "paper-1"):
+            self.assertEqual(definitions.setup(b, "original", model, "openrouter"), (None, "Paper models unavailable: choose the model setup for another"))
+        self.assertEqual(definitions.setup(b, "model", "their-model", "openai")[0]["asked"], "paper-1")
+
     def test_the_model_setup_asks_as_the_papers_model_and_sends_yours(self):
         o, _ = definitions.setup(self.b, "model", "their-model", "openai")
         self.assertEqual((o["asked"], o["sent"], o["comparable"]), ("paper-1", "their-model", False))
@@ -296,26 +302,39 @@ class Recipe(unittest.TestCase):
 
     def test_a_setup_and_a_judge_need_a_provider_that_serves_chat(self):
         said = [e["message"] for e in self.compiled(others=["original"], provider="anthropic", model="claude-x")["errors"]]
-        self.assertIn("Anthropic does not serve what LoCoMo original speaks: choose another provider.", said)
+        self.assertIn("Anthropic does not serve what LoCoMo 3eb6f2c original speaks: choose another provider.", said)
         said = [e["message"] for e in self.compiled(others=["nop"], benchmark="longmemeval", datasets=["longmemeval_s"], provider="anthropic")["errors"]]
         self.assertIn("Anthropic does not serve what LongMemEval's judge speaks: choose another provider.", said)
 
     def test_one_original_participant_uses_the_selected_model_scope(self):
-        paper = self.compiled(others=["original"], model_choice="paper", model="gpt-3.5-turbo-16k")
+        paper = self.compiled(benchmark="longmemeval", datasets=["longmemeval_s"], others=["original"], model_choice="paper", model="gpt-4o")
         custom = self.compiled(others=["original"], model_choice="any", model="vendor/their-model")
         for out in (paper, custom):
             self.assertEqual(out["errors"], [])
-            self.assertIn("--bench-option retrieval=none", out["script"])
-            self.assertNotIn("--bench-option rag_mode", out["script"])
-        self.assertIn("run locomo original --model gpt-3.5-turbo-16k --provider openrouter", paper["script"])
+        self.assertIn("--bench-option retrieval=none", custom["script"])
+        self.assertNotIn("--bench-option rag_mode", custom["script"])
+        self.assertIn("run longmemeval original --model gpt-4o --provider openrouter", paper["script"])
+        self.assertTrue(self.compiled(others=["original"], model_choice="paper", model="gpt-4-turbo")["errors"])   # none is the paper's now
         self.assertIn("run locomo model --model vendor/their-model", custom["script"])
         self.assertTrue(self.compiled(others=["original"], model="")["errors"])
 
-    def test_paper_filter_also_applies_to_a_memory_capability(self):
-        out = self.compiled(others=["mem0"], model_choice="paper", model="gpt-3.5-turbo-16k")
+    def test_locomo_dataset_counts_questions_when_only_its_original_runs(self):
+        out = recipe.compile({"version": 1, "harness": "standard", "name": "locomo-experiment", "title": "LoCoMo",
+                              "benchmark": "locomo", "datasets": ["locomo10"], "others": ["original"],
+                              "model_choice": "any", "provider": "openai", "model": "gpt-4-turbo", "limit": "",
+                              "concurrency": "", "unsandboxed": False, "where": "local", "backend": "local", "options": {}})
         self.assertEqual(out["errors"], [])
-        self.assertIn("--model openai/gpt-3.5-turbo", out["script"])
-        self.assertTrue(self.compiled(others=["mem0"], model_choice="paper", model="vendor/custom")["errors"])
+        rows = {r[1]: r[2] for r in out["review"]}
+        self.assertNotIn("1540 conversations", rows["Dataset"])
+        self.assertEqual(rows["Dataset"], "LoCoMo-10 · 1540 questions")
+        self.assertEqual(rows["Scope"].split()[:2], ["all", "conversations"])   # the setup's own unit, with no count of its own
+
+    def test_paper_filter_also_applies_to_a_memory_capability(self):
+        longmem = dict(benchmark="longmemeval", datasets=["longmemeval_s"], others=["mem0"], model_choice="paper")
+        out = self.compiled(**longmem, model="gpt-4o")
+        self.assertEqual(out["errors"], [])
+        self.assertIn("--model openai/gpt-4o-2024-08-06", out["script"])
+        self.assertTrue(self.compiled(**longmem, model="vendor/custom")["errors"])
 
     def test_like_the_paper_without_paper_models_leaves_the_model_free_and_keeps_the_official_judge_and_user(self):
         tau = dict(benchmark="tau3-bench", datasets=["airline"], others=["original"], provider="openai", model="their-model")
@@ -366,13 +385,13 @@ class Recipe(unittest.TestCase):
 
     def test_schema_exposes_one_original_and_the_paper_model_mapping(self):
         benches = recipe.choices()["benchmarks"]
-        locomo = next(b for b in benches if b["key"] == "locomo")
-        self.assertEqual([s["key"] for s in locomo["setups"]], ["original"])
-        self.assertEqual(locomo["setups"][0]["sent"]["openrouter"]["gpt-3.5-turbo-16k"], "openai/gpt-3.5-turbo")
+        longmem = next(b for b in benches if b["key"] == "longmemeval")
+        self.assertEqual([s["key"] for s in longmem["setups"]], ["original"])
+        self.assertEqual(longmem["setups"][0]["sent"]["openrouter"]["gpt-4o"], "openai/gpt-4o-2024-08-06")
 
     def test_a_gpu_option_is_refused_for_a_container_setup_and_asked_of_the_host_locally(self):
         boxed = self.compiled(others=["original"], model="vendor/model", backend="container", bench_options={"retrieval": "dialog"})
-        self.assertIn("cuda_gpu cannot be provided in a container: choose local processes.", [e["message"] for e in boxed["errors"]])
+        self.assertIn("NVIDIA GPU cannot be provided in a container: choose local processes.", [e["message"] for e in boxed["errors"]])
         self.assertEqual(boxed["host"]["needs"], [])
         here = self.compiled(others=["original"], model="vendor/model", bench_options={"retrieval": "dialog"})
         self.assertEqual([n["name"] for n in here["host"]["needs"]], ["cuda_gpu"])

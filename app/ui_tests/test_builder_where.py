@@ -120,7 +120,7 @@ class StandardWhere(CompilerCase):
     def test_a_setup_whose_option_needs_what_no_image_installs_is_not_offered_the_container(self):
         tile = lambda html: re.search(r'<button [^>]*data-std-backend="container"[^>]*>', html).group(0)
         gpu = self.draw(None, "r.bench_options={retriever:'flat-contriever-session'};")["longmemeval local"]
-        self.assertIn('disabled aria-disabled="true" title="cuda_gpu cannot be provided in a container: choose local processes."', tile(gpu))
+        self.assertIn('disabled aria-disabled="true" title="NVIDIA GPU cannot be provided in a container: choose local processes."', tile(gpu))
         self.assertNotIn("disabled", tile(self.draw(None, "r.bench_options={retriever:'flat-contriever-session'};r.others=['nop'];")["longmemeval local"]))     # Review's rule names setups only
 
     def test_docker_names_the_public_web_proxy_only_for_an_agent_whose_environment_declares_network(self):

@@ -29,8 +29,8 @@ Closes #n
 
 ## Agents
 
-- Claude Code, Opus 5.5: code
-- Codex, GPT-6.2 Sol: review
+- Claude Code, Opus 5.5
+- Codex, GPT-6.2 Sol
 -->
 
 Closes #
@@ -52,5 +52,5 @@ files changed: "Nothing visible changes." Else delete. -->
 
 ## Agents
 
-<!-- Each agent and model that wrote, reviewed or tested the change, and what it
-did. A model you do not know is "unknown", never a guess. By hand: "none". -->
+<!-- Optional: delete the section. Each agent and model that wrote, reviewed or
+tested the change, not what it did. A model you do not know is "unknown". -->

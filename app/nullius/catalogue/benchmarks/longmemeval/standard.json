@@ -442,12 +442,14 @@
   },
   "host": {
     "cuda_gpu": {
+      "label": "NVIDIA GPU",
       "summary": "An NVIDIA GPU with CUDA, for LongMemEval's Contriever retrievers.",
       "check": [
         "nvidia-smi"
       ]
     },
     "stella_gpu": {
+      "label": "NVIDIA GPU with 12000 MiB",
       "summary": "An NVIDIA GPU with CUDA and at least 12000 MiB of GPU memory, for Stella's fixed batch of 64.",
       "check": [
         "nvidia-smi"

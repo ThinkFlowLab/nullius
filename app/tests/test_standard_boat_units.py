@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import shlex
+import shutil
 import io
 import json
 import os
@@ -43,6 +44,20 @@ class Plan(unittest.TestCase):
         self.assertIn("--unsandboxed", argv)
         self.assertNotIn("--backend", argv)                        # local processes: the VM is the sandbox
         self.assertIn("NULLIUS_CATALOGUE=/home/user/.nullius/app/v1-x/catalogue", line)
+
+
+class Record(unittest.TestCase):
+    def test_the_merged_config_is_written_whole_beside_any_leftover_name(self):
+        d = tempfile.mkdtemp(prefix="nullius-boat-record-"); self.addCleanup(shutil.rmtree, d, True)
+        with open(os.path.join(d, "config.json"), "w") as f:
+            json.dump({"job_name": "j", "standard": {"backend": "local"}}, f)
+        os.makedirs(os.path.join(d, "config.json.tmp"))              # another writer's name: never this write's own
+        boat_units._record(d, "small")
+        with open(os.path.join(d, "config.json")) as f:
+            text = f.read()
+        self.assertEqual(json.loads(text)["standard"]["backend"], "boat")
+        self.assertEqual(text, json.dumps(json.loads(text), indent=2))
+        self.assertEqual(sorted(os.listdir(d)), ["config.json", "config.json.tmp"])
 
 
 class Compile(unittest.TestCase):
