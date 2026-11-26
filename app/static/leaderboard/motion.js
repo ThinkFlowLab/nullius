@@ -86,11 +86,19 @@ window.LeaderboardMotion = (() => {
   }
   function table(table) {
     const measure=()=>new Map([...table.querySelectorAll('tr,th,td')].map(n=>[n,{rect:n.getBoundingClientRect(),text:n.textContent}]));
-    let previous=measure(),frame;
-    const capture=()=>{previous=measure();};
+    const box=table.closest('.table-wrap')||table;
+    let previous=measure(),height=box.offsetHeight,frame,easing=null;
+    const capture=()=>{previous=measure();height=easing?height:box.offsetHeight;};
+    /* rows coming or going change the table's height: it eases to its new height instead of jumping */
+    const ease=(from,to)=>{
+      if(reduced.matches||Math.abs(from-to)<2)return;
+      easing?.cancel();box.style.overflowY='hidden';
+      easing=box.animate([{height:`${from}px`},{height:`${to}px`}],{duration:280,easing:'cubic-bezier(.2,.7,.2,1)'});
+      const done=easing;done.finished.then(()=>{if(easing===done){easing=null;box.style.overflowY='';}},()=>{});
+    };
     const update=()=>{
       cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{
-        const next=measure();
+        const next=measure(),now=box.offsetHeight;ease(height,now);height=now;
         /* nothing in a table is moved by a transform, which some engines draw blank: a row that moved, a cell that
            appears or one whose text changed fades in where it now is */
         next.forEach(({rect,text},node)=>{

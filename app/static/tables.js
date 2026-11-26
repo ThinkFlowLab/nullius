@@ -460,6 +460,7 @@ window.NulliusTable = {
       next.disabled = (page + 1) * n >= hit.length;
       empty.hidden = hit.length > 0;
       say(hit.length ? `${note.textContent} ${live.dataset.noun}` : empty.textContent);
+      table.dispatchEvent(new CustomEvent('table:drawn', {detail: {rows: hit}}));   // the rows that pass, on any page
       drawn();
     };
     const first = () => { page = 0; draw(); };

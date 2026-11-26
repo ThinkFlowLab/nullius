@@ -1,6 +1,6 @@
 .lb-head-link { min-width: 10rem; justify-content: center; }
-:root { --lb-heat-lo: #232934; --lb-heat-hi: #2670d0; --lb-chip-text: #fff; --lb-grey: #767a82; --lb-good: #5fae74; --lb-warn: #e5b451; }
-:root[data-theme="light"] { --lb-heat-lo: #e3e9f1; --lb-heat-hi: #215da5; --lb-chip-text: var(--text); --lb-grey: #9aa1ab; --lb-good: #3f8f55; --lb-warn: #8a6100; }
+:root { --lb-heat-lo: #232934; --lb-heat-hi: #1f5fb4; --lb-heat-top: #6fb0ff; --lb-chip-text: #fff; --lb-peak-ink: #071628; --lb-grey: #767a82; --lb-good: #5fae74; --lb-warn: #e5b451; }
+:root[data-theme="light"] { --lb-heat-lo: #e3e9f1; --lb-heat-hi: #3a76c4; --lb-heat-top: #0d3a75; --lb-chip-text: var(--text); --lb-peak-ink: #fff; --lb-grey: #9aa1ab; --lb-good: #3f8f55; --lb-warn: #8a6100; }
 
 /* cards: the board, the scatter, the agent, the strips and the radars */
 .lb-panel { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 16px; margin: 0 0 16px; min-width: 0; }
@@ -51,8 +51,9 @@
 .lb-overall { display: inline-block; font-weight: 600; color: var(--text); padding: 2px 5px; border: 1.5px solid transparent; cursor: help; }
 .lb-bar { display: block; height: 4px; width: 68px; margin: 4px auto 0; border-radius: 2px; background: var(--surface-2); }
 .lb-bar i { display: block; height: 100%; border-radius: 2px; background: var(--accent); transition: width .32s cubic-bezier(.2,.7,.2,1); }
-.lb-chip { display: inline-block; min-width: 46px; padding: 4px 7px; border-radius: 6px; font-weight: 600; cursor: help; color: var(--lb-chip-text); background: color-mix(in srgb, var(--lb-heat-hi) var(--lb-heat), var(--lb-heat-lo)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent); }
+.lb-chip { display: inline-block; min-width: 46px; padding: 4px 7px; border-radius: 6px; font-weight: 600; cursor: help; color: var(--lb-chip-text); background: color-mix(in oklab, var(--lb-heat-top) var(--lb-top, 0%), color-mix(in oklab, var(--lb-heat-hi) var(--lb-heat), var(--lb-heat-lo))); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent); }
 .lb-chip.lb-hot { color: #fff; }
+.lb-chip.lb-peak { color: var(--lb-peak-ink); }
 .lb-unverified { border: 1.5px dashed var(--lb-warn); }
 .lb-chip.lb-unverified { box-shadow: none; }
 .lb-none { color: var(--text-faint); }
@@ -137,12 +138,16 @@
 .lb-evidence p { margin: .35rem 0; color: var(--text-dim); }
 
 /* medals */
-.lb-medal { position: relative; display: inline-block; width: 28px; height: 32px; color: var(--lb-medal-gold); }
-.lb-medal svg { width: 100%; height: 100%; stroke: currentColor; fill: color-mix(in srgb, currentColor 20%, var(--bg)); }
-.lb-medal span { position: absolute; inset: 12px 0 0; text-align: center; color: var(--text); font-weight: 700; font-size: .75rem; }
+.lb-medal { display: inline-block; width: 30px; height: 36px; vertical-align: middle; color: var(--lb-medal-gold); }
+.lb-medal svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.lb-medal text { font-family: var(--sans); }
 .lb-medal-2 { color: var(--lb-medal-silver); }.lb-medal-3 { color: var(--lb-medal-bronze); }.lb-medal-4 { color: var(--lb-medal-chocolate); }
-tr:hover .lb-medal { animation: lb-swing .55s ease-in-out; transform-origin: top; }
-@keyframes lb-swing { 25% { transform: rotate(-14deg); } 75% { transform: rotate(12deg); } }
+/* hovering a row grows its wreath again leaf by leaf, then the disc glows in its metal's colour */
+.lb-medal .lb-leaf { transform-box: fill-box; transform-origin: center; }
+tr:hover .lb-medal .lb-leaf { animation: lb-leaf .42s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i) * 45ms); }
+tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
+@keyframes lb-leaf { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes lb-glow { 50% { filter: drop-shadow(0 0 3px currentColor); } }
 :root { --lb-medal-gold: #e8c85a; --lb-medal-silver: #c0c5cf; --lb-medal-bronze: #dca475; --lb-medal-chocolate: #b88568; }
 :root[data-theme="light"] { --lb-medal-gold: #906500; --lb-medal-silver: #687282; --lb-medal-bronze: #975525; --lb-medal-chocolate: #633f2d; }
 
@@ -167,5 +172,5 @@ tr:hover .lb-medal { animation: lb-swing .55s ease-in-out; transform-origin: top
   .lb-complete-count { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lb-medal, .lb-point, .lb-bar i, .lb-table, .lb-table th, .lb-table td, .lb-track > *, .lb-dot .lb-logo { animation: none !important; transition: none !important; }
+  .lb-medal, .lb-medal *, .lb-point, .lb-bar i, .lb-table, .lb-table th, .lb-table td, .lb-track > *, .lb-dot .lb-logo { animation: none !important; transition: none !important; }
 }

@@ -214,8 +214,7 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertEqual(medals.evaluate_all("e=>e.map(m=>m.getAttribute('aria-label'))"),
                          ["Rank 1, gold", "Rank 1, gold", "Rank 3, bronze", "Rank 4, chocolate"])
         self.assertEqual(self.page.get_by_role('img', name='Rank 4, chocolate').count(), 1)
-        self.assertEqual(medals.locator('use').evaluate_all("e=>e.map(u=>u.getAttribute('href'))"), ["#i-medal"] * 3 + ["#i-medal-bitten"])
-        self.assertTrue(self.page.evaluate("['i-medal','i-medal-bitten'].every(id=>document.getElementById(id))"))
+        self.assertEqual(medals.evaluate_all("e=>e.map(m=>[m.querySelectorAll('.lb-leaf').length, !!m.querySelector('mask')])"), [[12, False]] * 3 + [[12, True]])
         names = ('gold', 'silver', 'bronze', 'chocolate')
         tokens = {}
         for theme in ('dark', 'light'):
@@ -225,12 +224,12 @@ class LeaderboardBrowser(unittest.TestCase):
             gold, bronze, chocolate = (medals.nth(i).evaluate("e=>getComputedStyle(e).color") for i in (0, 2, 3))
             self.assertEqual(len({gold, bronze, chocolate}), 3)
         self.assertNotEqual(tokens['dark'], tokens['light'])
-        swings = "e=>getComputedStyle(e).animationName"
-        self.assertEqual(medals.first.evaluate(swings), 'none')
+        grows = "e=>getComputedStyle(e.querySelector('.lb-leaf')).animationName"
+        self.assertEqual(medals.first.evaluate(grows), 'none')
         ranked.first.locator('[data-name]').hover()
-        self.assertEqual(medals.first.evaluate(swings), 'lb-swing')
+        self.assertEqual(medals.first.evaluate(grows), 'lb-leaf')
         self.page.emulate_media(reduced_motion='reduce')
-        self.assertEqual(medals.first.evaluate(swings), 'none')
+        self.assertEqual(medals.first.evaluate(grows), 'none')
         self.assertFalse(self.errors)
 
 

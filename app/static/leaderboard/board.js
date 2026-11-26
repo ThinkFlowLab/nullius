@@ -61,15 +61,36 @@
     if (rank > 4) return document.createTextNode(String(rank));
     const names=['gold','silver','bronze','chocolate'];
     const span=element('span',null,{class:`lb-medal lb-medal-${rank}`,role:'img','aria-label':`Rank ${rank}, ${names[rank-1]}`});
-    const icon=svg('svg',{'aria-hidden':'true',viewBox:'0 0 24 24'});icon.append(svg('use',{href:rank===4?'#i-medal-bitten':'#i-medal'}));span.append(icon,element('span',rank));return span;
+    span.append(laurel(rank));return span;
   }
-  /* a score's chip: its shade climbs from the surface to the series colour between 20% and 80% */
-  const heat = v => Math.max(0,Math.min(1,(v-.2)/.6));
+  /* a laurel medal: the rank on a struck disc inside a wreath of twelve leaves; the 4th, chocolate, has a bite out of
+     its upper right and two crumbs. Its colours are its metal's own, the same in both themes. */
+  const METAL={1:['#fff1b8','#e8c24a','#9a6b12','#4a3205'],2:['#ffffff','#c9d0d8','#7d8792','#2c3239'],3:['#ffd9b5','#d68a4c','#8a4a1c','#3a1d08'],4:['#a8714c','#6e4027','#3e2112','#f4dcc6']};
+  let medals=0;
+  function laurel(rank) {
+    const [light,mid,dark,ink]=METAL[rank], id=`lb-medal-${++medals}`, plot=svg('svg',{'aria-hidden':'true',viewBox:'0 0 40 48'}), defs=svg('defs');
+    const shade=svg('radialGradient',{id:id+'-disc',cx:'35%',cy:'30%',r:'80%'});
+    [[0,light],[.55,mid],[1,dark]].forEach(([at,color])=>shade.append(svg('stop',{offset:at,'stop-color':color})));defs.append(shade);
+    const body=svg('g');
+    if(rank===4){const mask=svg('mask',{id:id+'-bite'});mask.append(svg('rect',{x:-10,y:-10,width:60,height:68,fill:'#fff'}),svg('circle',{cx:31,cy:15,r:4}),svg('circle',{cx:34.6,cy:20,r:3.7}),svg('circle',{cx:26.8,cy:12,r:2.4}));defs.append(mask);body.setAttribute('mask',`url(#${id}-bite)`);}
+    for(const side of [-1,1])for(let i=0;i<6;i++){
+      const deg=122+i*22,a=deg*Math.PI/180,x=20+Math.cos(a)*15.2,y=25+Math.sin(a)*15.2;
+      const leaf=svg('g',{transform:`translate(${(side<0?x:40-x).toFixed(1)} ${y.toFixed(1)}) rotate(${side<0?deg+110:-(deg+110)})`});
+      const blade=svg('ellipse',{class:'lb-leaf',cx:0,cy:0,rx:2.1,ry:4.3,fill:i%2?mid:dark});blade.style.setProperty('--i',i);leaf.append(blade);body.append(leaf);
+    }
+    body.append(svg('circle',{class:'lb-disc',cx:20,cy:26,r:10,fill:`url(#${id}-disc)`,stroke:dark}));
+    plot.append(defs,body,svg('path',{d:'M14 41l6-3 6 3',fill:'none',stroke:dark,'stroke-width':1.6,'stroke-linecap':'round'}),svg('text',{x:20,y:31,'text-anchor':'middle','font-size':13,'font-weight':800,fill:ink},rank));
+    if(rank===4)plot.append(svg('circle',{cx:36,cy:26,r:1,fill:mid}),svg('circle',{cx:33.8,cy:29.4,r:.75,fill:mid}));
+    return plot;
+  }
+  /* a score's chip: its shade climbs from the surface at 40% to the series colour at 82%, then to a brighter one at
+     100%, so close high scores still read apart */
+  const heat = v => Math.max(0,Math.min(1,(v-.4)/.6));
   function chip(cell, value, unverified, axis) {
     cell.replaceChildren();
     if (value == null) { cell.append(element('span','–',{class:'lb-none'})); return; }
-    const t=heat(value), span=element('span',whole(value),{class:`lb-chip${t>.5?' lb-hot':''}${unverified?' lb-unverified':''}`,tabindex:'0','data-axis':axis});
-    span.style.setProperty('--lb-heat',`${Math.round(t*100)}%`);cell.append(span);
+    const t=heat(value), span=element('span',whole(value),{class:`lb-chip${t>.85?' lb-peak':t>.5?' lb-hot':''}${unverified?' lb-unverified':''}`,tabindex:'0','data-axis':axis});
+    span.style.setProperty('--lb-heat',`${Math.round(Math.min(1,t/.7)*100)}%`);span.style.setProperty('--lb-top',`${Math.round(Math.max(0,(t-.7)/.3)*100)}%`);cell.append(span);
   }
   function overall(cell, r) {
     cell.replaceChildren();
@@ -77,6 +98,17 @@
     cell.append(element('span',`${(r.overall*100).toFixed(1)}%`,{class:`lb-overall${r.unverified?' lb-unverified':''}`,tabindex:'0','data-axis':'Overall'}));
     const bar=element('span',null,{class:'lb-bar'}),fill=element('i');fill.style.width=`${r.overall*100}%`;bar.append(fill);cell.append(bar);
   }
+  /* the medals and ranks follow who is on the board: a filter or a search ranks the rows that pass among themselves */
+  let onBoard=null;
+  const shownRank=r=>onBoard?onBoard.get(r.key)??null:r.rank;
+  table.addEventListener('table:drawn',e=>{
+    const keys=new Set(e.detail.rows.map(tr=>tr.dataset.key)), ranked=data.rows.filter(r=>keys.has(r.key)&&r.rank).sort((a,b)=>a.rank-b.rank);
+    const next=new Map();let previous=null,at=0;ranked.forEach((r,i)=>{if(r.overall!==previous)at=i+1;next.set(r.key,at);previous=r.overall;});
+    const changed=!onBoard||ranked.length!==onBoard.size||ranked.some(r=>onBoard.get(r.key)!==next.get(r.key));
+    onBoard=next;if(!changed)return;
+    table.querySelectorAll('tbody tr').forEach(tr=>{const r=row(tr.dataset.key);if(!r)return;const cell=tr.querySelector('[data-col="rank"]');cell.replaceChildren(medal(shownRank(r)));cell.dataset.sort=shownRank(r)||'';});
+    card();
+  });
   function updateTable() {
     tableMotion?.capture();
     const focused=document.activeElement, focusAxis=focused?.dataset?.axis, focusRow=focused?.closest?.('tr')?.dataset.key;
@@ -86,8 +118,8 @@
       tr.dataset.sortGroup = r.rank ? 0 : r.overall != null ? 1 : 2;
       tr.dataset.fStatus = `${r.rank ? 'ranked' : 'not-ranked'}${!r.has_runs?'\nno-run':''}`;
       tr.classList.toggle('lb-sel', r.key === selected);
-      tr.querySelector('[data-col="rank"]').replaceChildren(medal(r.rank));
-      tr.querySelector('[data-col="rank"]').dataset.sort=r.rank || '';
+      tr.querySelector('[data-col="rank"]').replaceChildren(medal(shownRank(r)));
+      tr.querySelector('[data-col="rank"]').dataset.sort=shownRank(r) || '';
       const same = data.rows.filter(v=>v.agent===r.agent && v.version===r.version).length>1;
       tr.querySelector('[data-name]').textContent = r.name + (same ? ' · '+[r.identity.model,r.identity.effort].filter(Boolean).join(' ') : '');
       const o=tr.querySelector('[data-col="overall"]');overall(o,r);o.dataset.sort=r.overall??'';
@@ -116,14 +148,20 @@
   const shownHeads=()=>heads().filter(th=>!th.hidden&&th.style.display!=='none');
   function columnWidth(th) {
     const fixed={rank:48,agent:innerWidth<=700?152:238,overall:innerWidth<=700?92:104,steps:66,time:84,calls:92,cost:72};
-    return fixed[th.dataset.col]??Math.max(64,Math.round(th.textContent.trim().length*6.4+24));
+    return fixed[th.dataset.col]??Math.max(64,Math.round(th.textContent.trim().length*7.4+26));
   }
+  /* the columns fill the card exactly: room to spare goes to the score columns alone, so #, Agent, Overall and the
+     measures keep their width whatever is shown */
+  const wrap=table.closest('.table-wrap');
   function size(except=null) {
-    const shown=shownHeads().filter(th=>th.dataset.col!==except);
-    shown.forEach(th=>{th.style.width=`${columnWidth(th)}px`;});
+    const shown=shownHeads().filter(th=>th.dataset.col!==except), axes=shown.filter(th=>data.axes.includes(th.dataset.col));
+    const base=new Map(shown.map(th=>[th,columnWidth(th)])), total=[...base.values()].reduce((a,b)=>a+b,0);
+    const spare=Math.max(0,(wrap?.clientWidth||0)-total), each=axes.length?Math.floor(spare/axes.length):0;
+    shown.forEach(th=>{th.style.width=`${base.get(th)+(axes.includes(th)?each:0)}px`;});
     if(except)heads().find(th=>th.dataset.col===except).style.width='0px';
-    table.style.minWidth=`${shown.reduce((sum,th)=>sum+columnWidth(th),0)}px`;
+    table.style.minWidth=`${total+each*axes.length}px`;
   }
+  if(wrap){let seen=wrap.clientWidth;new ResizeObserver(()=>{if(Math.abs(wrap.clientWidth-seen)>1){seen=wrap.clientWidth;size();}}).observe(wrap);}
   /* a column chosen in Columns grows from nothing and fades in; one taken away fades and narrows to nothing first */
   const cellsOf=col=>[...table.querySelectorAll(`td[data-col="${CSS.escape(col)}"]`)];
   let passing=false;
@@ -290,8 +328,8 @@
     if(url&&!url.includes('#'))mark.append(element('img',null,{src:url,alt:''}));
     else if(url){const icon=svg('svg',{viewBox:'0 0 24 24','aria-hidden':'true'});icon.append(svg('use',{href:url}));mark.append(icon);}
     name.append(element('h2',current.name),element('small',[current.company,current.version_label].filter(Boolean).join(' · ')));who.append(mark,name);
-    const ranked=data.rows.filter(r=>r.rank).length;
-    const figure=element('div',null,{class:'lb-figure'});figure.append(element('span',current.overall==null?'–':`${(current.overall*100).toFixed(1)}%`,{class:'lb-fig'}),element('span',current.rank?`rank ${current.rank} of ${ranked}`:'not ranked',{class:'muted'}));
+    const ranked=onBoard?onBoard.size:data.rows.filter(r=>r.rank).length;
+    const figure=element('div',null,{class:'lb-figure'});figure.append(element('span',current.overall==null?'–':`${(current.overall*100).toFixed(1)}%`,{class:'lb-fig'}),element('span',shownRank(current)?`rank ${shownRank(current)} of ${ranked}`:'not ranked',{class:'muted'}));
     const bar=element('span',null,{class:'lb-bar lb-bar-wide'}),fill=element('i');fill.style.width=`${(current.overall||0)*100}%`;bar.append(fill);
     const against=comparedName()||'the field';
     const differences=data.capabilities.map(name=>({name,d:current.axes[name].score!=null&&compared(name)!=null?current.axes[name].score-compared(name):null})).filter(v=>v.d!=null).sort((a,b)=>b.d-a.d);
