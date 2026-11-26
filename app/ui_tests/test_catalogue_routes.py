@@ -60,7 +60,7 @@ class PageCase(unittest.TestCase):
 
 class OriginTags(PageCase):
     """Every benchmark card and page says whether it is official - the
-    publisher's benchmark - or adapted by the community: a tag
+    publisher's benchmark - or an experiment: a tag
     beside the category."""
 
     def test_a_card_and_its_page_carry_the_origin(self):
@@ -131,12 +131,12 @@ class BenchmarksList(PageCase):
         keys = re.findall(r'<a class="card-link" href="/benchmarks/([^"]+)"', self.html)
         self.assertEqual(sorted(keys), sorted(b.key for b in cat.listed_benchmarks))
         self.assertEqual(len(keys), 11)
-        # two shelves, the official benchmarks then the community benchmarks; a shelf with nothing on it is not shown
+        # two shelves, the official benchmarks then the experiments; a shelf with nothing on it is not shown
         official = self.html[self.html.index('data-shelf="official"'):].split('</section>', 1)[0]
         for b in cat.listed_benchmarks:
             with self.subTest(b.key):
                 self.assertEqual('/benchmarks/%s"' % b.key in official, b.origin == "official")
-        self.assertEqual('data-shelf="community"' in self.html, any(b.origin == "community" for b in cat.listed_benchmarks))
+        self.assertEqual('data-shelf="experiment"' in self.html, any(b.origin == "experiment" for b in cat.listed_benchmarks))
 
     def test_a_card_says_what_it_holds(self):
         swe = visible(self.card("swe-bench-verified"))
@@ -245,7 +245,13 @@ class BenchmarkPage(PageCase):
             self.assertEqual(self.route_case(key), "non-harbor")                     # the standard's, not Harbor's
             self.assertIn(f'href="/new-run?standard={key}"', self.page_html(key))
             self.assertNotIn("No usable route", self.page(key))
-            self.assertIn('<span class="origin-tag official">Official</span>', self.page_html(key))
+            self.assertRegex(self.page_html(key), r'<span class="origin-tag official[^"]*"[^>]*>Official</span>')
+
+    def test_an_experiment_says_what_it_changes_and_the_official_version_does_not(self):
+        html = self.page_html("locomo")
+        self.assertIn('<h2 id="changes-full">Changes from official</h2>', html)
+        self.assertEqual(html.count("Changes from official"), 1)
+        self.assertIn('<a href="https://github.com/snap-research/locomo/pull/41">open pull request #41</a>.', html)
 
     def test_an_option_with_a_pattern_shows_its_example_not_the_pattern(self):
         for key in ("osworld2", "gsm8k", "humaneval", "gaia", "osworld1", "tau3-bench"):
@@ -263,6 +269,15 @@ class BenchmarkPage(PageCase):
             self.assertIn("needs " + label, osworld2)
         self.assertNotIn("Setup: scoring_programs", osworld2)
         self.assertIn("Setup: Docker for the tasks' VMs", self.page("osworld1"))
+
+    def test_a_card_names_what_its_options_need_by_label(self):
+        for key, said in (("locomo", "NVIDIA GPU"), ("longmemeval", "NVIDIA GPU, NVIDIA GPU with 12000 MiB"),
+                          ("osworld2", "Docker, Scoring tools"), ("tau3-bench", "Sandbox runtime")):
+            with self.subTest(key):
+                card = self.card(key)
+                self.assertIn(f'title="Some of its options need {said} installed on the machine it runs on: see its page"', card)
+                self.assertIn(f"</svg>needs {said}</div>", card)
+        self.assertNotIn("_gpu", self.html)
 
 
 class DatasetsOnTheirPage(PageCase):

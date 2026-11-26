@@ -150,7 +150,7 @@ class Validation(unittest.TestCase):
             benchmarks=[catalog.Benchmark(key="x", title="X", origin="maybe", datasets=["d"])],
             datasets=[])
         bad = catalog.validate(cat)
-        self.assertIn("x: origin is official or community", bad)
+        self.assertIn("x: origin is official or experiment", bad)
         self.assertTrue(any("dataset 'd'" in m for m in bad))
 
     def test_a_dataset_its_benchmark_does_not_list_is_named(self):
@@ -255,7 +255,7 @@ class Routes(unittest.TestCase):
         self.assertEqual(tb.blocker, "")
 
     def test_a_named_harness_that_is_here_is_usable_run_or_not(self):
-        b = self._bench(harness=["harbor"], origin="community")
+        b = self._bench(harness=["harbor"], origin="experiment")
         self.assertEqual([r.summary for r in b.routes], ["Harbor · runnable"])
         self.assertEqual((b.route_case, b.blocker), ("harbor-only", ""))
 
@@ -269,16 +269,16 @@ class Routes(unittest.TestCase):
         self.assertTrue(any("harness 'docker'" in m for m in catalog.validate(cat)))
         self.assertEqual(cat.listed_benchmarks, [])
 
-    def test_legacy_experiments_become_official_and_community_stays_community(self):
+    def test_older_words_for_an_experiment_load_as_experiment(self):
         with tempfile.TemporaryDirectory() as root:
             for key, extra in (("old-exp", {"status": "blocked", "experiment": True}),
-                               ("old-origin", {"origin": "experiment"}), ("community", {"origin": "community"})):
+                               ("new", {"origin": "experiment"}), ("community", {"origin": "community"})):
                 p = pathlib.Path(root, catalog.BENCHMARKS, key); p.mkdir(parents=True)
                 (p / catalog.ENTRY).write_text(json.dumps(
                     {"key": key, "title": key, "category": "Coding", "harness": ["harbor"], "datasets": [], **extra}))
             cat = catalog.load(root)
             self.assertEqual([(b.key, b.origin, b.blocker) for b in cat.benchmarks],
-                             [("community", "community", ""), ("old-exp", "official", ""), ("old-origin", "official", "")])
+                             [("community", "experiment", ""), ("new", "experiment", ""), ("old-exp", "experiment", "")])
 
 
 class Example(unittest.TestCase):

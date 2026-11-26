@@ -73,7 +73,7 @@ class AddBenchmark(unittest.TestCase):
     def test_the_list_offers_the_form_and_the_form_its_choices(self):
         self.assertIn('href="/benchmarks/new"', self.get("/benchmarks").get_data(as_text=True))
         html = self.get("/benchmarks/new").get_data(as_text=True)
-        for name, value in (("source", "hub"), ("source", "registry"), ("origin", "official"), ("origin", "community"),
+        for name, value in (("source", "hub"), ("source", "registry"), ("origin", "official"), ("origin", "experiment"),
                             ("harness", "harbor")):
             self.assertIn(f'name="{name}" value="{value}"', html)
         self.assertIn('name="origin" value="official" checked', html)

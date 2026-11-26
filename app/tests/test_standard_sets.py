@@ -630,7 +630,7 @@ class Running(Scratch):
         cfg = read(os.path.join(self.jobs, "plain", "config.json"))
         self.assertEqual(sorted(cfg["standard"]), ["backend", "benchmark", "benchmark_options", "control", "exchanges",
                                                    "exchanges_max_mb", "kind", "needs", "permissions_granted", "plugged",
-                                                   "provider", "retries", "unsandboxed"])
+                                                   "provider", "retries", "unsandboxed", "uuid"])
 
 
 class Listing(Scratch):

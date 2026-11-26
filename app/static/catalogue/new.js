@@ -15,6 +15,11 @@
   form.querySelectorAll('input[name=source]').forEach(r => r.addEventListener('change', placeholder));
   placeholder();
 
+  const adding = !form.hasAttribute('data-editing');
+  form.querySelectorAll('input[name=origin]').forEach(r => r.addEventListener('change', () => {
+    if (adding && r.value === 'experiment') window.nulliusNotify('Recommended: add an official version first.', {key: 'origin'});
+  }));
+
   button.addEventListener('click', async () => {
     button.disabled = true; said.className = 'nb-said'; said.textContent = 'Asking Harbor…';
     try {

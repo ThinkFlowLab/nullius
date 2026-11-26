@@ -56,10 +56,10 @@ section, or write "Nothing visible changes." when templates or static files did.
 
     gh pr create --draft --title "fix(web): ..." --body-file pr.md
 
-`## Agents` names each agent and model that wrote, reviewed or tested the change,
-subagents included, and what it did. Working on it later, add your line. A model
-you do not know is "unknown", never a guess. A squash keeps the title alone, so
-none of it reaches `main`.
+`## Agents` is optional. It names each agent and model that wrote, reviewed or
+tested the change, subagents included: a name and a model per line, not what it
+did. A model you do not know is "unknown", never a guess. A squash keeps the
+title alone, so none of it reaches `main`.
 
 It stays a draft until the user says it is ready: CI runs then.
 

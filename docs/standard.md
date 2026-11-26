@@ -366,7 +366,7 @@ N machines are N runs of the same command, each with `--shard I/N`, and one merg
 | Shards by the unit's id | `sha256(unit id) mod N`; changing N moves most units. Order: the driver's `units`, the units `--units FILE` lists, the shard, then `--limit` (`--shard 1/2 --limit 6` is the first six units of shard 1) |
 | A unit keeps its place | `u0042` is the 43rd unit of the whole dataset in every shard |
 | One launch | Each shard's `config.json` records `standard.shard` (`index`, `of`, `units_total`, `partition`, `planned`, `limit`) and `standard.launch` (`--launch`, else the UTC day, benchmark, agent or capability and model). With `--units`, `units_total` counts the listed units. The shards' lists hold the same units; a list's file name, comments and sha256 may differ from shard to shard |
-| `cli merge JOB_DIR... -o OUT` | One job: trials hard-linked, `result.json` recomputed, `config.json` with `merged_from`. Shards that differ in launch, version, dataset, agent, model, serving providers, backend, N or task set are refused unless `--force`. Shards whose lists hold different units, and two trials of one unit, are refused always. |
+| `cli merge JOB_DIR... -o OUT` | One job: trials hard-linked, `result.json` recomputed, `config.json` with `merged_from` and a `standard.uuid` of its own. Shards that differ in launch, version, dataset, agent, model, serving providers, backend, N or task set are refused unless `--force`. Shards whose lists hold different units, and two trials of one unit, are refused always. |
 | `cli prove --shard I/N` | The controls and the leak check on that shard's units; each record says `shard` |
 | Different options per shard | Shards of one launch may differ in `--bench-option` (a unit that needs a service its machine serves); the merged config keeps each shard's in `merged_from` |
 | `cli prove --job nop=MERGED` | Checks a merged launch of a control against its bound instead of running it. The job and each of its trials name that benchmark, version, control and job; each unit of the dataset has one trial, scored 0 to 1; the units check passes. `--dataset` named, no `--limit` or `--shard`. The record names the job and its options |
@@ -537,6 +537,7 @@ An agent or a capability may keep several versions in its one file: an older rel
 | `cli new version KEY VERSION` | Adds one from the default's block, nothing proven; a file without `versions` is turned into one first, proofs kept |
 | Proof per version | A version runs nothing until `cli conform KEY@VERSION` passes; without `versions`, a proof on another `upstream.version` does not count |
 | In jobs | In the job name (`…__codex-2.2.2`) and the trial's `agent_info` |
+| `upstream.origin` | `official` (default) or `experiment`, another source or someone's fixes; unsaid, a version with `upstream.fixes`, or another `repository` than the shared one, is an experiment, and a benchmark's takes its `benchmark.json` `origin` |
 | `upstream.core` | Which core an adapter runs; pin it in `install` when the adapter names a range (Codex 2.2.2 pins `@openai/codex@0.160.1`) |
 | Schema | Stays `nullius.agent/v1` (`nullius.capability/v1`): a file without `versions` is one version |
 
@@ -636,7 +637,7 @@ already accepts arbitrary models needs only the `original` method.
 | `model` driver method | The upstream is told `runs_as` (its window, batching and token budget) while the relay sends the model chosen. A model that reasons by default can spend that budget thinking: a last reply with neither text nor a tool call is `OutputLengthExceededError`. A last Responses reply that `failed` is an API error. A runner that fails after the unit is asked to stop is `CancelledError` |
 | `units` | A setup may count its own units; `units` is sent `setup` |
 | `answer` | Runs the upstream's answerer through the unit's relay; `score` is sent `setup` too. Local processes or the Original setup driver container |
-| `comparable` | `false` when no model of `models` is the paper's, so its runs compare with each other only; or the list of those models whose runs compare with the paper's (`paper`), when the setup runs several agents and only some are the paper's: the builder offers those alone as Like the paper, the others as Any of your choice |
+| `comparable` | `false` when no model of `models` is the paper's, so its runs compare with each other only; or the list of those models whose runs compare with the paper's (`paper`), when the setup runs several agents and only some are the paper's: the builder offers those alone as Like the paper, the others as Any of your choice; or `[]` when none can be run any more: Like the paper is greyed out, and `run BENCHMARK original` refused |
 | Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper`, and the benchmark's own agent that ran (`agent`), whose key is also the job's agent (`agent_info.name`) |
 | Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries [`pass_hat_k`](field-guide.md#attempts) |
 | Retries | `cli run --retries N` runs a failed attempt again: [which failures](cli/run.md#retries) |

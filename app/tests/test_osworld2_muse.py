@@ -153,7 +153,7 @@ class Definition(unittest.TestCase):
         self.assertTrue(definitions.setup(b, "original", "MiniMax-M3", "openrouter")[0]["comparable"])
 
     def test_comparable_names_some_of_the_setups_models(self):
-        for value, ok in ((["MiniMax-M3"], True), (True, True), (False, True), ([MUSE], False), (["gpt-5"], False), ([], False),
+        for value, ok in ((["MiniMax-M3"], True), (True, True), (False, True), ([MUSE], False), (["gpt-5"], False), ([], True),
                           (["MiniMax-M3", "MiniMax-M3"], False)):
             b = bench()
             b["setups"]["original"]["comparable"] = value

@@ -426,6 +426,8 @@
    "total_input_tokens",
    "total_output_tokens",
    "trials",
+   "uid",
+   "uid_source",
    "vocab"
   ],
   "Trial": [
@@ -455,6 +457,7 @@
    "is_infra",
    "is_regression",
    "job_id",
+   "key",
    "model_name",
    "n_cache_tokens",
    "n_input_tokens",

@@ -147,17 +147,17 @@ def _window(document: dict) -> tuple:
     return (min(starts) if starts else None, max(ends) if ends else None)
 
 
-def trial_name_of(document: dict) -> str:
-    """``<root span name>__<7 hex of the trace id>`` — readable, and unique
-    per trace."""
+def trial_name_of(document: dict, full: bool = False) -> str:
+    """``<root span name>__<7 hex of the trace id>``, readable; with *full*,
+    the whole trace id, for traces whose short names collide."""
     tid = str(document.get("session_id") or "")
     stem = _UNSAFE.sub("_", str(document.get("trial_name") or "")).strip("._-") or "trace"
-    return f"{stem[:80]}__{tid[:7] or 'unknown'}"
+    return f"{stem[:80]}__{(tid if full else tid[:7]) or 'unknown'}"
 
 
-def write_trial(document: dict, job_dir: str) -> dict:
+def write_trial(document: dict, job_dir: str, trial: str = "") -> dict:
     """One trace document as a trial directory. Returns a summary."""
-    trial = trial_name_of(document)
+    trial = trial or trial_name_of(document)
     trial_dir = os.path.join(job_dir, trial)
     agent_dir = os.path.join(trial_dir, "agent")
     os.makedirs(agent_dir, exist_ok=True)
@@ -190,6 +190,7 @@ def write_trial(document: dict, job_dir: str) -> dict:
             {"started_at": started, "finished_at": finished} if started and finished else None),
         "verifier": None,
         "config": {"environment": {"type": ""}},
+        "source_document": {"trace_id": document.get("session_id")},
     }
     if tokens:
         result["agent_result"] = {
@@ -204,11 +205,32 @@ def write_trial(document: dict, job_dir: str) -> dict:
             "model": model, "agent": agent.get("name") or "", "changed": changed}
 
 
+def _trace_id_in(trial_dir: str):
+    """The trace a trial folder holds: its recorded id, or its trace's own."""
+    for path, keys in ((("result.json"), ("source_document", "trace_id")),
+                       (os.path.join("agent", "trace.json"), ("session_id",))):
+        try:
+            with open(os.path.join(trial_dir, path), encoding="utf-8") as fh:
+                value = json.load(fh)
+            for key in keys:
+                value = value[key]
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if value is not None:
+            return str(value)
+    return None
+
+
 def _write_job(documents: list, out_root: str, job_name: str, command: str,
-               root: str, skipped: list) -> str:
+               root: str, skipped: list, sid=None) -> str:
     job_dir = os.path.join(out_root, job_name)
+    ids = [str(doc.get("session_id") or "") for doc in documents]
+    existing = importers.existing_trials(job_dir, _trace_id_in)
+    names = importers.unique_names(
+        [(tid, trial_name_of(doc), trial_name_of(doc, full=True)) for tid, doc in zip(ids, documents)],
+        *existing)
     os.makedirs(job_dir, exist_ok=True)
-    summaries = [write_trial(doc, job_dir) for doc in documents]
+    summaries = [write_trial(doc, job_dir, name) for doc, name in zip(documents, names)]
 
     # Derived output this importer wholly owns: a trial the export no longer
     # produces is stale and would keep being counted.
@@ -236,9 +258,13 @@ def _write_job(documents: list, out_root: str, job_name: str, command: str,
         "command": command,
         "agents": [{"name": agents[0], "model_name": models[0] if len(models) == 1 else "",
                     "kwargs": {}}],
-        "datasets": [{"name": NAME, "path": root, "n_tasks": len(summaries)}],
+        # a folder converted before ids keeps the path its identity was derived from
+        "datasets": [{"name": NAME, "path": _recorded(importers._config(job_dir)) if sid is None else root,
+                      "n_tasks": len(summaries)}],
         "import": {"format": reader.FORMAT, "conventions": reader.CONVENTIONS,
                    "skipped": skipped},
+        "trial_documents": importers.reservations(job_dir, zip(names, ids), *existing),
+        **importers.recorded_as(sid, root),
     })
     return job_dir
 
@@ -251,6 +277,17 @@ def convert(root: str, out_root: str, job_name: str = "",
     are listed in the job's ``config.json`` under ``import.skipped`` with their
     redacted reasons; when nothing reads, that list is the error.
     """
+    default = f"{NAME}__{os.path.basename(os.path.abspath(root)) or 'export'}"
+    root = os.path.realpath(root)                    # one spelling of the source, whatever the caller's cwd or links
+    _read(root)                                      # a refused tree is refused before even the lock is written
+    with importers.locked(out_root):
+        documents, skipped = _read(root)             # read under the lock: a newer conversion is never undone
+        name, sid = importers.place(out_root, root, default, job_name, NAME)
+        return [_write_job(documents, out_root, name, command, root, skipped, sid)]
+
+
+def _read(root: str) -> tuple:
+    """``(documents, refused files)`` of the exports under *root*, or a SystemExit."""
     paths = find_exports(root)
     skipped = refused(root)
     if not paths:
@@ -263,5 +300,11 @@ def convert(root: str, out_root: str, job_name: str = "",
         raise SystemExit(str(exc)) from None
     if not documents:
         raise SystemExit(redact(f"the OTLP/JSON exports in {root} carry no spans"))
-    name = job_name or f"{NAME}__{os.path.basename(os.path.abspath(root)) or 'export'}"
-    return [_write_job(documents, out_root, name, command, root, skipped)]
+    return documents, skipped
+
+
+def _recorded(cfg: dict):
+    """The export a conversion from before ids was made from."""
+    datasets = cfg.get("datasets")
+    first = datasets[0] if isinstance(datasets, list) and datasets and isinstance(datasets[0], dict) else {}
+    return first.get("path") if isinstance(first.get("path"), str) else None

@@ -25,8 +25,9 @@ overlap, such as a full split beside difficulty subsets. It controls the
 benchmark headline only; every dataset keeps its own count.
 
 Every entry says where it comes from (``origin``): ``official``, the
-publisher's own benchmark, or
-``community``, adapted by the community.
+publisher's own benchmark, or ``experiment``, another source or someone's
+fixes. It is the origin of its default version and of every version on the
+standard that does not say its own (``definitions.origin_of``).
 
 Routes: a benchmark reaches a run through a harness, and ``Benchmark.routes``
 says, for each harness in ``HARNESSES``, whether that route is usable here.
@@ -44,7 +45,7 @@ from dataclasses import dataclass, field, replace
 from nullius import paths
 from . import storage
 
-ORIGINS = ("official", "community")
+ORIGINS = ("official", "experiment")
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BENCHMARKS = "benchmarks"
 ENTRY = "benchmark.json"
@@ -92,7 +93,7 @@ class Benchmark:
     #: agent_run, verify) as recorded from a real run; empty when no run has
     #: recorded them
     timeouts: dict = field(default_factory=dict)
-    #: the publisher's benchmark or a community adaptation (ORIGINS)
+    #: the publisher's benchmark, or an experiment (ORIGINS)
     origin: str = "official"
     #: how it runs as published when Harbor runs it: the upstream's own agent, by
     #: the name Harbor registers it (``agent``), and why it is the published one
@@ -354,14 +355,20 @@ def load(root: str | None = None) -> Catalog:
     )
 
 
+def origin_of(entry: dict) -> str:
+    """An entry's origin as written, its older words (``community``, an ``experiment`` flag) read as ``experiment``."""
+    if entry.get("experiment") or entry.get("origin") == "community":
+        return "experiment"
+    return entry.get("origin") or "official"
+
+
 def _entry(path: str, name: str) -> tuple:
     """(Benchmark, [Dataset]) of one ``benchmark.json``; ValueError or
     TypeError when it is not JSON, not an object or lacks a field."""
     entry = _read(path)
     if not isinstance(entry, dict):
         raise ValueError("not a JSON object")
-    if entry.get("experiment") or entry.get("origin") == "experiment":
-        entry = {**entry, "origin": "official"}
+    entry = {**entry, "origin": origin_of(entry)}
     nested = [d for d in entry.get("datasets", []) if isinstance(d, dict)]
     return (_pick(Benchmark, {**entry, "datasets": [d.get("key") for d in nested]}),
             [_pick(Dataset, {**d, "benchmark": name}) for d in nested])
@@ -426,7 +433,7 @@ def validate(cat: Catalog) -> list:
             claimed.setdefault(s.strip().lower(), b.key)
     for b in cat.benchmarks:
         if b.origin not in ORIGINS:
-            bad.append(f"{b.key}: origin is official or community")
+            bad.append(f"{b.key}: origin is official or experiment")
         if b.task_count is not None:
             if type(b.task_count) is not int or b.task_count < 1:
                 bad.append(f"{b.key}: task_count must be a positive integer")

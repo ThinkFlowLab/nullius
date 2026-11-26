@@ -8,6 +8,7 @@ with a redacted message, the source is never written, and the Harbor jobs
 the same trajectories came from are not claimed.
 """
 
+import hashlib
 import json
 import os
 import shutil
@@ -100,6 +101,111 @@ class Conversion(unittest.TestCase):
         _, job = self.convert(src)
         self.assertEqual(sorted(t.trial_name for t in job.trials),
                          ["a", "runs__b", "runs__c", "trajectory"])
+
+    def test_paths_that_flatten_to_one_name_stay_two_trials(self):
+        src = tempfile.mkdtemp()
+        write_doc(src, "a/b.json", minimal(session_id="s-nested"))
+        write_doc(src, "a__b.json", minimal(session_id="s-flat"))
+        write_doc(src, "c.json", minimal())
+        job_dir, job = self.convert(src)
+        names = sorted(t.trial_name for t in job.trials)
+        self.assertEqual(len(names), 3)
+        self.assertIn("c", names)                     # an unshared name is kept as it was
+        sessions = {json.loads(Path(t.dir, "result.json").read_text())["source_document"]["session_id"]
+                    for t in job.trials}
+        self.assertEqual(sessions, {"s-nested", "s-flat", "s-1"})
+        self.assertEqual(json.loads(Path(job_dir, "result.json").read_text())["n_total_trials"], 3)
+
+    def test_a_later_colliding_document_never_renames_the_trial_already_there(self):
+        src = tempfile.mkdtemp()
+        write_doc(src, "a__b.json", minimal(session_id="s-first"))
+        job_dir, _ = self.convert(src)
+        before = {p.relative_to(job_dir): p.read_bytes() for p in Path(job_dir, "a__b").rglob("*") if p.is_file()}
+        write_doc(src, "a/b.json", minimal(session_id="s-later"))
+        _, job = self.convert(src)
+        names = sorted(t.trial_name for t in job.trials)
+        self.assertEqual(names[0], "a__b")
+        self.assertRegex(names[1], r"^a__b__[0-9a-f]{8}$")
+        after = {p.relative_to(job_dir): p.read_bytes() for p in Path(job_dir, "a__b").rglob("*") if p.is_file()}
+        self.assertEqual(after, before)
+
+    def test_one_tree_through_a_link_or_with_a_folder_deleted_by_hand_keeps_its_trial(self):
+        for case in ("link", "deleted"):
+            with self.subTest(case):
+                real = tempfile.mkdtemp()
+                src = os.path.join(real, "run")
+                write_doc(src, "a/b.json", minimal(session_id="s-first"))
+                write_doc(src, "c.json", minimal())
+                if case == "link":
+                    os.symlink(src, os.path.join(real, "link"))
+                    job_dir, _ = self.convert(os.path.join(real, "link"), job_name=case)
+                else:
+                    job_dir, _ = self.convert(src, job_name=case)
+                    shutil.rmtree(os.path.join(job_dir, "c"))
+                write_doc(src, "a__b.json", minimal(session_id="s-later"))
+                _, job = self.convert(src, job_name=case)
+                held = {t.trial_name: json.loads(Path(t.dir, "result.json").read_text())["source_document"]["session_id"]
+                        for t in job.trials}
+                self.assertEqual(held["a__b"], "s-first")
+
+    def test_a_gone_document_keeps_its_name_from_a_job_without_reservations_and_from_a_longer_name(self):
+        src = tempfile.mkdtemp()
+        write_doc(src, "a/b.json", minimal(session_id="s-gone"))
+        write_doc(src, "c.json", minimal())
+        job_dir, _ = self.convert(src)
+        config = json.loads(Path(job_dir, "config.json").read_text())
+        del config["trial_documents"]                        # as a conversion before them wrote it
+        Path(job_dir, "config.json").write_text(json.dumps(config))
+        os.remove(os.path.join(src, "a", "b.json"))
+        self.convert(src)                                    # its folder is pruned, its name kept
+        write_doc(src, "a__b.json", minimal(session_id="s-new"))
+        _, job = self.convert(src)
+        self.assertNotIn("a__b", {t.trial_name for t in job.trials})
+
+        src = tempfile.mkdtemp()                             # a gone file named like another's longer name
+        longer = "a__b__" + hashlib.sha256(b"a/b.json").hexdigest()[:8]
+        write_doc(src, longer + ".json", minimal(session_id="s-gone"))
+        write_doc(src, "c.json", minimal())
+        job_dir, _ = self.convert(src, job_name="longer")
+        os.remove(os.path.join(src, longer + ".json"))
+        self.convert(src, job_name="longer")
+        write_doc(src, "a/b.json", minimal(session_id="s-nested"))
+        write_doc(src, "a__b.json", minimal(session_id="s-flat"))
+        with self.assertRaisesRegex(SystemExit, "share the trial"):
+            self.convert(src, job_name="longer")
+        self.assertEqual(sorted(n for n in os.listdir(job_dir) if os.path.isdir(os.path.join(job_dir, n))), ["c"])
+
+    def test_a_refresh_replaces_the_config_whole(self):
+        src = tempfile.mkdtemp()
+        write_doc(src, "a.json", minimal())
+        job_dir, _ = self.convert(src)
+        with open(os.path.join(job_dir, "config.json"), encoding="utf-8") as held:    # a reader mid-refresh
+            before = held.read()
+            write_doc(src, "b.json", minimal())
+            self.convert(src)
+            held.seek(0)
+            self.assertEqual(held.read(), before)
+        self.assertIn("atif/b", Path(job_dir, "config.json").read_text())
+
+    def test_a_folder_an_older_conversion_wrote_two_documents_into_is_split(self):
+        src = tempfile.mkdtemp()
+        write_doc(src, "a__b.json", minimal(session_id="s-flat"))
+        write_doc(src, "a/b.json", minimal(session_id="s-nested"))
+        job_dir = os.path.join(self.out, "atif__old")
+        for name, data in (("result.json", {"n_total_trials": 2}),     # counted, or listed twice
+                           ("config.json", {"harness": "atif", "tasks": [{"name": "atif/a__b"}, {"name": "atif/a__b"}]})):
+            with self.subTest(name):
+                os.makedirs(os.path.join(job_dir, "a__b"))
+                Path(job_dir, "config.json").write_text(json.dumps({"harness": "atif"}))   # as every conversion wrote it
+                Path(job_dir, "a__b", "result.json").write_text(json.dumps(
+                    {"source_document": {"path": os.path.join(src, "a", "b.json")}}))
+                Path(job_dir, name).write_text(json.dumps(data))
+                _, job = self.convert(src, job_name="atif__old")
+                names = sorted(t.trial_name for t in job.trials)
+                self.assertEqual(len(names), 2)
+                for trial in names:
+                    self.assertRegex(trial, r"^a__b__[0-9a-f]{8}$")
+                shutil.rmtree(job_dir)
 
     def test_re_converting_updates_in_place_and_drops_a_stale_trial(self):
         src = tempfile.mkdtemp()
