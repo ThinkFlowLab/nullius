@@ -55,10 +55,9 @@ def _card(row, sheet) -> dict:
     """A benchmark's card on the list (templates/_cards.html), from a row of ``recipe.benchmarks``: ``sheet`` the
     sprite holding its own mark, none when it has none."""
     b, ds, tasks, unit, needs = row["b"], row["datasets"], row["tasks"], row["unit"], row["host"]
-    return {"key": b.key, "href": url_for("benchmark_page", key=b.key), "shelf": b.origin, "keys": " ".join([b.key, *b.datasets]),
+    return {"key": b.key, "href": url_for("benchmark_page", key=b.key), "keys": " ".join([b.key, *b.datasets]),
             "search": " ".join([b.title, b.category, b.key, *(d.title for d in ds), *b.datasets]),
             "category": b.category, "origin": [{"text": o.capitalize(), "class": o, "value": o} for o in row["origins"]],
-            "default_origin": {"text": b.label, "class": b.origin, "value": b.origin},
             "icon": sheet and f"{sheet}#bm-{b.key}", "title": b.title, "domain": b.domain,
             "runs": [{"text": label, "class": "rt-" + way, "title": "Runs with " + name, "value": way}
                      for way, (label, name) in RUNS_WITH.items() if way in b.harness],

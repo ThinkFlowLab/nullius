@@ -131,12 +131,9 @@ class BenchmarksList(PageCase):
         keys = re.findall(r'<a class="card-link" href="/benchmarks/([^"]+)"', self.html)
         self.assertEqual(sorted(keys), sorted(b.key for b in cat.listed_benchmarks))
         self.assertEqual(len(keys), 11)
-        # two shelves, the official benchmarks then the experiments; a shelf with nothing on it is not shown
-        official = self.html[self.html.index('data-shelf="official"'):].split('</section>', 1)[0]
-        for b in cat.listed_benchmarks:
-            with self.subTest(b.key):
-                self.assertEqual('/benchmarks/%s"' % b.key in official, b.origin == "official")
-        self.assertEqual('data-shelf="experiment"' in self.html, any(b.origin == "experiment" for b in cat.listed_benchmarks))
+        # one catalogue: no shelf per origin, and a card names every version's origin
+        self.assertNotIn("data-shelf", self.html)
+        self.assertIn("Experiment", visible(self.card("locomo")))
 
     def test_a_card_says_what_it_holds(self):
         swe = visible(self.card("swe-bench-verified"))

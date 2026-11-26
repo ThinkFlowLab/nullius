@@ -26,27 +26,16 @@
     </ul>
   {% endcall %}
 
-  {#- A card's fields (web/catalogue.py `_card`); the filters are the category's pills, the origin and what runs it dropdowns; a card shows its default version's origin. #}
+  {#- A card's fields (web/catalogue.py `_card`); the filters are the category's pills, the origin and what runs it dropdowns; a card shows every version's origin, as the builder's does. #}
   {% set cols = [dict(key='icon', label='Mark', card='icon', table=false, class='bench-mark'), dict(key='title', label='Name', card='title'),
-                 dict(key='category', label='Category', card='tag', class='cat-tag', filter='pills'), dict(key='default_origin', label='Origin', card='tag', class='origin-tag', table=false), dict(key='origin', label='Origin', class='origin-tag', filter='dropdown', filter_icon='origin'),
+                 dict(key='category', label='Category', card='tag', class='cat-tag', filter='pills'), dict(key='origin', label='Origin', card='tag', class='origin-tag', filter='dropdown', filter_icon='origin'),
                  dict(key='domain', label='Domain', card='text', off=true), dict(key='runs', label='Runs with', card='badge', class='run-tag', filter='dropdown', filter_icon='runner'),
                  dict(key='tasks', label='Tasks', card='stat', type='num'), dict(key='datasets', label='Datasets', card='stat', type='num'),
                  dict(key='scoring', label='Scored by', card='stat', class='word'), dict(key='needs', label='Needs', card='note', icon='wrench', off=true),
                  dict(key='blocker', label='Blocker', card='alert')] %}
-  {#- Two shelves: the official benchmarks, then the experiments; the table is one table in that order, its
-      Origin the shelf. #}
-  {% set sort = ['title', 'tasks', 'datasets'] %}{% set shelves = [('official', 'Official'), ('experiment', 'Experiment')] %}
-  {% set rows = [] %}{% for state, _ in shelves %}{% set _ = rows.extend(items|selectattr('shelf', 'equalto', state)) %}{% endfor %}
-  {% call cards('benchmarks', cols, rows, search='Name, category, dataset', choices=choices, sort=sort, empty='No benchmark matches.', noun='benchmarks', layout='table' if request.args.get('view') == 'table' else 'cards', default='cards') %}
-  {% for state, heading in shelves %}
-  {% set shelf = items|selectattr('shelf', 'equalto', state)|list %}
-  {% if shelf %}
-  <section class="bench-shelf st-{{ state }}" data-shelf="{{ state }}" data-group aria-labelledby="shelf-{{ state }}">
-    <h2 id="shelf-{{ state }}"><span class="shelf-dot" aria-hidden="true"></span>{{ heading }} <span class="shelf-n" data-group-n>{{ shelf|length }}</span></h2>
-    {{ grid(cols, shelf, every=items, choices=choices, sort=sort) }}
-  </section>
-  {% endif %}
-  {% endfor %}
+  {% set sort = ['title', 'tasks', 'datasets'] %}
+  {% call cards('benchmarks', cols, items, search='Name, category, dataset', choices=choices, sort=sort, empty='No benchmark matches.', noun='benchmarks', layout='table' if request.args.get('view') == 'table' else 'cards', default='cards') %}
+  {{ grid(cols, items, every=items, choices=choices, sort=sort) }}
   {% endcall %}
 </div>
 {% endblock %}
