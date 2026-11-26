@@ -24,12 +24,12 @@ SIX_DRIVER = '''from nullius.standard.protocols.jsonl import serve
 serve({"units": lambda dataset: {"units": [f"t{i}" for i in range(6)]}, "setup": lambda unit, dir: {"prompt": "model hi"},
        "score": lambda unit, dir, transcript, answer: {"reward": 1.0, "passed": True, "detail": {}}})
 '''
-# what differs between two runs of the same plan by their clocks and their names alone
-VOLATILE = {"started_at", "finished_at", "at", "found_at", "id", "job_name", "job", "date", "seconds", "ts"}
+# what differs between two runs of the same plan by their clocks, their names and their identities alone
+VOLATILE = {"started_at", "finished_at", "at", "found_at", "id", "job_name", "job", "date", "seconds", "ts", "uuid"}
 
 
 def steady(doc):
-    """A record with what a clock or a job's name puts in it left out."""
+    """A record with what a clock, a job's name or its identity puts in it left out."""
     if isinstance(doc, dict):
         return {k: steady(v) for k, v in doc.items() if k not in VOLATILE and not k.endswith("_sec") and not k.endswith("_ms")}
     if isinstance(doc, list):
