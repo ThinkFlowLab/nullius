@@ -88,7 +88,7 @@ window.LeaderboardMotion = (() => {
     const measure=()=>new Map([...table.querySelectorAll('tr,th,td')].map(n=>[n,{rect:n.getBoundingClientRect(),text:n.textContent}]));
     const box=table.closest('.table-wrap')||table;
     let previous=measure(),height=box.offsetHeight,frame,easing=null;
-    const capture=()=>{previous=measure();height=easing?height:box.offsetHeight;};
+    const capture=()=>{if(!box.getClientRects().length)return;previous=measure();height=easing?height:box.offsetHeight;};
     /* rows coming or going change the table's height: it eases to its new height instead of jumping */
     const ease=(from,to)=>{
       if(reduced.matches||Math.abs(from-to)<2)return;
@@ -98,7 +98,9 @@ window.LeaderboardMotion = (() => {
     };
     const update=()=>{
       cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{
-        const next=measure(),now=box.offsetHeight;ease(height,now);height=now;
+        /* a hidden table (the other view showing) has no height to ease from or to: it is measured afresh once shown */
+        if(!box.getClientRects().length){previous=new Map();height=null;return;}
+        const next=measure(),now=box.offsetHeight;if(height!=null)ease(height,now);height=now;
         /* nothing in a table is moved by a transform, which some engines draw blank: a row that moved, a cell that
            appears or one whose text changed fades in where it now is */
         /* a cell's contents may move, never the cell: a row that moved slides what it holds from where it was, a row

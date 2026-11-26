@@ -192,7 +192,7 @@
     if(except)heads().find(th=>th.dataset.col===except).style.width='0px';
     table.style.minWidth=`${total+each*axes.length}px`;
   }
-  if(wrap){let seen=wrap.clientWidth;new ResizeObserver(()=>{if(Math.abs(wrap.clientWidth-seen)>1){seen=wrap.clientWidth;size();}}).observe(wrap);}
+  if(wrap){let seen=wrap.clientWidth;new ResizeObserver(()=>{if(wrap.clientWidth&&Math.abs(wrap.clientWidth-seen)>1){seen=wrap.clientWidth;size();}}).observe(wrap);}
   /* a column chosen in Columns grows from nothing and fades in; one taken away fades and narrows to nothing first */
   const cellsOf=col=>[...table.querySelectorAll(`td[data-col="${CSS.escape(col)}"]`)];
   let passing=false;
@@ -397,12 +397,15 @@
   document.querySelectorAll('[data-vs-select]').forEach(s=>{data.versions.forEach(v=>s.append(element('option',`Same agent: ${v.label}`,{value:'version:'+JSON.stringify([v.benchmark,v.version])})));s.onchange=()=>{versus=s.value;document.querySelectorAll('[data-vs-select]').forEach(v=>setSelect(v,versus));compareChoice().catch(()=>{});};});
   document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{metric=b.dataset.metric;press('lb-metric','data-metric',metric);drawScatter();});
   async function deferred(turn) { const response=await nulliusFetch(`/api/leaderboard/metrics?all_scores=${data.all_scores?1:0}&context=${encodeURIComponent(data.context)}`);if(!response.ok)return;const result=await response.json();if(turn!==generation||result.context!==data.context)return;result.rows.forEach(r=>{const existing=row(r.key);if(existing)existing.metrics=r.metrics;});updateTable();card();drawScatter(); }
-  async function reload(mode){const turn=++generation;const response=await nulliusFetch(`/api/leaderboard?all_scores=${mode}`);if(!response.ok)return;const next=await response.json();if(turn!==generation)return;const kept=new Map(data.rows.map(r=>[r.key,r.metrics]));next.rows.forEach(r=>{const m=kept.get(r.key);if(!m)return;r.metrics={...m,...Object.fromEntries(Object.entries(r.metrics||{}).filter(([,v])=>v?.value!=null))};});data=next;if(!row(selected))selected=data.selected;updateTable();compareChoice().catch(()=>{});draw();deferred(turn).catch(()=>{});}
+  async function fetchBoard(mode){const turn=++generation;const response=await nulliusFetch(`/api/leaderboard?all_scores=${mode}`);if(!response.ok)return null;const next=await response.json();return turn===generation?{next,turn}:null;}
+  function apply({next,turn}){if(turn!==generation)return;const kept=new Map(data.rows.map(r=>[r.key,r.metrics]));next.rows.forEach(r=>{const m=kept.get(r.key);if(!m)return;r.metrics={...m,...Object.fromEntries(Object.entries(r.metrics||{}).filter(([,v])=>v?.value!=null))};});data=next;if(!row(selected))selected=data.selected;updateTable();compareChoice().catch(()=>{});draw();deferred(turn).catch(()=>{});}
+  async function reload(mode){const got=await fetchBoard(mode);if(got)apply(got);}
   document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{press('lb-mode','data-mode',b.dataset.mode);reload(b.dataset.mode).catch(()=>{});});
   /* scores saved in Scoring settings reach the board when it is shown again */
-  let rescored=false;
-  document.addEventListener('leaderboard:rescored',()=>{rescored=true;});
-  document.addEventListener('leaderboard:view',e=>{if(e.detail.view==='board'&&rescored){rescored=false;reload(data.all_scores?'1':'0').catch(()=>{});}});
+  /* each save fetches the new board at once, so it is ready when the board is shown; it is drawn then, at its real size */
+  let fresh=null;
+  document.addEventListener('leaderboard:rescored',()=>{fresh=null;fetchBoard(data.all_scores?'1':'0').then(got=>{if(!got)return;if(table.getClientRects().length)apply(got);else fresh=got;}).catch(()=>{});});
+  document.addEventListener('leaderboard:view',e=>{if(e.detail.view==='board'&&fresh){const got=fresh;fresh=null;apply(got);}});
   document.getElementById(`${table.id}-tools`)?.addEventListener('change',e=>{
     const box=e.target;if(!box.matches('input[data-col]')||passing)return;
     if(!box.checked){e.stopPropagation();shrink(box);}
