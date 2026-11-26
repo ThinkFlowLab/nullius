@@ -51,7 +51,7 @@ def index():
                                workspaces=workspace.list_all(shared.WS_HOME))
     # A Harbor killed by a Stop (or dead with the run) leaves its result
     # record saying trials are running; the runner's record says otherwise.
-    ended = {j.job_id: shared.ended_for(j.job_id) for j in jobs}
+    ended = {j.job_id: shared.ended_for(j.job_id, j) for j in jobs}
     # The header, the chips and the mix bar describe the agents' trials. A
     # control (nop, oracle) is a check on the tasks, not a competitor: it is
     # listed on its own line as behaved or not (`feasibility.summary_of`),
@@ -203,7 +203,7 @@ def _state_of(job_id, j, ended):
     "running"."""
     if j is not None and ended.get(job_id):
         return _said(ended[job_id][0])
-    ex = shared.run_for(job_id)
+    ex = shared.run_for(job_id, j)
     if ex is not None and ex.state in execution.ALIVE:
         return ex.live_state(job_id)
     if j is None:
@@ -566,10 +566,11 @@ def upload():
 def job(job_id):
     # every job, not the one alone: its Delete (_deletable) walks the workspace anyway, and one folder first costs more
     j = shared._find_job(shared._jobs_for_request(), job_id)
-    ex = shared.run_for(job_id)
+    ex = shared.run_on_page(job_id, j)
+    ended = ex.job_state(job_id) if ex is not None else None
     # this job's own state beside the run's: ended, or a part still to come while another runs
     own = ((execution.NOT_RUN, None) if ex is not None and ex.state not in execution.ALIVE and ex.never_ran(job_id)
-           else shared.ended_for(job_id) or ((ex.live_state(job_id), None)
+           else ended or ((ex.live_state(job_id), None)
                 if ex is not None and ex.live_state(job_id) in ("queued", execution.NOT_RUN) else None))
     if not j:
         # Started from the builder and not written by Harbor yet: the run's
@@ -583,7 +584,7 @@ def job(job_id):
     return render_template("runs/job.html", job=j, live_board=board, view=_view_of(board, j, ex),
                            execution=ex, csrf=shared._csrf_token(), set_link=_set_link(j), set_saving=_set_saving(j),
                            judgement=judge.job_summary(j) if j.trials else None,
-                           control=feasibility.summary_of(j), ended=shared.ended_for(job_id), own=own, deletable=_deletable(job_id, ex),
+                           control=feasibility.summary_of(j), ended=ended, own=own, deletable=_deletable(job_id, ex),
                            trial_rows=attempts.grouped(j), pass_k=attempts.for_job(j),
                            filtered=_filtered_of(j, analysis, versions), marks=_marks_of(analysis, versions),
                            names=_identity_names(j.identity))
@@ -921,7 +922,7 @@ def _view_of(board, j=None, ex=None) -> str | None:
         return "logs"
     if not ready:
         if ex is None:
-            return "results" if j is not None and j.is_preparing and not shared.ended_for(j.job_id) else None
+            return "results" if j is not None and j.is_preparing and not shared.ended_for(j.job_id, j) else None
         return "results" if asked == "results" else "logs"
     if asked in ("live", "results"):
         return asked
@@ -934,7 +935,7 @@ def _live_board_state(j):
     if not live.has_feed(j.dir):
         return None
     try:
-        snap = live.snapshot(j.dir, ended=shared.ended_for(j.job_id), with_timeline=True)
+        snap = live.snapshot(j.dir, ended=shared.ended_for(j.job_id, j), with_timeline=True)
     except live.FeedError as e:
         # A malformed line in the middle of the feed is a broken writer, not a
         # race. The page must still render — the settled sections read
@@ -959,7 +960,7 @@ def job_live(job_id):
     if not j:
         abort(404)
     if not live.has_feed(j.dir):
-        ended = shared.ended_for(job_id)
+        ended = shared.ended_for(job_id, j)
         if ended:
             # The preparing page must settle even if the runner never wrote a feed.
             response = jsonify({"state": "finished", "running": False, "ended_by": ended[0]})
@@ -967,7 +968,7 @@ def job_live(job_id):
             return response
         abort(404)
     try:
-        snap = live.snapshot(j.dir, ended=shared.ended_for(j.job_id), with_timeline=True)
+        snap = live.snapshot(j.dir, ended=shared.ended_for(j.job_id, j), with_timeline=True)
     except live.FeedError as e:
         response = jsonify({"error": f"events.jsonl is not a feed: {e}"})
         response.status_code = 422

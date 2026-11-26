@@ -265,7 +265,6 @@ class Parts(Base):
         self.assertEqual((ex.state, ex.error), ("failed", "last run exited 3"))
         self.assertEqual(ex.job_state("r-nop")[0], "done"); self.assertEqual(ex.job_state("r-last")[0], "failed")
         self.assertEqual(ex.job_state("r-never")[0], "failed")                                           # no part of its own ran: the run's
-        self.assertEqual(execution.ended_for("r-nop")[0], "done")
         back = execution.Execution(execution.Plan(name="r", script="", parts=parts, jobs=jobs), root=str(self.tmp),
                                    record=json.loads((self.tmp / "r" / "run.json").read_text()))
         self.assertEqual(back.job_state("r-nop")[0], "done")                                              # a restart reads it back

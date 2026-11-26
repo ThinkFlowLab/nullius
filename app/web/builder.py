@@ -44,9 +44,11 @@ def new_run():
     # to rebuild a recipe from (fromJob). ?saved=<id>: a saved recipe, as the
     # Saved recipes dialog loads it. Individual query fields also prefill the form.
     like = request.args.get("like")
-    run = request.args.get("run") or (like if like and _kept_recipe(like) else None)
-    if run:
-        ex = execution.for_job(run)
+    run = request.args.get("run") or like
+    ex = shared.run_on_page(run, shared._job_for_request(run), here=True) if run else None
+    if ex is None and request.args.get("run") and not request.args.get("workspace"):
+        ex = shared.run_for(run)                  # a bare ?run=: the open workspace's first, then any of that name
+    if request.args.get("run") or (ex and ex.plan.recipe):
         if ex is None or not ex.plan.recipe:
             abort(404)
         data["loadRecipe"] = ex.plan.recipe
@@ -407,11 +409,6 @@ def recipes_import():
         return jsonify(ok=True, **recipe_store.import_(items, lenient=wrapped and body.get("lenient") is True))
     except ValueError as e:
         return jsonify(ok=False, error="Not imported: " + str(e)), 400
-
-
-def _kept_recipe(job_id: str) -> bool:
-    ex = execution.for_job(job_id)
-    return bool(ex and ex.plan.recipe)
 
 
 def _host_target():
