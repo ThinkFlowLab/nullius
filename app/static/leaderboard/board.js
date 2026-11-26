@@ -32,7 +32,7 @@
     const shareOf=v=>v==null?'–':v.toFixed(2), adds=(score,share)=>score==null||!share?'–':(score*share*100).toFixed(1);
     const scoreCell=(score,reason)=>{const td=element('td',null,{class:'lb-ev-score'}),box=element('span',null,{class:'lb-ev-scorebox'});td.append(box);if(score==null){box.append(element('span',reason||'not run',{class:'muted'}));return td;}const bar=element('span',null,{class:'lb-ev-bar'}),fill=element('i');fill.style.width=`${score*100}%`;bar.append(fill);box.append(bar,element('span',whole(score),{class:'lb-ev-pct'}));return td;};
     const table=element('table',null,{class:'lb-ev-table'}), head=element('tr'), body=element('tbody');
-    ['Benchmark · dataset','Weight','Score','Adds'].forEach(t=>head.append(element('th',t)));
+    [axisName==='Overall'?'Capability':'Benchmark · dataset','Weight','Score','Adds'].forEach(t=>head.append(element('th',t)));
     const thead=element('thead');thead.append(head);table.append(thead,body);
     const line=(label,sub,share,score,reason)=>{const tr=element('tr'),name=element('td');name.append(...label);if(sub.length){const small=element('small');small.append(...sub);name.append(small);}tr.append(name,element('td',shareOf(share),{class:'lb-ev-num'}),scoreCell(score,reason),element('td',adds(score,share),{class:'lb-ev-num'}));body.append(tr);};
     const total=(label,score,share)=>{const foot=element('tfoot'),tr=element('tr');tr.append(element('td',label),element('td',shareOf(share),{class:'lb-ev-num'}),element('td',score==null?'–':percent(score),{class:'lb-ev-num'}),element('td'));foot.append(tr);table.append(foot);};
@@ -40,7 +40,6 @@
     pop.replaceChildren(element('strong', `${axisName} · ${current.name}`));
     if (axisName === 'Overall') {
       pop.append(element('p','Overall is the weighted mean of the capabilities measured'));
-      current.reasons.forEach(reason => pop.append(element('p', `Partial: ${reason}`)));
       const parts=data.axes.map(name=>[name,current.axes[name]]).filter(([,a]) => a.weight > 0);
       parts.forEach(([name,a]) => line([name],a.entries.some(e=>e.unverified&&e.share>0)?[element('span','Not verified',{class:'lb-tag'})]:[],a.share,a.score,'not measured'));
       total('Overall',current.overall,parts.reduce((n,[,a])=>n+(a.share||0),0));
@@ -370,7 +369,6 @@
     /* a difference reads green above the reference and red below it */
     const change=d=>element('span',signed(d),{class:d>0?'lb-up':d<0?'lb-down':''});
     const named=v=>v?[`${v.name} `,change(v.d)]:['–'];
-    if(current.reasons.length){const families=current.reasons.filter(r=>/^\d+ of \d+ (capabilities|domains)$/.test(r)),n=current.reasons.length-families.length;lines.push(['Partial',[[n?`${n} benchmark${n>1?'s':''} incomplete`:'',...families].filter(Boolean).join(' · ')],current.reasons.join('\n')]);}
     if(baseline!=null&&current.overall!=null)lines.push([`Overall against ${against}`,[change(current.overall-baseline)]]);
     lines.push([`Best against ${against}`,named(differences[0])],[`Weakest against ${against}`,named(differences.at(-1))]);
     lines.push(['Time per task',[measure('time',current.metrics?.time?.value)]],['Cost per task',[measure('cost',current.metrics?.cost?.value)]]);
