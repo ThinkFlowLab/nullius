@@ -23,6 +23,7 @@ from unittest.mock import patch
 from werkzeug.serving import make_server
 
 from nullius import access, cli, client, execution, mcp_server, workspace
+from nullius.catalogue import catalog
 from nullius.compare import cli as compare_cli, comparison
 from nullius.judge import client as judge_client, questions as Q, store as judge_store
 from nullius.recipes import store
@@ -239,27 +240,28 @@ class Reads(Case):
         self.assertEqual((g["runners"], [d["id"] for d in g["datasets"]]), (["standard"], ["test", "platinum"]))
         self.assertIn("reference", g["fits"])
         self.assertIn("reference", [a["ref"] for a in got["agents"]])
-        self.assertTrue(all(sorted(c) == ["key", "label", "offers", "ref", "summary"] for c in got["agents"] + got["capabilities"]))
+        self.assertTrue(all(sorted(c) == ["key", "label", "offers", "ref", "summary"] for c in got["capabilities"]))
+        self.assertTrue(all(sorted(c) == ["key", "label", "offers", "origin", "ref", "summary"] for c in got["agents"]))
+        self.assertLessEqual({x["origin"] for x in got["benchmarks"] + got["agents"]}, set(catalog.ORIGINS))
 
 
 class Judgements(Case):
-    """A judge's answers read, and a judge asked: one trial by the request, several only with a yes. The judge is a fake."""
+    """A judge's answers read, and a judge asked: one trial by the request, several only with a yes. The model's
+    answer is a fake; the record is kept and read back by the pages' own store."""
 
     def setUp(self):
         super().setUp()
-        self.asked = []
+        self.asked, self.failing = [], {}
         judges = {"decision": judge_client.Judge("typesafe", "k", "m"), "llm": judge_client.Judge("openrouter", "k", "m", url="http://127.0.0.1:9/v1", lane="llm")}
         self.stack.enter_context(patch.object(web.judge, "key", lambda lane="decision": judges[lane]))
 
-        def judge_trial(job, trial, k, post=None, calibration=None):
-            self.asked.append((job.job_id, trial.trial_name, k.lane))
-            if trial.trial_name in self.failing:
-                raise judge_client.JudgeError(self.failing[trial.trial_name], "the judge is busy")
-            record = {"questions": Q.VERSION, "judge": {"model": k.lane}, "answers": {"task_completed": {"choice": "yes", "confidence": 0.9}}}
-            judge_store.save(web.judge.ws_dir(), job.job_id, trial.trial_name, record, lane=k.lane, started=web.judge.started_of(trial))
-            return record
-        self.failing = {}
-        self.stack.enter_context(patch.object(web.judge, "judge_trial", judge_trial))
+        def ask_states(states, k, post=None, calibration=None):
+            self.asked.append((*states["of"], k.lane))
+            if states["of"][1] in self.failing:
+                raise judge_client.JudgeError(self.failing[states["of"][1]], "the judge is busy")
+            return {"questions": Q.VERSION, "judge": {"model": k.lane}, "answers": {"task_completed": {"choice": "yes", "confidence": 0.9}}}
+        self.stack.enter_context(patch.object(web.judge.batch, "ask_states", ask_states))
+        self.stack.enter_context(patch.object(web.judge, "_trial_ids_and_states", lambda trial, traj: {"of": (trial.job_id, trial.trial_name)}))
         for trial in sorted((self.tmp / "jobs" / "oracle-a").glob("*__*"))[:3]:               # a judge reads a trajectory: three trials kept one
             (trial / "agent").mkdir(exist_ok=True)
             (trial / "agent" / "trajectory.json").write_text("{}")
@@ -316,12 +318,20 @@ class Judgements(Case):
             self.assertEqual(self.post("/jobs/oracle-a/trials/t.try-1/judge").status_code, 404)
         self.assertEqual(self.asked, [])
 
-    def test_a_job_of_another_workspace_is_judged_into_its_own(self):
+    def test_a_job_asked_through_another_workspace_reads_and_keeps_what_that_one_kept_before(self):
+        kept = Path(web.shared.STATE["workspace"].dir) / "judgements" / "oracle-a"            # records from before judgements were the job's
+        kept.mkdir(parents=True)
+        (kept / f"{self.trial}.json").write_text(json.dumps({"retired": {"questions": "retired", "answers": {"kept": {"choice": "x"}}}}))
+        (kept / f"{self.judgeable[1]}.json").write_text(json.dumps({Q.VERSION: {"questions": Q.VERSION, "answers": {"kept": {"choice": "x"}}}}))
         web.shared.open_workspace(workspace.create(web.shared.WS_HOME, [str(self.tmp / "jobs")], "other"))
+        n = len(self.judgeable) - 1                                                            # one is judged already: its record is still read
+        self.assertEqual(self.get("/jobs/oracle-a/judgements?workspace=api").json["judged"], 1)
         r = self.post("/jobs/oracle-a/judge?workspace=api", {"confirm": True})
-        self.assertEqual((r.status_code, r.json["judged"]), (200, len(self.judgeable)))
-        self.assertEqual(self.get("/jobs/oracle-a/judgements?workspace=api").json["judged"], len(self.judgeable))
-        self.assertEqual(self.get("/jobs/oracle-a/judgements").json["judged"], 0)
+        self.assertEqual((r.status_code, r.json["judged"], len(self.asked)), (200, n, n))
+        saved = json.loads((Path(judge_store.home()) / "judgements" / self.job.uid / f"{self.trial}.json").read_text())
+        self.assertLessEqual({"retired", Q.VERSION}, set(saved))                                # the workspace asked's: the batch's threads have no request
+        self.assertEqual(self.get("/jobs/oracle-a/judgements").json["judged"], n)              # the new ones are the job's, in the open workspace too
+        self.assertEqual((self.post("/jobs/oracle-a/judge?workspace=api").json["todo"], len(self.asked)), (0, n))
 
     def test_a_judge_that_fails_is_said_and_a_refused_key_is_the_request_s_fault(self):
         self.failing = {self.trial: 500}
@@ -342,11 +352,6 @@ class Judgements(Case):
             self.assertEqual(self.get(path).json, {"error": "A judge is one of: decision, llm."}, path)
         self.assertEqual(self.post("/jobs/nope/judge", {"confirm": True}).status_code, 404)
         self.assertEqual(self.post("/jobs/oracle-a/trials/nope/judge").status_code, 404)
-
-    def test_without_a_workspace_there_is_nowhere_to_keep_a_judgement(self):
-        with patch.object(web.judge, "ws_dir", lambda: None):
-            r = self.post(f"/jobs/oracle-a/trials/{self.trial}/judge")
-        self.assertEqual((r.status_code, r.json, self.asked), (400, {"error": "No workspace is open: judgements are kept in the workspace."}, []))
 
 
 class SettingsTokens(Case):

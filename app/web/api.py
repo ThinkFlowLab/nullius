@@ -17,7 +17,6 @@ An error is ``{"error": "..."}`` with its status.
 """
 from __future__ import annotations
 
-import contextvars
 import functools
 import importlib.metadata
 import json
@@ -123,13 +122,13 @@ def api_info():
 @api("read")
 def api_catalogue():
     """The benchmarks with the runners that can run each, the agents and the capabilities; a standard benchmark with
-    its datasets and what fits it, by the reference a recipe names it with."""
+    its datasets and what fits it, by the reference a recipe names it with. A benchmark and an agent say their origin."""
     defs = {kind: definitions.load(kind)[0] for kind in definitions.KINDS}
     fits = match.table(defs["benchmark"], defs["agent"], defs["capability"])
     standard = {b["key"]: b for b in defs["benchmark"]}
     benchmarks = []
     for b in catalog.load().listed_benchmarks:
-        row = {"key": b.key, "title": b.title, "runners": [r.harness for r in b.usable_routes]}
+        row = {"key": b.key, "title": b.title, "origin": b.origin, "runners": [r.harness for r in b.usable_routes]}
         s = standard.get(b.key)
         if s:
             row.update(family=s["family"], needs=s.get("needs") or [],
@@ -137,7 +136,8 @@ def api_catalogue():
                        fits=[ref for ref, why in fits.get(b.key, {}).items() if not why])
         benchmarks.append(row)
     others = {kind: [{"key": d["key"], "ref": d.get("_ref") or d["key"], "label": d.get("label"), "summary": d.get("summary"),
-                      "offers": d.get("offers") or []} for d in defs[kind]] for kind in ("agent", "capability")}
+                      "offers": d.get("offers") or [], **({"origin": definitions.origin_of(d)} if kind == "agent" else {})}
+                     for d in defs[kind]] for kind in ("agent", "capability")}
     return _json({"benchmarks": benchmarks, "agents": others["agent"], "capabilities": others["capability"]})
 
 
@@ -264,7 +264,7 @@ def api_compare():
     return _json(compare_cli.document(comparison.build(selected, "matched" if request.args.get("matched") in ("1", "true") else "whole")))
 
 
-# Judgements: a judge model's answers about a trial, kept in the job's workspace (web/judge.py). Reading one is
+# Judgements: a judge model's answers about a trial, kept by the job they judge (web/judge.py). Reading one is
 # free; asking is a paid model call for each trial, so it takes the run scope, and several trials at once take a yes.
 
 def _lane(value) -> str:
@@ -274,11 +274,10 @@ def _lane(value) -> str:
     return lane
 
 
-def _judgements_dir() -> str:
-    d = judge.ws_dir()
-    if d is None:
-        raise _Refused(400, "No workspace is open: judgements are kept in the workspace.")
-    return d
+def _judged(job, lane: str) -> dict:
+    """{trial: record} for the trials of a job one judge has judged, as its page counts them."""
+    return judge_store.for_job(judge_store.home(), judge.job_key(job), judge.started_by_name(job), lane=lane,
+                               old=judge.old_of(job), strict=judge.retried(job))
 
 
 def _judge_error(e: judge_client.JudgeError) -> Response:
@@ -290,7 +289,7 @@ def _judge_error(e: judge_client.JudgeError) -> Response:
 def api_judgements(job_id):
     """``?lane=decision|llm``: {judged, trials, records: {trial: record}} for one job and one judge."""
     job, lane = _job(job_id), _lane(request.args.get("lane"))
-    judged = judge_store.for_job(_judgements_dir(), job.job_id, judge.started_by_name(job), lane=lane)
+    judged = _judged(job, lane)
     return _json({"lane": lane, "judged": len(judged), "trials": len(job.trials), "records": judged})
 
 
@@ -298,7 +297,6 @@ def api_judgements(job_id):
 @api("read")
 def api_judgement(job_id, trial_name):
     job, trial = _trial(job_id, trial_name)
-    _judgements_dir()
     lane = _lane(request.args.get("lane"))
     record = judge.judgement_of(job, trial, lane)
     if record is None:
@@ -311,7 +309,6 @@ def api_judgement(job_id, trial_name):
 def api_judge_trial(job_id, trial_name):
     """Ask a judge about one trial, ``{"lane"?}``: the record as stored."""
     job, trial = _trial(job_id, trial_name, tries=False)
-    _judgements_dir()
     try:
         return _json(judge.judge_trial(job, trial, judge.key(_lane(_body().get("lane", request.args.get("lane"))))))
     except judge_client.JudgeError as e:
@@ -325,13 +322,12 @@ def api_judge_job(job_id):
     Each trial is a paid call: without ``confirm`` it answers how many it would ask, and asks none."""
     job, body = _job(job_id), _body()
     lane = _lane(body.get("lane", request.args.get("lane")))
-    judged = judge_store.for_job(_judgements_dir(), job.job_id, judge.started_by_name(job), lane=lane)
+    judged = _judged(job, lane)
     todo = [t for t in job.trials if t.has_trajectory and t.trial_name not in judged]
     if todo and body.get("confirm") is not True:
         return _error(409, f"This asks the judge about {len(todo)} trial(s), a paid call each. Send \"confirm\": true to ask.", todo=len(todo))
-    k, cal = judge.key(lane), judge.batch_calibration()
-    here = {t.trial_name: contextvars.copy_context() for t in todo}        # the batch's threads keep this request's ?workspace=
-    done, failed = judge.run_batch(todo, lambda t: here[t.trial_name].run(judge.judge_trial, job, t, k, calibration=cal), lambda t: t.trial_name)
+    k, cal, col = judge.key(lane), judge.batch_calibration(), judge.batch_workspace()
+    done, failed = judge.run_batch(todo, lambda t: judge.judge_trial(job, t, k, calibration=cal, column=col), lambda t: t.trial_name)
     return _json({"lane": lane, "todo": len(todo), "judged": done, "failed": failed})
 
 

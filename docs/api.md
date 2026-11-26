@@ -100,7 +100,7 @@ Every trial asked is a paid model call, on the judge set in Settings.
 | `judge_job(job, lane="decision")` | Nothing: refused (409) with `todo`, how many it would ask; nothing left, it answers so |
 | `judge_job(job, confirm=True)` | Every trial of the job with a trajectory that judge has not judged |
 
-Records are kept in the job's workspace, as the [pages](judgement.md) keep them.
+Records belong to the job, as the [pages](judgement.md) keep them.
 
 ## Shell
 
