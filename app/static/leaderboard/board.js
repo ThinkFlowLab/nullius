@@ -30,7 +30,7 @@
     const axisName = target.dataset.axis; if (!axisName) return;
     /* a score's evidence: what it is made of, each part's share, score and what it adds, and the total */
     const shareOf=v=>v==null?'–':v.toFixed(2), adds=(score,share)=>score==null||!share?'–':(score*share*100).toFixed(1);
-    const scoreCell=(score,reason)=>{const td=element('td',null,{class:'lb-ev-score'});if(score==null){td.append(element('span',reason||'not run',{class:'muted'}));return td;}const bar=element('span',null,{class:'lb-ev-bar'}),fill=element('i');fill.style.width=`${score*100}%`;bar.append(fill);td.append(bar,element('span',whole(score)));return td;};
+    const scoreCell=(score,reason)=>{const td=element('td',null,{class:'lb-ev-score'}),box=element('span',null,{class:'lb-ev-scorebox'});td.append(box);if(score==null){box.append(element('span',reason||'not run',{class:'muted'}));return td;}const bar=element('span',null,{class:'lb-ev-bar'}),fill=element('i');fill.style.width=`${score*100}%`;bar.append(fill);box.append(bar,element('span',whole(score),{class:'lb-ev-pct'}));return td;};
     const table=element('table',null,{class:'lb-ev-table'}), head=element('tr'), body=element('tbody');
     ['Benchmark · dataset','Weight','Score','Adds'].forEach(t=>head.append(element('th',t)));
     const thead=element('thead');thead.append(head);table.append(thead,body);
@@ -55,7 +55,7 @@
           if(e.version)sub.push(e.version_label||e.version);
           if(!e.custom&&e.tasks!=null)sub.push(`${e.covered} of ${e.tasks} tasks`);
           const small=[sub.join(' · ')];
-          (e.links||[]).forEach(link=>small.push(' · ',element('a',link.id,{href:link.url})));
+          (e.links||[]).forEach((link,i,all)=>small.push(' · ',element('a',all.length>1?`Open run ${i+1}`:'Open run',{href:link.url,title:link.id})));
           if(e.note)small.push(` · ${e.note}`);
           if(e.unverified)small.push(' ',element('span','Not verified',{class:'lb-tag'}));
           line(label,small,e.share,e.score,e.reason);

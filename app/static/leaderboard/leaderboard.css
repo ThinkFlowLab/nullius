@@ -3,7 +3,7 @@
 :root[data-theme="light"] { --lb-grey: #9aa1ab; --lb-good: #3f8f55; --lb-warn: #8a6100; }
 
 /* cards: the board, the scatter, the agent, the strips and the radars */
-.lb-panel { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 24px; margin: 0 0 24px; min-width: 0; }
+.lb-panel { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 28px 30px; margin: 0 0 24px; min-width: 0; }
 .lb-panel h2 { font-size: 1.05rem; font-weight: 600; margin: 0; }
 .lb-panel h3 { font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; font-weight: 500; color: var(--text-dim); margin: 0 0 8px; }
 .lb-head { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 16px; }
@@ -137,7 +137,7 @@
 .lb-dot.lb-point { transform: none; }
 
 /* score evidence */
-.lb-evidence { position: fixed; z-index: 100; width: max-content; max-width: min(560px, calc(100vw - 24px)); max-height: min(480px, calc(100vh - 24px)); overflow: auto; padding: 16px 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font-size: .8rem; box-shadow: 0 8px 24px color-mix(in srgb, #000 30%, transparent); }
+.lb-evidence { position: fixed; z-index: 100; width: max-content; max-width: min(560px, calc(100vw - 24px)); max-height: min(480px, calc(100vh - 24px)); overflow: auto; padding: 18px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font-size: .8rem; box-shadow: 0 8px 24px color-mix(in srgb, #000 30%, transparent); }
 .lb-evidence > strong { display: block; font-size: .95rem; font-weight: 600; }
 .lb-evidence p { margin: .3rem 0 0; color: var(--text-faint); font-size: .76rem; }
 .lb-ev-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: .8rem; }
@@ -148,8 +148,10 @@
 .lb-ev-table td small { display: block; margin-top: 3px; color: var(--text-faint); font-size: .72rem; }
 .lb-ev-table td small a { color: var(--text-dim); }
 .lb-ev-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.lb-ev-score { display: flex; gap: 8px; align-items: center; justify-content: flex-end; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.lb-ev-bar { width: 56px; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.lb-ev-score { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lb-ev-scorebox { display: inline-flex; gap: 8px; align-items: center; justify-content: flex-end; min-height: 1.2em; }
+.lb-ev-pct { display: inline-block; min-width: 5ch; text-align: right; }
+.lb-ev-bar { flex: none; width: 56px; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
 .lb-ev-bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
 .lb-ev-table tfoot td { border-bottom: 0; padding-top: 10px; color: var(--accent); font-weight: 600; }
 
