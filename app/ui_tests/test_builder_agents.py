@@ -41,12 +41,14 @@ class AgentGrid(unittest.TestCase):
                 self.assertEqual({k for k in cards if k != "original"}, set(fits))
                 self.assertEqual({k for k, c in cards.items() if " disabled" in c[:c.index("</button>")]}, {k for k, v in fits.items() if v})
 
-    def test_a_benchmark_without_own_agents_keeps_its_original_and_greys_osworlds(self):
+    def test_the_version_procedure_is_the_first_card_and_other_benchmarks_agents_are_disabled(self):
         _, cards = self.grid("gsm8k")
         self.assertEqual(list(cards)[0], "original")
-        self.assertIn(">No agent · Original</button>", cards["original"])
-        self.assertIn('<span class="std-tag">As published</span>', cards["original"])            # how it runs, not a protocol
-        self.assertIn('data-f-protocol=""', cards["original"])
+        self.assertIn(">GSM8K</button>", cards["original"])                                    # named as its settings tab
+        _, cards = self.grid("locomo@full")
+        self.assertIn(">LoCoMo · full</button>", cards["original"])                            # the version's, no commit
+        for c in cards.values():                                                            # origin, protocol, source: filters
+            self.assertNotIn("origin-tag", c); self.assertNotIn("bench-harness", c); self.assertNotIn("std-tag", c)
         html, _ = self.grid("gsm8k")
         self.assertNotIn('data-value="reference"', html)
         for k, c in cards.items():

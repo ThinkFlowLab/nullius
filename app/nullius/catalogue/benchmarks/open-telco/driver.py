@@ -10,6 +10,10 @@ units  - the task's samples by the id Inspect gives them: TeleTables' own ids,
          else the sample's place in the file (1, 2, ...), zero-padded. A filter
          option (TeleQnA's subject, ORANBench's difficulty, 6G-Bench's task)
          runs the task with that argument; its samples keep their numbers
+describe - each unit's question as the sample holds it (3GPP TSG's title its
+         document's text, past the classification prompt), and as its categories
+         the value of each filter its task takes, from the sample's metadata, and
+         TeleMath's category, from the row the task reads
 setup  - the task on the unit with a model that replies nothing: what the
          solver asks it (TeleMath's system prompt, then the question; the
          multiple-choice template with its lettered choices) is the prompt
@@ -45,6 +49,8 @@ with open(os.path.join(HERE, "data-source.json")) as f:
 WORK = os.getcwd()                         # the job's driver folder, shared by its drivers
 FILTERS = ("subject", "difficulty", "task_id")      # a task argument that picks samples
 SCORING = ("eval_type",)                            # a task argument of the scorer
+ROW_FIELDS = {"telemath": ("category",)}            # a row's field the task leaves out of its samples
+DOCUMENT = "###TEXT:"                               # 3GPP TSG: the document's text follows the prompt
 # The reply each task's prompt asks for; a multiple-choice task's is 'ANSWER: <letter>'.
 FORMATS = {"telemath": "\\boxed{%s}", "telelogs": "\\boxed{%s}", "three_gpp": '{"WORKING GROUP": "%s"}'}
 
@@ -184,6 +190,40 @@ def units(dataset, setup=None):
     return {"units": out}
 
 
+def text_of(s):
+    """A sample's question: its input, or the text of its input's messages."""
+    if isinstance(s.input, str):
+        return s.input
+    return "\n\n".join(str(getattr(m, "text", "") or "") for m in s.input or [])
+
+
+def rows():
+    """The dataset's rows as its file holds them, in the samples' order: read by the
+    task's own call (Inspect's hf_dataset, from the cache the task's load wrote)."""
+    with locked(os.path.join(WORK, "open-telco.lock")), quiet():
+        from inspect_ai.dataset import Sample, hf_dataset
+        got = hf_dataset(ROOT, name=DATASET.rsplit("-", 1)[0], split=PARAMS["split"].default,
+                         sample_fields=lambda r: Sample(input="", metadata=r))
+    return [s.metadata for s in got]
+
+
+def describe(dataset, **_):
+    every = numbered()
+    place = {u: i for i, u in enumerate(every)}
+    fields = ROW_FIELDS.get(NAME, ())
+    row = rows() if fields else []
+    out = {}
+    for unit in units(dataset)["units"]:
+        s = every[unit]
+        meta = {**(s.metadata or {}), **{n: row[place[unit]].get(n) for n in fields}}
+        text = text_of(s)
+        title = text.split(DOCUMENT, 1)[1].strip().removeprefix("{").removesuffix("}") if DOCUMENT in text else text
+        out[unit] = {"title": title, "text": text,
+                     "categories": {n: str(meta[n]) for n in (*FILTERS, *fields)
+                                    if (n in PARAMS or n in fields) and meta.get(n) not in (None, "")}}
+    return {"units": out}
+
+
 def sample_id(unit):
     return unit if isinstance(numbered()[unit].id, str) else int(unit)
 
@@ -238,7 +278,7 @@ def oracle(unit, dir):
     return {"answer": f"ANSWER: {s.target}" if s.choices else FORMATS[NAME] % s.target}
 
 
-HANDLERS = {"units": units, "setup": setup, "answer": answer, "score": score, "oracle": oracle}
+HANDLERS = {"units": units, "describe": describe, "setup": setup, "answer": answer, "score": score, "oracle": oracle}
 
 
 def main():

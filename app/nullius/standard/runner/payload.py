@@ -20,6 +20,7 @@ from pathlib import Path
 
 from nullius import paths
 from nullius.standard.contract import definitions
+from nullius.standard.runner import sets as task_sets
 
 PACKAGE = Path(__file__).resolve().parents[2]
 FORMAT = 1
@@ -40,9 +41,9 @@ def _safe(relative: str) -> bool:
             and p.suffix.lower() not in {".pem", ".key", ".p12", ".pfx", ".pyc"})
 
 
-def _read(root: Path, relative: str) -> tuple[bytes, int]:
+def _read(root: Path, relative: str, *, task_set: bool = False) -> tuple[bytes, int]:
     """Read a regular file below root, refusing symlinks at every segment."""
-    if not _safe(relative):
+    if not (_safe(relative) or task_set and _safe(str(Path(relative).parent))):
         raise ValueError(f"not a runner resource: {relative}")
     p = root
     for segment in Path(relative).parts:
@@ -191,7 +192,7 @@ def _cached(destination: Path, marker: str, files: dict) -> bool:
     valid = found == expected and manifest.read_text() == marker
     if valid:
         for name, value in files.items():
-            if _read(destination / "app/nullius", name) != value:
+            if _read(destination / "app/nullius", name, task_set=name.startswith("catalogue/sets/")) != value:
                 valid = False
                 break
     if not valid:
@@ -199,11 +200,24 @@ def _cached(destination: Path, marker: str, files: dict) -> bool:
     return True
 
 
-def build(cache: str, *, package: Path | None = None, catalogue: str | None = None) -> tuple[str, str]:
+def recipe_sets(recipe: dict) -> list[tuple[str, str]]:
+    """The task sets a standard recipe runs (``task_sets``), as (benchmark, name): what its snapshot carries."""
+    asked = (recipe or {}).get("task_sets")
+    bench = str((recipe or {}).get("benchmark") or "").partition("@")[0]
+    if not bench:
+        return []
+    refs = [ref for ref in (asked.values() if isinstance(asked, dict) else []) if isinstance(ref, str) and ref]
+    return sorted({(bench, ref.partition("@")[0]) for ref in refs if ref})
+
+
+def build(cache: str, *, package: Path | None = None, catalogue: str | None = None,
+          sets: list[tuple[str, str]] | None = None) -> tuple[str, str]:
     """Return (content ID, snapshot root), with ``app/nullius`` below it.
 
     A user entry replaces the whole bundled entry. Nothing is created in either input tree. The staged tree is
     replaced atomically, and the address covers the exact bytes being sent.
+    ``sets``: the task sets of the user catalogue the run reads, each
+    (benchmark, name), carried at ``catalogue/sets/<benchmark>/<name>.json``.
     """
     package = Path(package) if package is not None else PACKAGE
     if package.is_symlink():
@@ -240,6 +254,15 @@ def build(cache: str, *, package: Path | None = None, catalogue: str | None = No
             except json.JSONDecodeError:
                 continue  # Unfinished JSON drafts are not runnable catalogue entries.
             files.update({f"catalogue/{kind}/{name}/{r}": value for r, value in contents.items()})
+    for bench, name in sets or ():
+        try:
+            task_sets.check_name(name)
+        except task_sets.Refused as e:
+            raise ValueError(str(e)) from None
+        relative = f"sets/{bench}/{name}.json"
+        if not _KEY.fullmatch(bench) or "/" in name or not (user / relative).is_file():
+            raise ValueError(f"the task set {name} of {bench} is not in the catalogue")
+        files[f"catalogue/{relative}"] = _read(user, relative, task_set=True)
     kits = package / "standard" / "kits"
     if kits.is_dir():
         if kits.is_symlink():

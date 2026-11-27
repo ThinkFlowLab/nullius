@@ -32,7 +32,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "21"
+SCHEMA = "22"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness, so a limit the run survived leaves nothing in result.json —
@@ -465,6 +465,9 @@ class Job:
     # "declared" by its producer, "derived" from its files or is "pending" ("" uid).
     uid: str = ""
     uid_source: str = ""
+    # The task set a Nullius standard job ran (config ``standard.task_set``): its name, its label (its name for a
+    # job from before labels) and id, its benchmark, and ``units``, its number of ids. {} for every other job.
+    task_set: dict = field(default_factory=dict)
     # How the job was launched, as its config.json recorded it with Harbor's
     # defaults filled in (launch_of). Empty when config.json is absent.
     launch: dict = field(default_factory=dict)
@@ -722,11 +725,14 @@ def looks_like_job_dir(path: str) -> bool:
     )
 
 
-def find_job_dirs(roots) -> list[str]:
+def find_job_dirs(roots, strict=None) -> list[str]:
     """Return every job directory found under the given root paths.
 
     A root may itself be a job dir, or a parent containing job dirs (one level
-    down). Duplicates are dropped in first-seen order.
+    down). Duplicates are dropped in first-seen order. `strict`: for a reader
+    that must know every job (who owns a judgement), a test on a folder's name:
+    OSError when a root, or a folder in one whose name passes, cannot be
+    searched (`uid.searched`), so a hidden job is never taken for none.
     """
     found: list[str] = []
     seen: set[str] = set()
@@ -740,10 +746,17 @@ def find_job_dirs(roots) -> list[str]:
     for root in roots:
         if not os.path.isdir(root):
             continue
+        if strict:
+            try:
+                os.stat(os.path.join(root, "result.json"))
+            except FileNotFoundError:
+                pass
         if looks_like_job_dir(root):
             add(root)
         for name in sorted(os.listdir(root)):
             p = os.path.join(root, name)
+            if strict and strict(name):
+                job_uid.searched(p)
             if os.path.isdir(p) and looks_like_job_dir(p):
                 add(p)
     return found
@@ -1093,7 +1106,7 @@ def identity_of(cfg: dict, res: dict, agent_version: str = "") -> dict:
     """What tells a Nullius standard run from another, from its ``config.json``
     (``cfg``) and its ``result.json`` (``res``): the benchmark, its version and
     options; the agent as the run named it, the version its trials report
-    (``agent_version``) and its options, defaults included; the model; the
+    (``agent_version``) and its options, defaults included; the backend its units ran on; the model; the
     provider; the serving providers pinned by model (``served_by``) and who
     served (``served``); and the limits in force: time limits by phase, turns,
     model calls, attempts of each unit, retries, units at a time, and the
@@ -1110,7 +1123,7 @@ def identity_of(cfg: dict, res: dict, agent_version: str = "") -> dict:
     out = {"benchmark": word(std.get("benchmark")), "benchmark_version": word(std.get("benchmark_version")),
            "benchmark_options": _options(std.get("benchmark_options")),
            "agent": word(std.get("plugged")), "agent_version": word(agent_version),
-           "agent_options": _options(std.get("options")), "model": word(first.get("model_name"))}
+           "agent_options": _options(std.get("options")), "backend": word(std.get("backend")), "model": word(first.get("model_name"))}
     # a control asks no model unless it has a judge or a simulated user; the provider it records is then a default
     asks = out["model"] or std.get("judge") or std.get("simulator") or std.get("kind") != "control"
     out["provider"] = word(std.get("provider")) if asks else ""
@@ -1211,6 +1224,11 @@ def parse_job(job_dir: str, reuse=None, trials: bool = True) -> Job:
     job.launch_id = str(std.get("launch") or "")
     merged = std.get("merged_from")
     job.merged_from = [s["job"] for s in merged if isinstance(s, dict) and isinstance(s.get("job"), str) and s["job"]] if isinstance(merged, list) else []
+    ts = std.get("task_set") if isinstance(std.get("task_set"), dict) else {}
+    job.task_set = ({"name": str(ts["name"]), "label": str(ts.get("label") or ts["name"]),
+                     "id": str(ts.get("id") or ""), "benchmark": str(std.get("benchmark") or ""),
+                     "units": len(ts["units"]) if isinstance(ts.get("units"), list) else 0}
+                    if isinstance(ts.get("name"), str) and ts["name"] else {})
     job.budget = _budget(res.get("budget"))
     job.identity = identity_of(cfg, res, job.agent_version)
     job.standard = bool(std)

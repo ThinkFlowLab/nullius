@@ -84,6 +84,48 @@ def facts(job_dir: str, cfg: dict, res: dict):
             "start": start or ""}
 
 
+def _strict_json(path: str) -> dict:
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except ValueError as e:
+        raise OSError(f"{path}: {e}") from e
+    if data is not None and not isinstance(data, dict):
+        raise OSError(f"{path}: not a JSON object")
+    return data or {}
+
+
+def strict(job_dir: str) -> str:
+    """The job's uid (`of`) from its files read strictly: OSError when one that is there cannot be
+    read, so a caller that must know who owns a judgement (a delete) is told the owner is unknown,
+    never another uid. The trials are listed strictly too."""
+    cfg, res = _strict_json(os.path.join(job_dir, "config.json")), _strict_json(os.path.join(job_dir, "result.json"))
+    if not _declared(cfg) and not res.get("started_at") and not isinstance(cfg.get("harness"), str):
+        searched(job_dir)                                # the trials `_has_trial` looks for, each one strictly
+    return of(job_dir, cfg, res)[0]
+
+
+def searched(folder: str) -> None:
+    """OSError when the folder *folder* cannot be searched for a job's or its trials'
+    ``result.json``, or listed: whether it is a job, and whose, is then unknown. A file is no job."""
+    try:
+        os.stat(os.path.join(folder, "result.json"))
+    except NotADirectoryError:
+        return
+    except FileNotFoundError:
+        if not os.path.isdir(folder):
+            return
+    with os.scandir(folder) as entries:
+        for e in entries:
+            if e.is_dir():
+                try:
+                    os.stat(os.path.join(e.path, "result.json"))
+                except (FileNotFoundError, NotADirectoryError):
+                    pass
+
+
 def of(job_dir: str, cfg: dict, res: dict) -> tuple:
     """``(uid, source)``: the job's identity and where it came from,
     ``declared``, ``derived`` or ``pending`` (uid "")."""

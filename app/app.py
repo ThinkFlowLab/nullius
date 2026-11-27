@@ -28,11 +28,11 @@ from werkzeug.serving import is_running_from_reloader  # noqa: E402
 if __package__:  # the wheel's private web namespace
     from .web.core import app
     from .web import shared
-    from .web import filters, runs, traces, compare, builder, catalogue, agents, settings, workspaces, execute, judge, feasibility, reconcile, judge_tasks, onboarding, failure
+    from .web import filters, runs, traces, compare, builder, catalogue, agents, settings, workspaces, execute, judge, feasibility, reconcile, judge_tasks, onboarding, failure, leaderboard
 else:  # python app/app.py, and the source route suite
     from web.core import app
     from web import shared
-    from web import filters, runs, traces, compare, builder, catalogue, agents, settings, workspaces, execute, judge, feasibility, reconcile, judge_tasks, onboarding, failure
+    from web import filters, runs, traces, compare, builder, catalogue, agents, settings, workspaces, execute, judge, feasibility, reconcile, judge_tasks, onboarding, failure, leaderboard
 from nullius import execution, workspace  # noqa: E402  - recorded runs, picked up again at start; the workspace left open
 
 
@@ -47,7 +47,7 @@ def _port(value: str) -> int:
 def parser() -> argparse.ArgumentParser:
     """The command line; the server's address and port default to APP_HOST
     and APP_PORT (an empty one is unset), read once, here, at start."""
-    ap = argparse.ArgumentParser(description="Nullius: the run behind a benchmark score.")
+    ap = argparse.ArgumentParser(prog="nullius serve", description="Nullius: the run behind a benchmark score.")
     ap.add_argument("paths", nargs="*", help="job directory (or parent) to scan")
     ap.add_argument("--host", default=os.environ.get("APP_HOST") or "127.0.0.1")
     ap.add_argument("--port", type=_port, default=os.environ.get("APP_PORT") or "5057")

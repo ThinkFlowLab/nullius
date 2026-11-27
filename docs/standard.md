@@ -146,6 +146,7 @@ record); verifier/reward.txt and score.json
 | Rate limits | After a `rate_limited` end no unit starts for 60 s, or the provider's `Retry-After`, doubling to 300 s while units keep ending so |
 | The relay | Headers pass through except the credentials, replaced by the relay's key; `agent/calls.jsonl` names them, never their values. A 429 reaches the agent as it came, never retried. Every call goes as the run's model, the one asked recorded as `model_asked`, except `model.side_models`, sent as asked and recorded `side`. Provider `anthropic` serves `messages` only ([protocols](settings/model-providers.md#protocols)) |
 | Constraints (`--constraint KEY=VALUE`) | What the machine allows Nullius, from Settings ([constraints](settings/run-hosts.md#constraints)): flags on every container the run starts on the machine, on either backend; a systemd scope for each process the run starts there (its drivers, and its agents and capabilities on the local backend); the most units at a time; the CPU affinity; the driver's `CUDA_VISIBLE_DEVICES`. The local backend refuses a cap that no scope holds. `config.json` records the values under `standard.constraints` |
+| A task set (`--set NAME`) | A frozen, named list of a dataset's units, recorded in `config.json` as `standard.task_set` ([Task sets](cli/task-sets.md)) |
 | A cap on model calls (`--max-calls`) | Agents only. A unit's relay counts its agent route's answered calls and refuses the one past the cap: the agent's error, as a timeout is ([Run a benchmark](cli/run.md#a-cap-on-model-calls)) |
 | Who served a call | Each call's record keeps the routing field it was sent with (`request.routing`), the serving provider its reply names (`reply.served_by`), how the reply ended (`reply.end`: `finish_reason`, `stop_reason` or a Responses status) and an error the reply holds under a 200 (`reply.error`), cleaned of credentials. |
 | Serving providers (`--served-by`) | On OpenRouter, the providers that may answer a model, in order and no other: the caller's own routing is replaced, kept as `request.routing_asked`. `config.json` records `standard.served_by`; each trial's `result.json` and the job's say the calls of every route by serving provider and, for each pinned model, `held`, which reads the provider's name alone ([Run a benchmark](cli/run.md#serving-providers)) |
@@ -365,7 +366,7 @@ N machines are N runs of the same command, each with `--shard I/N`, and one merg
 | Shards by the unit's id | `sha256(unit id) mod N`; changing N moves most units. Order: the driver's `units`, the units `--units FILE` lists, the shard, then `--limit` (`--shard 1/2 --limit 6` is the first six units of shard 1) |
 | A unit keeps its place | `u0042` is the 43rd unit of the whole dataset in every shard |
 | One launch | Each shard's `config.json` records `standard.shard` (`index`, `of`, `units_total`, `partition`, `planned`, `limit`) and `standard.launch` (`--launch`, else the UTC day, benchmark, agent or capability and model). With `--units`, `units_total` counts the listed units. The shards' lists hold the same units; a list's file name, comments and sha256 may differ from shard to shard |
-| `cli merge JOB_DIR... -o OUT` | One job: trials hard-linked, `result.json` recomputed, `config.json` with `merged_from` and a `standard.uuid` of its own. Shards that differ in launch, version, dataset, agent, model, serving providers, backend or N are refused unless `--force`. Shards whose lists hold different units, and two trials of one unit, are refused always. |
+| `cli merge JOB_DIR... -o OUT` | One job: trials hard-linked, `result.json` recomputed, `config.json` with `merged_from` and a `standard.uuid` of its own. Shards that differ in launch, version, dataset, agent, model, serving providers, backend, N or task set are refused unless `--force`. Shards whose lists hold different units, and two trials of one unit, are refused always. |
 | `cli prove --shard I/N` | The controls and the leak check on that shard's units; each record says `shard` |
 | Different options per shard | Shards of one launch may differ in `--bench-option` (a unit that needs a service its machine serves); the merged config keeps each shard's in `merged_from` |
 | `cli prove --job nop=MERGED` | Checks a merged launch of a control against its bound instead of running it. The job and each of its trials name that benchmark, version, control and job; each unit of the dataset has one trial, scored 0 to 1; the units check passes. `--dataset` named, no `--limit` or `--shard`. The record names the job and its options |
@@ -414,7 +415,7 @@ local proof records; saved runs and credentials remain.
 ### A benchmark
 
 1. **Scaffold it.** `cli new benchmark KEY` (`--family capability --port cap.memory/v1` for a capability benchmark) writes `benchmarks/<key>/standard.json` and `driver.py` under your user catalogue (`nullius paths`).
-2. **Pin the data.** `upstream.repository` and `upstream.tested`, a full commit: the latest release tag's (`upstream.tag`; an annotated tag's commit is the `^{}` line of `git ls-remote --tags`), a default-branch commit only without a release. Each dataset: its `path` in the upstream or its `url` at a revision, its `sha256` and `units`. Installs and upstreams go under `STANDARD_DIR` (`~/.local/share/nullius/standard` on Linux by default), downloaded datasets under its `datasets/` or `STANDARD_DATA_DIR`.
+2. **Pin the data.** `upstream.repository` and `upstream.tested`, a full commit: the latest release tag's (`upstream.tag`; an annotated tag's commit is the `^{}` line of `git ls-remote --tags`), a default-branch commit only without a release. Each dataset: its `path` in the upstream or its `url` at a revision, its `sha256` and `units`; optional `subset_of`, the id of a list cut from none that holds every unit of this one. Installs and upstreams go under `STANDARD_DIR` (`~/.local/share/nullius/standard` on Linux by default), downloaded datasets under its `datasets/` or `STANDARD_DATA_DIR`.
 3. **Choose the needs.** The fewest ports: `agent.workspace/v1` for files, `agent.search/v1` for search and source retrieval, `agent.tools/v1` for MCP tools, `agent.conversation/v1` if a user speaks more than once; a skill the units cannot be done without goes in `needs_skills`.
 4. **Write the driver.** It answers the [ops below](#driver-ops); the dataset file is `$NULLIUS_DATASET` (empty for a dataset with no `path` or `url`), the upstream `$NULLIUS_UPSTREAM`, the version `$NULLIUS_VERSION`. Keep the tests out of the workspace until `score`; prints go to stderr.
 5. **Its own options**, when the upstream offers a choice a run should make ([below](#benchmark-options)).
@@ -427,6 +428,7 @@ local proof records; saved runs and credentials remain.
 | Op | Sent | Replies |
 | --- | --- | --- |
 | `units` | `dataset`, `setup` | Every unit id |
+| `describe` | `dataset`, with `driver.describe` | `{units: {ID: {title, text, categories: {FIELD: VALUE}}}}`, from the dataset's files alone, for [listings](cli/task-sets.md) |
 | `setup` | `unit`, `dir`; `attempt` with `limits.attempts`; `participant` (`agent`, `capability` or `control`) with `driver.participant` | `{prompt}`, any `mcp` servers, `environment`, an own image's `image`, `prepare`, `internet` and `verify`, and `agent_seconds`, the unit's own agent timeout (up to 6 hours, instead of `limits.turn_seconds`); `progress`, a file in the trial the driver rewrites: `{steps, steps_limit, ended}` |
 | `turn` | The transcript so far; `simulator: {model, base_url, key}` when there is one; `judge` for an upstream that grades as the conversation ends; `attempt` with `limits.attempts` | The next message, `{done: true}`, or `restart` |
 | `produce` | A capability benchmark's recall, `base_url` and `key` | The reading, through the relay |
@@ -451,10 +453,13 @@ An `answer` or `score` error that begins `EnvironmentSetupError: `, `VerifierErr
 | `limits.call_seconds` | How long the relay waits for one model call's reply (default 900). A benchmark whose agent waits longer for a call sets it above that agent's own wait, so the agent's client, not the relay, ends a long call |
 | `driver.participant` | `true`: `setup` is also sent `participant`, the kind of what runs the unit, for a driver that starts something only an agent uses |
 | `driver.unit_end` | `true`: the driver is sent `end` (`unit`, `dir`) once each unit an agent ran has ended, scored or not, so that what its setup started for the agent ends with the unit. A control's or a setup's unit gets none |
+| `driver.describe` | `true`: the driver answers `describe`; without it a listing gives ids alone |
+| `driver.list_command` | A start of the driver for listings alone, needing only the standard library and the dataset's files; `{here}` its one slot |
 | `driver.task_given` | `true`: the driver is sent `task_given` before each agent is given its task, and the task waits for its answer: [the computer port](ports/agent-computer-v1.md#the-window-before-the-task) closes its window before the task there. A control's or a setup's unit gets none |
 | `limits.attempts` | How the upstream tells attempts apart; the driver is then sent `attempt` with `setup`, `turn` and `answer` |
 | `limits.scored_cuts` | The cuts after which an agent's unit is still scored: `time`, `calls`, `end` ([a unit cut at a limit](cli/run.md#a-unit-cut-at-a-limit)) |
 | `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |
+| `units.categories` | `{FIELD: {label, names: {VALUE: name}}}`: how `describe`'s categories read on a listing; `--category` still takes the value |
 
 !!! note "Call the upstream, never copy it"
     The driver imports the upstream from `$NULLIUS_UPSTREAM` and calls its loader, prompts, scorer, judge and loop. Never patch its bugs: say it in the limitations; a fix is a fork's, brought in as a [version](#versions).
@@ -529,7 +534,7 @@ An agent or a capability may keep several versions in its one file: an older rel
 | Rule | Detail |
 | --- | --- |
 | `versions` | Each version's `upstream`, `install`, and when it must, `start`, `model` or `env`; `default` names the one offered |
-| Naming | `codex@2.2.2` wherever a key is taken; a bare `codex` is its default |
+| Naming | `codex@2.2.2` wherever a key is taken; a bare `codex` is its default; `locomo@main`, the name pages show, when one version has it |
 | `cli new version KEY VERSION` | Adds one from the default's block, nothing proven; a file without `versions` is turned into one first, proofs kept |
 | Proof per version | A version runs nothing until `cli conform KEY@VERSION` passes; without `versions`, a proof on another `upstream.version` does not count |
 | In jobs | In the job name (`…__codex-2.2.2`) and the trial's `agent_info` |

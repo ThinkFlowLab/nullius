@@ -2,6 +2,7 @@
   "schema": "nullius.agent/v1",
   "key": "codex",
   "label": "Codex",
+  "company": "OpenAI",
   "summary": "OpenAI's coding agent.",
   "upstream": {
     "license": "Apache-2.0"

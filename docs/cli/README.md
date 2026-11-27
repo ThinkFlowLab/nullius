@@ -10,7 +10,7 @@ From a source checkout, replace `nullius` with
 | Page | Command |
 | --- | --- |
 | [Launch](../getting-started.md) | `nullius serve [roots...]` |
-| [Read jobs](read-jobs.md) | `nullius runs`, `nullius compare`, `nullius workspace`, `nullius standard traces` |
+| [Read jobs](read-jobs.md) | `nullius runs`, `nullius compare`, `nullius leaderboard`, `nullius workspace`, `nullius standard traces` |
 | [Import a run](import.md) | `nullius import` |
 | [Task flags](flags.md) | `nullius flags list`, `set`, `accept`, `remove`, `copy`, `import`, `feasibility` |
 | [Definitions](definitions.md) | `nullius standard list`, `check`, `fit`, `pins`, `new` |
@@ -20,6 +20,7 @@ From a source checkout, replace `nullius` with
 | [Fidelity](fidelity.md) | `nullius standard fidelity` |
 | [Replay a model call](replay.md) | `nullius standard replay`, `study`, `recount` |
 | [Shard and merge](shard-and-merge.md) | `nullius standard run --shard`, `merge` |
+| [Task sets](task-sets.md) | `nullius standard units`; `set create`, `list`, `show`, `rename`, `delete`, `import`; `run --set` |
 | [Storage](../settings/README.md#storage) | `nullius paths [--json]` |
 | [Model prices](../settings/model-prices.md) | `nullius prices [list\|update\|set\|remove]` |
 | [Migration](../getting-started.md#migrate-an-existing-checkout) | `nullius migrate --from CHECKOUT [--secrets PATH] [--apply]` |

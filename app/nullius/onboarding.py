@@ -94,12 +94,13 @@ def facts(env, jobs: Iterable[dict] = (), judged: bool = False, docker: Optional
 
 
 def any_judged(ws_dir: Optional[str]) -> bool:
-    """Whether a workspace holds a judgement from either judge."""
+    """Whether the user's store, or the store a workspace kept before, holds a judgement from either judge."""
     from nullius.judge import store
-    for lane in store.ROOTS.values():
-        root = os.path.join(ws_dir or "", lane)
-        if ws_dir and os.path.isdir(root) and any(files for _, _, files in os.walk(root)):
-            return True
+    for base in filter(None, (store.home(), ws_dir)):
+        for lane in store.ROOTS.values():
+            root = os.path.join(base, lane)
+            if os.path.isdir(root) and any(n.endswith(".json") for _, _, files in os.walk(root) for n in files):
+                return True
     return False
 
 

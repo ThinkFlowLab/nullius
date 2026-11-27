@@ -2,6 +2,7 @@
   "schema": "nullius.agent/v1",
   "key": "mini-swe-agent",
   "label": "mini-swe-agent",
+  "company": "Princeton and Stanford",
   "summary": "Princeton's 100-line agent, bash only.",
   "upstream": {
     "package": "mini-swe-agent",

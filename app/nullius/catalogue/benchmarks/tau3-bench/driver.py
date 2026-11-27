@@ -14,6 +14,10 @@ units  - the domain's tasks in the dataset file's order (the upstream's
          tasks than the upstream's task set runs.
          A dataset with no file (banking_knowledge, its tasks one file each) is
          the upstream's own task loader (``registry.get_tasks_loader``)
+describe - each task's purpose (``description.purpose``, else the reason
+         for the call) and the user's reason for the call; a telecom task's
+         intent and persona, read from its id by the upstream's own
+         ``get_intent_from_task_id`` and ``get_persona_from_task_id``
 setup  - the agent's instructions and the domain's policy as the upstream's
          agent is given them (``LLMAgent.system_prompt``: its
          ``SYSTEM_PROMPT`` and ``AGENT_INSTRUCTION`` over
@@ -110,6 +114,7 @@ from tau2.agent.llm_agent import LLMAgent
 from tau2.data_model.message import AssistantMessage, MultiToolMessage, ToolCall, ToolMessage, UserMessage
 from tau2.data_model.simulation import SimulationRun, TerminationReason, TextRunConfig
 from tau2.data_model.tasks import RewardType, Task
+from tau2.domains.telecom.tasks.utils import get_intent_from_task_id, get_persona_from_task_id
 from tau2.evaluator.evaluator import EvaluationType, evaluate_simulation
 from tau2.orchestrator.orchestrator import DEFAULT_FIRST_AGENT_MESSAGE
 from tau2.registry import registry
@@ -474,6 +479,23 @@ def units(dataset, setup=None):
     return {"units": [u for u, t in tasks().items() if keep is None or keep(t)]}
 
 
+def describe(dataset, **_):
+    out = {}
+    for unit in units(dataset)["units"]:
+        t = task(unit)
+        said = t.user_scenario.instructions
+        reason = str(said if isinstance(said, str) else said.reason_for_call or "").strip()
+        purpose = (t.description.purpose if t.description else None) or ""
+        cats = ({"intent": get_intent_from_task_id(unit), "persona": get_persona_from_task_id(unit)}
+                if unit.startswith("[") else {})        # a telecom id: [intent]actions[PERSONA:persona]
+        # a telecom task's purpose and reason are its issue's, which the Issue category already says: the faults
+        # its id lists tell it from the others
+        faults = unit.split("]", 1)[1].rsplit("[", 1)[0] if cats else ""
+        title = " · ".join(f.replace("_", " ") for f in faults.split("|") if f).capitalize() or purpose.strip() or reason
+        out[unit] = {"title": title, "text": reason, "categories": cats}
+    return {"units": out}
+
+
 def setup(unit, dir, attempt=None):
     t = task(unit)
     _leave()                                              # one unit at a time: an earlier one left unfinished is ended
@@ -612,4 +634,4 @@ def oracle(unit, dir):
 
 
 if __name__ == "__main__":
-    serve({"units": units, "setup": setup, "turn": turn, "answer": answer, "score": score, "oracle": oracle}, out=PROTOCOL)
+    serve({"units": units, "describe": describe, "setup": setup, "turn": turn, "answer": answer, "score": score, "oracle": oracle}, out=PROTOCOL)

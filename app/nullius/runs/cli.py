@@ -49,12 +49,12 @@ EXIT_FAILED = 4
 
 EPILOG = """\
 examples:
-  PYTHONPATH=app python3 -m nullius.runs.cli list jobs
-  PYTHONPATH=app python3 -m nullius.runs.cli list jobs jobs_imported --json
-  PYTHONPATH=app python3 -m nullius.runs.cli show jobs 2026-09-12__22-53-55 --json
-  PYTHONPATH=app python3 -m nullius.runs.cli show jobs 2026-09-12__22-53-55 astropy__astropy-8707__agWFDYq
-  PYTHONPATH=app python3 -m nullius.runs.cli show jobs 2026-09-12__22-53-55 astropy__astropy-8707__agWFDYq --call 3 --request
-  PYTHONPATH=app python3 -m nullius.runs.cli show jobs 2026-09-12__22-53-55 astropy__astropy-8707__agWFDYq --calls
+  nullius runs list jobs
+  nullius runs list jobs jobs_imported --json
+  nullius runs show jobs 2026-09-12__22-53-55 --json
+  nullius runs show jobs 2026-09-12__22-53-55 astropy__astropy-8707__agWFDYq
+  nullius runs show jobs 2026-09-12__22-53-55 astropy__astropy-8707__agWFDYq --call 3 --request
+  nullius runs show jobs 2026-09-12__22-53-55 astropy__astropy-8707__agWFDYq --calls
 
 exit codes:
   0  done
@@ -339,7 +339,7 @@ def _show(args) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        prog="python3 -m nullius.runs.cli", description=__doc__.splitlines()[0],
+        prog="nullius runs", description=__doc__.splitlines()[0],
         epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="command", metavar="COMMAND")
     ls = sub.add_parser("list", help="the job ids under one or more roots, newest first",

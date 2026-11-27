@@ -88,15 +88,15 @@ def _card(kind: str, e: dict) -> dict:
                        if b["key"] == d["benchmark"] for p in b.get("needs") or [])
         return {"href": url_for("benchmark_page", key=d["benchmark"]), "id": d["_ref"].replace(":", "-"),
                 "search": " ".join([d["label"], d["key"], d["benchmark_label"], e["protocol"], d.get("summary", "")]),
-                "protocol": e["protocol"], "origin": origin_tags(d), "default_origin": origin_tags(d)[:1], "icon": agent_mark_url(d["key"]), "title": d["label"], "summary": d.get("summary"),
-                "from": {"text": d["benchmark_label"], "value": "benchmark"},
+                "protocol": e["protocol"], "origin": origin_tags(d), "icon": agent_mark_url(d["key"]), "title": d["label"], "summary": d.get("summary"),
+                "from": {"text": d["benchmark_label"], "value": "benchmark"}, "benchmark": d["benchmark_label"],
                 "uses": "Computer use" if computer else None, "models": ", ".join(d.get("models") or []),
                 "runs_on": _runs_on(e), "unless": {"origin": "runs_on"}, "hide": ["ports", "runs", "installs"]}
     version, n = (d.get("upstream") or {}).get("version"), len(d.get("_versions") or ())
     return {"href": url_for("agent_page" if kind == "agent" else "feature_page", key=d["key"]), "id": d["key"],
             "search": " ".join([d["label"], d["key"], d.get("kind", ""), e["protocol"], d.get("summary", "")]),
             "kind": d.get("kind") if kind == "capability" else None, "protocol": e["protocol"],
-            "origin": origin_tags(d) if kind == "agent" else None, "default_origin": origin_tags(d)[:1] if kind == "agent" else None,
+            "origin": origin_tags(d) if kind == "agent" else None,
             "example": {"text": "example", "title": "Nullius's own, to read or copy - not an agent to compare"} if d.get("example") else None,
             "version": ("v" + str(version) if version else "") + (f" · {n} versions" if n > 1 else ""),
             "icon": agent_mark_url(d["key"]) if kind == "agent" else None, "title": {"text": d["label"], "after": str(version or "")},

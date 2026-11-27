@@ -12,6 +12,7 @@ The tasks and how each is scored; one folder in the catalogue, run on one or bot
 | Task, unit | One problem of a dataset; the standard says unit |
 | Task limit | How many tasks a run takes; empty means every task |
 | List of units | The tasks a standard run takes by their ids, from a file ([`--units FILE`](cli/run.md#a-list-of-units)) |
+| Task set | A named, frozen list of a dataset's units that a run can take ([`--set NAME`](cli/task-sets.md)) |
 | Verifier | The benchmark's own scoring: tests, an exact answer, a judge model |
 | Setup | Who answers: `original` (the published pipeline and models), `model` (that pipeline, your model), or your agent or capability |
 | Control | A run with no agent: `nop` does nothing, `oracle` applies the reference solution |
@@ -70,7 +71,7 @@ A count of runs leaves out the checks. The checks have a count of their own.
 
 ## Workspace
 
-The roots you opened, the imports converted and the judgements saved; the same roots reopen the same workspace.
+The roots you opened and the imports converted; the same roots reopen the same workspace. Judgements belong to the job, in every workspace that holds it.
 
 <div class="grid cards" markdown>
 

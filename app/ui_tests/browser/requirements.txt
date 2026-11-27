@@ -1,0 +1,2 @@
+# Test-only browser automation; Flask remains the application's sole runtime dependency.
+playwright==1.65.2

@@ -22,7 +22,7 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 - **Proven: 2/2.** Passed basic checks out of required basic checks. All must pass to prove the port. Skills are additional checks, required only by benchmarks that ask for them.
 
-- **Original procedure, chosen participant and model.** Reference agents, or No agent · Original for direct model evaluation. Memory benchmarks offer Original memory alongside compatible capabilities. Model choices: [Run builder](builder.md#stages).
+- **Benchmark version, chosen participant and model.** The selected version supplies its procedure by default. Another agent or memory capability replaces it; benchmarks with several upstream agents let you choose among them. Model choices: [Run builder](builder.md#stages).
 
 - **Native and combined setups.** A capability's proof does not prove an agent uses it. Native, augmented and replacement setups need separate evidence. A replacement must disable or redirect the native path; an extra tool alone is not a swap. General agent-plus-capability recipes are not supported yet.
 
@@ -160,7 +160,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `is_running` | The job records running or pending trials. Numbers are partial. | measured | any |
 | `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Repeated attempts are separate trials, not retries. | measured | any |
 | `retries` | Retries a standard run allows each attempt (`--retries`); 0 elsewhere. | measured | any |
-| `identity` | A standard run's setup: benchmark, agent, model, provider, limits. Empty elsewhere. | measured | any |
+| `identity` | A standard run's setup: benchmark, agent, backend, model, provider, limits. Empty elsewhere. | measured | any |
 | `dataset` | The dataset folder, `name@version` for a registry fetch, or the task names' shared prefix. | measured | any |
 
 ## Trial metrics, one row per task attempt {#trials}
@@ -194,6 +194,7 @@ These fields are stored in the standard's job and trial files ([Run a benchmark]
 | Field | What it is | Source | Works on |
 | --- | --- | --- | --- |
 | `standard.units_file` | In `config.json`: the units file's name, sha256 and ordered ids, before sharding and the limit. | measured | standard |
+| `standard.task_set` | In the same config: the task set run, with its id, name, hash, ids and version. | measured | standard |
 | `standard.constraints` | In the same config: what the machine allowed the run, when set. Shards may have different machine constraints; merging keeps the first shard's config values. | measured | standard |
 | `standard.served_by` | In the same config: the allowed OpenRouter provider slugs by model, in the order tried. | measured | standard |
 | `served / standard.served` | In the job's `result.json` and each trial's `result.json`, respectively: answered calls by provider (`calls`), calls naming none (`unnamed`), and each pinned model's `held`. Counts cover every relay route; the job also includes the benchmark's own relay. Tokens and cost are the agent's own calls'. | measured | standard |
@@ -287,3 +288,68 @@ Thirteen classes. The five marked **yes** under Infrastructure leave the adjuste
 - [Compare and judge runs](judgement.md)
 
 </div>
+
+## Leaderboard
+
+Leaderboard scores describe one workspace's completed runs of catalogue agents.
+Controls, example agents, preparing/running jobs and standalone capability
+results do not contribute. Agent versions and execution setups are separate
+rows; sampling, units at a time, a run's total spending cap and retries after
+an infrastructure failure affect coverage rather than identity.
+
+For each dataset and benchmark version, select the compatible run with the most
+distinct non-infrastructure tasks, then the latest finish, then its stable run
+ID. A better score never wins selection. Repeated attempts stay with their task;
+repeated runs are not pooled. Explicit merged runs replace their source shards.
+A whole-benchmark entry unions selected datasets by canonical task identity;
+an overlap uses the same run precedence and retains that task's attempts.
+Unknown identities make aggregation unavailable rather than guessing aliases.
+A dataset without a task list counts coverage against its declared task count,
+by recorded task name. A dataset entry reads only that dataset. A declared task-name
+part reads only tasks matching its catalogue prefixes, across the selected
+datasets; its coverage uses the same filtered task union.
+
+An entry requires an explicitly recorded benchmark version. For an unversioned
+catalogue benchmark, new standard runs record its tested source pin. Older runs
+without that identity remain unavailable; the current default is never inferred.
+
+Score is adjusted solve rate for pass/fail tasks. Graded scores preserve recorded
+part weighting within a task, including agent crashes as zero with their part
+count (one when absent). Distinct task scores are then averaged. Infrastructure
+outcomes are excluded; missing measurements stay absent. Scores outside the
+supported 0–1 scale are unavailable. Raw job metrics are unchanged. pass^3 uses
+recorded attempts in one selected run and the existing eligible-unit semantics;
+independent one-attempt runs cannot supply it. A pass^3 entry selects first among
+the runs that recorded three attempts per task, whatever they scored.
+
+Each axis normalizes positive entry weights over available scores. Each family
+(capabilities, domains) has its own Overall: positive axis weights normalized over
+its measured axes. The Leaderboard ranks by the family it shows. Missing values are never
+zero. Evidence gives effective shares, configured weights, benchmark versions,
+task coverage and links to each selected run. An all-zero entry column is
+unavailable. Each family needs a positive weight on a row that has a benchmark.
+
+Scoring settings, the Leaderboard's other view, autosave to `scoring.json` beside
+`settings.json` (`nullius paths`). A file that cannot be read gives defaults with a warning
+and is left intact.
+
+Every row with an Overall is ranked by it; ties, compared to twelve decimals, share
+competition rank.
+Incomplete or unknown coverage of the required verified entries across counted
+axes is listed beside the rank as a note.
+Removed entries and zero weights add no note.
+
+Average uses available row scores and reports the count. A row comparison uses
+the shown family's shared measured axes for best and weakest differences in percentage
+points. Benchmark-version comparisons are temporary: settings and ranks do not
+change. Missing evidence for a replacement version leaves affected axes and
+Overall differences absent, rather than renormalizing a partial comparison; a row
+that never measured the benchmark is unchanged.
+Radar segments connect only adjacent measured axes, including wraparound.
+
+Efficiency averages distinct selected real trials, deduplicated across mappings,
+with infrastructure excluded. Time uses observed agent durations; cost uses
+observed costs, each with its own count. Steps and Tool calls load later from
+trajectories on the page; the command completes that read synchronously. Missing
+or malformed traces are unavailable, not zero. Changed trace content invalidates
+its cached metrics without reparsing unchanged traces.

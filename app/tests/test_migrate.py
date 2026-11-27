@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from nullius import migrate, paths, settings
+from nullius.standard.runner import sets
 
 
 class Migration(unittest.TestCase):
@@ -79,6 +80,26 @@ class Migration(unittest.TestCase):
         self.assertTrue(Path(paths.workspaces_dir(), "one/judgements/one.json").is_file())
         self.assertEqual(settings.in_file(paths.settings_file())["RUNS_DIR"], str(self.checkout / "runs"))
         self.assertTrue((workspace / "workspace.json").exists())
+
+    def test_task_sets_and_the_lists_of_one_made_before_survive_migration(self):
+        source = self.checkout / "app/nullius/catalogue"
+        bench = {"key": "fakebench", "datasets": [{"id": "all"}]}
+        entry = sets.create(bench, "dev", dataset="all", units=["good"], root=str(source))
+        # a set made before sets were frozen holds a second list
+        entry["revisions"].append({"revision": 2, "date": "2026-11-18T10:00:00Z", "note": "one more", "units": ["good", "model"],
+                                   "hash": sets.content_hash("fakebench", "all", ["good", "model"])})
+        sets.write(entry, root=str(source))
+        entry = sets.load("fakebench", "dev", str(source))
+        original = Path(sets.path_of("fakebench", "dev", str(source))).read_bytes()
+        code, output = self.run_cli()
+        self.assertEqual(code, 0, output)
+        self.assertIn("catalogue_entries: 1", output)
+        self.assertFalse(self.profile.exists())
+        self.assertEqual(self.run_cli("--apply")[0], 0)
+        self.assertEqual(sets.load("fakebench", "dev"), entry)
+        dest = Path(sets.path_of("fakebench", "dev"))
+        self.assertEqual(dest.read_bytes(), original)
+        self.assertEqual(Path(sets.path_of("fakebench", "dev", str(source))).read_bytes(), original)
 
     def test_licences_are_opt_in_and_copied_privately(self):
         secret = self.root / "legacy-secrets/bench"

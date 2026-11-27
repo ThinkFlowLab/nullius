@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 import threading
 import unittest
 from unittest import mock
 
+from nullius import ondisk
 from nullius.judge import store
 
 
@@ -43,6 +45,18 @@ class OverlappingSaves(unittest.TestCase):
                 t.join()
         answers = store.load(ws, "job", "t1", "v1")["answers"]
         self.assertEqual((errors, sorted(answers)), ([], ["q1", "q2"]))
+
+    def test_a_save_waits_for_the_file_lock_another_process_would_hold(self):
+        base = tempfile.mkdtemp(prefix="nullius-judge-lock-")
+        self.addCleanup(shutil.rmtree, base, True)
+        store.save(base, "job", "t1", {"questions": "v1", "answers": {}})
+        done = threading.Event()
+        save = threading.Thread(target=lambda: (store.save(base, "job", "t1", {"questions": "v1", "answers": {"q": 1}}), done.set()))
+        with ondisk.locked(os.path.join(base, "judgements", "job", ".lock")):        # not this process's thread lock: a file's
+            save.start()
+            self.assertFalse(done.wait(0.3), "the save did not wait for the lock")
+        save.join(2)
+        self.assertEqual(store.load(base, "job", "t1", "v1")["answers"], {"q": 1})
 
 
 if __name__ == "__main__":

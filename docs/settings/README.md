@@ -73,6 +73,7 @@ credential values. Linux defaults:
 
 | Stores | Default |
 | --- | --- |
+| Composite scoring | `~/.config/nullius/scoring.json` |
 | Saved settings | `~/.config/nullius/settings.json` |
 | Benchmark credentials | `~/.config/nullius/secrets/<benchmark>/` |
 | Hugging Face token | `~/.config/nullius/secrets/data-provider-huggingface/` |

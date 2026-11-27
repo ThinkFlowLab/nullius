@@ -82,7 +82,7 @@ def secrets_dir(env=None) -> str:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Show Nullius's persistent user directories (no secret values).")
+    parser = argparse.ArgumentParser(prog="nullius paths", description="Show Nullius's persistent user directories (no secret values).")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     values = {"settings": settings_file(), "secrets": secrets_dir(), "prices": prices_file(), "own prices": own_prices_file(), "catalogue": catalogue_dir(),
