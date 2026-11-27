@@ -68,8 +68,8 @@ class StartWithPage(unittest.TestCase):
         self.assertNotIn('id="plan-sets"', html)                                 # no set names one
         # the runs list: solved over the trials run, and how many of the plan
         runs = self.page("/runs")
-        self.assertIn('title="Begun on a part of its plan: the rates and the mean are over the tasks run">3 of 6 tasks run</span>', runs)
-        self.assertIn("3 on disk of 6 planned · begun on a part of its plan, 3 of 6 tasks run", self.page("/runs?view=all"))
+        self.assertIn('title="Started on some of its plan: the rates and the mean are over the tasks run">3 of 6 tasks run</span>', runs)
+        self.assertIn("3 on disk of 6 planned · started on some of its plan, 3 of 6 tasks run", self.page("/runs?view=all"))
 
     def test_a_set_s_tasks_not_run_and_the_rest_go_to_the_question_as_ticks(self):
         d = self.run_of()
@@ -326,11 +326,11 @@ process.stdout.write(JSON.stringify(out));
         self.open(d.parent)
         trial = self.page(f"/trial/r1/{name}")
         tabs = text(trial, r'<nav class="try-tabs".*?</nav>')
-        self.assertRegex(tabs, r"^Try 1 first run, in a later part \S+ Try 2 run again by hand"); self.assertNotIn("Try 1 run again", tabs)
-        self.assertRegex(trial, r'title="Try 1: [^"]*, first run, in a later part: the rest of the plan"')
+        self.assertRegex(tabs, r"^Try 1 first run, in a later run of the job \S+ Try 2 run again by hand"); self.assertNotIn("Try 1 run again", tabs)
+        self.assertRegex(trial, r'title="Try 1: [^"]*, first run, in a later run of the job: the rest of the plan"')
         self.assertEqual(text(trial, r'<p class="try-why muted small".*?</p>'), "Run again by hand: the provider failed")
         earlier = self.page(f"/trial/r1/{name}.try-1")
-        self.assertEqual(text(earlier, r'<p class="try-why muted small".*?</p>'), "First run, in a later part: the rest of the plan")
+        self.assertEqual(text(earlier, r'<p class="try-why muted small".*?</p>'), "First run, in a later run of the job: the rest of the plan")
 
     def test_first_run_label_strips_only_the_archive_suffix(self):
         name = "case.try-1__u0000"
@@ -339,7 +339,7 @@ process.stdout.write(JSON.stringify(out));
         for suffix in ("", ".try-1", ".try-12", ".try-note", ".try-1.more"):
             with self.subTest(suffix=suffix):
                 trial = SimpleNamespace(trial_name=name + suffix, rerun={"at": "later"})
-                expected = "run again by hand" if suffix in (".try-note", ".try-1.more") else "first run, in a later part"
+                expected = "run again by hand" if suffix in (".try-note", ".try-1.more") else "first run, in a later run of the job"
                 self.assertEqual(mark(trial, job), expected)
         self.assertEqual(mark(SimpleNamespace(trial_name=name, rerun={"at": "again"}), job), "run again by hand")
 

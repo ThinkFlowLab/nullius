@@ -859,7 +859,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if why_not:
         add("where", why_not)
     elif start_of and len(targets) > 1:
-        add("where", "A run begun on a part of its plan runs on one machine: choose one, or start with all.")
+        add("where", "A run started on some of its plan runs on one machine: choose one, or start with all.")
     elif backend == "container" and "local" in targets and docker_unusable is not None:
         why = docker_unusable()
         if why:

@@ -30,7 +30,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--dataset`, `--limit`, `-j` | One dataset, the first N units, N at a time |
 | `--units FILE` | Only the units the file lists: [below](#a-list-of-units) |
 | `--set NAME` | Only the units of a [task set](task-sets.md), in its dataset |
-| `--start-with N\|FILE\|set:NAME\|ids:ID,ID...` | Plan the whole, begin with a part: [below](#plan-the-whole-begin-with-a-part) |
+| `--start-with N\|FILE\|set:NAME\|ids:ID,ID...` | Plan the whole, start with some of it: [below](#plan-the-whole-start-with-some-of-it) |
 | `--unsandboxed` | An agent runs as you; else `--backend container` |
 | `--backend` | `local` (default); `container`, each unit in a container with its relay; or [`boat`](../standard.md#the-boat-backend), a VM per unit |
 | `--boat-size` | Boat's VM size: `small` (default), `default`, `large`, `xlarge` |
@@ -127,7 +127,7 @@ A benchmark that names a cut in `limits.scored_cuts` still scores an agent's uni
 | Cached input | Estimated as if not cached, so a unit can be cut off short of its cap |
 | The result | `result.json` carries `budget` |
 | From the builder | *Limits*: one cap shared in equal parts by the run's jobs, and one per unit |
-| Later parts | The job's one cap: each part has what the parts before it left ([Run tasks again](rerun.md)) |
+| Later runs | The job's one cap: each later run of the job has what the runs before it left ([Run tasks again](rerun.md)) |
 | Shards | A shard's cap is its own: [Shard and merge](shard-and-merge.md) |
 
 ## Retries
@@ -166,11 +166,11 @@ HumanEval/12
 | The builder | A recipe has no field for a list |
 | A named list | A [task set](task-sets.md) keeps one, frozen: `--set NAME` |
 
-## Plan the whole, begin with a part
+## Plan the whole, start with some of it
 
-`--start-with` plans the whole run and begins only a part of it; the rest stay planned, run later in the same job by [`rerun`](rerun.md).
+`--start-with` plans the whole run and starts with some of it; the rest stay planned, run later in the same job by [`rerun`](rerun.md).
 
-| The part | Begins |
+| The start | Runs first |
 | --- | --- |
 | `N` | The plan's first N units, in its order |
 | `FILE` | The units a file lists, as [a list of units](#a-list-of-units) |
@@ -181,7 +181,7 @@ HumanEval/12
 | --- | --- |
 | Refused | A unit outside the plan, more units than it holds, another dataset's set, `--shard`, or a [VM benchmark on Boat](../standard.md#the-boat-backend). |
 | Attempts | A unit begun gets all its `--attempts`; a unit not begun has none. |
-| The record | `config.json` keeps the plan's size, `datasets[0].n_tasks`, and the part, `standard.start_with`. |
+| The record | `config.json` keeps the plan's size, `datasets[0].n_tasks`, and the start, `standard.start_with`. |
 | The rates | Over the tasks run; the job's page and `runs show` say how many have run. |
 
 ## Serving providers

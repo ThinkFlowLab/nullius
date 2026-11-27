@@ -446,7 +446,7 @@ class OneBudget(unittest.TestCase):
         b = self.read(job_dir, "result.json")["budget"]
         self.assertEqual((b["max_usd"], b["spent_usd"], b["spent_total_usd"], b["closed"]), (0.0001, CALL, 2 * CALL, False))
         self.assertNotIn("changes", b)
-        self.assertIn(f"the job's spending cap: 0.0001 USD, {usd(CALL)} spent, {usd(0.0001 - CALL)} left for this part", lines)
+        self.assertIn(f"the job's spending cap: 0.0001 USD, {usd(CALL)} spent, {usd(0.0001 - CALL)} left for this run", lines)
         self.assertIn(f"spent {usd(CALL)} USD; the job has spent {usd(2 * CALL)} of its 0.0001 USD cap", lines)
         # the third call does not fit what is left: that run stops at the cap, and the next is refused until it changes
         got = self.again(job_dir, ["model"])

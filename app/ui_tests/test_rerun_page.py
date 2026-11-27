@@ -340,7 +340,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         self.assertEqual(text(html, r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>'), "$0.31 spent · Change")
         self.assertEqual(text(html, r'<p class="small" id="rerun-budget">.*?</p>'), "Budget for the whole run: $4.00, $3.69 left.")
         self.assertEqual(text(html, r'<dialog class="std-how rerun-ask" id="cap-ask".*?</dialog>'),
-                         "Spending cap for the whole run $0.31 spent so far. The new cap applies from the next part. Cap, USD Cancel Save")
+                         "Spending cap for the whole run $0.31 spent so far. The new cap applies from the job's next run. Cap, USD Cancel Save")
         r = self.cap("r1", {"max_usd": "6"})
         self.assertEqual((r.status_code, r.json["left_usd"]), (200, 5.69), r.get_data(as_text=True))
         record = json.loads((self.tmp / "runs" / "r1" / "run.json").read_text())
@@ -374,7 +374,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         r = self.cap("r1", {"max_usd": "6"})
         self.assertEqual((r.status_code, r.json["error"]), (409, "Still running: more tasks can be started once it has ended."))
         self.assertEqual(text(self.page("/job/r1?view=results"), r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>'),
-                         "$0.31 spent · change it when this part ends")
+                         "$0.31 spent · change it when this run ends")
         self.assertEqual(ex.plan.caps, {})
 
     def test_a_job_whose_cap_is_spent_is_refused_and_the_question_says_so(self):
@@ -398,7 +398,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
                         "spent_total_usd": 0.726, "closed": True})
         self.open(d.parent)
         self.assertEqual(text(self.page("/job/r1?view=results"), r'<p class="small" id="rerun-budget">.*?</p>'),
-                         "Budget for the whole run: $0.80, $0.726 spent; the last part stopped at it. Change it to run more.")
+                         "Budget for the whole run: $0.80, $0.726 spent; its last run stopped at it. Change it to run more.")
         r = self.post("r1", {"trials": [trial_name(0)]})
         self.assertEqual((r.status_code, r.json["error"]), (409, "The job's spending cap of 0.80 USD is spent (0.726 spent, and a "
                                                                  "call did not fit what was left): change it to run more."))

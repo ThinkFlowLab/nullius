@@ -1004,7 +1004,7 @@ class Run:
             if isinstance(n, bool) or not isinstance(n, int) or n < 1:
                 raise Refused(f"--start-with {n!r}: a whole number of units, at least 1")
             if shard and shard[1] > 1:
-                raise Refused("--start-with and --shard: a run begun on a part of its plan is run on one machine")
+                raise Refused("--start-with and --shard: a run started on some of its plan is run on one machine")
             given = start_with.get("task_set") and start_with.get("dataset")
             if given and given != self.ds["id"]:
                 raise Refused(f"--start-with: the task set {start_with['task_set']['name']} is cut from the dataset "

@@ -327,7 +327,7 @@ def _show(args) -> int:
           f"raw {rate(row['raw_solve_rate'])} · adjusted {rate(row['adjusted_solve_rate'])}")
     if job.start_with:
         words = (job.runner_items or ["task", "tasks"])[1]
-        print(f"  begun on a part: {row['n_tasks_run']} of {row['n_tasks']} planned {words} run; "
+        print(f"  started on some of its plan: {row['n_tasks_run']} of {row['n_tasks']} planned {words} run; "
               f"the rates are over those run")
     mix = " · ".join(f"{k} {v}" for k, v in row["counts"].items() if v)
     if mix:

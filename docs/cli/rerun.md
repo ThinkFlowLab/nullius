@@ -16,7 +16,7 @@ nullius standard rerun JOB_DIR (--unit ID ... | --units FILE | --unfinished | --
 | `--reason TEXT` | Why, kept in the job's record |
 | `-j N` | Units at once; the job's by default |
 | `--retries N` | Automatic retries of each try, as [a run's](run.md#retries); 0 by default |
-| `--max-usd USD` | The job's [spending cap](run.md#a-spending-cap) from this part on |
+| `--max-usd USD` | The job's [spending cap](run.md#a-spending-cap) from this run on |
 | `--from-run` | Started by Nullius: `OPENAI_API_KEY` and `OPENAI_BASE_URL` only, saved settings unread |
 
 | Rule | Detail |
@@ -28,6 +28,6 @@ nullius standard rerun JOB_DIR (--unit ID ... | --units FILE | --unfinished | --
 | A merged job | Runs again in place; `--unfinished` is refused, since it has no live feed. |
 | The record | The trial's `standard.rerun` and the job's `reruns` keep each re-run, its reason and spend. |
 | Score and cost | The new result is the task's on every page; the job's cost adds every try. |
-| One cap | Each later part has the job's cap less what the parts before it spent. |
-| A job begun on a part | `--next`, `--set` or `--unfinished` runs more of its plan in the same job. |
+| One cap | Each later run of the job has its cap less what the runs before it spent. |
+| A job started on some of its plan | `--next`, `--set` or `--unfinished` runs more of its plan in the same job. |
 | The job's page | Runs chosen tasks again the same way, where the job ran ([Run tasks again](../results.md#run-tasks-again)). |

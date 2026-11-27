@@ -83,7 +83,7 @@ class StartWith(Scratch):
                                ({"task_sets": {"all": "dev"}, "start_with": {"all": "set:wide"}}, "dataset",
                                 "Start with: the task set wide names 1 of all's tasks outside the task set dev."),
                                ({"start_with": {"all": "1"}, "where": ["local", "bench"]}, "where",
-                                "A run begun on a part of its plan runs on one machine")):
+                                "A run started on some of its plan runs on one machine")):
             with self.subTest(kw=kw):
                 out = self.compile(**kw)
                 self.assertIn(recipe.STEP[step], [e["step"] for e in out["errors"]], out["errors"])

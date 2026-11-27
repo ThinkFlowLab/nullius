@@ -211,7 +211,7 @@
       <dl>
         <dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="No pass or fail in this benchmark: no rate">—</dd>
         {% if job.mean_score_planned is not none %}<dt>planned</dt><dd id="planned-mean" data-tip="The mean over all {{ [job.n_planned, job.trials|length]|max }} planned, a trial with no score counting 0">{{ '%.2f'|format(job.mean_score_planned) }}</dd>{% endif %}
-        {% if job.start_with %}<dt>tasks run</dt><dd id="tasks-run"{% if job.n_tasks_run < job.n_tasks %} class="warn"{% endif %} data-tip="Begun on a part of its plan: the mean is over the tasks run so far">{{ job.n_tasks_run }} of {{ job.n_tasks }}</dd>{% endif %}
+        {% if job.start_with %}<dt>tasks run</dt><dd id="tasks-run"{% if job.n_tasks_run < job.n_tasks %} class="warn"{% endif %} data-tip="Started on some of its plan: the mean is over the tasks run so far">{{ job.n_tasks_run }} of {{ job.n_tasks }}</dd>{% endif %}
         <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors, setup failures and spending caps">{{ job.n_infra }}</dd>
       </dl>
     </div>
@@ -259,7 +259,7 @@
     <div class="hk" aria-label="Health">
       <dl>
         {% if not job.has_verdict or job.raw_solve_rate != job.adjusted_solve_rate %}<dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="Harbor's mean: resolved over every trial, infra included">{{ job.raw_solve_rate|pct }}</dd>{% endif %}
-        {% if job.start_with %}<dt>tasks run</dt><dd id="tasks-run"{% if job.n_tasks_run < job.n_tasks %} class="warn"{% endif %} data-tip="Begun on a part of its plan: the rates are over the tasks run so far">{{ job.n_tasks_run }} of {{ job.n_tasks }}</dd>{% endif %}
+        {% if job.start_with %}<dt>tasks run</dt><dd id="tasks-run"{% if job.n_tasks_run < job.n_tasks %} class="warn"{% endif %} data-tip="Started on some of its plan: the rates are over the tasks run so far">{{ job.n_tasks_run }} of {{ job.n_tasks }}</dd>{% endif %}
         {% if job.n_infra %}<dt>infra</dt><dd class="warn" data-tip="Trials that never got a fair attempt — rate limits, API errors, setup failures and spending caps">{{ job.n_infra }}</dd>{% endif %}
         {% if job.n_regressions %}<dt>broke tests</dt><dd class="bad" data-tip="Trials whose patch broke tests that passed before it">{{ job.n_regressions }}</dd>{% endif %}
       </dl>
@@ -376,8 +376,8 @@
     <div class="sp"><details class="pop"><summary aria-label="Token split: input, cached, output"><span class="tw"></span>in · cached · out</summary>
       <div class="popm" role="group" aria-label="Token split"><span>input</span><b>{{ '{:,}'.format(job.total_input_tokens) }}</b><span>cached (part of input)</span><b>{{ '{:,}'.format(job.total_cache_tokens) }}</b><span>output</span><b>{{ '{:,}'.format(job.total_output_tokens) }}</b></div></details></div>
     <div class="kv" data-tip="{{ 'A control never calls a model, so this is a real zero' if job.is_control else 'Only recorded by agents that report it' }}"><span class="k">Cost</span><span class="v">{{ job.total_cost_usd|usd(job.kind) }}</span></div>
-    {% if job_cap or (job.budget and job.budget.max_usd) %}<div class="kv" id="run-cap" data-tip="One cap for the whole run: each later part has what the parts before it left{% if job.budget.unsettled_usd %}. {{ job.budget.unsettled_usd|usd }} stays booked for calls whose cost was never reported{% endif %}"><span class="k">Spending cap</span><span class="v">{{ (job_cap or job.budget).max_usd|cap }}</span></div>
-    {% if job_cap %}<div class="sp cap-spent small muted" id="cap-spent">{{ job_cap.spent_usd|cap }} spent{% if again and again.where %} · <button class="linkish" id="cap-change" type="button" aria-haspopup="dialog">Change</button>{% elif rerunning %} · <span class="faint">change it when this part ends</span>{% endif %}</div>{% endif %}
+    {% if job_cap or (job.budget and job.budget.max_usd) %}<div class="kv" id="run-cap" data-tip="One cap for the whole run: each later run of the job has what the runs before it left{% if job.budget.unsettled_usd %}. {{ job.budget.unsettled_usd|usd }} stays booked for calls whose cost was never reported{% endif %}"><span class="k">Spending cap</span><span class="v">{{ (job_cap or job.budget).max_usd|cap }}</span></div>
+    {% if job_cap %}<div class="sp cap-spent small muted" id="cap-spent">{{ job_cap.spent_usd|cap }} spent{% if again and again.where %} · <button class="linkish" id="cap-change" type="button" aria-haspopup="dialog">Change</button>{% elif rerunning %} · <span class="faint">change it when this run ends</span>{% endif %}</div>{% endif %}
     {% if job.budget.not_run %}<div class="sp"><details class="pop"><summary aria-label="The units not run"><span class="tw"></span>{{ job.budget.not_run|length }} not run</summary>
       <div class="popm cap-units" role="group" aria-label="The units not run">{% for u in job.budget.not_run %}<span>{{ u }}</span>{% endfor %}</div></details></div>{% endif %}
     {% elif again and again.where and job.standard %}<div class="kv" id="run-cap"><span class="k">Spending cap</span><span class="v faint">none</span></div>
@@ -581,7 +581,7 @@
     <ul class="rerun-names mono small" data-names></ul>
     <label class="small" data-reason>Reason <span class="faint">(optional)</span><input type="text" name="reason" maxlength="200" autocomplete="off"></label>
     {%- if job_cap %}
-    <p class="small" id="rerun-budget">{% if job_cap.closed %}Budget for the whole run: {{ job_cap.max_usd|cap }}, {% if job_cap.left_usd > 0 %}{{ job_cap.spent_usd|cap }} spent; the last part stopped at it{% else %}all spent{% endif %}. Change it to run more.{% else %}Budget for the whole run: {{ job_cap.max_usd|cap }}, {{ job_cap.left_usd|cap }} left.{% endif %}</p>
+    <p class="small" id="rerun-budget">{% if job_cap.closed %}Budget for the whole run: {{ job_cap.max_usd|cap }}, {% if job_cap.left_usd > 0 %}{{ job_cap.spent_usd|cap }} spent; its last run stopped at it{% else %}all spent{% endif %}. Change it to run more.{% else %}Budget for the whole run: {{ job_cap.max_usd|cap }}, {{ job_cap.left_usd|cap }} left.{% endif %}</p>
     {%- endif %}
     <p class="small bad" data-error hidden></p>
     <div class="rerun-acts"><button type="submit" value="cancel" class="btn ghost" formnovalidate>Cancel</button><button type="submit" value="run" class="btn" data-go{% if job_cap and job_cap.closed %} data-spent{% endif %}>Run 0 tasks again</button></div>
@@ -591,7 +591,7 @@
 <dialog class="std-how rerun-ask" id="cap-ask" aria-labelledby="cap-ask-h" data-post="{{ url_for('job_cap_change', job_id=job.job_id) }}" data-csrf="{{ csrf }}">
   <form method="dialog">
     <div class="std-how-head"><h2 id="cap-ask-h">Spending cap for the whole run</h2></div>
-    <p class="small muted">{% if job_cap %}{{ job_cap.spent_usd|cap }} spent so far. {% endif %}The new cap applies from the next part.</p>
+    <p class="small muted">{% if job_cap %}{{ job_cap.spent_usd|cap }} spent so far. {% endif %}The new cap applies from the job's next run.</p>
     <label class="small">Cap, USD<input type="number" name="max_usd" min="0" step="any" inputmode="decimal" required{% if job_cap %} value="{{ job_cap.max_usd }}"{% endif %}></label>
     <p class="small bad" data-error hidden></p>
     <div class="rerun-acts"><button type="submit" value="cancel" class="btn ghost" formnovalidate>Cancel</button><button type="submit" value="save" class="btn">Save</button></div>

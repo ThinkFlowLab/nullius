@@ -109,7 +109,7 @@ class StartWithTest(unittest.TestCase):
                 self.assertEqual(j.raw_solve_rate, 1.0)                                  # over the tasks run
                 text, row = self.show(job_dir)
                 self.assertIn("2 trial(s) of 6 planned", text)
-                self.assertIn("begun on a part: 2 of 6 planned tasks run; the rates are over those run", text)
+                self.assertIn("started on some of its plan: 2 of 6 planned tasks run; the rates are over those run", text)
                 self.assertEqual((row["state"], row["n_trials"], row["n_planned"], row["n_tasks"], row["n_tasks_run"]),
                                  ("finished", 2, 6, 6, 2))
                 self.assertEqual(row["start_with"], j.start_with)

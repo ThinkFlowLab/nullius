@@ -561,8 +561,8 @@ class Job:
 
     @property
     def n_tasks_run(self) -> int:
-        """How many of the job's tasks have an attempt that ended: of ``n_tasks`` planned, for a job begun on a
-        part of its plan (``start_with``) the tasks run so far."""
+        """How many of the job's tasks have an attempt that ended: of ``n_tasks`` planned, for a job started on
+        some of its plan (``start_with``) the tasks run so far."""
         return len({re.sub(r"(__u\d+)r\d+$", r"\1", t.trial_name) if self.standard else t.task_name
                     for t in self.trials})
 

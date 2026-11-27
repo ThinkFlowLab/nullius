@@ -511,7 +511,7 @@ def _again(r: "run.Run", job_dir: str, old: dict, cfg: dict, trials: Dict[str, d
         r.say(f"the job's spending cap: {ledgers.usd(capped['max_usd'])} USD"
               + (f" from now on (was {ledgers.usd(capped['was'])})" if capped["changed"] and capped["was"] is not None else
                  " from now on" if capped["changed"] else "")
-              + f", {ledgers.usd(capped['spent_usd'])} spent, {ledgers.usd(capped['left_usd'])} left for this part")
+              + f", {ledgers.usd(capped['spent_usd'])} spent, {ledgers.usd(capped['left_usd'])} left for this run")
     r.known_models()
     r.ready()                                # refused here, the job reads as it did: nothing has moved
     p.emit("plan", stages="units")           # a later run of the job: its units said after the first's

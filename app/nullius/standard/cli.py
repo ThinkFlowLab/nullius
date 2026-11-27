@@ -1236,7 +1236,7 @@ def main(argv=None):
                                 "options the run's own; the job's config records the set")
             p.add_argument("--limit", type=int)
             p.add_argument("--start-with", metavar="N|FILE|set:NAME|ids:ID,ID...",
-                           help="plan the whole (the dataset, or what --units, --set, --limit name) and begin with a part: "
+                           help="plan the whole (the dataset, or what --units, --set, --limit name) and start with some of it: "
                                 "its first N units, the units a file lists, a task set's, or the units named after ids:, "
                                 "separated by commas; the rest stay planned with no attempt, for rerun to run in the job later")
             p.add_argument("-j", "--concurrency", type=int, default=4)
@@ -1384,7 +1384,7 @@ def main(argv=None):
     rr.add_argument("--retries", type=_retries, default=RETRIES, metavar="N",
                     help=f"run a failed try again, up to N times, as a run's --retries; 0 to {MAX_RETRIES}, default {RETRIES}")
     rr.add_argument("--max-usd", type=float, metavar="USD",
-                    help="the job's spending cap from now on, for this part and every later one: each part has what the parts before it left")
+                    help="the job's spending cap from now on, for this run and every later one: each later run of the job has what the runs before it left")
     rr.add_argument("--from-run", action="store_true",
                     help="started by Nullius: the key is OPENAI_API_KEY (and OPENAI_BASE_URL), saved settings are not read")
     tr = sub.add_parser("traces", help="give past standard trials a trace, from the files they kept")
