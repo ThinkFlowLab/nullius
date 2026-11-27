@@ -24,8 +24,7 @@
     "It publishes no reference conversations, so there is no reference control."
   ],
   "limitations": [
-    "Another agent gets the upstream's prompt plus two lines from Nullius: where its tools are, and that its last message in a turn goes to the user.",
-    "A task that ends in an error, a failed judge call included, is played again up to 3 times, as VitaBench's own runner does."
+    "Another agent gets the upstream's prompt plus two lines from Nullius: where its tools are, and that its last message in a turn goes to the user."
   ],
   "datasets": [
     {

@@ -67,7 +67,6 @@ Food delivery, in-store and travel requests from a simulated user, with up to 66
 ## Nullius limitations
 
 - Another agent gets the upstream's prompt plus two lines from Nullius: where its tools are, and that its last message in a turn goes to the user.
-- A task that ends in an error, a failed judge call included, is played again up to 3 times, as VitaBench's own runner does.
 
 ## Cite
 
