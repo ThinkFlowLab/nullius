@@ -27,7 +27,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-from nullius import workspace
+from nullius import access, workspace
 from nullius.catalogue import catalog, harbor_entry
 from nullius.traces import trace as trace_mod
 from nullius.traces.spans import all_spans
@@ -50,7 +50,13 @@ WORKFLOW_ONLY = {
     "/job/<job_id>/live": "driven under the live-board workflow with a job carrying a feed",
     "/launch/<key>/ask": "driven under the Launches page workflow with a run record (test_run_routes.LaunchesPage)",
     "/launch/<key>/open": "driven under the Launches page workflow with a run record (test_run_routes.LaunchesPage)",
+    "/api/v1/jobs/<job_id>/trials/<trial_name>/trace": "driven with a trial that kept a trace (test_api.Reads)",
+    "/api/v1/jobs/<job_id>/trials/<trial_name>/judgement": "driven with a trial a judge was asked about (test_api.Judgements)",
 }
+
+# The API's routes take a token (web/api.py): asked with one here, of the read scope. Without one, test_api.Tokens.
+API = "/api/v1"
+API_TOKEN = "the-every-route-token"
 
 # Rules that answer 404 without a query argument by design - the argument names
 # a record inside the trial, not a page - so they are asked with a real one.
@@ -62,7 +68,8 @@ NEEDS_SPAN = ("/trial/<job_id>/<trial_name>/trace-span",)
 # builder's agent grid answers 404 without the benchmark it draws.
 HARBOR_QUERY = {"/new-run/harbor/refs": "repo=example/harbor",
                 "/new-run/harbor/agents": "kind=release&version=0.24.0",
-                "/new-run/agents": "benchmark=gsm8k"}
+                "/new-run/agents": "benchmark=gsm8k",
+                "/api/v1/compare": "job=oracle-a&job=oracle-b"}
 NO_GIT = "/nonexistent/nullius-route-test/git"
 
 
@@ -89,6 +96,7 @@ class EveryRoute(unittest.TestCase):
         cls.stack.enter_context(patch.dict(os.environ))
         os.environ.pop("TYPESAFE_API_KEY", None)
         cls.stack.enter_context(patch.object(urllib.request, "urlopen", offline))
+        cls.stack.enter_context(patch.object(access, "verify", lambda token: {"id": "t", "name": "t", "scope": "read"} if token == API_TOKEN else None))
         if gitrefs is not None:
             cls.stack.enter_context(patch.object(gitrefs, "GIT", NO_GIT))
         roots = [str(cls.jobs_root)]
@@ -131,7 +139,7 @@ class EveryRoute(unittest.TestCase):
         return ""
 
     def get(self, url):
-        resp = self.client.get(url)
+        resp = self.client.get(url, headers={"Authorization": f"Bearer {API_TOKEN}"} if url.startswith(API) else {})
         self.addCleanup(resp.close)
         return resp
 

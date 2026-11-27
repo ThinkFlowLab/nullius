@@ -5,7 +5,7 @@ import json
 import re
 from pathlib import Path
 
-from flask import g, render_template, url_for
+from flask import g, jsonify, render_template, request, url_for
 
 from nullius import importers as harnesses, providers
 from nullius.judge import client as judge_client
@@ -238,6 +238,8 @@ def _inject():
 
 
 def _error_page(title, status):
+    if request.path.startswith("/api/v1"):      # a program reads JSON (web/api.py)
+        return jsonify(error=title), status
     g.error_page = True     # an unknown ?workspace= may be what failed: the page does not read it again
     return render_template("error.html", title=title), status
 

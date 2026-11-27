@@ -640,7 +640,8 @@ def boat_credentials(a, bench, other, vals) -> dict:
     import base64
     needs = definitions.option_needs(bench, vals)
     out = {}
-    if other["_kind"] != "control" or (bench.get("score") or {}).get("judge") or needs["embeddings"] or needs["reranker"]:
+    if (other["_kind"] != "control" or (bench.get("score") or {}).get("judge") or needs["embeddings"] or needs["reranker"]
+            or (a.judge_model and (bench.get("score") or {}).get("experiment_judge"))):
         base, key = run.provider_endpoint(a.provider, run_env(a.provider) if a.from_run else os.environ)
         out.update(OPENAI_API_KEY=key, OPENAI_BASE_URL=base)
     held, spill = licences(bench, from_run=a.from_run)
@@ -1120,7 +1121,8 @@ def main(argv=None):
                                 "options the run's own; the job's config records the set")
             p.add_argument("--limit", type=int)
             p.add_argument("-j", "--concurrency", type=int, default=4)
-            p.add_argument("--judge-model", help="a benchmark scored by a model: this judge instead of its official one")
+            p.add_argument("--judge-model", help="a benchmark scored by a model: this judge instead of its official one; "
+                                                 "one with an experiment judge (LoCoMo's): run it, as this model")
             p.add_argument("--simulator-model", help="a benchmark whose user a model plays: this model instead of its official one")
             p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",
                            help="run each unit K times, each an attempt counted whatever its result "

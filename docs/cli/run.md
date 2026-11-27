@@ -45,7 +45,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--attempts K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--retries N` | Run a failed attempt again, up to N times: [below](#retries) |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--attempts`); by default they stay for the next run |
-| `--judge-model` | Instead of the official judge |
+| `--judge-model` | Instead of the official judge; on a benchmark with an experiment judge, runs it as this model |
 | `--simulator-model` | Instead of the official simulated user |
 | `--name` | The job's name |
 | `--jobs` | Where jobs are written (default `jobs_standard/` relative to the current directory) |
@@ -137,7 +137,7 @@ A benchmark that names a cut in `limits.scored_cuts` still scores an agent's uni
 | Rate limit | After the [pause](../standard.md#a-run) |
 | Provider, network or setup error; agent crash; setup timeout | Yes |
 | Run or check out of time | Only if the provider was refusing the calls |
-| Wrong key, spent credit | No; three in a row stop the run |
+| Wrong key, spent credit, an agent's first call over the model's context window | No; three in a row stop the run |
 | A setup this machine lacks, a missing secret, a cap reached, Stop, a unit a guard asked to stop, a full context window, failed task | No |
 
 `conform` and `prove` retry a rate limit once.

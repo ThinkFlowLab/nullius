@@ -27,7 +27,12 @@ def run_start():
     shared._require_csrf()
     if not shared._local_client():
         abort(403, description="Runs are started from a browser on the application host only.")
-    body = request.get_json(silent=True) or {}
+    return start(request.get_json(silent=True) or {})
+
+
+def start(body: dict):
+    """``run_start`` past its guards: what the page posts, and what the API
+    posts once its token is checked (``web/api.py``)."""
     recipe = body.get("recipe") if isinstance(body.get("recipe"), dict) else {}
     into = body.get("workspace") or ""
     if into and (not isinstance(into, str) or workspace.slug(into) != into):

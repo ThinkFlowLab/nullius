@@ -64,6 +64,25 @@ with open(os.path.join(a.emb_dir, "calls.jsonl"), "a") as f:
     f.write(json.dumps({"script": os.path.basename(sys.argv[0]), "argv": sys.argv[1:]}) + "\\n")
 open(a.out_file.replace(".json", "_conv-1.pkl"), "wb").write(b"db")
 '''
+EVALUATION = '''
+def eval_question_answering(qas, key):
+    return [float(q[key] == q.get("answer", "Not mentioned")) for q in qas], 0, []
+'''
+# The stand-in client: the judge's requests, each kept beside the database; its reply says CORRECT for "hi",
+# fenced as some models fence it, WRONG for anything else, and fails on "boom".
+OPENAI = '''
+import json, os
+class ChatCompletion:
+    @staticmethod
+    def create(**kw):
+        with open(os.environ["JUDGE_LOG"], "a") as f:
+            f.write(json.dumps(kw) + "\\n")
+        said = kw["messages"][0]["content"].split("Generated answer: ")[1].split("\\n")[0]
+        if said == "boom":
+            raise RuntimeError("the judge failed")
+        label = "```json\\n" + json.dumps({"label": "CORRECT"}) + "\\n```" if said == "hi" else json.dumps({"label": "WRONG"})
+        return {"choices": [{"message": {"content": label}}]}
+'''
 GPT_UTILS = '''
 QA_PROMPT = "{}"
 def get_gpt_answers(in_data, out_data, prediction_key, args):
@@ -81,6 +100,8 @@ QA_PROMPT_CAT_5 = "five: {}"
 def get_cat_5_answer(said, key):
     return key[said]
 def run_chatgpt(query, **k):
+    if query.startswith("FAIL"):
+        raise ValueError("no text")
     return "a" if "(a) Not mentioned (b) x." in query and query.startswith("M\\n\\nfive: Adversarial Pick:") else "b" if "(a) x (b) Not mentioned." in query else ""
 '''
 
@@ -93,16 +114,17 @@ class Driver:
         up = os.path.join(root, "up")
         os.makedirs(os.path.join(up, "task_eval"))
         os.makedirs(os.path.join(up, "prompt_examples"))
-        files = {"task_eval/__init__.py": "", "task_eval/evaluation.py": "def eval_question_answering(*a): return [0.0], 0, []\n",
+        files = {"task_eval/__init__.py": "", "task_eval/evaluation.py": EVALUATION,
                  "task_eval/gpt_utils.py": GPT_UTILS, "task_eval/evaluate_qa.py": EVALUATE_QA,
-                 "task_eval/get_facts.py": BUILD, "task_eval/get_session_summaries.py": BUILD, "openai.py": ""}
+                 "task_eval/get_facts.py": BUILD, "task_eval/get_session_summaries.py": BUILD, "openai.py": OPENAI}
         for name, text in files.items():
             with open(os.path.join(up, name), "w") as f:
                 f.write(textwrap.dedent(text))
         data = os.path.join(root, "locomo10.json")
         with open(data, "w") as f:
             json.dump([CONV], f)
-        env = dict(os.environ, NULLIUS_UPSTREAM=up, NULLIUS_DATASET=data, PYTHONPATH=up, NULLIUS_VERSION=version,
+        self.judged = os.path.join(root, "judge.jsonl")
+        env = dict(os.environ, NULLIUS_UPSTREAM=up, NULLIUS_DATASET=data, PYTHONPATH=up, NULLIUS_VERSION=version, JUDGE_LOG=self.judged,
                    **{"NULLIUS_OPTION_" + k.upper(): v for k, v in options.items()})
         self.p = subprocess.Popen([sys.executable, DRIVER], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
 
@@ -118,18 +140,88 @@ class Driver:
 
 
 class Listing(unittest.TestCase):
-    def test_describe_gives_question_text_and_excludes_category_five(self):
+    def test_a_unit_is_a_conversation_and_counts_its_questions_without_category_five(self):
         with tempfile.TemporaryDirectory() as root:
             driver = Driver(root, {})
             try:
                 ids = driver.ask(op="units", dataset="locomo10")["units"]
                 got = driver.ask(op="describe", dataset="locomo10")
+                setup = driver.ask(op="setup", unit="conv-1", dir=root)
             finally:
                 driver.close()
-        self.assertEqual(got, {"units": {"conv-1:0": {"title": "What did A say?", "text": "What did A say?",
-                                                     "categories": {"category": "4"}}}})
+        self.assertEqual(got, {"units": {"conv-1": {"title": "A and B", "text": "1 sessions, 1 questions"}}})
         self.assertEqual(list(got["units"]), ids)
+        self.assertEqual([s["id"] for s in setup["memory"]["add"]], ["session_1"])       # the conversation, once
+        self.assertEqual(setup["memory"]["recall"], [{"id": "conv-1:0", "question": "What did A say?"}])
         self.assertIs(BENCH["driver"].get("describe"), True)
+
+
+class Memory(unittest.TestCase):
+    def test_a_question_the_reader_fails_is_left_unscored_and_the_others_go_on(self):
+        with tempfile.TemporaryDirectory() as root:
+            d = Driver(root, {}, "full")
+            try:
+                recalled = [{"id": "conv-1:0", "memory": "FAIL"}, {"id": "conv-1:1", "memory": "M"}]
+                said = d.ask(op="produce", unit="conv-1", dir=root, recalled=recalled, model="gpt-4", base_url="", key="")
+                answers = json.loads(said["answer"])
+                self.assertEqual(answers, {"conv-1:0": {"error": "ValueError: no text"}, "conv-1:1": "Not mentioned"})
+                score = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=said["answer"])
+                self.assertEqual((score["reward"], score["parts"]["n"], score["detail"]["scored"], score["detail"]["questions"]), (1.0, 1, 1, 2))
+                self.assertEqual(score["detail"]["per_question"][0]["error"], "ValueError: no text")
+                oracle = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=d.ask(op="oracle", unit="conv-1", dir=root)["answer"])
+                nop = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer="")
+                self.assertEqual((oracle["reward"], oracle["parts"]["n"], nop["reward"], nop["parts"]["n"]), (1.0, 2, 0.0, 2))
+                failed = d.ask(op="produce", unit="conv-1", dir=root, recalled=recalled[:1], model="gpt-4", base_url="", key="")
+                self.assertIn("answered none of the 1 questions", failed["error"])
+            finally:
+                d.close()
+
+
+class Judge(unittest.TestCase):
+    JUDGE = {"model": "gpt-4o-mini", "base_url": "http://relay/judge/v1", "key": "placeholder"}
+
+    def test_the_experiment_judge_marks_each_answer_beside_the_f1_and_skips_category_five(self):
+        with tempfile.TemporaryDirectory() as root:
+            d = Driver(root, {}, "full")
+            try:
+                plain = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=json.dumps({"conv-1:0": "hi"}))
+                self.assertFalse(os.path.exists(d.judged))                       # no judge named: none asked
+                self.assertNotIn("complement", plain)
+                got = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=json.dumps({"conv-1:0": "hi", "conv-1:1": "x"}),
+                            judge=self.JUDGE)
+                wrong = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=json.dumps({"conv-1:0": "bye"}), judge=self.JUDGE)
+                failed = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=json.dumps({"conv-1:0": "boom"}), judge=self.JUDGE)
+            finally:
+                d.close()
+            with open(d.judged) as f:
+                asked = [json.loads(x) for x in f]
+        self.assertIn("words shared with the reference", got["complement"].pop("why"))              # what the page's tooltip opens with
+        self.assertEqual(got["complement"], {"label": "Judge", "score": 1.0, "n": 1})       # category 5 is not judged
+        self.assertEqual(got["reward"], plain["reward"])                                           # the F1 stays the score
+        self.assertEqual([q.get("judge") for q in got["detail"]["per_question"]], ["CORRECT", None])
+        self.assertEqual(wrong["complement"]["score"], 0.0)
+        self.assertNotIn("complement", failed)
+        self.assertEqual(failed["detail"]["per_question"][0]["judge_error"], "RuntimeError: the judge failed")
+        # Mem0's request: its prompt with the whole reference, JSON asked for, temperature 0, the run's judge route
+        self.assertEqual(len(asked), 3)
+        self.assertEqual({k: asked[0][k] for k in ("model", "api_base", "api_key", "temperature", "response_format")},
+                         {"model": "gpt-4o-mini", "api_base": "http://relay/judge/v1", "api_key": "placeholder", "temperature": 0.0,
+                          "response_format": {"type": "json_object"}})
+        self.assertIn("Question: What did A say?\nGold answer: hi\nGenerated answer: hi\n", asked[0]["messages"][0]["content"])
+
+    def test_the_original_setup_is_judged_too(self):
+        with tempfile.TemporaryDirectory() as root:
+            d = Driver(root, {})
+            try:
+                unit = os.path.join(root, "unit")
+                os.makedirs(unit)
+                got = d.ask(op="answer", unit="conv-1", dir=unit, setup="original", model="gpt-4-turbo", base_url="", key="", judge=self.JUDGE)
+                score = d.ask(op="score", unit="conv-1", dir=unit, transcript=[{"asked": "gpt-4-turbo"}], answer=got["answer"],
+                              setup="original", judge=self.JUDGE)
+            finally:
+                d.close()
+        self.assertEqual((score["reward"], score["complement"]), (1.0, {"label": "Judge", "score": 1.0, "n": 1, "why": score["complement"].get("why")}))
+        self.assertTrue(score["complement"]["why"])
 
 
 class Retrieval(unittest.TestCase):
@@ -165,9 +257,11 @@ class Retrieval(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             d = Driver(root, {}, "full")
             try:
-                self.assertEqual(d.ask(op="units", dataset="locomo10")["units"], ["conv-1:0", "conv-1:1"])
-                said = d.ask(op="produce", unit="conv-1:1", dir=root, recalled=[{"memory": "M"}], model="gpt-4", base_url="", key="")
-                self.assertEqual((said, d.ask(op="oracle", unit="conv-1:1", dir=root)), ({"answer": "Not mentioned"},) * 2)
+                self.assertEqual(d.ask(op="units", dataset="locomo10")["units"], ["conv-1"])
+                self.assertEqual([q["id"] for q in d.ask(op="setup", unit="conv-1", dir=root)["memory"]["recall"]], ["conv-1:0", "conv-1:1"])
+                said = d.ask(op="produce", unit="conv-1", dir=root, recalled=[{"id": "conv-1:1", "memory": "M"}], model="gpt-4", base_url="", key="")
+                self.assertEqual(json.loads(said["answer"]), {"conv-1:1": "Not mentioned"})
+                self.assertEqual(json.loads(d.ask(op="oracle", unit="conv-1", dir=root)["answer"]), {"conv-1:0": "hi", "conv-1:1": "Not mentioned"})
                 unit = os.path.join(root, "unit")
                 os.makedirs(unit)
                 got = d.ask(op="answer", unit="conv-1", dir=unit, setup="original", model="gpt-4-turbo", base_url="", key="")

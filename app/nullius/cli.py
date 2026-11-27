@@ -24,6 +24,9 @@ COMMANDS = {
     "paths": "show persistent storage locations",
     "prices": "show and update model prices",
     "migrate": "copy legacy storage into the user profile",
+    "access": "create and revoke the tokens of this server's HTTP API",
+    "remote": "ask a Nullius server on another machine",
+    "mcp": "a Nullius server as MCP tools, over stdio",
 }
 MODULES = {
     "runs": "nullius.runs.cli",
@@ -37,6 +40,9 @@ MODULES = {
     "paths": "nullius.paths",
     "prices": "nullius.prices",
     "migrate": "nullius.migrate",
+    "access": "nullius.access",
+    "remote": "nullius.client",
+    "mcp": "nullius.mcp_server",
 }
 
 

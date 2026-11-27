@@ -145,11 +145,24 @@ def _flat(text: str) -> str:
     return " ".join(str(text).split())
 
 
+def _each(answer, asked: dict) -> Optional[dict]:
+    """An answer per recalled question, by its id, when the oracle gave one so; else None."""
+    try:
+        got = json.loads(answer) if isinstance(answer, str) else None
+    except ValueError:
+        return None
+    if not isinstance(got, dict) or not got or not set(got) <= set(asked):
+        return None
+    return {q: str(a) for q, a in got.items()}
+
+
 def leak_check(driver: _Driver, units: List[str], family: str, in_prompt: str = "") -> dict:
     """For each unit: set up, run the oracle on a copy, and look for what it
     gave in what setup had already shown. ``in_prompt``: the benchmark's
     reason a prompt may name its own answer (``controls.oracle.in_prompt``); such a unit is counted and
-    named, not failed. Found in a file setup wrote, it is always a leak."""
+    named, not failed. Found in a file setup wrote, it is always a leak. A
+    capability's oracle that answers each recalled question by its id (a JSON
+    object) has each answer looked for in its own question."""
     p = driver.start(0)
     looked, short, nothing, leaks, failed, bad, named = 0, 0, 0, [], [], set(), []
     try:
@@ -167,15 +180,15 @@ def leak_check(driver: _Driver, units: List[str], family: str, in_prompt: str = 
                 bad.add(unit)
                 continue
             after = _files(b)
-            if family == "capability":
-                shown = " ".join(q.get("question", "") for q in (s.get("memory") or {}).get("recall") or [])
-            else:
-                shown = s.get("prompt") or ""
-            shown = _flat(shown)
+            asked = {str(q.get("id")): q.get("question", "") for q in (s.get("memory") or {}).get("recall") or []}
+            shown = _flat(" ".join(asked.values()) if family == "capability" else s.get("prompt") or "")
             files = _flat("\n".join(x.decode("utf-8", "replace") for x in before.values()))
             needles = []
-            if str(o.get("answer") or "").strip():
-                needles.append(("the answer", str(o["answer"])))
+            each = _each(o.get("answer"), asked) if family == "capability" else None
+            if each:
+                needles += [(f"{q}'s answer", a, _flat(asked[q]), q) for q, a in each.items() if a.strip()]
+            elif str(o.get("answer") or "").strip():
+                needles.append(("the answer", str(o["answer"]), shown, unit))
             for path, new in after.items():
                 old = before.get(path)
                 if old == new:
@@ -183,10 +196,10 @@ def leak_check(driver: _Driver, units: List[str], family: str, in_prompt: str = 
                 kept = set(old.decode("utf-8", "replace").splitlines()) if old is not None else set()
                 added = "\n".join(l for l in new.decode("utf-8", "replace").splitlines() if l not in kept)
                 if added.strip():
-                    needles.append((path, added))
+                    needles.append((path, added, shown, unit))
             if not needles:
                 nothing += 1
-            for what, text in needles:
+            for what, text, shown, who in needles:
                 flat = _flat(text)
                 if len(flat) < SHORT:
                     short += 1
@@ -196,7 +209,7 @@ def leak_check(driver: _Driver, units: List[str], family: str, in_prompt: str = 
                     leaks.append(f"{unit}: {what} is already there after setup, in {'a file' if flat in files else 'the prompt'}")
                     bad.add(unit)
                 elif flat in shown:
-                    named.append(unit)
+                    named.append(who)
             shutil.rmtree(os.path.dirname(a), ignore_errors=True)
     finally:
         p.close()

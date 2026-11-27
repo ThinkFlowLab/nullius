@@ -28,11 +28,11 @@ from werkzeug.serving import is_running_from_reloader  # noqa: E402
 if __package__:  # the wheel's private web namespace
     from .web.core import app
     from .web import shared
-    from .web import filters, runs, traces, compare, builder, catalogue, agents, settings, workspaces, execute, judge, feasibility, reconcile, judge_tasks, onboarding, failure, leaderboard
+    from .web import filters, runs, traces, compare, builder, catalogue, agents, settings, workspaces, execute, judge, feasibility, reconcile, judge_tasks, onboarding, failure, leaderboard, api
 else:  # python app/app.py, and the source route suite
     from web.core import app
     from web import shared
-    from web import filters, runs, traces, compare, builder, catalogue, agents, settings, workspaces, execute, judge, feasibility, reconcile, judge_tasks, onboarding, failure, leaderboard
+    from web import filters, runs, traces, compare, builder, catalogue, agents, settings, workspaces, execute, judge, feasibility, reconcile, judge_tasks, onboarding, failure, leaderboard, api
 from nullius import execution, workspace  # noqa: E402  - recorded runs, picked up again at start; the workspace left open
 
 

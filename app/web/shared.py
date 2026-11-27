@@ -56,7 +56,8 @@ def _served_name(name: str) -> bool:
 
 @app.before_request
 def _refuse_foreign_host():
-    if not _served_name(_host_name(request.host)):
+    # the API's routes take a token no page can send (web/api.py): a client names the server as it reaches it
+    if not _served_name(_host_name(request.host)) and not request.path.startswith("/api/v1"):
         abort(421, description="This server answers on its own address only (localhost, an IP address or its --host name).")
 
 

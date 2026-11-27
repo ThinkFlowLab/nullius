@@ -892,8 +892,10 @@ class Run:
         # A benchmark scored by a model: its official judge, or the one asked for; its calls go through the relay
         # on a route of their own (<tag>-judge), recorded beside the unit's and never counted as the agent's.
         # The official one is written as its maker spells it; the run's provider may spell it otherwise.
+        # An experiment judge (``score.experiment_judge``) runs only when the run names its model.
         j = (bench.get("score") or {}).get("judge")
-        self.judge_model = (judge_model or providers.served_as(j["model"], provider)) if j else None
+        self.judge_model = ((judge_model or providers.served_as(j["model"], provider)) if j
+                            else judge_model or None if (bench.get("score") or {}).get("experiment_judge") else None)
         # A benchmark whose user a model plays: its driver's turns ask that model the same way, on <tag>-simulator.
         # A control holds no conversation, so it never asks it.
         sim = bench.get("simulator")
@@ -1351,7 +1353,9 @@ class Run:
             self.say(f"{len(budget['over_unit'])} of the {self.bench['units']['nouns']} reached the cap of "
                      f"{ledgers.usd(budget['unit_max_usd'])} USD each and were cut off there")
         if self.halted:
-            self.say(f"stopped: the endpoint refused {REFUSED_IN_A_ROW} units in a row ({self.halted[0]}: "
+            why = ("the agent's first call was longer than the model's context window in" if self.halted[0] == relay.CONTEXT_ERROR
+                   else "the endpoint refused")
+            self.say(f"stopped: {why} {REFUSED_IN_A_ROW} units in a row ({self.halted[0]}: "
                      f"{redact(str(self.halted[1]))[:200]}); the {len(work) - len(results)} units not begun were not run")
         rewards = [(r.get("verifier_result") or {}).get("rewards", {}) for r in results]
         if self.bench["score"]["kind"] == "pass":
@@ -1896,7 +1900,7 @@ class Run:
                            **job.feed_outcome(self.bench["score"]["kind"], score, exc),
                            **{k: v for k, v in (res.get("agent_result") or {}).items() if k in FEED_TOTALS},
                            durations=job.feed_durations(res))
-        self.note_refusal(exc)
+        self.note_refusal(exc, calls)
         if exc and exc[0] == ledgers.ERROR and getattr(self, "_halt", None) is not None:
             with self._said:
                 self._cut.append(self.attempt_name(unit, r))
@@ -1962,15 +1966,19 @@ class Run:
                 **({"unit_max_usd": self.unit_max_usd, "over_unit": list(dict.fromkeys(getattr(self, "_over", [])))}
                    if self.unit_max_usd is not None else {})}
 
-    def note_refusal(self, exc: Optional[tuple]) -> None:
+    def note_refusal(self, exc: Optional[tuple], calls: Optional[List[dict]] = None) -> None:
         """A unit's end, counted toward the endpoint refusing the run: a wrong
         key or an unknown model fails every unit the same way, and running
-        the rest only repeats it (with their containers and relays). After
+        the rest only repeats it (with their containers and relays). So does
+        a model whose context window the agent's first call already overflows:
+        the unit's prompt and tools alone are longer. After
         ``REFUSED_IN_A_ROW`` such ends in a row, nothing more is begun."""
         if getattr(self, "_halt", None) is None:
             return
+        first = bool(exc) and exc[0] == relay.CONTEXT_ERROR and \
+            not any(c.get("status") == 200 and not c.get("side") for c in calls or [])
         with self._said:
-            if exc and exc[0] in REFUSALS:
+            if exc and (exc[0] in REFUSALS or first):
                 self._refused.append(exc)
                 if len(self._refused) >= REFUSED_IN_A_ROW and self.halted is None:
                     self.halted = exc
