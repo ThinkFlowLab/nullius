@@ -4,6 +4,7 @@ units  - one per problem of the test file, named by its line number ("0001");
          a GSM8K-Platinum problem keeps the number of the test file's problem
          it is (the same question, word for word), so a problem has one name
          in both datasets and Platinum's numbers have gaps where it removed one
+describe - the question as its text, its first sentence as its title; never its answer
 setup  - the question goes in the prompt; the workspace stays empty
 score  - the upstream's own extract_answer and is_correct, imported from
          grade_school_math/dataset.py at the tested commit ($NULLIUS_UPSTREAM),
@@ -27,6 +28,7 @@ dataset only when the score is taken.
 """
 import json
 import os
+import re
 import sys
 import urllib.request
 
@@ -61,6 +63,19 @@ TEMPERATURE = os.environ.get("NULLIUS_OPTION_TEMPERATURE", "default")
 
 def units(dataset, setup=None):
     return {"units": list(load())}
+
+
+SENTENCE_END = re.compile(r"(?<![MD]r\.)(?<!Mrs\.)(?<!Ms\.)(?<!St\.)(?<=[.?!])\s+(?=[A-Z0-9])")
+
+
+def describe(dataset=None, **_):
+    out = {}
+    for unit, problem in load().items():
+        text = problem["question"]
+        line = " ".join(text.split())
+        title = SENTENCE_END.split(line, maxsplit=1)[0]
+        out[unit] = {"title": title, "text": text}
+    return {"units": out}
 
 
 def prompt(unit):
@@ -105,7 +120,7 @@ def oracle(unit, dir):
     return {"answer": load()[unit]["answer"]}
 
 
-HANDLERS = {"units": units, "setup": setup, "answer": answer, "score": score, "oracle": oracle}
+HANDLERS = {"units": units, "describe": describe, "setup": setup, "answer": answer, "score": score, "oracle": oracle}
 for line in sys.stdin:
     try:
         req = json.loads(line)

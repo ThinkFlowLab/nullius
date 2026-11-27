@@ -1,9 +1,12 @@
 """Harbor selection, runnable scripts and saved recipe drafts."""
 import json
+import re
 import subprocess
 import unittest
 
-from ui_tests.builder_support import AGENT, PIN, CompilerCase
+from ui_tests.builder_support import AGENT, APP, PIN, CompilerCase
+
+PAGE = APP / "static/builder/command-builder.js"
 
 
 class HarborPin(CompilerCase):
@@ -153,6 +156,135 @@ class DraftBetweenPages(CompilerCase):
                       'process.stdout.write(JSON.stringify([typeof text,back.recipe.tasks,back.recipe.title,back.step,back.tab,typeof back.at,pre,run,bad,none,back.saved]));')
         # `saved`: the saved recipe the page holds, so a save after a reload still updates (renames) it
         self.assertEqual(out, ['string', 9, 'mine', 4, 'tau3-llm-agent', 'string', None, None, None, None, '0123456789abcdef'])
+
+    def test_start_over_and_delete_have_a_question_to_ask(self):
+        out = self.js('const r=C.prefill({}),back=C.unpackDraft(C.packDraft({recipe:r,step:0,tab:"select"}),{}).recipe,edited=C.prefill({}),bad=C.prefill({});edited.title="mine";bad.repeat=33;'
+                      'process.stdout.write(JSON.stringify([C.atDefaults(r),C.atDefaults(back),C.atDefaults(edited),C.atDefaults(C.create("harbor")),C.atDefaults(bad),'
+                      'C.deleteAsk({id:"0123456789abcdef",name:"a<b"},"h",x=>String(x).replace(/</g,"&lt;"))]));')
+        # an untouched recipe, a reloaded draft of it too, has nothing to lose; an edited one, another runner's and
+        # one holding a value a saved recipe would not keep have
+        self.assertEqual(out[:5], [True, True, False, False, False])
+        self.assertEqual(out[5], '<div class="std-how-head"><h2 id="h">Delete recipe a&lt;b</h2></div><div class="launch-delete-acts">'
+                                 '<button type="button" class="btn ghost" data-close autofocus>Keep it</button>'
+                                 '<button type="button" class="btn danger" data-delete="0123456789abcdef">Delete recipe</button></div>')
+
+    def test_start_over_resets_an_edited_recipe_on_yes_alone(self):
+        """The page's own click handler and its own untouched check, on stand-in elements: what the draft holds after each click."""
+        page = PAGE.read_text(encoding="utf-8")
+        wiring = re.search(r"^  const startOverClick=.*$", page, re.M)
+        clicks = page[page.index("  root.addEventListener('click',async event=>{"):page.index("  // a benchmark chosen on the Benchmark step's grid")]
+        program = ('const C=require(' + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ')(' + json.dumps(self.schema) + ');'
+                   'const {startOver}=require(' + json.dumps(str(PAGE)) + ');'
+                   'const data=new Map(),localStorage={removeItem:k=>data.delete(k),setItem:(k,v)=>data.set(k,v)},draftKey="draft",S=C.STEP,REVIEW=S.review;'
+                   'let recipe=C.prefill({}),step=S.limits,tab="select",savedId="",runnerOut,runnerKey,modelActed,click;recipe.repeat=33;'
+                   'const r=()=>recipe,status=()=>{},render=()=>localStorage.setItem(draftKey,C.packDraft({recipe,step,tab,saved:savedId}));'
+                   'const el=()=>({hidden:true,a:{"aria-expanded":"false"},getAttribute(k){return this.a[k];},setAttribute(k,v){this.a[k]=v;},focus(){}});'
+                   'const els={"#nb-startover":el(),"#nb-startover-ask":el(),"#nb-startover-keep":el()},$=s=>els[s];'
+                   'const root={addEventListener:(type,f)=>{click=f;}};\n' + (wiring.group(0) if wiring else "") + "\n" + clicks + '\n'
+                   'const press=async id=>{await click({target:{closest:()=>({id,dataset:{}})}});const d=JSON.parse(data.get(draftKey));'
+                   'return [d.recipe.repeat??null,d.step,els["#nb-startover-ask"].hidden];};'
+                   '(async()=>{render();const got=[];for(const id of ["nb-startover","nb-startover-keep","nb-startover","nb-startover","nb-startover","nb-startover-yes"])got.push(await press(id));'
+                   'step=S.limits;got.push(await press("nb-startover"));process.stdout.write(JSON.stringify({got,limits:S.limits,first:S.benchmark}));})();')
+        out = json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
+        asked, kept, reset = [33, out["limits"], False], [33, out["limits"], True], [None, out["first"], True]
+        # Start over asks, Keep it closes; Start over asks, Start over again closes; Start over asks, Yes resets; then untouched: at once
+        self.assertEqual(out["got"], [asked, kept, asked, kept, asked, reset, reset])
+
+    def test_a_step_drawn_again_keeps_the_keyboard_on_its_control(self):
+        """The page's own redraws (renderForm's line, the parameter Type handler) and controls.js' scan, on stand-in elements that
+        match selectors and hold the focus: which control has it once its box is drawn again."""
+        page = PAGE.read_text(encoding="utf-8")
+        controls = (APP / "static/controls.js").read_text(encoding="utf-8")
+        # controls.js' own scan, kept reachable: the frames that call it are not there
+        controls = controls[:controls.index("\n// A .ui-range's filled part")].replace("  scan();\n})();", "  listeners.frame = scan; scan();\n})();")
+        form = re.search(r"^    keepFocus\(\$\('#nb-form'\),.*$", page, re.M)
+        family = re.search(r"^    else if\(d\.stdFamilySet!==undefined\).*$", page, re.M).group(0)
+        change = page[page.index("  root.addEventListener('change',async event=>{"):page.index("  { const dl=document.getElementById('nb-models')")]
+        program = r"""
+const body = {name: 'body', matches: () => false}, listeners = {};
+// elements that match the selectors the page uses, hold the focus, and lose it when hidden or taken out of the page
+const el = (name, tagName, data = {}, more = {}) => Object.assign({name, tagName, id: '', dataset: data, size: 0, hidden: false, labels: [],
+  attributes: [{name: 'class', value: 'x'}, ...Object.entries(data).map(([k, value]) => ({name: 'data-' + k, value}))],
+  matches(s) { return s === '.ui-select-trigger' ? this.className === 'ui-select-trigger' : s[0] === '#' ? s === '#' + this.id
+    : s.startsWith(this.tagName + '[') && s.slice(this.tagName.length + 1, -1).split('][').every(one => this.attributes.some(a => one === `${a.name}="${CSS.escape(a.value)}"`)); },
+  get isConnected() { return Object.values(boxes).some(b => b.contains(this)); }, remove() {},
+  focus() { if (!this.gone) document.activeElement = this; }, setSelectionRange(...a) { this.name += ' ' + a.join(' '); },
+  classList: {add() {}}, setAttribute() {}, getAttribute: () => null, removeAttribute() {}, addEventListener() {}, closest: () => null, replaceChildren() {},
+  after(b) { this.nextElementSibling = b; b.previousElementSibling = this; b.name = this.name + ' menu'; }, selectedOptions: [{textContent: 'a', dataset: {}}]}, more);
+const hides = select => { select.classList.add = () => { select.gone = true; if (document.activeElement === select) document.activeElement = body; }; return select; };
+const box = () => ({els: [], next: [], contains(e) { return this.els.includes(e) || this.els.some(x => x.nextElementSibling === e); },
+  querySelector(s) { return this.els.find(e => e.matches(s)) || null; },
+  set innerHTML(html) { if (this.contains(document.activeElement)) document.activeElement = body; this.els = this.next; }});
+const boxes = {'#nb-form': box(), '#nb-parameters': box()}, $ = s => boxes[s];
+globalThis.CSS = {escape: s => s.replace(/"/g, '\\$&')};
+globalThis.document = {body, activeElement: body, addEventListener() {}, createElement: tag => el('', tag.toUpperCase()),
+  querySelectorAll: s => s.startsWith('select') ? Object.values(boxes).flatMap(b => b.els).filter(e => e.tagName === 'SELECT') : []};
+globalThis.window = {addEventListener() {}}; globalThis.MutationObserver = class { observe() {} }; globalThis.requestAnimationFrame = () => {};
+const keepFocus = require(__PAGE__).keepFocus || ((box, draw) => draw());   // a page without it only draws
+const root = {addEventListener: (type, f) => { listeners[type] = f; }}, customRows = () => '', placeGrids = () => {}, html = '', tab = 'extra';
+__CONTROLS__
+const scan = () => listeners.frame();
+__CHANGE__
+const got = [], say = () => got.push(document.activeElement.name);
+(async () => {
+  // a choice: the step drawn again by renderForm's own line
+  const f = boxes['#nb-form'], oracle = el('old', 'BUTTON', {agent: 'oracle'});
+  f.els = [oracle]; f.next = [el('nop', 'BUTTON', {agent: 'nop'}), el('oracle', 'BUTTON', {agent: 'oracle'})]; oracle.focus();
+  __FORM__
+  say();
+  // the same id; a field on its selection; a choice whose other data changed with it; nothing to tell it by; outside the box
+  const redraw = (on, next, inside = true) => { f.els = inside ? [on] : []; f.next = next; document.activeElement = on; keepFocus(f, () => { f.innerHTML = ''; }); say(); };
+  redraw(el('old', 'BUTTON', {x: 'y'}, {id: 'nb-add'}), [el('other', 'BUTTON', {x: 'y'}), el('add', 'BUTTON', {x: 'z'}, {id: 'nb-add'})]);
+  redraw(el('old', 'INPUT', {field: 'a"b'}, {selectionStart: 2, selectionEnd: 5, selectionDirection: 'backward'}), [el('field', 'INPUT', {field: 'a"b'})]);
+  redraw(el('old', 'BUTTON', {family: 'small', was: 'all'}), [el('all', 'BUTTON', {family: 'all', was: 'small'}), el('small', 'BUTTON', {family: 'small', was: 'small'})]);
+  // a set of two lists chosen in its second, by the page's own line: both lists' groups are drawn, the set in each of them
+  const set = (was, to) => el('set ' + was + ' ' + to, 'BUTTON', {stdFamilySet: 'mine', was, in: to}), old = set('l3', 'l2');
+  { const d = old.dataset, C = {swapDataset() {}, setTaskSet() {}}, r = () => ({}); if (0) {}
+__FAMILY__
+    old.attributes.find(a => a.name === 'data-was').value = d.was; }
+  redraw(old, [set('l1', 'l1'), set('l1', 'l2'), set('l2', 'l1'), set('l2', 'l2')]);
+  redraw(el('old', 'BUTTON'), [el('plain', 'BUTTON')]);
+  redraw(el('outside', 'BUTTON', {agent: 'oracle'}), [el('oracle', 'BUTTON', {agent: 'oracle'})], false);
+  // the second parameter's Type, by the page's own change handler: its select is drawn again, then controls.js draws its menu button
+  const p = boxes['#nb-parameters'], type = hides(el('old type', 'SELECT', {custom: '1:type'}));
+  f.els = []; p.els = [type]; scan(); type.nextElementSibling.focus(); say();
+  p.next = [hides(el('type 0', 'SELECT', {custom: '0:type'})), hides(el('type 1', 'SELECT', {custom: '1:type'}))];
+  await listeners.change({target: type}); say(); scan(); say();
+  process.stdout.write(JSON.stringify(got));
+})();
+"""
+        program = (program.replace("__PAGE__", json.dumps(str(PAGE))).replace("__CONTROLS__", controls).replace("__CHANGE__", change).replace("__FAMILY__", family)
+                   .replace("__FORM__", form.group(0) if form else ""))
+        out = json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
+        self.assertEqual(out, ["oracle", "add", "field 2 5 backward", "small", "set l2 l2", "body", "outside",
+                               "old type menu", "type 1", "type 1 menu"])   # the Type's menu button, its new select, that one's button
+
+    def test_removing_a_row_puts_the_keyboard_on_add(self):
+        """The page's own click handler: the row after a removed one takes its number, so the focus leaves Remove for Add."""
+        page = PAGE.read_text(encoding="utf-8")
+        clicks = page[page.index("  root.addEventListener('click',async event=>{"):page.index("  // a benchmark chosen on the Benchmark step's grid")]
+        program = ('const got=[],rec={custom:[{key:"first"},{key:"second"}],customAgents:["a.A","b.B"],agents:["oracle","custom-0","custom-1"]};let click;'
+                   'const r=()=>rec,render=()=>{},renderForm=()=>{},refreshPlan=()=>{},$=s=>({focus(){got.push(s);}}),root={addEventListener:(type,f)=>{click=f;}};\n' + clicks + '\n'
+                   '(async()=>{await click({target:{closest:()=>({id:"",dataset:{remove:"0"}})}});await click({target:{closest:()=>({id:"",dataset:{removeCustomAgent:"0"}})}});'
+                   'process.stdout.write(JSON.stringify([got,rec.custom,rec.customAgents,rec.agents]));})();')
+        out = json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
+        self.assertEqual(out, [["#nb-add", "#nb-add-custom-agent"], [{"key": "second"}], ["b.B"], ["oracle", "custom-0"]])
+
+
+    def test_saving_closes_an_open_start_over_question(self):
+        """Save swaps in its own copy of the draft, so a Yes left open would clear the saved recipe's successor."""
+        page = PAGE.read_text(encoding="utf-8")
+        drop = re.search(r"^  const dropStartOverAsk=.*$", page, re.M)
+        save = page[page.index("  async function save(){"):page.index("  root.addEventListener('submit'")]
+        program = ('const C=require(' + json.dumps(str(APP / "static/builder/command-builder-core.js")) + ')(' + json.dumps(self.schema) + ');'
+                   'let recipe=C.prefill({}),saved=[],savedId="",compiled={errors:[]};const r=()=>recipe,render=()=>{},renderSaved=()=>{},status=()=>{},recipeSlug=t=>t.toLowerCase();'
+                   'const store={save:async c=>({id:"0123456789abcdef",recipe:c})};'
+                   'const el=()=>({hidden:false,value:"Renamed",textContent:"",a:{"aria-expanded":"true"},setAttribute(k,v){this.a[k]=v;},close(){},focus(){}});'
+                   'const els={"#nb-startover":el(),"#nb-startover-ask":el(),"#nb-recipe-title":el(),"#nb-save-dialog":el(),"#nb-save-message":el()},$=s=>els[s];\n'
+                   + (drop.group(0) if drop else "") + "\n" + save + '\n'
+                   '(async()=>{await save();process.stdout.write(JSON.stringify([recipe.title,els["#nb-startover-ask"].hidden,els["#nb-startover"].a["aria-expanded"]]));})();')
+        out = json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
+        self.assertEqual(out, ["Renamed", True, "false"])
 
 
 if __name__ == "__main__":

@@ -149,9 +149,9 @@ class Tabs(unittest.TestCase):
         self.assertIn('data-f-origin="benchmark&#10;"', card)
         self.assertIn('href="/benchmarks/osworld1"', card)
         self.assertIn('<div class="bench-card-setup">computer-use-preview</div>', card)
-        self.assertIn('<div class="bench-card-runs run-tags" role="group" aria-label="Kind, Origin, Uses, Example"><span class="origin-tag benchmark">A benchmark&#39;s own</span><span class="std-tag">Computer use</span></div>', card)
-        self.assertIn('<div class="bench-card-foot"><span class="bench-card-tags"><span class="std-tag">Its own script</span></span>'
-                      '<span class="bench-harness">OSWorld1</span></div>', card)                   # the builder's foot: its protocol, where it comes from
+        self.assertIn('<div class="bench-card-runs run-tags" role="group" aria-label="Kind, Uses, Example"><span class="std-tag">Computer use</span></div>', card)
+        self.assertIn('<div class="bench-card-foot"><span class="bench-harness">OSWorld1</span></div>', card)   # its benchmark; origin and protocol are filters
+        self.assertIn('data-f-protocol="Its own script&#10;"', card)
         self.assertNotIn("Ports proven", card)
         self.assertIn('id="osworld2-muse-spark"', table)
         self.assertEqual(self.get("/agents/openai-cua").status_code, 404)                 # its benchmark's page is its page
@@ -333,10 +333,10 @@ class Tabs(unittest.TestCase):
         self.assertIn("v1.0 · 2 versions", self.get("/agents?view=table").get_data(as_text=True))
         html = self.get("/agents/fake").get_data(as_text=True)                          # the default
         self.assertIn('<nav class="std-versions"', html)
-        self.assertIn('href="/agents/fake?v=1.0" aria-current="page"><b>1.0</b><small>2/7 proven · default · Official</small>', html)
+        self.assertIn('href="/agents/fake?v=1.0" aria-current="page"><b>1.0</b><small>2/7 proven · default <span class="origin-tag official">Official</span></small>', html)
         self.assertIn('href="/new-run?standard=fakebench&amp;other=fake@1.0"', html)
         html = self.get("/agents/fake?v=2.0").get_data(as_text=True)
-        self.assertIn('aria-current="page"><b>2.0</b><small>0/7 proven · Experiment</small>', html)
+        self.assertIn('aria-current="page"><b>2.0</b><small>0/7 proven <span class="origin-tag experiment">Experiment</span></small>', html)
         self.assertIn("which Fake agent 2.0 does not offer", html)                       # its own proofs, none yet
         self.assertIn('<input type="hidden" name="version" value="2.0">', html)
         self.assertEqual(self.get("/agents/fake?v=9").status_code, 404)

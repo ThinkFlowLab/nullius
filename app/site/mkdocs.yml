@@ -109,6 +109,7 @@ nav:
           - Conform an agent or a capability: cli/conform.md
           - Fidelity: cli/fidelity.md
           - Shard and merge: cli/shard-and-merge.md
+          - Task sets: cli/task-sets.md
           - Pages from a shell: cli/pages.md
           - Exit codes and output: cli/exit-codes.md
       - Settings:

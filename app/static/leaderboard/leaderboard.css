@@ -1,0 +1,278 @@
+.lb-head-link { min-width: 10rem; justify-content: center; }
+:root { --lb-chip-lo: var(--surface-2); --lb-chip-hi: color-mix(in oklab, var(--accent) 24%, var(--accent-soft)); --lb-chip-text: var(--text); --lb-grey: #767a82; --lb-good: #5fae74; --lb-warn: #e5b451; }
+:root[data-theme="light"] { --lb-grey: #9aa1ab; --lb-good: #3f8f55; --lb-warn: #8a6100; }
+
+/* cards: the board, the scatter, the agent, the strips and the radars */
+.lb-panel { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 28px 30px; margin: 0 0 24px; min-width: 0; }
+/* the score columns hold their name and chip in the middle; the measures stay right-aligned */
+#leaderboard-table :is(th, td):not([data-col=rank], [data-col=agent], [data-col=steps], [data-col=time], [data-col=calls], [data-col=cost]) { text-align: center; }
+#leaderboard-table td { vertical-align: middle; }
+.lb-panel h2 { font-size: 1.25rem; font-weight: 600; margin: 0; }
+.lb-panel h3 { font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 500; color: var(--text-dim); margin: 0 0 8px; }
+.lb-head { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.lb-two { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); margin: 0 0 24px; }
+.lb-two > .lb-panel { margin: 0; }
+@media (min-width: 1000px) { .lb-two { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); } }
+
+/* the table */
+.lb-table { table-layout: fixed; width: 100%; font-size: .82rem; }
+.lb-table th { white-space: nowrap; text-align: center; overflow: hidden; transition: width .28s cubic-bezier(.2,.7,.2,1), padding .28s cubic-bezier(.2,.7,.2,1), color .15s ease; }
+.lb-table { transition: min-width .28s cubic-bezier(.2,.7,.2,1); }
+.lb-table td { overflow: hidden; }
+.lb-table .lb-closing { padding-left: 0; padding-right: 0; transition: width .28s cubic-bezier(.2,.7,.2,1), padding .28s cubic-bezier(.2,.7,.2,1); }
+.lb-table.lb-instant, .lb-table.lb-instant :is(th, td), .lb-table .lb-instant { transition: none; }
+/* switching families: the changing columns' contents fade, their cells and the row's colour stay */
+.lb-table :is(th, td) > * { transition: opacity .15s ease; }
+.lb-table.lb-swap :is(th, td):not([data-col="rank"], [data-col="agent"], [data-col="overall"]) { color: transparent; }
+.lb-table.lb-swap :is(th, td):not([data-col="rank"], [data-col="agent"], [data-col="overall"]) > * { opacity: 0; }
+/* the sideways scrollbar's track is always there, so a wider table never pushes the page down */
+#leaderboard-board .table-wrap { overflow-x: scroll; }
+.lb-table [data-col="rank"] { width: 48px; text-align: center; }
+/* the sort arrow sits in the header's own padding: a sorted name stays centred, and is never cut by its column */
+#leaderboard-table thead th[data-sorted]::after { position: absolute; top: 50%; transform: translateY(-50%); line-height: 1; margin-left: .25rem; }
+.lb-table [data-col="agent"] { width: 238px; text-align: left; }
+.lb-table [data-col="overall"] { width: 104px; }
+.lb-table [data-col="steps"] { width: 66px; } .lb-table [data-col="time"] { width: 84px; } .lb-table [data-col="calls"] { width: 92px; } .lb-table [data-col="cost"] { width: 88px; }
+.lb-table td { text-align: center; white-space: nowrap; color: var(--text-dim); font-variant-numeric: tabular-nums; padding-top: 9px; padding-bottom: 9px; transition: background-color .2s, padding .28s cubic-bezier(.2,.7,.2,1), color .15s ease; }
+/* the board sits on a card, so its pinned cells take the card's colour, and the row's when hovered or chosen */
+#leaderboard-board .table-wrap .grid .sticky-col, #leaderboard-board .table-wrap .grid thead th { background: var(--surface); }
+#leaderboard-board .table-wrap .grid tbody tr:hover td { background: var(--surface-2); }
+#leaderboard-board .table-wrap .grid tbody tr.lb-sel td { background: var(--accent-soft); }
+.lb-table tbody tr { cursor: pointer; }
+.lb-table tbody tr:hover td { background: var(--surface-2); }
+.lb-table tbody tr.lb-sel td { background: var(--accent-soft); }
+.lb-table tbody tr.lb-sel td:first-child { box-shadow: inset 3px 0 var(--accent); }
+.lb-agent { all: unset; display: flex; align-items: center; gap: 10px; cursor: pointer; min-width: 0; max-width: 100%; }
+.lb-agent:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lb-mark { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; flex: none; border-radius: 7px; overflow: hidden; }
+.lb-mark img, .lb-mark svg { width: 100%; height: 100%; object-fit: contain; display: block; }
+.lb-who { min-width: 0; }
+.lb-who b { display: block; font-weight: 600; color: var(--text); white-space: normal; overflow-wrap: anywhere; }
+.lb-who small { display: block; color: var(--text-faint); font-size: .75rem; white-space: normal; overflow-wrap: anywhere; }
+.lb-overall { display: inline-block; font-weight: 600; color: var(--text); padding: 2px 5px; border: 1.5px solid transparent; cursor: help; }
+.lb-bar { display: block; height: 4px; width: 68px; max-width: 100%; margin: 4px auto 0; border-radius: 2px; background: var(--surface-2); }
+.lb-bar i { display: block; height: 100%; border-radius: 2px; background: var(--accent); transition: width .32s cubic-bezier(.2,.7,.2,1); }
+.lb-chip { display: inline-block; min-width: 46px; padding: 4px 7px; border-radius: 6px; font-weight: 600; cursor: help; --lb-chip: color-mix(in oklab, var(--lb-chip-hi) calc(var(--lb-t, 0) * 100%), var(--lb-chip-lo)); background: var(--lb-chip); color: var(--lb-chip-text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent); }
+/* the text is white on a dark shade and near black on a light one: the shade's lightness decides, per theme */
+.lb-chip.lb-top { --lb-chip: color-mix(in oklab, var(--accent) calc(60% + var(--lb-t2, 0) * 40%), var(--accent-soft)); color: var(--surface); }
+/* in the light theme the strong chip starts darker, so its white text reads from the first step (4.5:1) */
+:root[data-theme="light"] .lb-chip.lb-top { --lb-chip: color-mix(in oklab, var(--accent) calc(80% + var(--lb-t2, 0) * 20%), var(--accent-soft)); }
+.lb-none { color: var(--text-faint); }
+/* a cell's contents are boxes, so they can slide when their row moves */
+.lb-none, .lb-m { display: inline-block; }
+
+/* the scatter */
+.lb-scroll { overflow-x: auto; scrollbar-width: thin; }
+.lb-scatter { display: block; width: 100%; min-width: 520px; }
+.lb-scatter text, .lb-chart-pair svg text { fill: var(--text-dim); font: 12px var(--sans); }
+.lb-scatter .lb-grid { stroke: color-mix(in srgb, var(--text) 8%, transparent); }
+.lb-scatter .lb-better { fill: var(--lb-good); font-weight: 600; letter-spacing: .08em; }
+.lb-scatter .lb-name { font-weight: 600; fill: var(--text-dim); }
+.lb-scatter .lb-name.lb-me { fill: var(--text); }
+.lb-scatter .lb-version { font-size: 10.5px; fill: var(--text-faint); }
+.lb-dot { cursor: pointer; outline: none; }
+.lb-dot .lb-tile { fill: var(--bg); }
+.lb-dot .lb-edge { fill: none; stroke: color-mix(in srgb, var(--text) 15%, transparent); }
+.lb-dot.lb-current .lb-edge { stroke: var(--accent); stroke-width: 2.5; }
+.lb-dot:is(:hover, :focus-visible) .lb-edge { stroke: var(--text); }
+.lb-dot .lb-logo { transform-box: fill-box; transform-origin: center; transition: transform .18s ease-out; }
+.lb-dot:is(:hover, :focus-visible) .lb-logo { transform: scale(1.25); }
+
+/* the agent card */
+.lb-who-big { display: flex; gap: 12px; align-items: center; }
+.lb-who-big h2 { font-size: 1.2rem; }
+.lb-who-big small { color: var(--text-faint); font-size: .82rem; }
+.lb-mark-big { width: 48px; height: 48px; border-radius: 10px; }
+.lb-figure { margin: 18px 0 12px; display: flex; align-items: baseline; gap: 8px; }
+.lb-fig { font-size: 2.5rem; font-weight: 650; line-height: 1.1; color: var(--text); }
+.lb-bar-wide { width: 100%; height: 8px; margin: 0 0 18px; border-radius: 4px; }
+.lb-bar-wide i { border-radius: 4px; }
+.lb-kv { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; color: var(--text-dim); font-size: .88rem; }
+/* a line's label wraps inside the card; its value keeps its own width */
+.lb-kv > span { min-width: 0; overflow-wrap: anywhere; }
+.lb-kv > b { flex: none; max-width: 62%; }
+.lb-kv .lb-up { color: var(--lb-good); }
+.lb-kv .lb-down { color: var(--bad); }
+.lb-kv b { color: var(--text); font-weight: 600; text-align: right; }
+
+/* pickers over the strips and the radars */
+.lb-picks { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.lb-picks .lb-pick { display: inline-flex; align-items: center; gap: 6px; }
+.lb-picks select, .lb-picks .ui-select-trigger { width: 190px; }
+.lb-swatch { width: 22px; height: 14px; flex: none; }
+/* scrolled to, a picker stops below the page's top bar rather than under it */
+.lb-picks .ui-select-trigger { scroll-margin-top: calc(var(--topbar-height) + 12px); }
+
+/* two columns: domains, capabilities */
+.lb-chart-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+.lb-chart-pair > * + * { border-top: 1px solid var(--border); padding-top: 24px; }
+/* the two halves pad alike on either side of the divider, so both charts are drawn at one size */
+@media (min-width: 900px) { .lb-chart-pair { grid-template-columns: 1fr 1fr; gap: 0; } .lb-chart-pair > :first-child { padding-right: 36px; } .lb-chart-pair > * + * { border-top: 0; border-left: 1px solid var(--border); padding: 0 0 0 36px; } }
+
+/* strips */
+.lb-srow { display: grid; grid-template-columns: 104px minmax(0, 1fr) 42px; gap: 10px; align-items: center; height: 38px; font-size: .88rem; }
+.lb-srow > :last-child { line-height: 1.15; }
+.lb-srow > :first-child { text-align: right; cursor: help; }
+.lb-srow > :last-child { font-weight: 600; color: var(--text); }
+.lb-srow small { display: block; color: var(--series-2); font-weight: 500; font-size: .72rem; line-height: 1; }
+.lb-track { position: relative; height: 22px; background: linear-gradient(var(--border-soft), var(--border-soft)) center / 100% 1px no-repeat; }
+.lb-track > * { position: absolute; top: 50%; transition: left .32s cubic-bezier(.2,.7,.2,1), transform .18s ease-out; }
+.lb-track i { width: 8px; height: 8px; margin: -4px; border-radius: 50%; background: var(--lb-grey); cursor: pointer; }
+.lb-track i.lb-me { width: 13px; height: 13px; margin: -6.5px; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); z-index: 2; }
+.lb-track i:is(:hover, :focus-visible) { transform: scale(1.5); outline: none; }
+.lb-track u { top: 0; bottom: 0; border-left: 1.5px dashed var(--text-dim); }
+.lb-track em { width: 11px; height: 11px; margin: -5.5px; transform: rotate(45deg); background: var(--series-2); box-shadow: 0 0 0 2px var(--surface); pointer-events: none; z-index: 3; }
+
+/* radars */
+.lb-chart-pair svg { display: block; width: 100%; max-height: 440px; overflow: visible; }
+.lb-ring { fill: none; stroke: var(--border-soft); }
+.lb-axis-label { cursor: help; outline: none; }
+.lb-axis-label:focus-visible { text-decoration: underline; }
+.lb-chart-pair svg text.lb-axis-label { font-size: 14.5px; }
+.lb-chart-pair svg .lb-axis-label .lb-me { font-size: 16px; }
+.lb-pill { fill: color-mix(in oklab, var(--accent) 16%, transparent); stroke: color-mix(in oklab, var(--accent) 28%, transparent); opacity: 0; cursor: help; transition: opacity 150ms; }
+.lb-label:is(:hover, :focus-within) .lb-pill { opacity: 1; }
+.lb-chart-pair svg .lb-label:is(:hover, :focus-within) text { fill: var(--accent); }
+.lb-chart-pair svg .lb-label:is(:hover, :focus-within) .lb-me { fill: var(--accent); }
+.lb-chart-pair svg .lb-me { fill: var(--text); font-weight: 600; }
+.lb-chart-pair svg .lb-versus { fill: var(--series-2); }
+.lb-wedge { fill: var(--accent); opacity: .14; }
+.lb-radar-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.lb-radar-line.lb-comparison { stroke: var(--text-dim); stroke-dasharray: 4 4; }
+.lb-versus-agent .lb-radar-line.lb-comparison { stroke: var(--series-2); }
+.lb-point { fill: var(--accent); cursor: pointer; transform-box: fill-box; transform-origin: center; transition: transform 150ms; outline: none; }
+.lb-point.lb-comparison { fill: var(--text-dim); cursor: default; }
+.lb-versus-agent .lb-point.lb-comparison { fill: var(--series-2); }
+.lb-point:not(.lb-dot):is(:hover, :focus-visible, .lb-hover) { transform: scale(1.6); }
+.lb-dot.lb-point { transform: none; }
+
+/* score evidence */
+.lb-evidence { position: fixed; z-index: 100; width: max-content; max-width: min(560px, calc(100vw - 24px)); max-height: min(640px, calc(100vh - 24px)); overflow: auto; padding: 18px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font-size: .8rem; box-shadow: 0 8px 24px color-mix(in srgb, #000 30%, transparent); }
+.lb-evidence > strong { display: block; font-size: .95rem; font-weight: 600; }
+.lb-evidence p { margin: .3rem 0 0; color: var(--text-faint); font-size: .76rem; }
+.lb-ev-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: .8rem; }
+.lb-ev-table th { padding: 0 8px 6px; color: var(--text-faint); font-weight: 500; font-size: .74rem; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border-soft); }
+.lb-ev-table th:first-child, .lb-ev-table td:first-child { text-align: left; padding-left: 0; }
+.lb-ev-table td { padding: 8px; vertical-align: top; border-bottom: 1px solid var(--border-soft); color: var(--text); }
+.lb-ev-table td:last-child, .lb-ev-table th:last-child { padding-right: 0; }
+.lb-ev-table td small { display: block; margin-top: 3px; color: var(--text-faint); font-size: .72rem; }
+.lb-ev-table td small a { color: var(--text-dim); text-decoration: underline; text-underline-offset: 2px; }
+.lb-ev-table td small a:hover { color: var(--text); }
+.lb-ev-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lb-ev-score { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lb-ev-scorebox { display: inline-flex; gap: 8px; align-items: center; justify-content: flex-end; min-height: 1.2em; }
+.lb-ev-pct { display: inline-block; min-width: 5ch; text-align: right; }
+.lb-ev-bar { flex: none; width: 56px; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.lb-ev-bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.lb-ev-table tfoot td { border-bottom: 0; padding-top: 10px; color: var(--accent); font-weight: 600; }
+
+/* medals */
+.lb-medal { display: inline-block; width: 30px; height: 36px; vertical-align: middle; color: var(--lb-medal-gold); }
+.lb-medal svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.lb-medal text { font-family: var(--sans); }
+.lb-medal-2 { color: var(--lb-medal-silver); }.lb-medal-3 { color: var(--lb-medal-bronze); }.lb-medal-4 { color: var(--lb-medal-chocolate); }
+/* hovering a row grows its wreath again leaf by leaf, then the disc glows in its metal's colour */
+.lb-medal .lb-leaf { transform-box: fill-box; transform-origin: center; }
+tr:hover .lb-medal .lb-leaf { animation: lb-leaf .42s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i) * 45ms); }
+tr:hover .lb-medal .lb-disc { animation: lb-glow .9s ease-in-out .25s; }
+@keyframes lb-leaf { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes lb-glow { 50% { filter: drop-shadow(0 0 3px currentColor); } }
+:root { --lb-medal-gold: #e8c85a; --lb-medal-silver: #c0c5cf; --lb-medal-bronze: #dca475; --lb-medal-chocolate: #b88568; }
+:root[data-theme="light"] { --lb-medal-gold: #906500; --lb-medal-silver: #687282; --lb-medal-bronze: #975525; --lb-medal-chocolate: #633f2d; }
+
+/* Scoring settings: one header per card names the columns every row lines up under */
+.lb-settings fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.lb-settings h2 { font-size: 1rem; margin: 0; }
+.lb-axes > h2 { margin-bottom: 14px; }
+.lb-settings .lb-input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 34px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); font: 13px/1.5 var(--sans); font-variant-numeric: tabular-nums; outline: none; transition: border-color .15s, box-shadow .15s; }
+.lb-input:hover { border-color: var(--text-faint); }
+.lb-input:focus { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.lb-input::placeholder { color: var(--text-faint); }
+.lb-settings .lb-input:disabled { opacity: .5; cursor: not-allowed; }
+.lb-input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+.lb-input::-webkit-inner-spin-button, .lb-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.lb-input[aria-invalid="true"] { border-color: var(--bad); box-shadow: inset 0 0 0 1px var(--bad); }
+.lb-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; flex: none; }
+.lb-icon .ic { width: 16px; height: 16px; }
+/* every select keeps room for its name on one line; an axis's weight in Overall sits beside its name, folded or not, and its
+   benchmarks open below it: nothing moves when a row folds */
+.lb-axis { --lb-entry: minmax(112px, 1.2fr) minmax(132px, 1.3fr) minmax(132px, 1.2fr) minmax(96px, 1fr) 72px 34px;
+  display: grid; grid-template-columns: 156px minmax(0, 1fr); grid-template-areas: 'name weight' '. entries'; gap: 0 16px; align-items: start; padding: 14px 0; border-top: 1px solid var(--border-soft); }
+.lb-axis h3 { text-transform: none; letter-spacing: normal; margin: 0; font-size: .88rem; font-weight: 600; color: var(--text); }
+.lb-fold { display: inline-flex; align-items: center; min-height: 34px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.lb-fold:hover { color: var(--accent-strong); }
+.lb-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.lb-count { margin-left: 8px; color: var(--text-faint); font-weight: 400; font-size: .76rem; font-variant-numeric: tabular-nums; }
+.lb-fold[aria-expanded="true"] .lb-count { display: none; }
+.lb-overview { margin: 12px 0 20px; }
+.lb-overview > .lb-fold { font-size: .82rem; font-weight: 600; color: var(--text-dim); }
+.lb-ov-wrap { margin-top: 8px; }
+.lb-ov { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.lb-ov th { padding: 6px 6px 8px; color: var(--text-faint); font-weight: 500; font-size: .72rem; text-align: left; border-bottom: 1px solid var(--border-soft); hyphens: auto; vertical-align: bottom; }
+.lb-ov td { padding: 8px 6px; border-bottom: 1px solid var(--border-soft); color: var(--text); vertical-align: middle; }
+.lb-ov tr > :first-child { padding-left: 0; font-weight: 500; }
+.lb-ov .lb-ov-num { text-align: center; }
+.lb-ov-chip { display: inline-block; min-width: 40px; padding: 3px 6px; border-radius: 6px; font: 600 .74rem var(--mono); font-variant-numeric: tabular-nums;
+  background: color-mix(in oklab, var(--accent) calc(16% + var(--v, 0) * 30%), transparent); color: var(--text); }
+.lb-ov-none { color: var(--text-faint); }
+.lb-axis > h3 { grid-area: name; }
+.lb-axis > .lb-entries { grid-area: entries; }
+.lb-weight { grid-area: weight; align-self: start; }
+.lb-weight-name { color: var(--text-faint); font-size: .75rem; }
+.lb-axis-head .lb-fold { display: none; }
+.lb-axis-head { padding: 0 0 8px; border-top: 0; color: var(--text-faint); font-size: .75rem; }
+.lb-entries { display: grid; gap: 8px; justify-items: start; min-width: 0; }
+/* the space above a row's benchmarks is inside what slides, never padding the slide's height would leave behind */
+.lb-entries::before { content: ''; height: 2px; }
+.lb-entries > [data-entries] { display: grid; gap: 8px; width: 100%; }
+.lb-entries > [data-entries]:empty { display: none; }
+.lb-entry { display: grid; grid-template-columns: var(--lb-entry); gap: 8px; align-items: center; min-width: 0; }
+.lb-cell { min-width: 0; }
+.lb-cell .ui-select-trigger { width: 100%; }
+.lb-cell.lb-none { color: var(--text-faint); text-align: center; }
+.lb-cell.lb-fixed { padding: 0 12px; overflow-wrap: anywhere; }
+.lb-weight { display: grid; grid-template-columns: auto 58px; justify-content: start; gap: 8px; align-items: center; }
+.lb-weight output { text-align: left; }
+.lb-reset { display: flex; justify-content: flex-end; margin: 0 0 16px; }
+#reset-confirm:not([hidden]) { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.lb-savebar[hidden] { display: none; }
+.lb-savebar { position: sticky; bottom: 12px; display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--bad); border-radius: 10px; background: var(--surface-2); }
+@media (max-width: 700px) {
+  .lb-company { display: none; }
+  /* #, Agent and Overall fill a phone's width exactly: the first score is a sideways scroll away, Overall never cut */
+  .lb-table :is(th, td) { padding-left: .6rem; padding-right: .6rem; }
+  .lb-table [data-col="rank"] { width: 44px; }
+  #leaderboard-table [data-col="agent"] { position: relative; left: auto; width: 168px; box-shadow: none; }
+  .lb-table [data-col="overall"] { width: 84px; }
+  .lb-picks .lb-pick { flex: 1 1 100%; }
+  .lb-picks select, .lb-picks .ui-select-trigger { flex: 1; width: auto; }
+  .lb-picks > .muted { display: none; }
+  .lb-srow { grid-template-columns: 96px minmax(0, 1fr) 40px; }
+  .lb-complete-count { display: none; }
+}
+@media (max-width: 380px) {
+  /* a narrow phone: tighter cells and a smaller logo keep Overall whole and a name on one line */
+  .lb-table [data-col="rank"] { padding-left: .2rem; padding-right: .2rem; }
+  #leaderboard-table td[data-col="agent"] { padding-right: .3rem; }
+  .lb-agent { gap: 8px; }
+  .lb-agent .lb-mark { width: 24px; height: 24px; }
+}
+/* a scoring row lays out by its card's width, whatever the window's and the rail's: too narrow for a row's name beside
+   its benchmarks, they go under it; narrower still, each benchmark stacks */
+.lb-axes { container-type: inline-size; }
+@container (max-width: 800px) {
+  .lb-axis { grid-template-areas: 'name weight' 'entries entries'; }
+  .lb-axis-head > span { display: none; }
+  .lb-axis-head > .lb-entry { grid-column: 1 / -1; }
+}
+@container (max-width: 640px) {
+  .lb-axis { grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; }
+  .lb-axis-head { display: none; }
+  .lb-entry { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding-bottom: 8px; border-bottom: 1px dashed var(--border-soft); }
+  .lb-entry > .lb-none { display: none; }
+  .lb-entry > :first-child { grid-column: 1 / -1; }
+  .lb-weight { grid-template-columns: auto 90px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-medal, .lb-medal *, .lb-point, .lb-bar i, .lb-table, .lb-table th, .lb-table td, .lb-track > *, .lb-dot .lb-logo { animation: none !important; transition: none !important; }
+}

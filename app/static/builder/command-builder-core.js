@@ -62,6 +62,17 @@
   // A control that calls no model at all - on a benchmark with no judge - needs no key to run.
   // The agents, capabilities and controls a standard recipe runs, each its own job of the one run.
   const chosenOf = r => Array.isArray(r.others) ? r.others : (r.other ? [r.other] : []);
+  // A participant ticked or unticked; the selected version's procedure is one of them, on by default and back when
+  // none is left.
+  function toggleParticipant(r, key) {
+    const current = chosenOf(r), removing = current.includes(key);
+    r.others = removing ? current.filter(k => k !== key) : [...current, key];
+    const b = standardBench(r);
+    if (!r.others.length && !ownAgentsOf(b).length && (b.setups || []).some(s => s.key === 'original')) r.others = ['original'];
+    delete r.other;
+    if (r.options) delete r.options[key];
+    return r;
+  }
   // The datasets a standard recipe runs: each with each choice, a job each; dataset also accepts one key.
   const datasetsOf = r => Array.isArray(r.datasets) ? r.datasets : (r.dataset ? [r.dataset] : []);
   const standardKeyless = r => { const b = standardBench(r), c = chosenOf(r); return !!b && !b.judged && c.length > 0 && c.every(k => (b.controls || []).some(x => x.key === k)); };
@@ -88,7 +99,7 @@
     r.model_choice = choice;
     if (paperListed(r)) r.model = '';
     if (choice !== 'any') { delete r.judge_model; delete r.simulator_model; }
-    if (choice !== was) delete r.served_by;     // its models change with it: a pin belongs to the model it was set for
+    if (choice !== was) { delete r.served_by; delete r.reasoning; }     // its models change with it: a pin or a level belongs to the model it was set for
     if (lb && was === 'leaderboard' && choice !== 'leaderboard') {
       r.bench_options = {...(r.bench_options || {})};
       for (const k of Object.keys(lb.bench_options || {})) delete r.bench_options[k];
@@ -116,6 +127,7 @@
   const SERVED_FIELD = {model: 'model', simulator_model: 'simulator', judge_model: 'judge'};
   function setModelOf(r, field, value) {
     if (SERVED_FIELD[field] && r[field] !== value && r.served_by) setServed(r, SERVED_FIELD[field], []);
+    if (SERVED_FIELD[field] && r[field] !== value && r.reasoning) setReasoning(r, SERVED_FIELD[field], '');
     r[field] = value;
     return r;
   }
@@ -123,7 +135,7 @@
   // (recipe.py, served_models: a paper model's served name, an official one's with its maker), else the one shown.
   const servedModelOf = (role, shown, compiled) => ((compiled || {}).served_models || {})[role] || shown || '';
   // What decides the models the run sends: the recipe but its pins. A pin added or taken out changes none of them.
-  const servedKey = r => JSON.stringify({...r, served_by: undefined});
+  const servedKey = r => JSON.stringify({...r, served_by: undefined, reasoning: undefined});
   // The models the server last named, and what decided them ({out, key}): a compile that names them (`out`, the
   // compile route's answer for the recipe `recipeKey`, its JSON) replaces them; one that failed keeps the last ones.
   const servedCompiled = (last, out, recipeKey) => out && out.served_models && typeof out.served_models === 'object'
@@ -137,6 +149,20 @@
     const visible = !!chosen.length || !!providers && (!providers.ok || providers.models.length !== 1);
     return {shown, model, pending: !model && !!shown, chosen, visible, placeholder: chosen.length ? 'Add a provider' : 'any provider'};
   }
+  // Reasoning (recipe.py, reasoning): a level for each model field, one its model offers; any provider, the same fields.
+  function reasoningRoles(r) {
+    const b = standardBench(r);
+    if (!b || standardKeyless(r)) return [];
+    return SERVED_ROLES.filter(k => k === 'model' || (k === 'simulator' && b.simulator) || (k === 'judge' && b.judge));
+  }
+  function setReasoning(r, role, level) {
+    r.reasoning = {...(r.reasoning || {})};
+    if (level) r.reasoning[role] = level; else delete r.reasoning[role];
+    if (!Object.keys(r.reasoning).length) delete r.reasoning;
+    return r;
+  }
+  // a level as the select says it (relay.LEVELS)
+  const LEVEL_NAMES = {none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', off: 'Off', on: 'On'};
   function setServed(r, role, slugs) {
     const list = Array.isArray(slugs) ? slugs : servedList(slugs);
     r.served_by = {...(r.served_by || {})};
@@ -169,11 +195,13 @@
     const b = standardBench({benchmark: key});
     if (!b) return r;
     const was = standardBench(r), same = !!was && was.key === b.key;     // another version of it keeps the choices
-    if (!same) { r.model_choice = 'any'; delete r.served_by; }
+    if (!same) { r.model_choice = 'any'; delete r.served_by; delete r.reasoning; }
+    if (was !== b) delete r.task_sets;
     r.benchmark = key;
     const kept = same ? datasetsOf(r).filter(id => b.datasets.some(d => d.id === id)) : [];
     r.datasets = kept.length ? kept : [b.datasets[0].id];
     delete r.dataset;
+    keepTaskSets(r);
     const fitting = standardOthers(r).filter(o => !o.why.length);
     const keys = fitting.map(o => o.key), first = fitting.find(o => o.own) || fitting.find(o => o.setup && o.key === 'original')
       || fitting.find(o => !o.control && !o.setup);
@@ -187,12 +215,46 @@
     if (was !== b || r.name === 'standard-experiment') { r.name = b.key + '-experiment'; r.title = b.label + ' experiment'; }
     return r;
   }
+  // A benchmark whose lists name the list they are cut from (``subset_of``): the dataset a list is drawn under, its
+  // own id for one cut from none. A choice of another list of that dataset takes the place of the one chosen, its task
+  // set dropped with it.
+  const nestedDatasets = b => !!b && (b.datasets || []).some(d => d.subset_of);
+  const wholeOf = (b, id) => ((b && b.datasets || []).find(d => d.id === id) || {}).subset_of || id;
+  function swapDataset(r, was, now) {
+    r.datasets = [...new Set(datasetsOf(r).map(id => id === was ? now : id))];
+    delete r.dataset;
+    if (was !== now) { if (r.task_sets) delete r.task_sets[was]; }
+    else if (r.task_sets) delete r.task_sets[now];
+    return keepTaskSets(r);
+  }
+  // A chosen dataset's task set, NAME, run in place of all its tasks (recipe.py: task_sets, {dataset: NAME});
+  // '' for all of them. A set of several datasets is chosen for each of them, those not chosen yet added: each runs
+  // its part, a job of its own. A dataset no longer chosen keeps none.
+  function setTaskSet(r, dataset, ref) {
+    r.task_sets = {...(r.task_sets || {})};
+    if (!ref) { delete r.task_sets[dataset]; return keepTaskSets(r); }
+    const b = standardBench(r), name = ref.split('@')[0];
+    const set = b && b.datasets.flatMap(d => d.sets || []).find(s => s.name === name);
+    const all = set && (set.datasets || []).length > 1 ? set.datasets.filter(id => b.datasets.some(d => d.id === id)) : [dataset];
+    r.datasets = [...new Set([...datasetsOf(r), ...all])];
+    delete r.dataset;
+    for (const id of all) r.task_sets[id] = ref;
+    return keepTaskSets(r);
+  }
+  function keepTaskSets(r) {
+    const on = datasetsOf(r), kept = Object.entries(r.task_sets || {}).filter(([k, v]) => on.includes(k) && typeof v === 'string' && v);
+    if (kept.length) r.task_sets = Object.fromEntries(kept); else delete r.task_sets;
+    return r;
+  }
   // A saved standard recipe read back: known fields only, each of its type.
   function standardFromJSON(raw) {
     const r = createStandard(typeof raw.benchmark === 'string' ? raw.benchmark : '');
     for (const key of ['name', 'title', 'model', 'where', 'model_choice']) if (typeof raw[key] === 'string') r[key] = raw[key];
     const sets = Array.isArray(raw.datasets) ? raw.datasets.filter(k => typeof k === 'string') : typeof raw.dataset === 'string' && raw.dataset ? [raw.dataset] : null;
-    if (sets && sets.length) r.datasets = [...new Set(sets)];
+    // lists cut from one list overlap: a recipe naming two keeps the first (the builder draws one of each)
+    const b = standardBench(r), seen = new Set();
+    if (sets && sets.length) r.datasets = [...new Set(sets)].filter(id => { const w = wholeOf(b, id); return !seen.has(w) && seen.add(w); });
+    if (raw.task_sets && typeof raw.task_sets === 'object' && !Array.isArray(raw.task_sets)) { r.task_sets = {...raw.task_sets}; keepTaskSets(r); }
     const picked = Array.isArray(raw.others) ? raw.others.filter(k => typeof k === 'string') : typeof raw.other === 'string' && raw.other ? [raw.other] : null;
     if (picked) r.others = [...new Set(picked)];
     if (Array.isArray(raw.where) && raw.where.length && raw.where.every(w => typeof w === 'string')) r.where = raw.where.length > 1 ? [...raw.where] : raw.where[0];
@@ -243,6 +305,9 @@
       for (const role of SERVED_ROLES) { const v = raw.served_by[role];
         // kept as saved, a slug the server refuses included: a pin is refused in sight, never dropped in silence
         if (Array.isArray(v) && v.length) setServed(r, role, v.map(s => typeof s === 'string' ? s.trim() : String(s))); }
+    // Reasoning: each field's level, kept as saved (the server checks it as --reasoning)
+    if (raw.reasoning && typeof raw.reasoning === 'object' && !Array.isArray(raw.reasoning))
+      for (const role of SERVED_ROLES) if (typeof raw.reasoning[role] === 'string' && raw.reasoning[role]) setReasoning(r, role, raw.reasoning[role]);
     r.unsandboxed = raw.unsandboxed === true;
     if(raw.modelFormat === 'provider-id')r.modelFormat='provider-id';
     else r.model = bareModel(r.model);
@@ -822,7 +887,14 @@
   }
   function prefill(query) {
     // ?standard=<benchmark>[&other=<agent or capability>]: the standard's recipe for that pair (the Agents and Capabilities pages link here).
-    if(query.standard)return createStandard(query.standard,query.other||'');
+    if(query.standard) {
+      const r = createStandard(query.standard, query.other || '');
+      if ((standardBench(r)?.datasets || []).some(d => d.id === query.dataset)) {
+        r.datasets = [query.dataset];
+        if (query.set) setTaskSet(r, query.dataset, query.set);
+      }
+      return r;
+    }
     // nothing asked for: the Nullius runner, chosen first; a Harbor recipe comes from its own card
     if(!query.agent&&!query.dataset&&!query.model&&!query.n_tasks&&standard().benchmarks.length)return createStandard();
     const r=create(), known=schema.agents.find(a=>[a.id,a.arg,a.label].includes(query.agent))||(query.agent&&schema.agents.find(a=>String(a.arg||'').includes(':')&&String(a.arg).split(':').pop()===query.agent));
@@ -873,5 +945,10 @@
         at: String(d.at || ''), saved: typeof d.saved === 'string' ? d.saved : ''};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
-  return {STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBase,standardBench,standardOthers,ownAgentsOf,ownChosen,runsOf,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
+  // What a recipe's Delete asks before anything goes, on the Recipes page and in the builder's Saved recipes; `h` names its dialog.
+  const deleteAsk = (item, h, esc) => `<div class="std-how-head"><h2 id="${h}">Delete recipe ${esc(item.name)}</h2></div><div class="launch-delete-acts"><button type="button" class="btn ghost" data-close autofocus>Keep it</button><button type="button" class="btn danger" data-delete="${esc(item.id)}">Delete recipe</button></div>`;
+  // A recipe nobody changed: Start over has nothing to ask about. A new one, or that one as a reloaded draft holds it
+  // (fromJSON fills in what a new one leaves out). The page's own values are compared as they are: reading would drop the bad ones.
+  const atDefaults = r => { const s = JSON.stringify(r); return s === JSON.stringify(prefill({})) || s === JSON.stringify(fromJSON(prefill({}))); };
+  return {setTaskSet,keepTaskSets,nestedDatasets,wholeOf,swapDataset,STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBase,standardBench,standardOthers,ownAgentsOf,ownChosen,runsOf,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,reasoningRoles,setReasoning,LEVEL_NAMES,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,toggleParticipant,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,atDefaults,deleteAsk,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
 });

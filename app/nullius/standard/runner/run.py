@@ -81,7 +81,7 @@ from nullius.standard.calls import exchanges as exchange_store, ledger as ledger
 from nullius.standard.contract import definitions, match
 from nullius.standard.protocols import acp, jsonl
 from nullius.standard.requirements import hostreq, install
-from nullius.standard.runner import job, pace as pacing, shard as shards
+from nullius.standard.runner import job, pace as pacing, sets, shard as shards
 from nullius.standard.runner.retries import RETRIES, retryable
 
 # the totals a unit's end carries onto the live board, from its trial's agent_result
@@ -225,6 +225,16 @@ def key_header(provider: str, other: dict, env=os.environ) -> str:
         raise Refused(f"{providers.label(provider, env)} does not serve what {other.get('key') or 'the agent'} speaks "
                       f"({', '.join(apis)}): choose another provider")
     return providers.PROTOCOLS[providers.protocol_for(provider, apis, env)]["auth"]
+
+
+def reasoning(given, model: str) -> Dict[str, str]:
+    """``--reasoning [MODEL=]LEVEL``, repeatable: by model, how much it reasons (``relay.LEVELS``, as
+    OpenRouter's model list names them). Without ``MODEL=`` it is the run's model. Refused as
+    ``relay.parse_reasoning`` finds it wrong."""
+    out, bad = relay.parse_reasoning(given, model)
+    if bad:
+        raise Refused("; ".join(bad))
+    return out
 
 
 def served_by(given, model: str) -> Dict[str, List[str]]:
@@ -728,11 +738,11 @@ class Run:
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
                  max_usd_per_unit: Optional[float] = None, prices_unreachable: Optional[str] = None,
-                 units_file: Optional[dict] = None,
+                 units_file: Optional[dict] = None, task_set: Optional[dict] = None,
                  constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
                  max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None, boat_size: str = boat.SIZE,
                  relay_container: bool = False, exchanges: str = exchange_store.DEFAULT,
-                 exchanges_max_mb: int = exchange_store.MAX_MB):
+                 exchanges_max_mb: int = exchange_store.MAX_MB, reasoning: Optional[Dict[str, str]] = None):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: consent to execute code as the user: required for
@@ -754,6 +764,9 @@ class Run:
         an id the dataset does not hold refuses the run before any unit
         starts. The job's config records the file's name, its sha256 and its
         units.
+        ``task_set``: a task set's record (``sets.record``): its units run as
+        a file's would, and the job's config keeps the record. Refused beside
+        ``units_file``.
         ``repeat``: each unit run that many times (a conformance check run for
         confidence, ``conform``), each run a trial of its own tagged
         ``u0042r2``; once by default, tagged ``u0042``. Each is an
@@ -803,6 +816,9 @@ class Run:
         run's relays (``relay.routing``) and recorded in the job's config.
         Refused when the provider routes no model to several (only
         ``openrouter`` does), or when it names a model the run does not call.
+        ``reasoning``: by model, the reasoning put on every request sent as
+        that model (:func:`reasoning`, ``relay.think``), recorded the same way;
+        refused when it names a model the run does not call.
         ``exchanges``: what each unit's relay keeps of its agent's calls
         (``exchanges``): ``whole``, the request as sent and the reply as it
         arrived; ``text``, without the pictures' bytes; ``off``, the call
@@ -976,13 +992,26 @@ class Run:
             if stray:
                 raise Refused(f"--served-by names {', '.join(stray)}, which this run does not call: it calls "
                               + (", ".join(called) or "no model"))
+        self.reasoning = dict(reasoning or {})
+        if self.reasoning:
+            bad = [f"{m}={v}" for m, v in self.reasoning.items() if v not in relay.LEVELS]
+            if bad:
+                raise Refused(f"--reasoning {', '.join(bad)}: the level is one of {', '.join(relay.LEVELS)}")
+            called = ([m for m in (self.judge_model,) if m] if other.get("_kind") == "control" else self.models_called())
+            stray = [m for m in self.reasoning if m not in called]
+            if stray:
+                raise Refused(f"--reasoning names {', '.join(stray)}, which this run does not call: it calls "
+                              + (", ".join(called) or "no model"))
         self.bench_relay = None
         keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
         self.base, self.key = (None, None) if keyless else provider_endpoint(provider, env)
         self.provider_env = env                  # where the provider's model list is asked (``known_models``)
         self.key_header = "authorization" if keyless else key_header(provider, other, env)
         self.limit, self.concurrency = limit, limits.concurrency(max(1, int(concurrency)), self.constraints)
+        if units_file and task_set:
+            raise Refused("a run takes its units from a file or from a task set, not both")
         self.units_file = units_file
+        self.task_set = task_set
         self.repeat = max(1, int(repeat or 1))
         self.retries = max(0, int(retries or 0))
         self.retry_if = retry_if or retryable
@@ -1149,39 +1178,56 @@ class Run:
                 container.sweep(self.name)
             raise
         everything = [str(u) for u in units]
-        listed = self.units_file["units"] if self.units_file else None
+        listed = self.units_file["units"] if self.units_file else self.task_set["units"] if self.task_set else None
+        why, unknown = "", []
         if listed is not None:
             held = set(everything)
             unknown = [u for u in listed if u not in held]
             if unknown:
-                # what the run holds is let go as when its driver cannot list the units: on the container
-                # backend that includes the containers its driver or its doors started
-                for d in self.drivers:
-                    d.close()
-                if self.bench_relay is not None:
-                    self.bench_relay.stop()
-                if self.backend == "container" or self.relay_container:
-                    container.sweep(self.name)
-                # the record a refusal in ready() leaves, which the runs list reads (execution's refused):
-                # the job's folder with its progress.jsonl, the driver's working folders and logs taken out
-                work = os.path.join(self.job_dir, ".work")
-                for name in os.listdir(work):
-                    path = os.path.join(work, name)
-                    if name in ("driver", "driver-home"):
-                        shutil.rmtree(path, ignore_errors=True)
-                    elif name.startswith("driver-") and name.endswith(".log"):
-                        os.remove(path)
                 words = self.bench["units"]
-                why = (f"{self.units_file['name']} lists {len(unknown)} {words['noun'] if len(unknown) == 1 else words['nouns']} "
-                       f"that {self.bench['label']}'s dataset {self.ds['id']} does not hold: " + ", ".join(unknown))
-                p.emit("refused", detail=why)
-                raise Refused(why)
+                if self.units_file:
+                    why = (f"{self.units_file['name']} lists {len(unknown)} {words['noun'] if len(unknown) == 1 else words['nouns']} "
+                           f"that {self.bench['label']}'s dataset {self.ds['id']} does not hold: " + ", ".join(unknown))
+                elif self.task_set.get("version") and self.task_set["version"] != str(self.bench.get("_version") or ""):
+                    # made at another version of the benchmark, whose list may hold other tasks
+                    label = self.task_set.get("label") or self.task_set["name"]
+                    ours, theirs = (sets.version_label(self.bench, v) for v in (str(self.bench.get("_version") or ""), self.task_set["version"]))
+                    why = (f"the task set {label} was made at {self.bench['label']} {theirs}, and {unknown[0]} is not a task of "
+                           f"{self.ds['id']} at {ours}, the version this run is at"
+                           + (f" ({len(unknown) - 1} more are not either)" if len(unknown) > 1 else "")
+                           + f": run it at {theirs}, or make a set at {ours}")
+                else:
+                    # a set holds no option: its ids are checked against the listing under this run's own
+                    given = ", ".join(f"{k}={v}" for k, v in sorted(self.bench_options.items())) or "none"
+                    why = (f"{len(unknown)} of the {len(listed)} ids of the task set {self.task_set.get('label') or self.task_set['name']} "
+                           f"are not listed by {self.bench['label']}'s dataset {self.ds['id']} "
+                           f"under the run's options ({given}): " + ", ".join(unknown[:5]) + (", ..." if len(unknown) > 5 else ""))
         # the list and the shard, then the limit; each unit keeps its place in the whole dataset (its trial's tag)
         mine = shards.select(everything, *self.shard, by=self.shard_by) if self.shard else list(enumerate(everything))
         if listed is not None:
             wanted = set(listed)
             mine = [(i, u) for i, u in mine if u in wanted]
         mine = mine[: self.limit] if self.limit else mine
+        if why:
+            # what the run holds is let go as when its driver cannot list the units: on the container
+            # backend that includes the containers its driver or its doors started
+            for d in self.drivers:
+                d.close()
+            if self.bench_relay is not None:
+                self.bench_relay.stop()
+            if self.backend == "container" or self.relay_container:
+                container.sweep(self.name)
+            # the record a refusal in ready() leaves, which the runs list reads (execution's refused):
+            # the job's folder with its progress.jsonl, the driver's working folders and logs taken out
+            work = os.path.join(self.job_dir, ".work")
+            for name in os.listdir(work):
+                path = os.path.join(work, name)
+                if name in ("driver", "driver-home"):
+                    shutil.rmtree(path, ignore_errors=True)
+                elif name.startswith("driver-") and name.endswith(".log"):
+                    os.remove(path)
+            p.emit("refused", detail=why)
+            raise Refused(why)
         units = [u for _, u in mine]
         self.n_units = len(units)
         if getattr(self, "boat", None) is not None:
@@ -1198,8 +1244,8 @@ class Run:
                          options=self.options, launch=self.launch or "", bench_options=self.bench_options,
                          # a shard of a list splits the listed units: they are its whole
                          shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit, by=self.shard_by)
-                         if self.shard else None, units_file=self.units_file,
-                         repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving,
+                         if self.shard else None, units_file=self.units_file, task_set=self.task_set,
+                         repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving, reasoning=self.reasoning,
                          timeouts=self.timeouts, max_turns=self.forced_turns, max_calls=self.max_calls,
                          exchanges=self.exchanges, exchanges_max_mb=self.exchanges_max_mb,
                          simulator=self.simulator_model if self.other["_kind"] in ("agent", "upstream") and self.simulator_model else "")
@@ -2099,7 +2145,8 @@ class Run:
         record = os.path.join(trial, ".work", "relay")
         # whether the relay keeps its agent's calls whole, and its bound: the class's defaults for a stand-in of a run
         keep = {"exchanges": getattr(self, "exchanges", Run.exchanges),
-                "exchanges_max_mb": getattr(self, "exchanges_max_mb", Run.exchanges_max_mb)}
+                "exchanges_max_mb": getattr(self, "exchanges_max_mb", Run.exchanges_max_mb),
+                "reasoning": getattr(self, "reasoning", None)}
         side = tuple((self.other.get("model") or {}).get("side_models") or ())
         key_header = self.key_header
         if self.backend in ("local", "boat") and not getattr(self, "relay_container", False):     # boat: the agent reaches it through its VM's tunnel
@@ -2766,7 +2813,9 @@ class Run:
                 plan = setup.get("memory") or {}
                 for s in plan.get("add") or []:
                     send("add", session=s)
-                recalled = [{"id": q.get("id"), "memory": send("recall", question=q["question"]).get("memory", "")}
+                # a question asked on a date of its own carries it: "how long ago" is counted from then, not from today
+                recalled = [{"id": q.get("id"), "memory": send("recall", question=q["question"],
+                                                               **({"date": q["date"]} if q.get("date") else {})).get("memory", "")}
                             for q in plan.get("recall") or []]
             except jsonl.Failed as e:
                 raise _Ended("NonZeroAgentExitCodeError", "the capability: " + str(e),

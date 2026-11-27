@@ -43,7 +43,7 @@ One JSON request per line on stdin, one reply per line on stdout, logs only on s
 | Request | The wrapper | Reply |
 | --- | --- | --- |
 | `add` | Stores `session.text`, or text built from `session.turns` | `{}` |
-| `recall` | Searches `question`, formats the records as text | `{"memory": "..."}` |
+| `recall` | Searches `question`, as of `date` when given, formats the records as text | `{"memory": "..."}` |
 
 Examples: `app/nullius/catalogue/capabilities/mem0/capability.py` calls an upstream memory library; `app/nullius/catalogue/capabilities/keyword-memory/capability.py` is the protocol alone, BM25 over sessions.
 

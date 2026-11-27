@@ -86,7 +86,7 @@
   --span-neutral: #8b95a5;
 
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --serif: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   --radius: 9px;
 }
@@ -360,6 +360,14 @@ tr.tone-good .jbar .fill { background: #4cc26a; } tr.tone-warn .jbar .fill { bac
 .run-meta > span + span::before { content: "·"; color: var(--text-faint); margin-right: 14px; }
 .run-meta > .mono { color: var(--text); }
 @media(max-width:640px){.run-meta > span + span::before{display:none}.run-meta{font-size:13px}}
+.run-saveset { position: relative; }
+.run-saveset > summary { list-style: none; }
+.run-saveset > summary::-webkit-details-marker { display: none; }
+.run-saveset-form { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; display: flex; flex-direction: column; gap: 10px; width: min(300px, calc(100vw - 32px)); padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 8px 24px rgba(0, 0, 0, .12); }
+.run-saveset-form label { display: flex; flex-direction: column; gap: 5px; }
+.run-saveset-form .btn { align-self: flex-start; }
+.run-saveset-form input[type=text] { flex: none; height: 34px; box-sizing: border-box; }
+@media (max-width: 640px) { .run-saveset-form { position: static; margin-top: 8px; box-shadow: none; } }
 
 .bar {
   display: flex; height: 8px; border-radius: 99px; overflow: hidden;
@@ -450,6 +458,8 @@ button.seg:hover { filter: brightness(1.25); }
 .table-wrap .grid .sticky-col {
   position: sticky; left: var(--sticky-left, 0); z-index: 2; background: var(--bg);
 }
+/* a header's screen-reader name is placed against its cell, inside the scroll box, so it never widens the page */
+.table-wrap .grid th:not(.sticky-col) { position: relative; }
 .table-wrap .grid .sticky-col.sticky-edge { box-shadow: 1px 0 0 var(--border-soft); }
 .table-wrap .grid thead th.sticky-col { z-index: 4; background: var(--bg); }
 /* opaque sticky cells would hide the row hover, so repaint them to match */
@@ -1806,9 +1816,11 @@ select.ui-select-native { display: none !important; }
 .ui-select-trigger:hover { border-color: var(--text-faint); }
 .ui-select-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ui-select-trigger:disabled { opacity: .5; cursor: default; }
+.ui-select-trigger[data-placeholder] { color: var(--text-faint); }
 .ui-select-trigger[hidden] { display: none; }
 .ui-select-menu { position: fixed; inset: auto; margin: 0; padding: 5px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); color: var(--text); box-shadow: 0 12px 30px #0005; overflow-y: auto; overscroll-behavior: contain; font: 13px/1.5 var(--sans); z-index: 100; }
 .path-suggestions { font-family: var(--mono); }
+.ui-option-label { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .ui-select-option { padding: 6px 9px; border-radius: 5px; cursor: pointer; overflow-wrap: anywhere; }
 .ui-select-option:hover, .ui-select-option.is-active { background: var(--nav-hover); }
 .ui-select-option[aria-selected=true] { font-weight: 500; }

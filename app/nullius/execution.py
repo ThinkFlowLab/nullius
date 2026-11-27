@@ -1140,10 +1140,12 @@ class Execution:
 
         The exact code imported here travels, including source edits, so
         installed wheels and editable checkouts have the same behaviour.
-        Configuration and credential stores are not payload inputs.
+        Configuration and credential stores are not payload inputs; the
+        task sets the recipe runs are, from the user catalogue.
         """
         try:
-            return standard_payload.build(app_root(self.root), catalogue=self._catalogue)
+            return standard_payload.build(app_root(self.root), catalogue=self._catalogue,
+                                          sets=standard_payload.recipe_sets(self.plan.recipe))
         except (OSError, ValueError) as e:
             self._fail("app", "the standard runner could not be packed: " + str(e)[-300:])
             return None
@@ -1644,16 +1646,39 @@ def active() -> List[Execution]:
     return [e for e in EXECUTIONS.values() if e.state in ALIVE]
 
 
+def writers() -> Dict[str, List[Execution]]:
+    """Each job a plan names -> the executions whose script writes it, newest
+    first; those started at once, as listed."""
+    out: Dict[str, List[Execution]] = {}
+    for e in EXECUTIONS.values():
+        for j in e.plan.jobs:
+            out.setdefault(str(j.get("name")), []).append(e)
+    for runs in out.values():
+        if len(runs) > 1:
+            runs.sort(key=lambda e: -e.started)
+    return out
+
+
+def writing(runs: List[Execution], job_id: str, path: Optional[str] = None, roots=None) -> Optional[Execution]:
+    """The first of *runs*, ``writers()``'s of this job, that is the run of
+    one job folder. ``path``: the job's folder on disk; its run writes that
+    very folder, links resolved. ``roots``: a workspace's resolved job roots,
+    for a job not written yet; its run's folder for it is one those roots
+    would find, a root or its folder of that name. Neither: the newest of
+    that name."""
+    real = path and os.path.realpath(path)
+    for e in runs:
+        out = os.path.realpath(os.path.join(e.jobs, job_id)) if path or roots is not None else None
+        if (not path or out == real) and (roots is None or out in roots
+                                          or any(os.path.realpath(os.path.join(r, job_id)) == out for r in roots)):
+            return e
+    return None
+
+
 def owners() -> Dict[str, Execution]:
     """Each job a plan names -> the newest execution whose script writes it; of
     several started at once, the first listed."""
-    out: Dict[str, Execution] = {}
-    for e in EXECUTIONS.values():
-        for j in e.plan.jobs:
-            name = str(j.get("name"))
-            if name not in out or e.started > out[name].started:
-                out[name] = e
-    return out
+    return {name: runs[0] for name, runs in writers().items()}
 
 
 def run_ends(owner: Optional[Dict[str, Execution]] = None) -> Dict[str, Optional[tuple]]:
@@ -1665,25 +1690,7 @@ def run_ends(owner: Optional[Dict[str, Execution]] = None) -> Dict[str, Optional
             for name, e in (owners() if owner is None else owner).items()}
 
 
-def for_job(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Optional[Execution]:
-    """The newest execution whose script writes this job, if any - the one
-    the job page shows beside the job, or instead of it while Harbor has
-    not written it yet. ``owner``: ``owners()``, when the caller holds it."""
-    return (owners() if owner is None else owner).get(job_id)
-
-
 ENDED = ("stopped", "failed", "done")
-
-
-def ended_for(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Optional[tuple]:
-    """``(state, finished_at)`` when the run that writes this job has ended
-    - stopped, failed or done - by the runner's own record; None while it
-    is alive or when no run of this application wrote the job. A Harbor
-    killed by a Stop leaves its feed without ``job.end`` and its result
-    record with trials "running", so a page reading either alone would say
-    the job goes on; this is the fact that says otherwise. ``owner``: as ``for_job``'s."""
-    ex = for_job(job_id, owner)
-    return ex.job_state(job_id) if ex is not None else None
 
 
 class Followed(RuntimeError):

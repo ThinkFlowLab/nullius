@@ -36,6 +36,9 @@ nullius_catalogue=$(nullius paths --json | python3 -c 'import json, sys; print(j
 
 ## Inspect the launch configuration
 
+An agent definition may include `company`, a nonempty text label for its maker.
+Omit it when unknown; the catalogue does not infer a company from the name.
+
 ```json title="agent.json · launch configuration excerpt"
 {
   "install": {"npm": ["@aaif/goose-acp@1.53.0"]},

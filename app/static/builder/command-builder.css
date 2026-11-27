@@ -11,6 +11,7 @@
 #nullius-builder .nb-errorlist { background: var(--nb-soft); border-left: 2px solid var(--bad); padding: 12px 15px; margin-bottom: 16px; border-radius: 0 6px 6px 0; }
 #nullius-builder .nb-errorlist button { color: var(--bad); background: none; border: none; padding: 4px 0; text-align: left; display: block; font-size: 12px; }
 #nullius-builder .nb-saved { width: min(640px, calc(100vw - 32px)); max-height: min(70vh, 640px); }
+#nullius-builder .std-yoursets { margin-top: 10px; }
 #nullius-builder .nb-dialoghead { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 #nullius-builder .nb-dialoghead h2 { margin: 0; }
 #nullius-builder .nb-dialogclose { flex: none; display: grid; place-items: center; padding: 0; width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; color: var(--nb-muted); font-size: 20px; line-height: 1; cursor: pointer; }
@@ -222,6 +223,13 @@
 
 #nullius-builder .nb-model-control input { padding: 6px 36px 6px 11px; min-height: 34px; font-size: 13px; }
 @media (max-width: 650px) { #nullius-builder .nb-model-control input { font-size: 16px; } }
+/* A model and its reasoning on one line; the provider, model and Served by rows widen alike so a name is not cut. */
+#nullius-builder .nb-model-line { display: flex; gap: 8px; min-width: 0; }
+#nullius-builder .nb-model-line > .nb-model-control { flex: 1 1 auto; }
+#nullius-builder .nb-reasoning { flex: 0 0 12rem; }
+#nullius-builder .nb-reasoning:empty { display: none; }
+@media (max-width: 650px) { #nullius-builder .nb-model-line { flex-wrap: wrap; } #nullius-builder .nb-model-line > .nb-model-control { flex-basis: 100%; } }
+@media (min-width: 651px) { #nullius-builder label.nb-field.ui-field-row:has(.nb-model-line), #nullius-builder label.nb-field.ui-field-row.std-served, #nullius-builder #nb-form:has(.nb-model-line) label.nb-field.ui-field-row:has([data-field="provider"]) { grid-template-columns: minmax(0, 1fr) minmax(180px, 56%); } }
 
 /* Compact settings rows use one shared control column, including paired fields. */
 #nullius-builder .nb-two:has(> .ui-field-row) { grid-template-columns: minmax(0, 1fr); gap: 0; }
@@ -250,6 +258,8 @@
 /* a limit the benchmark or the agent declares: its placeholder reads as a value; Nullius's default stays grey */
 #nullius-builder .nb-field input.nb-declared::placeholder { color: var(--nb-text); opacity: 1; }
 
+/* A chosen dataset's tasks: all of them, or one of its task sets. */
+#nullius-builder .nb-pick-grid + .std-sethead, #nullius-builder .nb-field + .std-sethead { margin-top: 26px; }
 /* Where: machine kind, its machines, then isolation. Fixed values are not controls. */
 #nullius-builder .std-machines { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--nb-line); border-radius: 999px; }
 #nullius-builder .std-machines button { padding: 6px 16px; border: 0; border-radius: 999px; background: transparent; color: var(--nb-text); font: 14px/1.4 var(--sans); }

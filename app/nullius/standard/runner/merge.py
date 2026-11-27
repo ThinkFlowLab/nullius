@@ -10,14 +10,17 @@ the shards' with ``shard`` taken out and ``merged_from`` put in.
 
 What is merged must be one launch: the same launch id, benchmark and
 version, dataset, agent or capability and model, the same serving providers
-pinned for each model (``served_by``) and the same number of shards - else it
+pinned for each model (``served_by``), the same reasoning (``reasoning``) and the same number of shards - else it
 is refused, naming what differs, unless ``force``. Two trials of
 one unit are always refused, with the units named: one of them would be
 counted twice. So are shards whose lists of units (``run.units_file``) hold
 different units, or a shard of a list and one of none: the merged job
 records one list. The units are compared in any order; a list's name,
 comments, line endings and sha256 may differ from shard to shard, and the
-merged job records the first shard's list. Units no shard ran
+merged job records the first shard's list. Shards of different task sets
+(``sets``), of different revisions of one, or of a set and none, are refused
+as the other differences are, unless ``force``; the merged job keeps the
+first shard's set. Units no shard ran
 are not a refusal - a shard may be missing, or stopped early - and are said:
 the shards absent, and the units a shard planned and has no trial for. A
 trial whose record names another job, benchmark, version, control or agent
@@ -46,8 +49,9 @@ from nullius.standard.contract.names import backend as backend_name
 SAME = (("launch", ("standard", "launch")), ("benchmark", ("standard", "benchmark")),
         ("benchmark version", ("standard", "benchmark_version")), ("dataset", ("datasets", 0, "name")),
         ("agent or capability", ("standard", "plugged")), ("model", ("agents", 0, "model_name")),
-        ("backend", ("standard", "backend")), ("serving providers", ("standard", "served_by")),
-        ("number of shards", ("standard", "shard", "of")), ("retries per attempt", ("standard", "retries")))
+        ("backend", ("standard", "backend")), ("serving providers", ("standard", "served_by")), ("reasoning", ("standard", "reasoning")),
+        ("number of shards", ("standard", "shard", "of")), ("retries per attempt", ("standard", "retries")),
+        ("task set", ("standard", "task_set")))
 
 
 LISTED = 1000
@@ -80,9 +84,21 @@ def _at(d, path):
 
 
 def _same(cfg: dict, path) -> object:
-    """What a shard's config says at ``path`` (``SAME``); ``retries`` absent reads as none."""
+    """What a shard's config says at ``path`` (``SAME``); ``retries`` absent reads as none.
+    A task set is its name, revision, id and hash: the record's other fields follow from them."""
     got = _at(cfg, path)
+    if path == ("standard", "task_set"):
+        return (tuple(got.get(k) for k in ("name", "revision", "id", "hash"))
+                if isinstance(got, dict) else None)
     return got or 0 if path == ("standard", "retries") else got
+
+
+def _shown(cfg: dict, path) -> object:
+    got = _same(cfg, path)
+    if path == ("standard", "task_set") and got is not None:
+        name, revision, identity, digest = got
+        return f"{name}@{revision} ({str(identity)[:8]}, {str(digest)[:12]})"
+    return got
 
 
 def _listed(cfg: dict) -> Optional[tuple]:
@@ -174,7 +190,7 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
     for label, path in SAME:
         seen = {json.dumps(_same(s["config"], path), sort_keys=True) for s in shards}      # a mapping by its content
         if len(seen) > 1:
-            differ.append(f"{label}: " + ", ".join(f"{s['name']} {_same(s['config'], path)!r}" for s in shards))
+            differ.append(f"{label}: " + ", ".join(f"{s['name']} {_shown(s['config'], path)!r}" for s in shards))
     if differ and not force:
         raise Refused("the shards are not of one launch - " + "; ".join(differ) + " (--force merges them anyway)")
     # every trial by its unit: two of one unit are never merged, force or not
@@ -240,7 +256,7 @@ def check(job_dirs: List[str], force: bool = False) -> dict:
         short = total - len(by_unit)
         if short > 0:
             # a shard of a list of units counts the listed ones as its whole (run.units_file)
-            listed = any(_at(s["config"], ("standard", "units_file")) for s in shards)
+            listed = any(_at(s["config"], ("standard", "units_file")) or _at(s["config"], ("standard", "task_set")) for s in shards)
             whole = f"{total} listed units" if listed else f"dataset's {total} units"
             notes.append(f"{short} of the {whole} are not in the merge")
     return {"shards": shards, "by_unit": by_unit, "notes": notes, "missing": missing, "units_total": total, "differ": differ}

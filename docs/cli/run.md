@@ -3,11 +3,11 @@
 One benchmark and one agent, capability, control or setup, into a job.
 
 ```bash title="Run"
-nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE] [--limit N] [-j N] \
+nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE | --set NAME] [--limit N] [-j N] \
     [--unsandboxed | --backend container|boat] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
     [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS]... [--max-turns N] [--max-calls N] \
     [--constraint KEY=VALUE]... \
-    [--served-by [MODEL=]SLUG[,SLUG...]]... [--exchanges whole|text|off] [--exchanges-max-mb N] \
+    [--served-by [MODEL=]SLUG[,SLUG...]]... [--reasoning [MODEL=]LEVEL]... [--exchanges whole|text|off] [--exchanges-max-mb N] \
     [--attempts K] [--retries N] [--remove-images] [--judge-model M] [--simulator-model M] [--name NAME] [--jobs DIR] [--provider P]
 ```
 
@@ -15,6 +15,7 @@ nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--
 nullius standard run humaneval reference --model gpt-5-mini --limit 2 --unsandboxed
 nullius standard run humaneval oracle --limit 6
 nullius standard run humaneval oracle --units tasks.txt
+nullius standard run humaneval oracle --set first-ten
 nullius standard run locomo original --model gpt-3.5-turbo-4k
 nullius standard run locomo model --model gpt-4o-mini
 ```
@@ -27,6 +28,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--provider` | `anthropic`, `custom`, `openai` or `openrouter` |
 | `--dataset`, `--limit`, `-j` | One dataset, the first N units, N at a time |
 | `--units FILE` | Only the units the file lists: [below](#a-list-of-units) |
+| `--set NAME` | Only the units of a [task set](task-sets.md), in its dataset |
 | `--unsandboxed` | An agent runs as you; else `--backend container` |
 | `--backend` | `local` (default); `container`, each unit in a container with its relay; or [`boat`](../standard.md#the-boat-backend), a VM per unit |
 | `--boat-size` | Boat's VM size: `small` (default), `default`, `large`, `xlarge` |
@@ -38,6 +40,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--max-calls N` | The most model calls a unit's agent may make: [below](#a-cap-on-model-calls) |
 | `--constraint KEY=VALUE` | What the machine allows the run (repeatable): `cpus`, `memory_mb`, `processes`, `cpu_set`, `concurrency`, `gpu_ids` (indices, empty for none); [constraints](../settings/run-hosts.md#constraints). A recipe passes each machine's own |
 | `--served-by [MODEL=]SLUG[,SLUG...]` | On OpenRouter, the serving providers that may answer a model (repeatable): [below](#serving-providers) |
+| `--reasoning [MODEL=]LEVEL` | How much a model reasons, on every call sent as it (repeatable): [below](#reasoning) |
 | `--exchanges MODE`, `--exchanges-max-mb N` | What each unit's relay keeps of its agent's calls, and its bound ([below](#the-exchange-record)) |
 | `--attempts K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--retries N` | Run a failed attempt again, up to N times: [below](#retries) |
@@ -159,6 +162,7 @@ HumanEval/12
 | The record | `config.json`: `standard.units_file`, the file's name, its sha256 and its units |
 | Where it is read | On the machine the command runs on, from the directory it starts in |
 | The builder | A recipe has no field for a list |
+| A named list | A [task set](task-sets.md) keeps one, frozen: `--set NAME` |
 
 ## Serving providers
 
@@ -180,6 +184,19 @@ nullius standard run humaneval reference --provider openrouter --model meta-llam
 | What `held` reads | The provider's name alone: a reply names no endpoint variant, and `held` for `deepinfra/fp8` is true for any endpoint of `deepinfra`. A reply gives the provider's display name. Where that name is not the slug once lowercased, `held` reads `unknown` though the provider served the call (`Google` for `google-vertex`, `SambaNova` for `sambanova-turbo`) |
 | Shards | `merge` refuses shards whose pins differ, unless `--force`; a model pinned differently in the merged shards reads `held: unknown` |
 | The builder | *Model* step, **Served by** after each model field, on OpenRouter alone: the recipe's `served_by`, by field (`model`, `simulator`, `judge`), compiled into `--served-by` for each job that calls that model. |
+
+## Reasoning
+
+`--reasoning high` sets the run's model; `--reasoning m=off` the model `m`.
+
+| Rule | Detail |
+| --- | --- |
+| A level | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`; `off`, `on` for a model that has no levels. A level the model does not offer is the provider's to refuse |
+| What is sent | In place of the caller's own: on OpenRouter `reasoning: {effort}` (`{enabled}` for `on`, `off`); elsewhere `reasoning_effort` (Chat Completions), `reasoning.effort` (Responses), `output_config.effort` or `thinking` (Messages) |
+| An agent's own | An agent option or a benchmark option that sets reasoning wins: the builder compiles no `--reasoning` for that model |
+| Refused before any unit | A model the run does not call; a model named twice; an unknown level |
+| The record | `config.json`: `standard.reasoning`, the level by model. `merge` refuses shards whose levels differ, unless `--force` |
+| The builder | *Model* step, a select on each model field's line, with the levels that model offers: OpenRouter's public model list, asked with no key. Greyed when the agent or the benchmark sets it, or the model has none (No reasoning). The recipe's `reasoning`, by field |
 
 <div class="grid cards" markdown>
 

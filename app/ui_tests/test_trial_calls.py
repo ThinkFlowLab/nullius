@@ -183,6 +183,49 @@ click(dialog, dialog); assert.ok(!dialog.open);        // outside it, on the bac
         got = subprocess.run([node, "-"], input=program, capture_output=True, text=True, timeout=10)
         self.assertEqual(got.returncode, 0, got.stderr)
 
+    def test_a_redraw_keeps_the_keyboard_in_the_list(self):
+        """loadConversation itself, on stand-in elements: which row holds the focus once the list is drawn again."""
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node is required for the conversation reader")
+        script = (Path(__file__).resolve().parents[1] / "static/traces/conversation.js").read_text(encoding="utf-8")
+        load = script[script.index("    loadConversation = async () => {"):script.index("    search.addEventListener('submit'")]
+        program = r"""
+const assert = require('node:assert/strict');
+const body = {name: 'body', matches: () => false}, document = {activeElement: body};
+// focus(): a row scrolled into view says so
+const control = (name, cls, dataset = {}) => ({name, dataset, matches: s => s.split(', ').includes(cls),
+  focus(how) { document.activeElement = this; if (!how?.preventScroll) this.name += ', in view'; }});
+// the list as the answer draws it: rows by position, one of them open
+let rows = [], answer = {positions: [], open: null}, release;
+const reader = {dataset: {endpoint: '/c'}, setAttribute() {}, removeAttribute() {}, querySelectorAll: () => [], contains: e => e !== body && e.name !== 'elsewhere'};
+const indexHost = {querySelector: s => rows.find(r => s === `[data-position="${r.dataset.position}"]` || s === '[aria-current=true]' && r.open) || null};
+const pages = {querySelector: () => null}, status = {}, selectedHost = {}, location = {href: 'http://x/t'}, history = {replaceState() {}};
+const readJSON = () => new Promise(done => { release = () => done({view: 'calls', query: '', kind: 'calls', page: 1}); });
+const renderCalls = () => { if (rows.includes(document.activeElement)) document.activeElement = body;       // a removed row loses the focus
+  rows = answer.positions.map(p => Object.assign(control('row ' + p, '.reader-row', {position: String(p)}), {open: p === answer.open})); };
+let state = {}, latest, controller, conversationStarted, loadConversation;
+""" + load + r"""
+const got = [];
+const load = async (on, next, before = () => {}) => { document.activeElement = on; answer = next; const done = loadConversation(); before(); release(); await done; got.push(document.activeElement.name); };
+(async () => {
+  await load(body, {positions: [0, 1, 2], open: 0});
+  await load(rows[1], {positions: [0, 1, 2], open: 1});                                                   // Enter on a row
+  await load(rows[1], {positions: [0, 1, 2], open: 1}, () => { document.activeElement = rows[2]; });     // Tab before the answer
+  await load(rows[2], {positions: [12, 13], open: 12});                                                   // a row no longer listed
+  await load(control('Tools', '[data-kind]'), {positions: [4, 9], open: 4});
+  const tools = control('Tools', '[data-kind]');
+  await load(control('Messages', '[data-kind]'), {positions: [1, 2], open: 1}, () => { document.activeElement = tools; });   // Tab before the answer
+  await load(control('Next page', '[data-page]'), {positions: [24, 25], open: 24});
+  await load(control('Errors', '[data-kind]'), {positions: [], open: null});                              // no row: the filter keeps it
+  await load(control('Search', 'input'), {positions: [0, 1], open: 0});
+  await load(control('elsewhere', '[data-page]'), {positions: [0, 1], open: 0});                          // another list's page button
+  assert.deepEqual(got, ['body', 'row 1', 'row 2', 'row 12, in view', 'row 4, in view', 'Tools', 'row 24, in view', 'Errors', 'Search', 'elsewhere']);
+})();
+"""
+        got = subprocess.run([node, "-"], input=program, capture_output=True, text=True, timeout=10)
+        self.assertEqual(got.returncode, 0, got.stderr)
+
     def test_the_picture_route(self):
         r = self.get(f"/trial/calls-run/kept__u0001/picture/{sha(P2)}")
         self.assertEqual((r.data, r.mimetype), (P2, "image/png"))

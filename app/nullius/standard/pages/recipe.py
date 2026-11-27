@@ -35,6 +35,7 @@ command.
 from __future__ import annotations
 
 import math
+import os
 import re
 import shlex
 from typing import Callable, Dict, List, Optional
@@ -46,7 +47,7 @@ from nullius.standard.calls import exchanges, ledger, relay
 from nullius.standard.contract import definitions, match, ports
 from nullius.standard.proofs import prove
 from nullius.standard.requirements import hostreq
-from nullius.standard.runner import run
+from nullius.standard.runner import run, sets
 from nullius.standard.runner.retries import MAX_RETRIES
 
 CHOOSE_PROVIDER = "Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider."
@@ -122,7 +123,8 @@ def _capability_kind(b: dict) -> str:
 def benchmarks(cat) -> List[dict]:
     """The benchmarks the Benchmarks page and the builder's Benchmark step list: each of the catalogue's listed
     entries (``Catalog.listed_benchmarks``, whichever runner runs it) as ``b``, with its ``datasets``, its ``tasks``
-    and their ``unit`` (``Catalog.tasks_of``), what some of its options need of a machine (``host``, by label, None for nothing),
+    and their ``unit`` (``Catalog.tasks_of``), what it needs of a machine (``host``, each name's label, None for nothing: what its options need, and Docker when
+    its tasks run in images or Harbor runs it),
     what it is run with: ``family`` agent or capability (a benchmark only Harbor runs runs agents) and, for a
     capability, its ``kind``; ``versions``, another version's tasks and unit by version; and ``origins``, its versions'
     origins, each once, the default version's first."""
@@ -132,7 +134,7 @@ def benchmarks(cat) -> List[dict]:
         d = defs.get(b.key) or {}
         tasks, unit = cat.tasks_of(b)
         out.append({"b": b, "datasets": cat.datasets_of(b), "tasks": tasks, "unit": unit,
-                    "host": [hostreq.label(d, n) for n in sorted(d["host"])] if d.get("host") else None,
+                    "host": _machine_needs(b, d),
                     "family": d.get("family") or "agent", "kind": _capability_kind(d),
                     "origins": origins(d) if d else [b.origin],
                     # another version's tasks, when its datasets count differently (``Catalog.in_version``)
@@ -146,6 +148,25 @@ def origins(d: dict) -> List[str]:
     return list(dict.fromkeys([every.get(d["_default"]) or definitions.origin_of(d), *every.values()]))
 
 
+def _machine_needs(b, d: dict) -> Optional[dict]:
+    """What a listed benchmark needs of a machine, each name's label: what its options need, and Docker when its
+    tasks run in images or Harbor runs it (a Harbor run needs ``docker ps`` to answer)."""
+    out = {n: hostreq.label(d, n) for n in sorted(d.get("host") or {})}
+    if "docker" not in out and ("harbor" in b.harness or any(e.get("image") for e in (d.get("environments") or {}).values())):
+        out["docker"] = "Docker"
+    return out or None
+
+
+def _short(label: str) -> str:
+    """A version's label as the builder names it: without its commit."""
+    return re.sub(r"\s*\([0-9a-f]{7,40}\)$", "", label)
+
+
+def procedure_label(b: dict) -> str:
+    """The selected benchmark version whose own procedure runs by default."""
+    return " · ".join(filter(None, (b["label"], _short(definitions.version_label(b) or ""))))
+
+
 def _bench_page(b: dict) -> dict:
     """A benchmark as a page shows it. ``controls``: the ones it declares,
     each with who wrote it and where it comes from - what the builder offers
@@ -156,11 +177,15 @@ def _bench_page(b: dict) -> dict:
     controls = [{**{k: c[k] for k in ("key", "label", "source", "from", "expect")}, "must": prove.must_score(c["expect"])}
                 for c in (definitions.control(b, w) for w in definitions.CONTROLS) if c]
     versioned = definitions.version_of(b) is not None
+    task_sets = sets.rows(b["key"])
     return {"key": b["key"], "label": b["label"], "summary": b["summary"], "family": b["family"], "kind": _capability_kind(b),
+            "procedure": procedure_label(b),
+            "origin": definitions.origin_of(b),
             "ref": definitions.ref_of(b) if "_version" in b else b["key"],
             "version": b["_version"] if versioned else "",
             # its versions, each by the ref a recipe names it with (the bare key: the default)
             "versions": [{"ref": b["key"] if v == b.get("_default") else f"{b['key']}@{v}", "version": v, "default": v == b.get("_default"),
+                          "choice_label": _short((b.get("_labels") or {}).get(v) or v),
                           "label": (b.get("_labels") or {}).get(v) or v, "origin": (b.get("_origins") or {}).get(v) or "official"}
                          for v in b.get("_versions") or []] if versioned else [],
             "environments": {n: {"summary": e.get("summary", ""), "local_ok": bool(e.get("local_ok")), "network": e.get("network"),
@@ -201,10 +226,17 @@ def _bench_page(b: dict) -> dict:
                      for n, r in hostreq.all_of(b).items()},
             "datasets": [{"id": d["id"], "label": d.get("label") or d["id"], "summary": d.get("summary", ""), "units": d.get("units"),
                           "environment": d.get("environment") or "",
+                          # the list it is cut from, when the benchmark declares one: drawn as that dataset's own task set
+                          "subset_of": d.get("subset_of") or "",
                           "controls": [dict(c, **{k: status[d["id"]][c["key"]][k] for k in ("proven", "short", "failed")})
                                        for c in controls],
                           "proofs": {k: status[d["id"]][k]["proven"] for k in ("units", "leak")},
-                          "failed": {k: status[d["id"]][k]["failed"] for k in ("units", "leak") if status[d["id"]][k]["failed"]}}
+                          "failed": {k: status[d["id"]][k]["failed"] for k in ("units", "leak") if status[d["id"]][k]["failed"]},
+                          # the user's task sets cut from it (standard/runner/sets.py), each with the version it was made at;
+                          # a set of several datasets under each, its ``units`` its ids of this one
+                          "sets": [dict(s, units=s["parts"][d["id"]], whole=s["units"],
+                                        version_label=sets.version_label(b, s["version"]) if s["version"] else "")
+                                   for s in task_sets if d["id"] in s["parts"]]}
                          for d in b["datasets"]]}
 
 
@@ -434,7 +466,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     ``served_by``: on OpenRouter, the serving providers each model field
     pins, ``{model|simulator|judge: [slug, ...]}``, checked as ``--served-by``
     is and compiled into it for each job that calls that model, by the name
-    the run sends it as."""
+    the run sends it as. ``reasoning``: each model field's level
+    (``{model|simulator|judge: level}``), compiled into ``--reasoning`` the
+    same way, for each job whose agent or benchmark sets none of its own;
+    ``own_reasoning`` says, by field, what does when every job's does."""
     d = defs or _all()
     errors, notes = [], []
     # each problem once; shown: the step already says it elsewhere, so only Review lists it; field: the input it is about; unset: nothing is
@@ -443,7 +478,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         if not any(e["step"] == STEP[step] and e["message"] == message for e in errors):
             errors.append({"step": STEP[step], "message": message, **({"shown": True} if shown else {}), **({"field": field} if field else {}), **({"unset": True} if unset else {})})
     out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": "",
-           "served_models": {}}
+           "served_models": {}, "own_reasoning": {}}
     name = str(recipe.get("name") or "")
     if not _NAME.match(name):
         add("limits", "The recipe's name may hold letters, digits, dots, dashes and underscores.")
@@ -461,8 +496,48 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     dss = [x for x in b["datasets"] if x["id"] in wanted]
     dss.sort(key=lambda x: wanted.index(x["id"]))
     unknown = [x for x in wanted if x not in {y["id"] for y in b["datasets"]}]
+    # lists cut from one list (subset_of) overlap: one of them a run, as the builder draws one of each
+    whole = {x["id"]: x.get("subset_of") or x["id"] for x in dss}
+    twice = [x for x in dss if [whole[y["id"]] for y in dss].count(whole[x["id"]]) > 1]
+    if twice:
+        add("dataset", f"{' and '.join(x.get('label') or x['id'] for x in twice)} share their tasks: choose one of them.")
     if not dss or unknown:
         add("dataset", f"Choose one or more of {b['label']}'s datasets" + (f" ({', '.join(unknown)} is not one)" if unknown else "") + ".")
+    # a chosen dataset's task set (``task_sets``: {dataset: NAME}), run in place of all its tasks; a recipe from
+    # before sets were frozen may name one NAME@N
+    set_of = {}                        # {dataset: {name, label, units, ids}}
+    asked = recipe.get("task_sets") or {}
+    if not isinstance(asked, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in asked.items()):
+        add("dataset", "Task sets are a dataset with a set's name each.")
+        asked = {}
+    for ds_id, ref in asked.items():
+        if ds_id not in {x["id"] for x in dss}:
+            add("dataset", f"The task set {ref} is for {ds_id}, a dataset not chosen.")
+            continue
+        try:
+            set_name, rev = sets.split_ref(ref)
+        except sets.Refused as e:
+            add("dataset", f"Task set {ref}: {e}.")
+            continue
+        try:
+            if not os.path.isfile(sets.path_of(b["key"], set_name)):
+                add("dataset", f"{b['label']} has no task set {set_name}: choose another, or all of {ds_id}'s tasks.")
+                continue
+            entry = sets.load(b["key"], set_name)
+        except sets.Refused as e:
+            add("dataset", sets.plain(e, b["key"], set_name))
+            continue
+        try:
+            got = sets.latest(entry, rev)
+        except sets.Refused as e:
+            add("dataset", f"Task set {ref}: {e}.")
+            continue
+        part = sets.parts(entry, got).get(ds_id)
+        if part is None:
+            add("dataset", f"The task set {sets.label_of(entry)} is cut from the dataset{'s' if len(sets.datasets_of(entry)) > 1 else ''} "
+                           f"{', '.join(sets.datasets_of(entry))}, not {ds_id}.")
+            continue
+        set_of[ds_id] = {"name": set_name, "label": sets.label_of(entry), "units": len(part), "ids": set(part)}
     side = "agent" if b["family"] == "agent" else "capability"
     # A control the benchmark declares (nop, oracle) is a choice beside the agents or capabilities: it runs
     # nothing as you and calls no model - a judged benchmark's judge only - so it asks for neither.
@@ -482,7 +557,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         control = ref in definitions.CONTROLS
         given, opts = {}, {}
         if ref == "model":
-            add("agent", "Choose Original, then choose the model on the Model step.")
+            add("agent", "Use the selected benchmark version's procedure, then choose the model on the Model step.")
             continue
         own = definitions.own_agent(base, ref) if ":" in ref else None
         if ":" in ref and own is None:
@@ -643,6 +718,14 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                 add("model", "Served by " + problem + ".")
             if served and provider_ != "openrouter":
                 add("model", "Served by needs OpenRouter, the provider that routes a model to several: choose it, or leave Served by empty.")
+    # reasoning is {model|simulator|judge: level}, one of the levels the builder asked the model for (relay.LEVELS)
+    asked_levels = recipe.get("reasoning")
+    levels: Dict[str, str] = {}
+    if asked_levels not in (None, {}):
+        if not isinstance(asked_levels, dict) or any(k not in roles or v not in (None, "", *relay.LEVELS) for k, v in asked_levels.items()):
+            add("model", f"Reasoning is a level for the model, the user simulator's or the judge's: {', '.join(relay.LEVELS)}.")
+        else:
+            levels = {k: v for k, v in asked_levels.items() if v}
     cap = recipe.get("max_usd")
     if cap in ("", None):
         cap = None
@@ -794,6 +877,41 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["served_models"] = {role: next((sent_of(p)[role] for p in sorted(picks, key=lambda q: q["control"]) if _MODEL.match(sent_of(p)[role] or "")), None)
                             for role in roles}
 
+    def options_for_pick(d: dict, p: dict) -> dict:
+        """The benchmark's options for this dataset and this pick: a setup's own, or those of the port."""
+        return definitions.bench_options_of(b, d["id"], dict(chosen_opts, **agent_of(p)), p["o"]["key"] if p.get("setup") else "yours",
+                                            kind=None if p.get("setup") else p["o"].get("_kind"))[0]
+
+    def own_reasoning(d: dict, p: dict) -> Dict[str, str]:
+        """The fields whose reasoning job (d, p) leaves to its agent or its benchmark, and what they set: an agent's
+        ``reasoning_effort``, a setup's ``agent_reasoning_effort`` and the simulator's ``user_reasoning_effort``."""
+        bench = options_for_pick(d, p)
+        own = {"model": bench.get("agent_reasoning_effort") if p.get("setup") else p["opts"].get("reasoning_effort"),
+               "simulator": bench.get("user_reasoning_effort")}
+        return {r: v for r, v in own.items() if v and v != "default" and sent_of(p).get(r)}
+
+    def reasoned(d: dict, p: dict) -> Dict[str, str]:
+        """The --reasoning of one job: each field's level, by the model it sends, where no one sets its own."""
+        own = own_reasoning(d, p)
+        return {sent_of(p)[r]: v for r, v in levels.items() if sent_of(p).get(r) and r not in own}
+    for ds_ in dss:
+        for pick_ in picks:
+            mine_, set_ = own_reasoning(ds_, pick_), {}
+            for role_, level_ in levels.items():
+                model_ = sent_of(pick_).get(role_)
+                if not model_ or role_ in mine_:
+                    continue
+                if set_.get(model_, level_) != level_:
+                    add("model", f"Reasoning sets {model_} twice, at different levels: give its fields the same one.")
+                if any(sent_of(pick_)[o] == model_ for o in mine_):
+                    add("model", f"{model_} reasons as {pick_['o']['label']} sets it: give the {SERVED_LABEL[role_]} another model, or leave its reasoning at the default.")
+                set_[model_] = level_
+    # by field, what sets its reasoning in place of the recipe when every job that calls it does: the builder greys its select
+    for role_ in roles:
+        owned_ = [own_reasoning(ds_, pick_).get(role_) for ds_ in dss for pick_ in picks if sent_of(pick_).get(role_)]
+        if owned_ and all(owned_):
+            out["own_reasoning"][role_] = sorted(set(owned_))
+
     def pinned(p: dict) -> Dict[str, List[str]]:
         """The --served-by of one job: the pins of the models it calls."""
         called = called_of(p)
@@ -808,7 +926,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     nouns = bench_nouns = (b.get("units") or {}).get("nouns", "units")   # a dataset's count is always the benchmark's
     if picks and all(p.get("setup") for p in picks):          # only setups: a unit is theirs (a conversation)
         nouns = picks[0]["o"]["units"]["nouns"]
-    each = [None if picks and all(p.get("setup") for p in picks) else x.get("units") for x in dss]   # a setup's count is not the dataset's
+    each = [None if picks and all(p.get("setup") for p in picks) else (set_of[x["id"]]["units"] if x["id"] in set_of else x.get("units"))
+            for x in dss]   # a setup's count is not the dataset's; a task set's is its own
     total = sum(each) if all(each) else None
     n = sum(min(limit, t) for t in each) if isinstance(limit, int) and total else (limit or total)
     of = len(targets)
@@ -824,16 +943,12 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     def job_of(d: dict, p: dict, index: int) -> str:
         return f"{launch_of(d, p)}-shard-{index}of{of}" if of > 1 else launch_of(d, p)
 
-    def options_for_pick(d: dict, p: dict) -> dict:
-        """The benchmark's options for this dataset and this pick: a setup's own, or those of the port."""
-        return definitions.bench_options_of(b, d["id"], dict(chosen_opts, **agent_of(p)), p["o"]["key"] if p.get("setup") else "yours",
-                                            kind=None if p.get("setup") else p["o"].get("_kind"))[0]
-
     def command_for(d: dict, p: dict, index: int) -> str:
         o, control, given = p["o"], p["control"], p["given"]
         m = p["model"] if p.get("setup") else model
         words = ["nullius", "standard", "run", definitions.ref_of(b), o["_ref"], *(["--model", m] if m else []), "--provider", provider,
-                 "--dataset", d["id"], *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
+                 "--dataset", d["id"], *(["--set", set_of[d["id"]]["name"]] if d["id"] in set_of else []),
+                 *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
                  *[w for k, v in options_for_pick(d, p).items() for w in ("--bench-option", f"{k}={v}")],
                  *(["--attempts", str(repeat)] if repeat > 1 else []),
                  *(["--retries", str(retries)] if retries else []),
@@ -852,7 +967,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
                  *(["--shard", f"{index}/{of}", "--launch", launch_of(d, p)] if of > 1 else []),
                  *limits.cli_words(limits.of(targets[index - 1])),
-                 *[w for m_, slugs in pinned(p).items() for w in ("--served-by", f"{m_}={','.join(slugs)}")], "--from-run"]
+                 *[w for m_, slugs in pinned(p).items() for w in ("--served-by", f"{m_}={','.join(slugs)}")],
+                 *[w for m_, v in reasoned(d, p).items() for w in ("--reasoning", f"{m_}={v}")], "--from-run"]
         return " ".join(shlex.quote(w) for w in words) + ' --jobs "${NULLIUS_JOBS:-jobs_standard}"'
 
     def script_for(d: dict, p: dict, command: str, index: int) -> str:
@@ -918,16 +1034,15 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             return [STEP["agent"], "Check", f"{o['label']} ({o['key']}) · {o['source']} · {o['from']}"]
         if p.get("agent"):
             return [STEP["agent"], "Participant", f"{p['agent']['label']} · {p['agent'].get('benchmark_label') or b['label']}'s own"]
-        if p.get("setup"):
-            original = (b.get("setups") or {}).get("original") or {}
-            label = original.get("reference_agent") or ("No agent · Original" if side == "agent" else "Original " + (_bench_page(b)["kind"] or "capability"))
-            return [STEP["agent"], "Participant", label]
+        if p.get("setup"):                                                          # the version's own procedure
+            return [STEP["agent"], "Participant", f"{b['label']} · its own procedure"]
         proven = ", ".join(f"{q} {r.get('passed', '')}".strip() for q, r in (o.get("proven") or {}).items() if q in b["needs"])
         return [STEP["agent"], "Agent" if side == "agent" else "Capability", f"{o['label']} · {protocol(o)} · proven {proven}"]
     out["review"] = [[STEP["benchmark"], "Benchmark", f"{b['label']} · needs {', '.join(b['needs'])}"],
                      [STEP["runner"], "Runner", "Nullius"],
                      [STEP["dataset"], "Datasets" if many else "Dataset",
-                      ", ".join(f"{x.get('label') or x['id']}" + (f" · {x['units']} {bench_nouns}" if x.get("units") else "") for x in dss)],
+                      ", ".join(f"{x.get('label') or x['id']}" + (f" · task set {set_of[x['id']]['label']} · {set_of[x['id']]['units']} {bench_nouns}"
+                                                                   if x["id"] in set_of else f" · {x['units']} {bench_nouns}" if x.get("units") else "") for x in dss)],
                      *[[STEP["limits" if (b.get("options") or {})[k].get("limit") else "dataset" if (b.get("options") or {})[k].get("step") else "agent"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
                         _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)")
                         + ("" if all(per_ds[x["id"]].get(k) == v for x in dss) else f" · {', '.join(x.get('label') or x['id'] for x in dss if per_ds[x['id']].get(k) == v)}")]
@@ -944,7 +1059,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       else f"{providers.label(providers.choice(provider, str(recipe.get('endpoint') or '')))} · " + (model if needs_model else ", ".join(p["o"]["sent"] for p in picks if p.get("setup")) or "the judge only")
                       + (f" · user simulator {sim_model or (b.get('simulator') or {}).get('model')}" + (" (leaderboard)" if lb.get("simulator") else "" if sim_model else " (official)") if b.get("simulator") else "")
                       + (f" · judge {judge_model or b['score']['judge']['model']}" + ("" if judge_model else " (official)") if (b.get("score") or {}).get("judge") else "")
-                      + "".join(f" · {SERVED_LABEL[r_]} served by {', '.join(s)}" for r_, s in served.items())],
+                      + "".join(f" · {SERVED_LABEL[r_]} served by {', '.join(s)}" for r_, s in served.items())
+                      + "".join(f" · {SERVED_LABEL[r_]} reasoning {', '.join(out['own_reasoning'][r_])} ({'the agent' if r_ == 'model' else 'the benchmark'}'s)"
+                                if r_ in out["own_reasoning"] else f" · {SERVED_LABEL[r_]} reasoning {levels[r_]}"
+                                for r_ in roles if r_ in levels or r_ in out["own_reasoning"])],
                      [STEP["limits"], "Scope", f"{'first ' + str(n) if isinstance(limit, int) else 'all ' + str(total or '')} {nouns}"
                       + (" of each shard" if of > 1 and isinstance(limit, int) else "")
                       + (" · as many at a time as Boat allows" if backend == "boat" and not recipe.get("concurrency") else f" · {conc} at a time")
@@ -984,7 +1102,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if any(p["control"] for p in picks) and any(definitions.own_image(e) for e in (b.get("environments") or {}).values()):
         notes.append(f"Each {(b.get('units') or {}).get('noun', 'unit')} of {b['label']} is its own image: the control "
                      "runs in it, so docker is needed where it runs, whatever the backend.")
-    if not isinstance(limit, int):
+    # Run asks first before every task of the datasets; a task set is a choice of tasks made already
+    if not isinstance(limit, int) and not set_of:
         out["confirm"] = f"Run all {total or ''} {nouns} of {b['label']}{' (' + ', '.join(x.get('label') or x['id'] for x in dss) + ')' if many else ''} with {', '.join(p['o']['label'] for p in picks)}?".replace("  ", " ")
     return out
 

@@ -32,6 +32,7 @@ from typing import Dict, List, Optional
 
 from nullius import ondisk
 from nullius.standard.calls import ledger
+from nullius.standard.contract import definitions
 from nullius.traces import otel
 from nullius.traces.breakdown import breakdown
 
@@ -225,9 +226,8 @@ def agent_name(other: dict) -> str:
 
 
 def _version(bench: dict) -> dict:
-    """A benchmark with versions says which one ran (``benchmark_version``), and the
-    ``key@version`` that names it; one without says nothing more than its key."""
-    v = bench.get("_version") if "@" in str(bench.get("_ref") or "") else None
+    """Record the explicit benchmark release or source pin, never an inferred current default."""
+    v = definitions.version_identity(bench)
     return {"benchmark_version": v, "benchmark_ref": bench["_ref"]} if v else {}
 
 
@@ -606,16 +606,20 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
                  retries: int = 0, bench_options: Optional[dict] = None,
                  simulator: str = "", prices: Optional[dict] = None, units_file: Optional[dict] = None,
+                 task_set: Optional[dict] = None,
                  constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
                  max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None,
-                 exchanges: str = "", exchanges_max_mb: Optional[int] = None):
+                 exchanges: str = "", exchanges_max_mb: Optional[int] = None, reasoning: Optional[Dict[str, str]] = None):
     """``unsandboxed`` is true for an agent on the local backend only: in a
     container (``backend``, ``image``) it is not. ``standard.options`` holds
     every option's value, the defaults included, so two runs read side by side
     say what differed. ``launch`` and ``shard``: a shard of a launch run over
     several machines (``shard``), which ``merge`` reads back. ``units_file``:
     the file a run's units were listed in (``run.units_file``), its name, its
-    sha256 and its units, said only for such a run. ``repeat``: how
+    sha256 and its units, said only for such a run. ``task_set``: the task
+    set a run's units came from (``sets.record``): its id, name, revision,
+    hash and units, and what ``set import`` rebuilds the entry from, said
+    only for such a run. ``repeat``: how
     many times each unit was run, each an attempt, said only when more than
     once; ``retries``: how many times an attempt could be tried again after a
     failure a further try might mend (``retries.retryable``), always said.
@@ -629,7 +633,8 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     a unit's agent the run forced (``run --timeout``, ``--max-turns``,
     ``--max-calls``), when it forced any.
     ``served_by``: by model, the serving providers the run let answer it
-    (``--served-by``), said only for a run that pinned them.
+    (``--served-by``), said only for a run that pinned them. ``reasoning``: by
+    model, the reasoning the run set (``--reasoning``), said only for a run that set one.
     ``exchanges`` and ``exchanges_max_mb``: what each unit's relay kept of
     its agent's calls (``run --exchanges``) and its bound in MB, said for
     every run that gives them.
@@ -646,11 +651,13 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                                 **({"simulator": simulator} if simulator else {}), **({"options": options} if options else {}), **({"benchmark_options": bench_options} if bench_options else {}), **_control(other), **_setup(other),
                                 **({"launch": launch} if launch else {}), **({"shard": shard} if shard else {}),
                                 **({"units_file": units_file} if units_file else {}),
+                                **({"task_set": task_set} if task_set else {}),
                                 **({"repeat": repeat} if repeat > 1 else {}), "retries": retries, **({"prices": prices} if prices else {}),
                                 **({"constraints": constraints} if constraints else {}),
                                 **({"timeouts": timeouts} if timeouts else {}), **({"max_turns": max_turns} if max_turns else {}),
                                 **({"max_calls": max_calls} if max_calls else {}),
                                 **({"served_by": dict(sorted(served_by.items()))} if served_by else {}),
+                                **({"reasoning": dict(sorted(reasoning.items()))} if reasoning else {}),
                                 **({"exchanges": exchanges, "exchanges_max_mb": exchanges_max_mb} if exchanges else {})},
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],
                    "n_concurrent_trials": concurrency,

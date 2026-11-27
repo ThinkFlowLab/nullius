@@ -4,7 +4,7 @@ The outlined circle-and-slash mark and Instrument Serif wordmark are supplied pr
 
 `tokens.json` records surface, text and action roles. Which font carries which text: `../fonts/README.md`.
 
-Wordmark lettering is outlined from Instrument Serif. Source licensing is in the repository’s root `LICENSE`; the three font OFLs remain beside the fonts in `../fonts/`.
+Wordmark lettering is outlined from Instrument Serif. Source licensing is in the repository’s root `LICENSE`; the font OFLs remain beside the fonts in `../fonts/`.
 
 ## Provider marks
 
