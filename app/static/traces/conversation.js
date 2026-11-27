@@ -157,6 +157,7 @@
       indexHost.replaceChildren();
       data.rows.forEach(row => {
         const node = button('', () => change({position: row.position, section: null, chunk: 0}), false, 'reader-row');
+        node.dataset.position = row.position;
         node.setAttribute('aria-current', String(row.position === data.selected?.position));
         const meta = el('span', 'reader-row-meta');
         meta.append(el('span', 'mono', row.label));
@@ -211,6 +212,8 @@
       conversationStarted = true;
       controller?.abort(); controller = new AbortController();
       const signal = controller.signal;
+      let row = null;
+      const from = document.activeElement;
       reader.setAttribute('aria-busy', 'true'); status.textContent = 'Loading recorded evidence…';
       const url = new URL(reader.dataset.endpoint, location.href);
       Object.entries(state).forEach(([key, value]) => { if (value !== null && value !== undefined && value !== '') url.searchParams.set(key, value); });
@@ -218,6 +221,10 @@
         const data = await readJSON(url, signal);
         if (signal.aborted) return;
         latest = data;
+        // the rows are drawn again: the keyboard stays on the row it is on, by its position, and goes to the open row from
+        // a row no longer listed, or from the filter or page button that asked for them, while it still has the focus
+        const on = document.activeElement;
+        if (reader.contains(on) && (on.matches('.reader-row') || on === from && on.matches('[data-kind], [data-page]'))) row = `[data-position="${on.dataset.position}"]`;
         state.q = data.query; state.kind = data.kind;
         state.page = data.page; state.position = data.selected?.position ?? null;
         state.section = data.selected?.content?.key ?? null; state.chunk = data.selected?.content?.chunk ?? 0;
@@ -236,6 +243,7 @@
         indexHost.replaceChildren();
         data.rows.forEach(row => {
           const item = button('', () => change({position: row.position, section: null, chunk: 0}), false, 'reader-row');
+          item.dataset.position = row.position;
           item.setAttribute('aria-current', String(row.position === data.selected?.position));
           const meta = el('span', 'reader-row-meta');
           meta.append(el('span', 'mono', `#${row.step_id}`), el('span', '', row.source || 'Unspecified'));
@@ -263,7 +271,12 @@
         if (error.name !== 'AbortError') {
           status.textContent = error.message; selectedHost.replaceChildren(el('p', 'muted', error.message), button('Retry', () => loadConversation()));
         }
-      } finally { if (!signal.aborted) reader.removeAttribute('aria-busy'); }
+      } finally {
+        if (!signal.aborted) reader.removeAttribute('aria-busy');
+        // the same row stays where it is on the page; the open row is brought into view
+        const same = row && indexHost.querySelector(row);
+        if (row) (same || indexHost.querySelector('[aria-current=true]'))?.focus({preventScroll: !!same});
+      }
     };
     search.addEventListener('submit', event => { event.preventDefault(); change({q: searchInput.value.trim(), position: null, page: 1, section: null, chunk: 0}); });
     reader.querySelector('[data-clear-search]').addEventListener('click', () => { searchInput.value = ''; change({q: '', position: null, page: 1, section: null, chunk: 0}); });
