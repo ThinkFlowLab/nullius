@@ -1054,7 +1054,7 @@ def cmd_prove(a):
 REPLAY_EPILOG = """\
 changes, applied in this order, each recorded with the request's sha256 before and after:
   --through CMD, --system FILE, --tools FILE, --tool-description NAME TEXT, --replace OLD NEW,
-  --drop-last K, --set FIELD=JSON, --model M, --served-by SLUG[,SLUG...], --provider P
+  --drop-last K, --param FIELD=JSON, --model M, --served-by SLUG[,SLUG...], --provider P
   (a TEXT, OLD or NEW that starts with @ is the text of that file)
 
 examples:
@@ -1105,14 +1105,14 @@ def replay_changes(a) -> list:
         out.append(rp.replace_text(_text_arg(old), _text_arg(new)))
     if a.drop_last is not None:
         out.append(rp.drop_last(a.drop_last))
-    for pair in a.set or []:
+    for pair in a.param or []:
         name, eq, value = pair.partition("=")
         try:
             value = json.loads(value) if eq else ValueError
         except ValueError:
             value = ValueError
         if value is ValueError:
-            raise rp.Refused(f"--set {pair!r}: FIELD=JSON, the value as JSON (a number, true, null, \"text\")")
+            raise rp.Refused(f"--param {pair!r}: FIELD=JSON, the value as JSON (a number, true, null, \"text\")")
         out.append(rp.set_field(name.strip(), value))
     if a.model:
         out.append(rp.model(a.model))
@@ -1600,7 +1600,7 @@ def main(argv=None):
     rp.add_argument("--replace", nargs=2, action="append", metavar=("OLD", "NEW"),
                     help="OLD replaced by NEW in the system text or a message; OLD must appear exactly once (repeatable)")
     rp.add_argument("--drop-last", type=int, metavar="K", help="the last K messages left out")
-    rp.add_argument("--set", action="append", metavar="FIELD=JSON",
+    rp.add_argument("--param", action="append", metavar="FIELD=JSON",
                     help="a top-level parameter set (temperature=0, max_tokens=2048); null removes it (repeatable)")
     rp.add_argument("--model", help="another model; the request's pin is left out unless --served-by gives one")
     rp.add_argument("--served-by", metavar="SLUG[,SLUG...]",

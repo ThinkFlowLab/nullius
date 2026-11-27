@@ -629,7 +629,7 @@ class CommandLine(ReplayCase):
         env = {"MODEL_API_URL": self.base, "MODEL_API_KEY": KEY}
         for trial, said in (("chat__u0002", r"refused: one send may cost up to (0\.0165) USD \(its prompt and 8192 output "
                                              r"tokens\), past the cap of 0\.001 USD: --max-usd \1 or more lets one go out"),
-                            ("open__u0003", r"refused: nothing bounds the length of an answer to m, .*--set max_tokens=N bounds it")):
+                            ("open__u0003", r"refused: nothing bounds the length of an answer to m, .*--param max_tokens=N bounds it")):
             with self.subTest(trial=trial):
                 code, got, err = self.main(self.job, trial, "--call", 1, "--times", 1, "--max-usd", 0.001,
                                                   "--provider", "custom", "--out", out, env=env)

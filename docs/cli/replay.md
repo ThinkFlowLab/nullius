@@ -6,7 +6,7 @@ Send a trial's recorded model call again, K times under a spending cap, as it wa
 nullius standard replay <job dir> <trial> --list [--read CMD] [--json]
 nullius standard replay <job dir> <trial> --call N --times K --max-usd USD \
     [--through CMD] [--system FILE] [--tools FILE] [--tool-description NAME TEXT]... \
-    [--replace OLD NEW]... [--drop-last K] [--set FIELD=JSON]... \
+    [--replace OLD NEW]... [--drop-last K] [--param FIELD=JSON]... \
     [--model M] [--served-by SLUG[,SLUG...]] [--provider P] [--price MODEL=INPUT,OUTPUT]... \
     [--read CMD] [-j N] [--dry-run] [--out DIR] [--json]
 ```
@@ -33,7 +33,7 @@ Applied in this order. A `TEXT`, `OLD` or `NEW` that starts with `@` is that fil
 | `--tool-description NAME TEXT` | One tool's description. |
 | `--replace OLD NEW` | A text of the system text or a message, found exactly once. |
 | `--drop-last K` | The last K messages left out. |
-| `--set FIELD=JSON` | A top-level parameter such as `temperature=0`; `null` removes it. |
+| `--param FIELD=JSON` | A top-level parameter such as `temperature=0`; `null` removes it. |
 | `--model`, `--served-by`, `--provider` | Another model, pin or provider. |
 
 ## Answers

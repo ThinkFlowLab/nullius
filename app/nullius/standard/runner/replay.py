@@ -668,7 +668,7 @@ class Prepared:
     most_usd: Optional[float] = None             # what a send is booked at: the most it can cost; None, unbounded
     most_output: Optional[int] = None            # the output tokens that bound it
 
-    def unbounded(self, change: str = "--set {}=N") -> str:
+    def unbounded(self, change: str = "--param {}=N") -> str:
         """Why the most a send can cost is unknown, and what bounds it: ``change``, the request's own limit set
         (``{}`` its field), or the model's output limit in the price list."""
         return (f"nothing bounds the length of an answer to {self.model}, so the most a send can cost is unknown: "
