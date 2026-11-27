@@ -105,6 +105,8 @@ class RerunRecords(unittest.TestCase):
         copy = self.tmp / "result-copy.json"            # a hard-linked copy of the job's result keeps what it held
         os.link(path / "result.json", copy)
         kept_copy = copy.read_bytes()
+        (path / "result.json").chmod(0o600)              # and the result keeps its permissions, whatever the umask
+        self.addCleanup(os.umask, os.umask(0o022))
         for unit, link in (("good", os.link), ("wrong", os.symlink)):
             name = next(n for n, u in rerun.planned(str(path)) if u == unit)
             (path / name / "result.json").unlink()
@@ -118,6 +120,7 @@ class RerunRecords(unittest.TestCase):
                 self.assertNotEqual(kept.stat().st_ino, outside.stat().st_ino)
                 self.assertIsNone(json.loads(kept.read_text())["result"])
                 self.assertEqual(copy.read_bytes(), kept_copy)
+                self.assertEqual((path / "result.json").stat().st_mode & 0o777, 0o600)
 
     def test_unfinished_counts_interruptions_before_starting_and_keeps_verdicts(self):
         path = Path(run.run(self.bench, self.other, model="", provider="custom", jobs_root=str(self.tmp),

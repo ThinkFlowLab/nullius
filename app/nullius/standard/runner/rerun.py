@@ -63,6 +63,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import time
 from typing import Callable, Dict, List, Optional
 
@@ -589,7 +590,10 @@ def _again(r: "run.Run", job_dir: str, old: dict, cfg: dict, trials: Dict[str, d
             if capped["changed"]:
                 whole["changes"] = list(whole.get("changes") or []) + [{"at": job.iso(t0), "max_usd": capped["max_usd"], "was": capped["was"]}]
             out["budget"] = whole
-        ondisk.write_whole(os.path.join(job_dir, "result.json"), json.dumps(out, indent=1))
+        result = os.path.join(job_dir, "result.json")
+        kept = os.lstat(result) if os.path.lexists(result) else None       # its permissions, as the run left them
+        ondisk.write_whole(result, json.dumps(out, indent=1),
+                           mode=stat.S_IMODE(kept.st_mode) if kept and stat.S_ISREG(kept.st_mode) else None)
 
     ended, budget, u0 = r.run_units(work, write, first)
     p.emit("units", "done", seconds=round(time.time() - u0, 1))
