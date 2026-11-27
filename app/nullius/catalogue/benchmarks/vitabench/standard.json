@@ -121,6 +121,7 @@
   "limits": {
     "turn_seconds": 7200,
     "turns": 160,
+    "retries": 3,
     "score_seconds": 3600,
     "attempts": "Attempt N is the upstream's trial N-1: its recorded seed is the one run_tasks draws for it from 300. The upstream sends no seed to a model."
   },

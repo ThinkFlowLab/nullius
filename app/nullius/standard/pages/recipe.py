@@ -188,6 +188,7 @@ def _bench_page(b: dict) -> dict:
             # what the upstream's leaderboard fixes besides the ranked model (Like the leaderboard)
             "leaderboard": b.get("leaderboard") or None,
             "attempts": (b.get("limits") or {}).get("attempts", ""),
+            "retries": (b.get("limits") or {}).get("retries", 0),
             # what a unit's time limits and a conversation's length are when the recipe forces none
             "timeouts": {"setup": run.DRIVER_SECONDS, "setup_agent": (b.get("limits") or {}).get("setup_seconds") or run.DRIVER_SECONDS, "image": run.IMAGE_SECONDS, "score": (b.get("limits") or {}).get("score_seconds") or run.DRIVER_SECONDS,
                          "agent": (b.get("limits") or {}).get("turn_seconds") or run.TURN_SECONDS,
@@ -618,10 +619,12 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if lb and repeat < lb.get("repeat", 1):
         add("limits", f"Like the leaderboard runs each {(b.get('units') or {}).get('noun', 'unit')} at least {lb['repeat']} times.")
     # each attempt run again up to N times when it ends in a failure a further try may mend (runner.retries)
-    retries = 0 if recipe.get("retries") in (None, "") else _int(recipe.get("retries"), 0, MAX_RETRIES)
+    # empty: the upstream's own retries (limits.retries), as the run takes them without --retries
+    own_retries = (b.get("limits") or {}).get("retries", 0)
+    retries = own_retries if recipe.get("retries") in (None, "") else _int(recipe.get("retries"), 0, MAX_RETRIES)
     if retries is None:
         add("limits", f"Retries after an error: a whole number from 0 to {MAX_RETRIES}.")
-        retries = 0
+        retries = own_retries
     sim_model = str(recipe.get("simulator_model") or "").strip()
     judge_model = str(recipe.get("judge_model") or "").strip()
     like = {"paper": "Like the paper", "leaderboard": "Like the leaderboard"}.get(model_choice)
@@ -843,7 +846,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  "--dataset", d["id"], *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
                  *[w for k, v in options_for_pick(d, p).items() for w in ("--bench-option", f"{k}={v}")],
                  *(["--attempts", str(repeat)] if repeat > 1 else []),
-                 *(["--retries", str(retries)] if retries else []),
+                 *(["--retries", str(retries)] if retries != own_retries else []),
                  *(["--max-usd", f"{share:.6f}".rstrip("0").rstrip(".")] if share and spends(p) else []),
                  *(["--max-usd-per-unit", f"{per_unit:.6f}".rstrip("0").rstrip(".")] if per_unit and spends(p) else []),
                  *[w for k, v in forced.items() for w in ("--timeout", f"{k}={v:g}")],

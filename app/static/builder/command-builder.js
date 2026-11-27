@@ -797,7 +797,7 @@
         + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: rec.backend === 'boat' ? String((schema.standardHere || {}).boatSlots || 'Boat\'s limit') : '1'}) + '</div>'
         + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1',
             hint: 'Each ' + esc(u.noun) + ' is run and scored this many times.'})
-        + field('Retries after an error', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0',
+        + field('Retries after an error', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: String(b.retries || 0),
             hint: 'Retry errors such as rate limits or crashes, but not failed ' + esc(u.nouns) + '.'}) + '</div>'
         // a conversation's most agent turns (recipe.py: run --max-turns): only a benchmark that holds conversations has turns
         + ((b.needs || []).includes('agent.conversation/v1')

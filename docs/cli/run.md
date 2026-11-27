@@ -127,7 +127,7 @@ A benchmark that names a cut in `limits.scored_cuts` still scores an agent's uni
 
 ## Retries
 
-`--retries N` (at most 9) runs a failed attempt again after the other units; the last try counts.
+`--retries N` (at most 9) runs a failed attempt again after the other units; the last try counts. Default: the benchmark's `limits.retries`, else 0.
 
 | Failure | Retried |
 | --- | --- |

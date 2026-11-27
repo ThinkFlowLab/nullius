@@ -170,6 +170,7 @@ _VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,39}$")
 # What a version may say for itself; the rest of the file is shared.
 VERSIONED = ("upstream", "install", "start", "model", "env", "options", "caches", "fidelity", "proven")
 # What a benchmark's version may say for itself: its data, its driver, how it scores, who plays its user, its environments.
+MAX_RETRIES = 9                        # the most retries of a failed attempt (runner.retries, cli run --retries)
 BENCH_VERSIONED = ("upstream", "datasets", "files", "driver", "mcp_servers", "score", "simulator", "limits", "controls", "environments",
                    "options", "host", "setups", "proven", "leaderboard")
 # What a benchmark option may need: embedding and reranker models through the relay,
@@ -1635,6 +1636,9 @@ def problems(d: dict, kind: str) -> List[str]:
                     v = lim.get(f)
                     if v is not None and (isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 100000):
                         bad.append(f"limits.{f}: a whole number from 1")
+                r = lim.get("retries")
+                if r is not None and (isinstance(r, bool) or not isinstance(r, int) or not 0 <= r <= MAX_RETRIES):
+                    bad.append(f"limits.retries: the upstream's own retries of a failed unit, a whole number from 0 to {MAX_RETRIES}")
                 cuts = lim.get("scored_cuts")
                 if cuts is not None and (not isinstance(cuts, list) or not cuts or len(set(map(str, cuts))) != len(cuts)
                                          or any(c not in CUTS for c in cuts)):

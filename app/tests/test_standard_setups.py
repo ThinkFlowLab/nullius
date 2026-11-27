@@ -362,6 +362,14 @@ class Recipe(unittest.TestCase):
         o, _ = definitions.setup(definitions.get("benchmark", "vitabench"), "original", "vendor/m", "openrouter")
         self.assertEqual((o["sent"], o["comparable"]), ("vendor/m", False))
 
+    def test_a_benchmarks_own_retries_are_the_default_and_the_command_names_another(self):
+        vita = dict(benchmark="vitabench", datasets=["cross"], others=["original"], provider="openrouter", model="vendor/m",
+                    judge_model="vendor/judge")
+        out = self.compiled(**vita)
+        self.assertNotIn("--retries", out["script"])                     # the run takes limits.retries itself
+        self.assertIn("up to 3 retries an attempt", json.dumps(out))
+        self.assertIn("--retries 0", self.compiled(**vita, retries=0)["script"])
+
     def test_like_the_leaderboard_runs_its_user_simulator_options_and_attempts(self):
         tau = dict(benchmark="tau3-bench", datasets=["airline"], others=["original"], provider="openai", model="their-model",
                    model_choice="leaderboard")

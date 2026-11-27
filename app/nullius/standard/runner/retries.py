@@ -22,10 +22,10 @@ from __future__ import annotations
 from typing import Optional
 
 from nullius.standard.calls import ledger, relay
+from nullius.standard.contract.definitions import MAX_RETRIES
 from nullius.standard.runner import pace
 
 RETRIES = 0
-MAX_RETRIES = 9
 
 NOT_RETRIED = frozenset({
     # Harbor's RetryConfig.exclude_exceptions: a result, or a mistake a second try does not mend

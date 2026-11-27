@@ -453,6 +453,7 @@ An `answer` or `score` error that begins `EnvironmentSetupError: `, `VerifierErr
 | `driver.unit_end` | `true`: the driver is sent `end` (`unit`, `dir`) once each unit an agent ran has ended, scored or not, so that what its setup started for the agent ends with the unit. A control's or a setup's unit gets none |
 | `driver.task_given` | `true`: the driver is sent `task_given` before each agent is given its task, and the task waits for its answer: [the computer port](ports/agent-computer-v1.md#the-window-before-the-task) closes its window before the task there. A control's or a setup's unit gets none |
 | `limits.attempts` | How the upstream tells attempts apart; the driver is then sent `attempt` with `setup`, `turn` and `answer` |
+| `limits.retries` | The upstream's own retries of a failed unit (0 to 9): a run's `--retries` when none is given |
 | `limits.scored_cuts` | The cuts after which an agent's unit is still scored: `time`, `calls`, `end` ([a unit cut at a limit](cli/run.md#a-unit-cut-at-a-limit)) |
 | `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |
 

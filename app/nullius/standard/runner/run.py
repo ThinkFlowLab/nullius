@@ -723,7 +723,7 @@ class Run:
                  turn_seconds: Optional[int] = None, say: Callable[[str], None] = print, env=os.environ,
                  proving: bool = False, unsandboxed: bool = False, judge_model: Optional[str] = None,
                  backend: str = "local", options: Optional[dict] = None, shard: Optional[tuple] = None, shard_by: str = "id",
-                 launch: Optional[str] = None, repeat: int = 1, retries: int = RETRIES,
+                 launch: Optional[str] = None, repeat: int = 1, retries: Optional[int] = None,
                  retry_if: Optional[Callable[[dict], bool]] = None, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
@@ -989,7 +989,8 @@ class Run:
         self.limit, self.concurrency = limit, limits.concurrency(max(1, int(concurrency)), self.constraints)
         self.units_file = units_file
         self.repeat = max(1, int(repeat or 1))
-        self.retries = max(0, int(retries or 0))
+        # not given: the upstream's own retries (limits.retries), else none
+        self.retries = max(0, int((bench.get("limits") or {}).get("retries", RETRIES) if retries is None else retries))
         self.retry_if = retry_if or retryable
         # an attempt a try may follow keeps what that try needs: its own image (removed when no try follows,
         # ``release_image``), its unit's count of what it spent (``ledger.forget``), and a rate limit's end

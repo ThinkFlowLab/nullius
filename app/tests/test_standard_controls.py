@@ -180,6 +180,15 @@ class ControlRun(unittest.TestCase):
         self.assertEqual(run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env=env,
                                  judge_model="judge-2").judge_model, "judge-2")
 
+    def test_a_runs_retries_default_to_the_benchmarks_own(self):
+        b = kit("agent-task-v1", os.path.join(self.tmp, "kits"))
+        nop = definitions.control(b, "nop")
+        self.assertEqual(run.Run(b, nop, model="", provider="openai", env={}).retries, 0)
+        b["limits"] = dict(b.get("limits") or {}, retries=3)
+        self.assertEqual([run.Run(b, nop, model="", provider="openai", env={}, retries=r).retries for r in (None, 0, 1)], [3, 0, 1])
+        self.assertIn("limits.retries: the upstream's own retries of a failed unit, a whole number from 0 to 9",
+                      definitions.problems(dict(b, limits={"retries": 10}), "benchmark"))
+
     def test_a_standard_job_named_oracle_without_the_record_is_no_control(self):
         j = parse.parse_job(self.go("agent-task-v1", "oracle"))
         with open(os.path.join(j.dir, "config.json")) as f:
