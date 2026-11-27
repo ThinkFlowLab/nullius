@@ -387,6 +387,9 @@ def rerun(job_dir: str, ids: List[str], *, reason: str = "", concurrency: Option
     if std.get("merged_despite"):
         raise run.Refused(f"{os.path.basename(job_dir)} merges shards that differed ({'; '.join(std['merged_despite'])}): "
                           "a trial's settings may not be its config's. Run it again in its shard's job")
+    if std.get("reasoning") and not isinstance(std["reasoning"], dict):
+        raise run.Refused(f"{os.path.basename(job_dir)} records its reasoning as {str(std['reasoning'])[:60]!r}, not a level "
+                          "for each model: its config.json is not as its run wrote it")
     names = merge._trials(job_dir)
     trials = {n: merge._read(os.path.join(job_dir, n, "result.json")) for n in names}
     plan = planned(job_dir)

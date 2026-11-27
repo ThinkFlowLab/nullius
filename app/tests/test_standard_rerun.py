@@ -364,6 +364,19 @@ class RerunTest(unittest.TestCase):
                     self.again(job_dir, ids)
                 self.assertIn(words, str(e.exception))
                 self.assertEqual(digest(job_dir), whole)
+        with self.subTest("a recorded reasoning of the wrong shape"):
+            path = Path(job_dir, "config.json")
+            kept = path.read_bytes()
+            cfg = json.loads(kept)
+            path.write_text(json.dumps(dict(cfg, standard=dict(cfg["standard"], reasoning="high"))))
+            try:
+                whole = digest(job_dir)
+                with self.assertRaises(run.Refused) as e:
+                    self.again(job_dir, ["model"])
+                self.assertIn("job records its reasoning as 'high', not a level for each model", str(e.exception))
+                self.assertEqual(digest(job_dir), whole)
+            finally:
+                path.write_bytes(kept)
         with self.subTest("a re-run under way"):
             held = rerun._hold(job_dir)
             try:
