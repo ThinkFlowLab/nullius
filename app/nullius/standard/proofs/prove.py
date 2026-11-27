@@ -264,7 +264,8 @@ def control_check(bench: dict, ds: dict, which: str, *, limit: Optional[int], jo
     ran_with = _options_of(cfg) if cfg else (options or {})
     if ran_with:
         rec["options"] = ran_with
-    judge = (cfg.get("standard") or {}).get("judge") if cfg else judge_model or (bench["score"].get("judge") or {}).get("model")
+    # the judge the job ran with, as its config records it: none for a control that asks no judge
+    judge = ((cfg or _config(job_dir) or {}).get("standard") or {}).get("judge")
     if judge:
         rec["judge"] = judge
     return rec

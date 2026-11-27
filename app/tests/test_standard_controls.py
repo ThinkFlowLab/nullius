@@ -355,6 +355,13 @@ class Prove(unittest.TestCase):
         self.assertNotIn("limit", proven["oracle"])
         self.assertEqual(definitions.problems(written, "benchmark"), [])
 
+    def test_a_proof_names_the_judge_its_job_ran_with_and_none_without_one(self):
+        b = kit("agent-task-v1", os.path.join(self.tmp, "kits"))
+        b["score"] = dict(b["score"], judge={"model": "judge-1", "says": "x", "retired": True})
+        got = self.prove(b, write=False)["kit"]
+        self.assertTrue(got["nop"]["ok"], got)
+        self.assertNotIn("judge", got["nop"])                              # never the retired one it did not ask
+
     def test_a_shard_s_proof_runs_its_controls_on_its_units_and_says_which(self):
         from nullius.standard.runner import shard
         b = kit("agent-workspace-v1", os.path.join(self.tmp, "kits"))
