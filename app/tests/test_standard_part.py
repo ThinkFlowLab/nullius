@@ -209,9 +209,9 @@ class PartTest(unittest.TestCase):
         with self.assertRaises(sets.NotFound):
             std_cli.start_with(b, "set:nothing")
         # a set of several datasets: its list of the run's dataset; the rest of a job begun on a part, by its name
-        sets.create(b, "both", parts={"all": ["t2"], "other": ["t5"]})
+        both = sets.create(b, "both", parts={"all": ["t4", "t2"], "other": ["t5"]})
         got = std_cli.start_with(b, "set:both", "all")
-        self.assertEqual((got["dataset"], got["task_set"]["units"], sorted(got["task_set"]["parts"])), ("all", ["t2"], ["all", "other"]))
+        self.assertEqual((got["dataset"], got["task_set"]["units"], sorted(got["task_set"]["parts"])), ("all", ["t4", "t2"], ["all", "other"]))
         for dataset, said in ((None, "set:both: the task set both mixes the datasets all, other; give --dataset"),
                               ("more", "set:both: the task set both mixes the datasets all, other, not more")):
             with self.subTest(dataset=dataset), self.assertRaises(sets.Refused) as e:
@@ -219,7 +219,12 @@ class PartTest(unittest.TestCase):
             self.assertIn(said, str(e.exception))
         job_dir = self.plan(name="mixed", start_with={"count": 1})
         got = self.again(job_dir, [], task_set=std_cli.set_units(b["key"], "both", "all", "--set "))
-        self.assertEqual([x["unit"] for x in got["begun"]], ["t2"])
+        self.assertEqual([x["unit"] for x in got["begun"]], ["t2", "t4"])
+        # a job that ran that set's list of one dataset, begun on its first task: the rest of that list next
+        job_dir = self.plan(name="mixed-set", task_set=sets.record(both, None, "all"), start_with={"count": 1})
+        self.assertEqual(self.read(job_dir, "config.json")["standard"]["start_with"]["units"], ["t2"])
+        got = self.again(job_dir, [], every_unfinished=True)
+        self.assertEqual([x["unit"] for x in got["begun"]], ["t4"])
         # ids inline, as the run builder writes them
         self.assertEqual(std_cli.start_with(b, "ids:t2,t0"), {"ids": ["t2", "t0"]})
         for bad, said in (("ids:", "ids separated by commas"), ("ids:t1,,t2", "ids separated by commas"),
