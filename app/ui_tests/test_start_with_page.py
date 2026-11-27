@@ -491,8 +491,10 @@ class TheBuilder(task_set_pages.BuilderCase):
                    + r"""const draw=h=>[...h.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)].map(([,a,t])=>({tagName:'BUTTON',id:'',
   name:(t.match(/<strong>(.*?)<\/strong>/)||[0,t.replace(/<[^>]*>|→/g,'').trim()])[1],attributes:[...a.matchAll(/ ([\w-]+)="([^"]*)"/g)].map(([,name,value])=>({name,value})),
   matches(s){return s.startsWith('BUTTON[')&&s.slice(7,-1).split('][').every(p=>this.attributes.some(a=>p===`${a.name}="${a.value}"`));},focus(){document.activeElement=this;}}));
-const step={els:[],contains(e){return this.els.includes(e);},querySelector(s){return this.els.find(e=>e.matches(s))||null;}};
-const back=(from,name,to)=>{step.els=draw(from);globalThis.document={activeElement:step.els.find(e=>e.name===name)};keepFocus(step,()=>{step.els=draw(to);});return document.activeElement.name;};
+// drawn again, the step takes the focus from the button it removes, as a page does
+const body={name:'body'},step={els:[],contains(e){return this.els.includes(e);},querySelector(s){return this.els.find(e=>e.matches(s))||null;},
+  set innerHTML(h){if(this.contains(document.activeElement))document.activeElement=body;this.els=draw(h);}};
+const back=(from,name,to)=>{step.els=draw(from);globalThis.document={activeElement:step.els.find(e=>e.name===name)};keepFocus(step,()=>{step.innerHTML=to;});return document.activeElement.name;};
 """
                    # the dialog closed onto the tile with tasks ticked, or with none; Change the tasks, closed with none; All of it chosen
                    + "const focus=[back(all,'Specific tasks',ticked),back(ticked,'Specific tasks',ticked),back(ticked,'Change the tasks',all),back(ticked,'All of it',all)];"
