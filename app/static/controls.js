@@ -90,6 +90,7 @@
       if (select.size > 1 || select.closest('[inert]')) return;   // an inert copy (a sticky row's placeholder) needs no menu
       let button = controls.get(select);
       if (!button) {
+        const held = document.activeElement === select;   // a select drawn under the keyboard: hidden below, it hands it to its button
         button = document.createElement('button'); button.type = 'button'; button.className = 'ui-select-trigger';
         button.setAttribute('role', 'combobox'); button.setAttribute('aria-haspopup', 'listbox'); button.setAttribute('aria-expanded', 'false');
         button.setAttribute('aria-controls', 'ui-options-' + (++serial));
@@ -98,6 +99,7 @@
         button.setAttribute('aria-label', select.getAttribute('aria-label') || label?.textContent.trim() || select.name || 'Choose an option');
         select.classList.add('ui-select-native'); select.setAttribute('aria-hidden', 'true'); select.tabIndex = -1;
         select.after(button); controls.set(select, button);
+        if (held) button.focus({preventScroll: true});
         button.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (active?.button === button) close(); else open(select, button); });
         button.addEventListener('keydown', e => keydown(e, select, button));
         select.addEventListener('invalid', e => { e.preventDefault(); button.focus(); button.setAttribute('aria-invalid', 'true'); });

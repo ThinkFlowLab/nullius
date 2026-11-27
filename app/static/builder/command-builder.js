@@ -120,7 +120,21 @@
     show(false);
     if (id === 'nb-startover-yes' || id === 'nb-startover' && !open) reset();
   }
-  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList, prereqHead, fieldErrors, underlineAt, startOver}; return; }
+  // Draws `box` again with the keyboard where it was: on the control drawn in the focused one's place (the same id, else
+  // the same tag and data attributes, else the first of them alone: a choice can change the others), and in a field on
+  // the same selection. A select's menu button (controls.js) is told by its select; the new select takes the focus and
+  // hands it to its own button.
+  function keepFocus(box, draw) {
+    const on = document.activeElement, was = on.matches('.ui-select-trigger') ? on.previousElementSibling : on;
+    const data = [...was.attributes].filter(a => a.name.startsWith('data-')), by = some => was.tagName + some.map(a => `[${a.name}="${CSS.escape(a.value)}"]`).join('');
+    const at = !box.contains(on) ? [] : was.id ? ['#' + CSS.escape(was.id)] : data.length ? [by(data), by(data.slice(0, 1))] : [];
+    draw();
+    const now = at.map(sel => box.querySelector(sel)).find(Boolean);
+    if (!now) return;
+    now.focus({preventScroll: true});
+    if (typeof on.selectionStart === 'number') now.setSelectionRange(on.selectionStart, on.selectionEnd, on.selectionDirection);
+  }
+  if (typeof module === 'object' && module.exports) { module.exports = {servedRows, recipeStore, savedList, prereqHead, fieldErrors, underlineAt, startOver, keepFocus}; return; }
   const root = document.getElementById('nullius-builder');
   if (!root) return;
   const schema = JSON.parse(document.getElementById('nb-schema').textContent);
@@ -1045,7 +1059,8 @@
       const rows=own?[...((runnerOut&&runnerOut.review)||[]),...(C.isStandard(rec)?[]:[[S.where,'Where',C.whereLabel(rec)]])]:C.review(rec);
       html='<div class="nb-sectionhead"><h2>Review the experiment.</h2></div>'+rows.map(([i,t,v])=>`<div class="nb-reviewrow"><div><small>${t}</small><strong>${esc(v)}</strong></div>${button('Edit',`data-step="${i}"`)}</div>`).join('')+'<div id="nb-errors" class="nb-errorlist" hidden></div><div id="nb-reviewnotes"></div>'+(schema.local?'<section id="nb-prereq" class="nb-prereq" aria-live="polite"></section>':'')+runPanel();
     }
-    $('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';placeGrids();
+    // a choice draws its step again: the keyboard stays on that choice
+    keepFocus($('#nb-form'),()=>{$('#nb-form').innerHTML=html+'<p id="nb-localerrors" class="nb-error" role="status"></p>';placeGrids();});
     if(step===REVIEW&&schema.local){drawPrereq();checkPrereq();}
     $('#nb-back').hidden=step===S.benchmark;
     $('#nb-next').textContent=step===REVIEW?'Export recipe JSON':stepName(steps[nextShown(step,1)],nextShown(step,1))+' →';
@@ -1242,7 +1257,7 @@
     if(d.agent){const on=r().agents.includes(d.agent);r().agents=on?r().agents.filter(id=>id!==d.agent):[...r().agents,d.agent];renderForm();refreshPlan();return;}
     else if(d.href){if(!window.nulliusOpenSettings?.(d.href,b))location.href=d.href;return;}
     else if(b.id==='nb-add-custom-agent'){r().customAgents.push('');r().agents.push('custom-'+(r().customAgents.length-1));renderForm();refreshPlan();root.querySelector('[data-custom-agent="'+(r().customAgents.length-1)+'"]')?.focus();return;}
-    else if(d.removeCustomAgent!==undefined){const i=Number(d.removeCustomAgent),rec=r(),kept=rec.agents.filter(id=>id.startsWith('custom-')&&id!=='custom-'+i).map(id=>Number(id.slice(7)));rec.customAgents.splice(i,1);rec.agents=rec.agents.filter(id=>!id.startsWith('custom-')).concat(kept.map(k=>'custom-'+(k>i?k-1:k)));renderForm();refreshPlan();return;}
+    else if(d.removeCustomAgent!==undefined){const i=Number(d.removeCustomAgent),rec=r(),kept=rec.agents.filter(id=>id.startsWith('custom-')&&id!=='custom-'+i).map(id=>Number(id.slice(7)));rec.customAgents.splice(i,1);rec.agents=rec.agents.filter(id=>!id.startsWith('custom-')).concat(kept.map(k=>'custom-'+(k>i?k-1:k)));renderForm();refreshPlan();$('#nb-add-custom-agent').focus();return;}   // the next one takes its number: not to its Remove
     // The Harbor panel (Runner step): a release or a repository, a ref of it, installed and asked for its agents.
     else if(d.harborKind){const rec=r(),h=rec.harbor||{},k=d.harborKind;if(k===h.kind)return;harbor.kept[h.kind]=h;rec.harbor=harbor.kept[k]||(k==='repo'?{kind:'repo',repo:'',revisionKind:'branch',revision:'',commit:'',extras:[]}:{kind:'release',version:'',extras:[]});applyScan();renderForm();refreshPlan();harborFollow();root.querySelector(k==='repo'?'[data-harbor-repo]':'[data-harbor-kind="release"]')?.focus();return;}
     else if(d.harborRefKind){const h=r().harbor,got=harbor.refs[C.harborRepoUrl(h.repo)]||{},k=d.harborRefKind;if(k===h.revisionKind)return;h.revisionKind=k;const pick=k==='branch'?(got.branches||[]).find(x=>x.name===got.default_branch)||(got.branches||[])[0]:k==='tag'?(got.tags||[])[0]:null;if(pick){h.revision=pick.name;h.commit=pick.commit;}else if(k==='commit')h.revision=h.commit;else{h.revision='';h.commit='';}applyScan();renderForm();refreshPlan();askScan(false);root.querySelector(`[data-harbor-ref-kind="${k}"]`)?.focus();return;}
@@ -1252,8 +1267,9 @@
     else if(d.stdBench){C.setStandardBenchmark(r(),d.stdBench);}
     else if(d.stdOther){C.toggleParticipant(r(),d.stdOther);}   // a check
     else if(d.stdDataset){const rec=r(),c=C.datasetsOf(rec),b=C.standardBench(rec),mine=c.filter(k=>C.wholeOf(b,k)===d.stdDataset);rec.datasets=mine.length?(c.length>mine.length?c.filter(k=>!mine.includes(k)):c):[...c,d.stdDataset];delete rec.dataset;C.keepTaskSets(rec);}
-    else if(d.stdFamily!==undefined){C.swapDataset(r(),d.was,d.stdFamily);}
-    else if(d.stdFamilySet!==undefined){C.swapDataset(r(),d.was,d.in);C.setTaskSet(r(),d.in,d.stdFamilySet);}
+    // the choice's group is drawn again as the chosen list's: so named (data-was), the redraw finds the choice in that group
+    else if(d.stdFamily!==undefined){C.swapDataset(r(),d.was,d.stdFamily);d.was=d.stdFamily;}
+    else if(d.stdFamilySet!==undefined){C.swapDataset(r(),d.was,d.in);C.setTaskSet(r(),d.in,d.stdFamilySet);d.was=d.in;}
     else if(d.stdTaskset!==undefined){C.setTaskSet(r(),d.of,d.stdTaskset);}
     // the standard's machines: each a toggle, one at least; several split the run into shards
     else if(d.stdWhere){const rec=r(),list=C.whereList(rec),on=list.includes(d.stdWhere),next=on?list.filter(w=>w!==d.stdWhere):[...list,d.stdWhere];if(!next.length)return;rec.where=next.length>1?next:next[0];}
@@ -1276,7 +1292,7 @@
       root.querySelectorAll('[data-settings-pane]').forEach(p=>{p.hidden=p.dataset.settingsPane!==setTab;});
       return;
     }
-    else if(d.remove!==undefined)r().custom.splice(Number(d.remove),1);
+    else if(d.remove!==undefined){r().custom.splice(Number(d.remove),1);render();$('#nb-add').focus();return;}   // the next row takes its number: not to its Remove
     else if(d.load){try{recipe=C.fromJSON(saved.find(s=>s.id===d.load).recipe);savedId=d.load;step=REVIEW;dropStartOverAsk();$('#nb-saved').close();status('Loaded “'+(recipe.title||recipe.name)+'”.');}catch(error){status('This saved recipe cannot be read: '+error.message);return;}}
     else if(d.ask){const q=$('#nb-ask');q.innerHTML=C.deleteAsk(saved.find(s=>s.id===d.ask),'nb-ask-h',esc);q.showModal();return;}
     else if(d.close!==undefined){$('#nb-ask').close();return;}
@@ -1338,16 +1354,15 @@
   root.addEventListener('change',async event=>{
     const el=event.target,d=el.dataset;
     if(d.providerModel)commitModel(el);
-    else if(d.custom?.endsWith(':type')){$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');}
+    else if(d.custom?.endsWith(':type'))keepFocus($('#nb-parameters'),()=>{$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');});
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
     else if(d.stdVersion!==undefined){   // keep the grid's filters while refreshing the version's origin and settings
       C.setStandardBenchmark(r(),el.value);inPlace(()=>render());}
     else if(d.stdTasksetSelect!==undefined){C.setTaskSet(r(),d.stdTasksetSelect,el.value);renderForm();refreshPlan();}
     // an option at its default is left out: the recipe names only what was changed. A select's value can show or hide
-    // the options that apply under it (`when`): the step is drawn again and the focus goes back to the select, or to the
-    // menu button controls.js puts after it once this change is handled; a typed value is left as it is
+    // the options that apply under it (`when`): the step is drawn again; a typed value is left as it is
     else if(d.benchOptSelect!==undefined){const rec=r(),n=d.benchOptSelect,o=((C.standardBench(rec)||{}).options||{})[n]||{};rec.bench_options={...(rec.bench_options||{})};const v=el.value.trim();if(!v||v===o.default)delete rec.bench_options[n];else rec.bench_options[n]=v;
-      if(el.tagName==='SELECT'){renderForm();queueMicrotask(()=>{const s=root.querySelector(`select[data-bench-opt-select="${CSS.escape(n)}"]`),m=s&&s.nextElementSibling;(m&&m.matches('.ui-select-trigger')?m:s)?.focus();});}refreshPlan();}
+      if(el.tagName==='SELECT')renderForm();refreshPlan();}
     else if(d.stdOption!==undefined){const rec=r(),k=d.stdOptionOf,o=(C.standardOthers(rec).find(x=>x.key===k)||{}).options||{},x=o[d.stdOption]||{},v=el.value.trim();rec.options={...(rec.options||{})};const mine={...(rec.options[k]||{})};if(v===''||v===x.default)delete mine[d.stdOption];else mine[d.stdOption]=v;if(Object.keys(mine).length)rec.options[k]=mine;else delete rec.options[k];refreshPlan();}
     // a release or a ref picked, a commit typed: an explicit choice, so its agents are asked for (built here the first time)
     else if(d.harborVersion!==undefined){r().harbor.version=el.value.trim();applyScan();renderForm();refreshPlan();askScan(true);}
