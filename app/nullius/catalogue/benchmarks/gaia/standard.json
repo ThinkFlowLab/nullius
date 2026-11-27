@@ -105,7 +105,7 @@
   },
   "setups": {
     "original": {
-      "summary": "The paper's no-tools API procedure: its formatting prompt as the system message, the question as the user message, one call, the authors' scorer unchanged. Attachments are not read.",
+      "summary": "The paper's no-tools API procedure makes one call with its formatting prompt as the system message and the question as the user message. It uses the authors' scorer unchanged. Attachments are not read.",
       "providers": {
         "openai": "",
         "openrouter": "",

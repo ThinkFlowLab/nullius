@@ -50,7 +50,7 @@
   },
   "setups": {
     "original": {
-      "summary": "The problem's prompt - its imports, signature and docstring - completed by the model in one call, as the paper had Codex complete it, and checked by the upstream's own check_correctness, as published. The paper's models were never released and a chat model takes no raw completion: the prompt goes in a message asking for the code, any model in their place.",
+      "summary": "The model completes the problem's prompt (imports, signature and docstring) in one call, as the paper had Codex complete it.\n\nThe upstream's own check_correctness checks the answer, as published.\n\nThe paper's models were never released; because a chat model takes messages rather than raw completions, any replacement model receives the prompt in a message asking for code.",
       "providers": {
         "openai": "",
         "openrouter": "",

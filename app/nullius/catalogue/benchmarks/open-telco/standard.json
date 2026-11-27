@@ -185,7 +185,7 @@
   },
   "setups": {
     "original": {
-      "summary": "GSMA's own Inspect task on the question, as `inspect eval` runs it: its prompt (the multiple-choice template, TeleMath's system prompt), one call to the run's model through Inspect's OpenAI-compatible client, and its scorer. Any model, as GSMA's leaderboard ranks them.",
+      "summary": "GSMA's own Inspect task runs on the question as `inspect eval` runs it, using its prompt (the multiple-choice template or TeleMath's system prompt).\n\nIt makes one call to the run's model through Inspect's OpenAI-compatible client and uses its own scorer.\n\nAny model can run, as on GSMA's leaderboard.",
       "providers": {
         "openai": "",
         "openrouter": "",

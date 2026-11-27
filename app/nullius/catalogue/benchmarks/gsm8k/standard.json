@@ -72,7 +72,7 @@
   },
   "setups": {
     "original": {
-      "summary": "The problem asked of the model in one call, in the format the paper's solutions end with ('#### <number>'), and the reply scored by the upstream's own extract_answer and is_correct, as published. The paper's answerers were its own fine-tuned models, never released: the setup takes any model, in their place.",
+      "summary": "The model answers the problem in one call, using the format the paper's solutions end with ('#### <number>').\n\nThe upstream's own extract_answer and is_correct score the reply, as published.\n\nThe paper's fine-tuned models were never released, so this procedure takes any model in their place.",
       "providers": {
         "openai": "",
         "openrouter": "",
