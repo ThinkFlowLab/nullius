@@ -1617,34 +1617,34 @@ def main(argv=None):
     rp.add_argument("--out", metavar="DIR",
                     help="the replay's folder, new or empty, outside the job (default replays/<job>/<trial>/call-<N>__<time>)")
     rp.add_argument("--json", action="store_true", help="one JSON document on stdout")
-    st = sub.add_parser("study", help="send recorded model calls of several trials again, as recorded and changed, and compare them call by call",
+    sy = sub.add_parser("study", help="send recorded model calls of several trials again, as recorded and changed, and compare them call by call",
                         description="Send recorded model calls of several trials again, each K times as recorded and under "
                                     "each named arm of changes, under one spending cap; read each answer by one rule kept "
                                     "before the first send; count the answers by target and arm and compare two arms with "
                                     "an exact sign test. Everything is kept in one folder outside every run's tree.",
                         epilog=STUDY_EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-    st.add_argument("out", metavar="DIR", help="the study's folder: new, or the study's own to go on with it")
-    st.add_argument("--targets", metavar="FILE", help="a file of lines JOB_DIR TRIAL CALL, one target each (# starts a comment)")
-    st.add_argument("--job", metavar="JOB_DIR", help="a job whose trials (--trial) give targets")
-    st.add_argument("--trial", action="append", metavar="TRIAL", help="a trial of --job: its calls are targets (repeatable)")
-    st.add_argument("--every", type=int, metavar="N", help="only every Nth call of the trials: its number a multiple of N")
-    st.add_argument("--where", metavar="REGEX", help="only the calls whose recorded answer the rule labels with a match")
-    st.add_argument("--arm", action="append", metavar="NAME=CHANGES",
+    sy.add_argument("out", metavar="DIR", help="the study's folder: new, or the study's own to go on with it")
+    sy.add_argument("--targets", metavar="FILE", help="a file of lines JOB_DIR TRIAL CALL, one target each (# starts a comment)")
+    sy.add_argument("--job", metavar="JOB_DIR", help="a job whose trials (--trial) give targets")
+    sy.add_argument("--trial", action="append", metavar="TRIAL", help="a trial of --job: its calls are targets (repeatable)")
+    sy.add_argument("--every", type=int, metavar="N", help="only every Nth call of the trials: its number a multiple of N")
+    sy.add_argument("--where", metavar="REGEX", help="only the calls whose recorded answer the rule labels with a match")
+    sy.add_argument("--arm", action="append", metavar="NAME=CHANGES",
                     help="an arm after the call as recorded: its changes as a JSON list of [NAME, ARG...], or @FILE (repeatable)")
-    st.add_argument("--times", type=int, metavar="K", help="sends of each target under each arm")
-    st.add_argument("--max-usd", type=float, metavar="USD",
+    sy.add_argument("--times", type=int, metavar="K", help="sends of each target under each arm")
+    sy.add_argument("--max-usd", type=float, metavar="USD",
                     help="the study's spending cap, over all its starts, each send booked at the most it can cost; a new one above the spend replaces it")
-    st.add_argument("--price", action="append", metavar="MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]",
+    sy.add_argument("--price", action="append", metavar="MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]",
                     help="a price in USD per million tokens, over the job's and your price list (repeatable)")
-    st.add_argument("--read", metavar="CMD",
+    sy.add_argument("--read", metavar="CMD",
                     help="the reading rule: a command that reads one answer as JSON on stdin and prints its label "
                          "(default: the first tool call's name and arguments; run without a key)")
-    st.add_argument("--yes", metavar="REGEX", help="an answer reads yes when its label matches (default: the label is the recorded answer's)")
-    st.add_argument("--compare", nargs=2, metavar=("A", "B"), help="the two arms of the sign test (default: the first two)")
-    st.add_argument("-j", "--concurrency", type=int, default=1, metavar="N", help="sends in flight at once (default 1)")
-    st.add_argument("--stop-after", type=int, metavar="N", help="at most N sends in this start; the same command again goes on")
-    st.add_argument("--dry-run", action="store_true", help="print the number of sends and the estimate; send nothing, write nothing")
-    st.add_argument("--json", action="store_true", help="one JSON document on stdout")
+    sy.add_argument("--yes", metavar="REGEX", help="an answer reads yes when its label matches (default: the label is the recorded answer's)")
+    sy.add_argument("--compare", nargs=2, metavar=("A", "B"), help="the two arms of the sign test (default: the first two)")
+    sy.add_argument("-j", "--concurrency", type=int, default=1, metavar="N", help="sends in flight at once (default 1)")
+    sy.add_argument("--stop-after", type=int, metavar="N", help="at most N sends in this start; the same command again goes on")
+    sy.add_argument("--dry-run", action="store_true", help="print the number of sends and the estimate; send nothing, write nothing")
+    sy.add_argument("--json", action="store_true", help="one JSON document on stdout")
     rc = sub.add_parser("recount", help="count a kept study or replay again with another rule, with no send",
                         description="Read the answers a study or a replay kept again by another rule, with no send and no "
                                     "key; the counts are written to recounts/ in its folder, beside the earlier ones.",
@@ -1664,11 +1664,11 @@ def main(argv=None):
     if a.cmd == "replay" and a.list and (a.call is not None or a.dry_run):
         rp.error("--list goes alone, with --read and --json or without")
     if a.cmd == "study" and (a.times is None or a.max_usd is None or not (a.targets or a.job)):
-        st.error("--times K, --max-usd USD and the targets (--targets FILE, or --job JOB_DIR --trial TRIAL) go together")
+        sy.error("--times K, --max-usd USD and the targets (--targets FILE, or --job JOB_DIR --trial TRIAL) go together")
     if a.cmd == "study" and bool(a.job) != bool(a.trial):
-        st.error("--job JOB_DIR and --trial TRIAL go together")
+        sy.error("--job JOB_DIR and --trial TRIAL go together")
     if a.cmd == "study" and (a.every or a.where) and not a.job:
-        st.error("--every and --where take the calls of --job's trials")
+        sy.error("--every and --where take the calls of --job's trials")
     if a.cmd in ("run", "prove", "conform", "fidelity"):
         _exit_on_term()
         progress.ECHO = sys.stderr           # each stage as a line (nullius/progress.py): stdout stays the job and its units
