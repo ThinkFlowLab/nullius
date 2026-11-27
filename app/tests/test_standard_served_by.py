@@ -32,7 +32,7 @@ from nullius.standard.backends import container
 from nullius.standard.calls import relay
 from nullius.standard.contract import definitions
 from nullius.standard.requirements import install
-from nullius.standard.runner import job, merge, run
+from nullius.standard.runner import job, merge, rerun, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -522,6 +522,24 @@ class TheRun(WithUpstream):
         self.assertTrue(all(c["request"]["routing"]["order"] == ["prov-a"] and c["reply"]["served_by"] == "Prov A" for c in calls))
         with open(os.path.join(job_dir, "result.json")) as f:
             self.assertEqual(json.load(f)["served"], {"calls": {"Prov A": n}, "unnamed": 0, "held": {"m-1": True}})
+
+    def test_a_task_run_again_in_its_job_keeps_the_jobs_pin_and_reasoning(self):
+        b = dict(self.b, datasets=[{"id": "responding", "units": 3}])
+        with mock.patch.dict(run.providers.PRESETS, {"openrouter": dict(run.providers.PRESETS["openrouter"], base=self.base)}):
+            job_dir = run.run(b, self.a, model="m-1", provider="openrouter", env={"OPENROUTER_API_KEY": "or-test"}, unsandboxed=True,
+                              jobs_root=os.path.join(self.tmp, "jobs"), say=lambda s: None, dataset="responding",
+                              served_by={"m-1": ["prov-a"]}, reasoning={"m-1": "high"})
+            with open(os.path.join(job_dir, "config.json")) as f:
+                self.assertEqual(json.load(f)["standard"]["reasoning"], {"m-1": "high"})
+            first, Upstream.seen = Upstream.seen, []
+            with mock.patch.object(rerun, "resolve", return_value=(b, self.a)):
+                got = rerun.rerun(job_dir, ["model"], env={"OPENROUTER_API_KEY": "or-test"}, say=lambda s: None, root=ROOT)
+        self.assertEqual([x["unit"] for x in got["replaced"]], ["model"])
+
+        def sent(seen):
+            return [(c.get("provider"), c.get("reasoning_effort")) for c in (json.loads(raw) for _, _, raw in seen)]
+        self.assertEqual(sent(first), [({"order": ["prov-a"], "allow_fallbacks": False}, "high")])   # a base that is not OpenRouter's: the field of its API
+        self.assertEqual(sent(Upstream.seen), sent(first))
 
     def test_a_run_without_the_option_sends_records_and_ends_as_before(self):
         """Every request as before, the record's earlier fields as they were read, and the same verdicts, even

@@ -428,8 +428,8 @@ def rerun(job_dir: str, ids: List[str], *, reason: str = "", concurrency: Option
                 max_usd=capped["left_usd"] if capped else None, max_usd_per_unit=(old.get("budget") or {}).get("unit_max_usd"),
                 prices_unreachable=prices_unreachable, constraints=std.get("constraints") or None,
                 timeouts=std.get("timeouts") or None, max_turns=std.get("max_turns"), max_calls=std.get("max_calls"),
-                served_by=std.get("served_by") or None, exchanges=std.get("exchanges") or exchange_store.DEFAULT,
-                exchanges_max_mb=std.get("exchanges_max_mb") or exchange_store.MAX_MB)
+                served_by=std.get("served_by") or None, reasoning=std.get("reasoning") or None,
+                exchanges=std.get("exchanges") or exchange_store.DEFAULT, exchanges_max_mb=std.get("exchanges_max_mb") or exchange_store.MAX_MB)
     # each trial's unit, its place and its attempt, as the runner named it; the try it is run again as.
     # ``fresh``: a trial with no folder, begun now as the try after those kept (none, for a task never begun)
     work, first_try, fresh = [], {}, {}
