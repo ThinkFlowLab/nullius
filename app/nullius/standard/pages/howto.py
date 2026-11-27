@@ -83,7 +83,7 @@ for line in sys.stdin:
             s = req["session"]
             store.add(s["text"], id=s["id"], date=s["date"])
             out = {}
-        elif req["op"] == "recall":               # question: the text
+        elif req["op"] == "recall":               # question: the text; date: when it is asked, if the benchmark says
             hits = store.search(req["question"], k=5)
             out = {"memory": "\\n\\n".join(h.text for h in hits)}
         else:

@@ -34,7 +34,7 @@ Long-term chat memory: questions over timestamped chat histories.
 
 | Version | Setups as published, whose model | Options |
 |---|---|---|
-| `longmemeval` | Original · Original memory · Like the paper or Any of your choice | `expansion_join`, `gen_length`, `history_format`, `merge_key_expansion`, `question_type`, `reading`, `retriever`, `separate_notes`, `session_expansion`, `topk`, `turn_expansion`, `useronly` |
+| `longmemeval` | Original · Original memory · Like the paper or Any of your choice | `expansion_join`, `gen_length`, `history_format`, `merge_key_expansion`, `question_type`, `reading`, `recalled_as`, `retriever`, `separate_notes`, `session_expansion`, `topk`, `turn_expansion`, `useronly` |
 
 ## Options
 
@@ -46,6 +46,7 @@ Long-term chat memory: questions over timestamped chat histories.
 | `merge_key_expansion` | **`none`**, `merge`, `replace` | Whether retrieved conversations are shown in full, replaced by their user text, or combined with that text. | `original`, `model` |
 | `question_type` | **`all`**, `knowledge-update`, `temporal-reasoning`, `multi-session`, `single-session-user`, `single-session-assistant`, `single-session-preference` | Which memory ability the run measures: every question, or only the questions of one type. | `original`, `model`, `yours` |
 | `reading` | **`con`**, `direct` | Whether the model answers from recalled memory directly or first identifies relevant facts and reasons through them. | `original`, `model`, `yours` |
+| `recalled_as` | **`history-chats`**, `chats-and-facts`, `facts` | What the reader's prompt says the recalled memory is, in one of LongMemEval's three prompts. | `yours` |
 | `retriever` | **`full-history-session`**, `full-history-turn`, `no-retrieval`, `flat-bm25-session`, `flat-bm25-turn`, `flat-contriever-session`, `flat-contriever-turn`, `flat-stella-session`, `flat-stella-turn` | Whether the model receives the full conversation history, no history, or sessions or turns selected by a retrieval method. | `original`, `model` |
 | `separate_notes` | **`false`**, `true` | Write a separate note for each retrieved session or turn before reasoning. Original memory only. | `original`, `model` |
 | `session_expansion` | **`none`**, `session-summ`, `session-keyphrase`, `session-userfact` | Expand retrieval keys with the authors' cached summaries, keyphrases or user facts. No expansion by default. | `original`, `model` |

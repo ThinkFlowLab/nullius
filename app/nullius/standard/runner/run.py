@@ -2813,7 +2813,9 @@ class Run:
                 plan = setup.get("memory") or {}
                 for s in plan.get("add") or []:
                     send("add", session=s)
-                recalled = [{"id": q.get("id"), "memory": send("recall", question=q["question"]).get("memory", "")}
+                # a question asked on a date of its own carries it: "how long ago" is counted from then, not from today
+                recalled = [{"id": q.get("id"), "memory": send("recall", question=q["question"],
+                                                               **({"date": q["date"]} if q.get("date") else {})).get("memory", "")}
                             for q in plan.get("recall") or []]
             except jsonl.Failed as e:
                 raise _Ended("NonZeroAgentExitCodeError", "the capability: " + str(e),
