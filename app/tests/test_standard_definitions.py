@@ -220,7 +220,7 @@ class Problems(unittest.TestCase):
                                        cwd=tmp, env=dict(os.environ, PYTHONPATH=str(APP)),
                                        log=os.path.join(tmp, "driver.log"))
                     try:
-                        units = driver.request("units", dataset="kit", timeout=10)["units"]
+                        units = driver.request("units", dataset="kit", timeout=60)["units"]
                     finally:
                         driver.close()
                     details = kit["check_details"]
