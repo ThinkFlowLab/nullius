@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import threading
 import time
+import types
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from contextlib import contextmanager
@@ -123,6 +124,7 @@ class Echo(BaseHTTPRequestHandler):
     limited = 0             # how many calls, from now, get the rate limit before the model answers again
     retry_after = None      # what a refused call says of when to call again (Retry-After), when it says
     listed = None           # the models GET /models lists; None: no list, as a provider without one
+    message = "Rate limit reached for requests"     # what a refused call says
 
     def do_GET(self):
         if Echo.listed is None or not self.path.endswith("/models"):
@@ -145,7 +147,7 @@ class Echo(BaseHTTPRequestHandler):
         limited = Echo.limited > 0
         Echo.limited -= limited
         if Echo.status != 200 or body.get("model") == Echo.refused or limited:
-            out = json.dumps({"error": {"message": "Rate limit reached for requests"}}).encode()
+            out = json.dumps({"error": {"message": Echo.message}}).encode()
             self.send_response(Echo.status if Echo.status != 200 else 429)
             if Echo.retry_after is not None:
                 self.send_header("Retry-After", Echo.retry_after)
@@ -258,6 +260,32 @@ class RunTest(unittest.TestCase):
         job_dir, failed = run.run_and_report(b, o, model="m-1", provider="custom", jobs_root=self.tmp, concurrency=1, env=self.env,
                                              say=lambda s: None, unsandboxed=True, proving=True, name="answered")
         self.assertFalse(failed)
+
+    def test_a_model_whose_context_the_first_call_overflows_stops_the_run(self):
+        """The prompt and tools alone overflow the model's window: every unit ends the same way, as with a wrong key.
+        An overflow after an answered call is the unit's own, and the run goes on."""
+        here = os.path.join(self.tmp, "calling")
+        os.makedirs(here)
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write(CALLING_DRIVER)
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), _here=here, driver={"command": ["python3", "{here}/driver.py"]})
+        o = definitions.get("agent", "fake", ROOT)
+        Echo.status, Echo.message = 400, "Upstream error from DeepInfra: Requested input length 37271 exceeds maximum input length 32767"
+        self.addCleanup(setattr, Echo, "message", Echo.message)
+        self.addCleanup(setattr, Echo, "status", 200)
+        said = []
+        job_dir, failed = run.run_and_report(b, o, model="m-1", provider="custom", jobs_root=self.tmp, concurrency=1,
+                                             env=self.env, say=said.append, unsandboxed=True, proving=True)
+        trials = parse.parse_job(job_dir).trials
+        self.assertTrue(failed)
+        self.assertEqual([t.exception_type for t in trials], [relay.CONTEXT_ERROR] * run.REFUSED_IN_A_ROW)
+        self.assertTrue(any(s.startswith("stopped: the agent's first call was longer than the model's context window in 3 units")
+                            for s in said), said)
+        r = types.SimpleNamespace(_halt=threading.Event(), _said=threading.Lock(), _refused=[], halted=None)
+        answered = [{"status": 200, "t0": 1}, {"status": 400, "t0": 2}]
+        for _ in range(run.REFUSED_IN_A_ROW):
+            run.Run.note_refusal(r, (relay.CONTEXT_ERROR, "x"), answered)
+        self.assertIsNone(r.halted)
 
     def test_an_unexpected_error_in_a_unit_is_that_units_alone(self):
         """A missing agent binary (OSError) or a driver reply without its

@@ -99,6 +99,8 @@ class Failure(unittest.TestCase):
                                                                   "limit: 196000 + 8192 > 200000"}))
         self.assertTrue(relay.overflowed({"status": 400, "error": "HTTP 400: The input token count (1200) exceeds the "
                                                                   "maximum number of tokens allowed (1000)."}))
+        self.assertTrue(relay.overflowed({"status": 400, "error": "HTTP 400: Upstream error from DeepInfra: Requested input "
+                                                                  "length 37271 exceeds maximum input length 32767"}))
         self.assertFalse(relay.overflowed(dict(OVERFLOW, status=500)))
         self.assertFalse(relay.overflowed({"status": 400, "error": EMPTY}))
         self.assertFalse(relay.overflowed({"status": 400}))
