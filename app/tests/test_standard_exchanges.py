@@ -30,7 +30,7 @@ from nullius.standard.calls import exchanges, relay
 from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe
 from nullius.standard.requirements import install
-from nullius.standard.runner import pace as pacing, run
+from nullius.standard.runner import pace as pacing, rerun, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -900,7 +900,12 @@ class TheRun(WithUpstream):
         return code, out.buffer.getvalue(), err.getvalue()
 
     def test_off_and_a_bad_value_and_the_command_line(self):
-        job_dir = self.go(exchanges="off", name="off")
+        job_dir = self.go(exchanges="off", exchanges_max_mb=1, name="off")
+        # a task that calls the model, run again in the job, keeps the job's choice
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
+        with mock.patch.object(rerun, "resolve", return_value=(b, definitions.get("agent", "fake", ROOT))):
+            got = rerun.rerun(job_dir, ["model"], env=self.env, say=lambda s: None, root=ROOT)
+        self.assertEqual([x["unit"] for x in got["replaced"]], ["model"])
         for root, dirs, _ in os.walk(job_dir):
             self.assertNotIn(exchanges.FOLDER, dirs, root)
         with open(os.path.join(job_dir, "config.json")) as f:

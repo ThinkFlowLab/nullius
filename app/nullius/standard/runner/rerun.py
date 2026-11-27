@@ -69,7 +69,7 @@ from typing import Callable, Dict, List, Optional
 from nullius import ondisk
 from nullius.harbor import feed as live_feed
 from nullius.standard.backends import boat
-from nullius.standard.calls import ledger as ledgers
+from nullius.standard.calls import exchanges as exchange_store, ledger as ledgers
 from nullius.standard.contract import definitions
 from nullius.standard.runner import job, merge, run
 
@@ -427,7 +427,8 @@ def rerun(job_dir: str, ids: List[str], *, reason: str = "", concurrency: Option
                 max_usd=capped["left_usd"] if capped else None, max_usd_per_unit=(old.get("budget") or {}).get("unit_max_usd"),
                 prices_unreachable=prices_unreachable, constraints=std.get("constraints") or None,
                 timeouts=std.get("timeouts") or None, max_turns=std.get("max_turns"), max_calls=std.get("max_calls"),
-                served_by=std.get("served_by") or None)
+                served_by=std.get("served_by") or None, exchanges=std.get("exchanges") or exchange_store.DEFAULT,
+                exchanges_max_mb=std.get("exchanges_max_mb") or exchange_store.MAX_MB)
     # each trial's unit, its place and its attempt, as the runner named it; the try it is run again as.
     # ``fresh``: a trial with no folder, begun now as the try after those kept (none, for a task never begun)
     work, first_try, fresh = [], {}, {}
