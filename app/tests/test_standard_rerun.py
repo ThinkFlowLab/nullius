@@ -98,10 +98,13 @@ class RerunRecords(unittest.TestCase):
                 self.assertEqual(outside.exists(), exists)
                 self.assertTrue((path / "retried").is_symlink())
 
-    def test_a_no_result_marker_replaces_links_without_writing_their_target(self):
+    def test_a_no_result_marker_and_the_job_result_replace_links_without_writing_their_target(self):
         path = self.job()
         outside = self.tmp / "evidence.bin"
         outside.write_bytes(b"\x00original evidence\xff")
+        copy = self.tmp / "result-copy.json"            # a hard-linked copy of the job's result keeps what it held
+        os.link(path / "result.json", copy)
+        kept_copy = copy.read_bytes()
         for unit, link in (("good", os.link), ("wrong", os.symlink)):
             name = next(n for n, u in rerun.planned(str(path)) if u == unit)
             (path / name / "result.json").unlink()
@@ -114,6 +117,7 @@ class RerunRecords(unittest.TestCase):
                 self.assertEqual(kept.stat().st_mode & 0o777, 0o644)
                 self.assertNotEqual(kept.stat().st_ino, outside.stat().st_ino)
                 self.assertIsNone(json.loads(kept.read_text())["result"])
+                self.assertEqual(copy.read_bytes(), kept_copy)
 
     def test_unfinished_counts_interruptions_before_starting_and_keeps_verdicts(self):
         path = Path(run.run(self.bench, self.other, model="", provider="custom", jobs_root=str(self.tmp),

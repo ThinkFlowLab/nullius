@@ -588,7 +588,7 @@ def _again(r: "run.Run", job_dir: str, old: dict, cfg: dict, trials: Dict[str, d
             if capped["changed"]:
                 whole["changes"] = list(whole.get("changes") or []) + [{"at": job.iso(t0), "max_usd": capped["max_usd"], "was": capped["was"]}]
             out["budget"] = whole
-        job._write(os.path.join(job_dir, "result.json"), json.dumps(out, indent=1))
+        ondisk.write_whole(os.path.join(job_dir, "result.json"), json.dumps(out, indent=1))
 
     ended, budget, u0 = r.run_units(work, write, first)
     p.emit("units", "done", seconds=round(time.time() - u0, 1))
