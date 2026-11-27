@@ -310,6 +310,8 @@ Do NOT include both CORRECT and WRONG in your response, or it will break the eva
 Just return the label CORRECT or WRONG in a json format with the key as "label".
 """
 JUDGE_LABEL = "Judge"
+JUDGE_WHY = ("The mean score counts words shared with the reference, so a right answer in other words scores low. "
+             "A judge model reads the meaning instead")
 
 
 def judge_says(q, answer, judge):
@@ -334,7 +336,7 @@ def judged(rows, judge):
             said.append(row["judge"] == "CORRECT")
         except Exception as e:
             row["judge_error"] = f"{type(e).__name__}: {e}"
-    return {"label": JUDGE_LABEL, "score": sum(said) / len(said), "n": len(said)} if said else None
+    return {"label": JUDGE_LABEL, "score": sum(said) / len(said), "n": len(said), "why": JUDGE_WHY} if said else None
 
 
 def score(unit, dir, transcript, answer, setup=None, judge=None, **_):

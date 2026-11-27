@@ -195,6 +195,7 @@ class Judge(unittest.TestCase):
                 d.close()
             with open(d.judged) as f:
                 asked = [json.loads(x) for x in f]
+        self.assertIn("words shared with the reference", got["complement"].pop("why"))              # what the page's tooltip opens with
         self.assertEqual(got["complement"], {"label": "Judge", "score": 1.0, "n": 1})       # category 5 is not judged
         self.assertEqual(got["reward"], plain["reward"])                                           # the F1 stays the score
         self.assertEqual([q.get("judge") for q in got["detail"]["per_question"]], ["CORRECT", None])
@@ -219,7 +220,8 @@ class Judge(unittest.TestCase):
                               setup="original", judge=self.JUDGE)
             finally:
                 d.close()
-        self.assertEqual((score["reward"], score["complement"]), (1.0, {"label": "Judge", "score": 1.0, "n": 1}))
+        self.assertEqual((score["reward"], score["complement"]), (1.0, {"label": "Judge", "score": 1.0, "n": 1, "why": score["complement"].get("why")}))
+        self.assertTrue(score["complement"]["why"])
 
 
 class Retrieval(unittest.TestCase):

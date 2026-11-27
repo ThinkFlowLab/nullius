@@ -329,6 +329,8 @@ def _show(args) -> int:
               + ("" if planned is None else f" · {planned:.2f} over the {max(job.n_planned, len(job.trials))} planned"))
     if job.complement:
         print(f"  {job.complement['label']} {job.complement['score']:.2f} over {job.complement['n']} answers (experiment, not the benchmark's score)")
+        if job.complement.get("why"):
+            print(f"    {job.complement['why']}.")
     width = max((len(t.trial_name) for t in job.trials), default=0)
     for t in job.trials:
         line = f"  {t.trial_name:<{width}}  {t.outcome}"

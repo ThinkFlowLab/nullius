@@ -32,7 +32,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "23"
+SCHEMA = "24"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness, so a limit the run survived leaves nothing in result.json —
@@ -224,11 +224,11 @@ def count_rate_limits(path: str) -> int | None:
 
 
 def _complement(ver_res) -> dict:
-    """A trial's ``verifier_result.complement``, when it is whole: {label, score, n}."""
+    """A trial's ``verifier_result.complement``, when it is whole: {label, score, n}, and ``why`` when the benchmark says how it differs from the score."""
     c = ver_res.get("complement") if isinstance(ver_res, dict) else None
     if (isinstance(c, dict) and isinstance(c.get("label"), str) and type(c.get("score")) in (int, float)
             and type(c.get("n")) is int and c["n"] > 0):
-        return {"label": c["label"], "score": float(c["score"]), "n": c["n"]}
+        return {"label": c["label"], "score": float(c["score"]), "n": c["n"], **({"why": c["why"]} if isinstance(c.get("why"), str) else {})}
     return {}
 
 
@@ -609,12 +609,14 @@ class Job:
     @property
     def complement(self) -> dict:
         """The trials' second score (``Trial.complement``), weighed by its parts as ``mean_score`` is:
-        {label, score, n}; empty when no trial has one. Trials whose labels differ give none."""
+        {label, score, n, why when every trial says the same}; empty when no trial has one. Trials whose labels differ give none."""
         got = [t.complement for t in self.trials if t.complement]
         if not got or len({c["label"] for c in got}) > 1:
             return {}
         n = sum(c["n"] for c in got)
-        return {"label": got[0]["label"], "score": sum(c["score"] * c["n"] for c in got) / n, "n": n}
+        why = {c.get("why") for c in got}
+        return {"label": got[0]["label"], "score": sum(c["score"] * c["n"] for c in got) / n, "n": n,
+                **({"why": why.pop()} if len(why) == 1 and None not in why else {})}
 
     @property
     def mean_score_planned(self):

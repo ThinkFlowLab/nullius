@@ -543,7 +543,8 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
         if (isinstance(also, dict) and isinstance(also.get("label"), str) and type(also.get("score")) in (int, float)
                 and type(also.get("n")) is int and also["n"] > 0):
             # a second score beside the reward, never in its place (an experiment judge's): the job weighs it by its n
-            res["verifier_result"]["complement"] = {"label": also["label"], "score": float(also["score"]), "n": also["n"]}
+            res["verifier_result"]["complement"] = {"label": also["label"], "score": float(also["score"]), "n": also["n"],
+                                                   **({"why": also["why"]} if isinstance(also.get("why"), str) else {})}
         parts = score.get("parts")
         if isinstance(parts, dict) and isinstance(parts.get("n"), int) and not isinstance(parts["n"], bool) and parts["n"] > 0:
             # a score over several parts (a conversation's questions): the job's mean weighs it by them
