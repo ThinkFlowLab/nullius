@@ -486,7 +486,17 @@ class TheBuilder(task_set_pages.BuilderCase):
                    + "const r=C.createStandard('fakebench'),b=C.standardBench(r),x=b.datasets[0],u={noun:'task',nouns:'tasks'};"
                    + "const all=startChoice(r,b,x,u);C.setStartWith(r,x.id,['good','slow']);const ticked=startChoice(r,b,x,u);"
                    + "C.setStartWith(r,x.id,'2');const older=startChoice(r,b,x,u);"
-                   + "process.stdout.write(JSON.stringify({all,ticked,older}));")
+                   # the step drawn again by the page's keepFocus, its buttons as stand-ins that match its selectors and take the focus
+                   + f"globalThis.CSS={{escape:s=>s}};const {{keepFocus}}=require({json.dumps(str(folder / 'command-builder.js'))});\n"
+                   + r"""const draw=h=>[...h.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)].map(([,a,t])=>({tagName:'BUTTON',id:'',
+  name:(t.match(/<strong>(.*?)<\/strong>/)||[0,t.replace(/<[^>]*>|→/g,'').trim()])[1],attributes:[...a.matchAll(/ ([\w-]+)="([^"]*)"/g)].map(([,name,value])=>({name,value})),
+  matches(s){return s.startsWith('BUTTON[')&&s.slice(7,-1).split('][').every(p=>this.attributes.some(a=>p===`${a.name}="${a.value}"`));},focus(){document.activeElement=this;}}));
+const step={els:[],contains(e){return this.els.includes(e);},querySelector(s){return this.els.find(e=>e.matches(s))||null;}};
+const back=(from,name,to)=>{step.els=draw(from);globalThis.document={activeElement:step.els.find(e=>e.name===name)};keepFocus(step,()=>{step.els=draw(to);});return document.activeElement.name;};
+"""
+                   # the dialog closed onto the tile with tasks ticked, or with none; Change the tasks, closed with none; All of it chosen
+                   + "const focus=[back(all,'Specific tasks',ticked),back(ticked,'Specific tasks',ticked),back(ticked,'Change the tasks',all),back(ticked,'All of it',all)];"
+                   + "process.stdout.write(JSON.stringify({all,ticked,older,focus}));")
         got = json.loads(subprocess.run([node, "-"], input=program, check=True, capture_output=True, text=True, timeout=10).stdout)
         titles = lambda h: re.findall(r"<strong>(.*?)</strong>", h)
         pressed = lambda h: re.findall(r'aria-pressed="true"[^>]*>.*?<strong>(.*?)</strong>', h)
@@ -496,6 +506,8 @@ class TheBuilder(task_set_pages.BuilderCase):
         self.assertIn('data-std-start-pick="all"', got["ticked"])
         self.assertNotIn("other", task_set_pages.visible(got["all"]))           # the other sets are not offered there
         self.assertEqual(titles(got["older"]), ["All of it", "Specific tasks", "The first 2"])    # a recipe from before, shown chosen
+        # the keyboard stays on the choice, not on the Change button drawn before it
+        self.assertEqual(got["focus"], ["Specific tasks", "Specific tasks", "Specific tasks", "All of it"])
 
     def test_the_page_holds_the_dialog_with_the_tasks_list(self):
         html = self.get("/new-run").get_data(as_text=True)

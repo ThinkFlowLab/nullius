@@ -906,8 +906,9 @@
     const on = (rec.start_with || {})[x.id] || '', ids = Array.isArray(on) ? on : null, data = ` data-of="${esc(x.id)}"`;
     const set = typeof on === 'string' && on.startsWith('set:') ? (x.sets || []).find(s => s.name === on.slice(4).split('@')[0]) : null;
     const older = typeof on === 'string' && on ? (/^\d+$/.test(on) ? 'The first ' + on : set ? set.label : on.slice(4)) : '';
+    // each tile names its dataset (data-of): the step drawn again finds the tile, not the Change button of the same pick
     const tiles = [tile({attr: 'std-start', key: '', data, on: !on, title: 'All of it'}),
-      tile({attr: 'std-start-pick', key: x.id, on: !!ids, title: 'Specific ' + u.nouns, meta: ids ? ids.length + ' chosen' : ''}),
+      tile({attr: 'std-start-pick', key: x.id, data, on: !!ids, title: 'Specific ' + u.nouns, meta: ids ? ids.length + ' chosen' : ''}),
       ...(older ? [tile({attr: 'std-start', key: on, data, on: true, title: older})] : [])];
     return `<div class="nb-sectionhead std-sethead"><h3>${C.datasetsOf(rec).length > 1 ? esc(x.label) + ': start with' : 'Start with'}</h3>`
       + (ids ? `<button type="button" class="btn ghost sm" data-std-start-pick="${esc(x.id)}">Change the ${esc(u.nouns)} <span aria-hidden="true">→</span></button>` : '')
