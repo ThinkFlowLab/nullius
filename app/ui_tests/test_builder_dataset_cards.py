@@ -22,13 +22,12 @@ class DatasetCards(CompilerCase):
                    + "process.stdout.write(JSON.stringify({html:standardForm(r),limits:unitsOf(r).nouns}));")
         return json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
 
-    def test_locomo10_counts_questions_whatever_runs(self):
+    def test_locomo10_counts_conversations_whatever_runs(self):
         for others in (["original"], ["mem0"], ["original", "mem0"], ["nop"]):
             with self.subTest(others=others):
                 got = self.draw("locomo", others)
-                self.assertIn("1540 questions", got["html"])
-                self.assertNotIn("1540 conversations", got["html"])
-        self.assertEqual(self.draw("locomo", ["original"])["limits"], "conversations")   # the Limits step counts the setup's own
+                self.assertIn("10 conversations", got["html"])
+                self.assertEqual(got["limits"], "conversations")
 
 
 if __name__ == "__main__":

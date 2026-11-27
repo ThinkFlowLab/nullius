@@ -464,8 +464,9 @@ class Locomo(unittest.TestCase):
 
     def test_the_score_is_the_upstreams_eval_question_answering(self):
         p = _driver(self, self.b, self.up, self.data)
-        units = [f"s:{i}" for i in range(len(self.QA))]
-        said = [[p.request("score", unit=u, dir=self.tmp, transcript=[], answer=a)["reward"] for a in self.ANSWERS] for u in units]
+        per = [p.request("score", unit="s", dir=self.tmp, transcript=[], answer=json.dumps({f"s:{i}": a for i in range(len(self.QA))}))
+               for a in self.ANSWERS]
+        said = [[r["detail"]["per_question"][i]["f1"] for r in per] for i in range(len(self.QA))]
         theirs = _upstream_says(self.drv, self.up, (
             "import json, os, sys, contextlib\nsys.path.insert(0, os.environ['NULLIUS_UPSTREAM'])\n"
             "with contextlib.redirect_stdout(sys.stderr):\n    from task_eval.evaluation import eval_question_answering\n"
@@ -481,18 +482,18 @@ class Locomo(unittest.TestCase):
         """For category 3 the answer field's part before ";" (the authors'
         reasoning follows it): the reference scores 1 where the whole field would not."""
         p = _driver(self, self.b, self.up, self.data)
-        said = {u: p.request("oracle", unit=u, dir=self.tmp)["answer"] for u in ("s:0", "s:1", "s:2")}
-        self.assertEqual(said, {"s:0": "Likely yes", "s:1": "a cat, two dogs", "s:2": "Paris; the capital"})
-        for u, a in said.items():
-            self.assertEqual(p.request("score", unit=u, dir=self.tmp, transcript=[], answer=a)["reward"], 1.0, u)
-        self.assertLess(p.request("score", unit="s:0", dir=self.tmp, transcript=[], answer=self.QA[0]["answer"])["reward"], 1.0)
+        said = json.loads(p.request("oracle", unit="s", dir=self.tmp)["answer"])
+        self.assertEqual({u: said[u] for u in ("s:0", "s:1", "s:2")}, {"s:0": "Likely yes", "s:1": "a cat, two dogs", "s:2": "Paris; the capital"})
+        self.assertEqual(p.request("score", unit="s", dir=self.tmp, transcript=[], answer=json.dumps(said))["reward"], 1.0)
+        whole = p.request("score", unit="s", dir=self.tmp, transcript=[], answer=json.dumps(dict(said, **{"s:0": self.QA[0]["answer"]})))
+        self.assertLess(whole["detail"]["per_question"][0]["f1"], 1.0)
 
     def test_the_reader_prompt_is_the_upstreams(self):
         seen, base = _fake_model(self, " May 2023 ")
         p = _driver(self, self.b, self.up, self.data)
-        said = [p.request("produce", unit=u, dir=self.tmp, recalled=[{"id": u, "memory": "DATE: 1 May\nA: hi"}], model="gpt-4o-mini",
-                          base_url=base, key="k")["answer"] for u in ("s:2", "s:3")]
-        self.assertEqual(said, ["May 2023", "May 2023"])          # stripped, as get_gpt_answers keeps it
+        said = p.request("produce", unit="s", dir=self.tmp, recalled=[{"id": u, "memory": "DATE: 1 May\nA: hi"} for u in ("s:2", "s:3")],
+                         model="gpt-4o-mini", base_url=base, key="k")["answer"]
+        self.assertEqual(json.loads(said), {"s:2": "May 2023", "s:3": "May 2023"})          # stripped, as get_gpt_answers keeps it
         theirs = _upstream_says(self.drv, self.up, (
             "import json, os, sys, contextlib\nsys.path.insert(0, os.environ['NULLIUS_UPSTREAM'])\n"
             "with contextlib.redirect_stdout(sys.stderr):\n    from task_eval import gpt_utils\n"
@@ -509,11 +510,11 @@ class Locomo(unittest.TestCase):
         the question, and an API error is retried (here, once)."""
         seen, base = _fake_model(self, "Paris", fail_first=1)
         p = _driver(self, self.b, self.up, self.data)
-        ask = dict(unit="s:2", dir=self.tmp, recalled=[{"id": "s:2", "memory": "M"}], base_url=base, key="k")
-        self.assertEqual(p.request("produce", model="gpt-3.5-turbo-0125", **ask)["answer"], "Paris")
+        ask = dict(unit="s", dir=self.tmp, recalled=[{"id": "s:2", "memory": "M"}], base_url=base, key="k")
+        self.assertEqual(json.loads(p.request("produce", model="gpt-3.5-turbo-0125", **ask)["answer"]), {"s:2": "Paris"})
         self.assertEqual(len(seen), 2)                           # the 500 asked again, as run_chatgpt does
         self.assertEqual([(s["model"], s["messages"][0]["role"]) for s in seen], [("gpt-3.5-turbo", "system")] * 2)
-        with self.assertRaisesRegex(jsonl.Failed, "ValueError"):
+        with self.assertRaisesRegex(jsonl.Failed, "answered none of the 1 questions; the first: ValueError"):
             p.request("produce", model="claude-sonnet", **ask)
         self.assertEqual(len(seen), 2)                           # nothing asked
 

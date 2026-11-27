@@ -64,6 +64,10 @@ with open(os.path.join(a.emb_dir, "calls.jsonl"), "a") as f:
     f.write(json.dumps({"script": os.path.basename(sys.argv[0]), "argv": sys.argv[1:]}) + "\\n")
 open(a.out_file.replace(".json", "_conv-1.pkl"), "wb").write(b"db")
 '''
+EVALUATION = '''
+def eval_question_answering(qas, key):
+    return [float(q[key] == q.get("answer", "Not mentioned")) for q in qas], 0, []
+'''
 GPT_UTILS = '''
 QA_PROMPT = "{}"
 def get_gpt_answers(in_data, out_data, prediction_key, args):
@@ -81,6 +85,8 @@ QA_PROMPT_CAT_5 = "five: {}"
 def get_cat_5_answer(said, key):
     return key[said]
 def run_chatgpt(query, **k):
+    if query.startswith("FAIL"):
+        raise ValueError("no text")
     return "a" if "(a) Not mentioned (b) x." in query and query.startswith("M\\n\\nfive: Adversarial Pick:") else "b" if "(a) x (b) Not mentioned." in query else ""
 '''
 
@@ -93,7 +99,7 @@ class Driver:
         up = os.path.join(root, "up")
         os.makedirs(os.path.join(up, "task_eval"))
         os.makedirs(os.path.join(up, "prompt_examples"))
-        files = {"task_eval/__init__.py": "", "task_eval/evaluation.py": "def eval_question_answering(*a): return [0.0], 0, []\n",
+        files = {"task_eval/__init__.py": "", "task_eval/evaluation.py": EVALUATION,
                  "task_eval/gpt_utils.py": GPT_UTILS, "task_eval/evaluate_qa.py": EVALUATE_QA,
                  "task_eval/get_facts.py": BUILD, "task_eval/get_session_summaries.py": BUILD, "openai.py": ""}
         for name, text in files.items():
@@ -118,18 +124,41 @@ class Driver:
 
 
 class Listing(unittest.TestCase):
-    def test_describe_gives_question_text_and_excludes_category_five(self):
+    def test_a_unit_is_a_conversation_and_counts_its_questions_without_category_five(self):
         with tempfile.TemporaryDirectory() as root:
             driver = Driver(root, {})
             try:
                 ids = driver.ask(op="units", dataset="locomo10")["units"]
                 got = driver.ask(op="describe", dataset="locomo10")
+                setup = driver.ask(op="setup", unit="conv-1", dir=root)
             finally:
                 driver.close()
-        self.assertEqual(got, {"units": {"conv-1:0": {"title": "What did A say?", "text": "What did A say?",
-                                                     "categories": {"category": "4"}}}})
+        self.assertEqual(got, {"units": {"conv-1": {"title": "A and B", "text": "1 sessions, 1 questions"}}})
         self.assertEqual(list(got["units"]), ids)
+        self.assertEqual([s["id"] for s in setup["memory"]["add"]], ["session_1"])       # the conversation, once
+        self.assertEqual(setup["memory"]["recall"], [{"id": "conv-1:0", "question": "What did A say?"}])
         self.assertIs(BENCH["driver"].get("describe"), True)
+
+
+class Memory(unittest.TestCase):
+    def test_a_question_the_reader_fails_is_left_unscored_and_the_others_go_on(self):
+        with tempfile.TemporaryDirectory() as root:
+            d = Driver(root, {}, "full")
+            try:
+                recalled = [{"id": "conv-1:0", "memory": "FAIL"}, {"id": "conv-1:1", "memory": "M"}]
+                said = d.ask(op="produce", unit="conv-1", dir=root, recalled=recalled, model="gpt-4", base_url="", key="")
+                answers = json.loads(said["answer"])
+                self.assertEqual(answers, {"conv-1:0": {"error": "ValueError: no text"}, "conv-1:1": "Not mentioned"})
+                score = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=said["answer"])
+                self.assertEqual((score["reward"], score["parts"]["n"], score["detail"]["scored"], score["detail"]["questions"]), (1.0, 1, 1, 2))
+                self.assertEqual(score["detail"]["per_question"][0]["error"], "ValueError: no text")
+                oracle = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=d.ask(op="oracle", unit="conv-1", dir=root)["answer"])
+                nop = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer="")
+                self.assertEqual((oracle["reward"], oracle["parts"]["n"], nop["reward"], nop["parts"]["n"]), (1.0, 2, 0.0, 2))
+                failed = d.ask(op="produce", unit="conv-1", dir=root, recalled=recalled[:1], model="gpt-4", base_url="", key="")
+                self.assertIn("answered none of the 1 questions", failed["error"])
+            finally:
+                d.close()
 
 
 class Retrieval(unittest.TestCase):
@@ -165,9 +194,11 @@ class Retrieval(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             d = Driver(root, {}, "full")
             try:
-                self.assertEqual(d.ask(op="units", dataset="locomo10")["units"], ["conv-1:0", "conv-1:1"])
-                said = d.ask(op="produce", unit="conv-1:1", dir=root, recalled=[{"memory": "M"}], model="gpt-4", base_url="", key="")
-                self.assertEqual((said, d.ask(op="oracle", unit="conv-1:1", dir=root)), ({"answer": "Not mentioned"},) * 2)
+                self.assertEqual(d.ask(op="units", dataset="locomo10")["units"], ["conv-1"])
+                self.assertEqual([q["id"] for q in d.ask(op="setup", unit="conv-1", dir=root)["memory"]["recall"]], ["conv-1:0", "conv-1:1"])
+                said = d.ask(op="produce", unit="conv-1", dir=root, recalled=[{"id": "conv-1:1", "memory": "M"}], model="gpt-4", base_url="", key="")
+                self.assertEqual(json.loads(said["answer"]), {"conv-1:1": "Not mentioned"})
+                self.assertEqual(json.loads(d.ask(op="oracle", unit="conv-1", dir=root)["answer"]), {"conv-1:0": "hi", "conv-1:1": "Not mentioned"})
                 unit = os.path.join(root, "unit")
                 os.makedirs(unit)
                 got = d.ask(op="answer", unit="conv-1", dir=unit, setup="original", model="gpt-4-turbo", base_url="", key="")
