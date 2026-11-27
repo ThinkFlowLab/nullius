@@ -773,6 +773,182 @@ class ARunAndItsJob(unittest.TestCase):
             self.assertEqual(self.shown(self.a), mine)
             self.assertEqual(self.shown(workspace.create(web.shared.WS_HOME, [newer.jobs], "N")), (newer.id, "newer", "stopped"))
 
+    def listed(self, ws):
+        """The Runs page of *ws*, opened: (its launches' keys, the Deletes it offers, its rows' states, what its
+        links offer, its pulse)."""
+        web.shared.open_workspace(ws)
+        html = self.client.get("/runs?view=launch").get_data(as_text=True)
+        return (re.findall(r'<section class="launch" data-launch="([^"]+)"', html), re.findall(r'action="(/launch/[^"]+/delete)"', html),
+                re.findall(r'class="la-state ([^"]+)"', html), [t for t in ("continue or stop", "Open this launch's recipe") if t in html],
+                self.client.get("/runs/pulse").get_json()["signature"])
+
+    def test_the_runs_page_lists_a_run_only_over_the_folder_it_writes(self):
+        """Another workspace's job of that name is a launch of its own: none of the run's state, links, Delete or pulse."""
+        key = f"run:{self.ex.id}"
+        delete = lambda **form: self.client.post(f"/launch/{key}/delete", data=form).status_code
+        self.ex._save()
+        b = self.other("b")
+        with patch.object(web.shared, "_require_csrf"), patch.object(web.shared, "_local_client", return_value=True):
+            self.assertEqual(self.listed(self.a)[:3], ([key], [f"/launch/{key}/delete"], ["stopped"]))
+            self.assertEqual(self.listed(b)[:4], (["inferred:job-x"], [], ["running"], []))
+            pulse = self.listed(b)[4]
+            self.ex.state = "paused"
+            self.assertEqual(self.listed(self.a)[2:4], (["not-run"], ["continue or stop", "Open this launch's recipe"]))
+            self.assertEqual(self.listed(b)[1:], ([], ["running"], [], pulse))
+            self.ex.state = "stopped"
+            self.assertEqual((delete(), os.path.isdir(self.ex.dir)), (404, True))             # B is open: not its launch
+            self.assertIn(f'data-launch="{key}"', self.client.get("/launches").get_data(as_text=True))
+            self.listed(self.a)
+            self.assertEqual((delete(), os.path.isdir(self.ex.dir), os.path.isdir(b.roots[0] + "/job-x")), (302, False, True))
+
+    def test_the_job_page_offers_the_delete_of_its_own_launch_only(self):
+        """A job shown from another workspace than the open one: not the open one's launch of that name."""
+        from nullius import execution
+        newer = self.run_in("newer", 2.0)
+        spaces = [(self.a, self.ex), (workspace.create(web.shared.WS_HOME, [newer.jobs], "N"), newer)]
+        with patch.dict(execution.EXECUTIONS, {newer.id: newer}):
+            for ex in (self.ex, newer):
+                ex._save()
+            for opened, _ in spaces:
+                web.shared.open_workspace(opened)
+                for shown, ex in spaces:
+                    html = self.client.get(f"/job/job-x?workspace={shown.name}").get_data(as_text=True)
+                    self.assertIn(f'data-stop="/run/{ex.id}/stop"', html)
+                    self.assertEqual(re.findall(r'href="/runs\?[^"]*delete=run(?:%3A|:)([^"&#]+)', html), [ex.id] if shown is opened else [],
+                                     (opened.label, shown.label))
+            # A's own Delete takes A's run, not the newer one of that name
+            with patch.object(web.shared, "_require_csrf"), patch.object(web.shared, "_local_client", return_value=True):
+                self.assertEqual(self.listed(self.a)[:2], ([f"run:{self.ex.id}"], [f"/launch/run:{self.ex.id}/delete"]))
+                asked = visible(self.client.get("/runs?view=launch").get_data(as_text=True))
+                self.assertIn("workspace A", asked); self.assertNotIn("workspace N", asked)
+                self.assertEqual(self.client.post(f"/launch/run:{self.ex.id}/delete").status_code, 302)
+                self.assertEqual((os.path.isdir(self.ex.dir), os.path.isdir(newer.dir)), (False, True))
+
+    def test_two_runs_that_plan_one_job_in_one_workspace_offer_no_delete(self):
+        """Neither wrote it: the block is the first record's, whichever is the newer, and no Delete takes either."""
+        from nullius import execution
+        later = self.run_in("later", 2.0)
+        for ex in (self.ex, later):
+            ex._save(); shutil.rmtree(Path(ex.jobs) / "job-x")
+        both = workspace.create(web.shared.WS_HOME, [self.ex.jobs, later.jobs], "Both")
+        for first, second in ((self.ex, later), (later, self.ex)):
+            with self.subTest(first=first.id), patch.dict(execution.EXECUTIONS, {first.id: first, second.id: second}, clear=True), \
+                 patch.object(web.shared, "_require_csrf"), patch.object(web.shared, "_local_client", return_value=True):
+                self.assertEqual(self.listed(both)[:2], ([f"run:{first.id}"], []))
+                self.assertEqual(self.client.post(f"/launch/run:{first.id}/delete").status_code, 302)
+                self.assertEqual([os.path.isdir(e.dir) for e in (first, second)], [True, True])
+                second.state = "paused"                                  # the block is the first record's: not paused
+                self.assertEqual(self.listed(both)[3], [])               # nor a link that would open the newer of the two
+                self.assertNotIn('href="/job/job-x', self.client.get("/runs?view=launch").get_data(as_text=True))
+                second.state = "stopped"
+
+    def followed(self, ws):
+        """Where the links of the one block of *ws* lead: (the runs its job links show, the recipes its recipe links open)."""
+        web.shared.open_workspace(ws)
+        html = self.client.get("/runs?view=launch").get_data(as_text=True)
+        strips = [re.search(r'data-stop="/run/([^"/]+)/stop"', self.client.get(unescape(u)).get_data(as_text=True))
+                  for u in re.findall(r'href="(/job/job-x[^"]*)"', html)]
+        return ({s and s.group(1) for s in strips}, {self.opened(unescape(u)) for u in re.findall(r'href="(/new-run\?run=[^"]*)"', html)})
+
+    def test_a_row_not_written_yet_opens_its_own_run_not_a_newer_one_elsewhere(self):
+        from nullius import execution
+        later = self.run_in("later", 2.0)
+        for ex in (self.ex, later):
+            shutil.rmtree(Path(ex.jobs) / "job-x")
+        self.ex.state = "paused"
+        with patch.dict(execution.EXECUTIONS, {later.id: later}):
+            self.assertEqual(self.listed(self.a)[3], ["continue or stop", "Open this launch's recipe"])
+            self.assertEqual(self.followed(self.a), ({self.ex.id}, {(200, "runs")}))
+
+    def test_two_folders_of_one_job_in_one_workspace_show_the_first_and_offer_no_delete(self):
+        """The row, its link and its state are the first root's; whose launch it is cannot be told: no Delete, no recipe."""
+        from nullius import execution
+        newer = self.run_in("newer", 2.0)
+        with patch.dict(execution.EXECUTIONS, {newer.id: newer}), patch.object(web.shared, "_require_csrf"), \
+             patch.object(web.shared, "_local_client", return_value=True):
+            for first, second in ((self.ex, newer), (newer, self.ex)):
+                first._save(); second._save()
+                second.state, first.state = "failed", "stopped"
+                ws = workspace.create(web.shared.WS_HOME, [first.jobs, second.jobs], f"first {first.id}")
+                self.assertEqual(self.listed(ws)[:4], ([f"run:{first.id}"], [], ["stopped"], []))
+                self.assertEqual(self.followed(ws), ({first.id}, set()))
+                self.assertEqual(self.client.post(f"/launch/run:{first.id}/delete").status_code, 302)
+                self.assertEqual([os.path.isdir(e.dir) for e in (first, second)], [True, True])
+
+    def test_a_sibling_not_written_yet_opens_from_a_workspace_that_holds_the_written_job_alone(self):
+        self.ex.plan.jobs.append({"name": "job-y"})
+        ws = self.other("linked", Path(self.ex.jobs) / "job-x")
+        web.shared.open_workspace(ws)
+        html = self.client.get("/runs?view=launch").get_data(as_text=True)
+        links = [unescape(u) for u in re.findall(r'href="(/job/job-y[^"]*)"', html)]
+        self.assertTrue(links)
+        for u in links:
+            self.assertIn(f'data-stop="/run/{self.ex.id}/stop"', self.client.get(u).get_data(as_text=True), u)
+        # another run that plans job-y, listed first, joins the workspace by its own written job: the saved link opens neither
+        from nullius import execution
+        b = execution.Execution(execution.Plan(name="b", script="true", jobs=[{"name": "job-b"}, {"name": "job-y"}], recipe={}),
+                                root=str(self.tmp / "b"), run=lambda *a, **k: (0, ""))
+        b.id, b.started, b.state = "run-b", 2.0, "paused"
+        job_with_feed(Path(b.jobs), "job-b")
+        with patch.dict(execution.EXECUTIONS, {b.id: b, self.ex.id: self.ex}, clear=True), patch.object(web.shared, "_require_csrf"):
+            self.assertEqual(self.client.post("/use-path", data={"path": str(Path(b.jobs) / "job-b"), "into": ws.name}).status_code, 302)
+            self.assertNotIn('href="/job/job-y', self.client.get("/runs?view=launch").get_data(as_text=True))
+            for u in links:
+                r = self.client.get(u)
+                self.assertEqual((r.status_code, "data-stop=" in r.get_data(as_text=True)), (404, False), u)
+
+    def test_the_pulse_moves_with_the_run_of_each_folder_listed(self):
+        """Two folders of one name, each a root: either one's run moves the pulse, a run of that name elsewhere does not."""
+        from nullius import execution
+        second, outside = self.run_in("second", 2.0), self.run_in("outside", 3.0)
+        pulse = lambda: self.client.get("/runs/pulse").get_json()["signature"]
+        with patch.dict(execution.EXECUTIONS, {second.id: second, outside.id: outside}):
+            for n, order in enumerate(((self.ex, second), (second, self.ex))):
+                web.shared.open_workspace(workspace.create(web.shared.WS_HOME, [str(Path(e.jobs) / "job-x") for e in order], f"roots {n}"))
+                for ex, moves in ((self.ex, True), (second, True), (outside, False)):
+                    before = pulse()
+                    ex.state = "running"
+                    self.assertEqual(pulse() != before, moves, (n, ex.id))
+                    ex.state = "stopped"
+
+    def test_two_folders_of_one_job_count_and_check_as_the_first_and_list_each_as_it_is(self):
+        """An agent's and a nop's folder of one id: the launch, Compare and the workspace's counts read the first;
+        All runs reads each folder, and the pulse follows the first one's run."""
+        from nullius import execution
+        nop = self.run_in("nop", 2.0)
+        cfg = Path(nop.jobs) / "job-x" / "config.json"
+        write_json(cfg, dict(json.loads(cfg.read_text()), agents=[{"name": "nop"}]))
+        nop.state = "failed"
+        with patch.dict(execution.EXECUTIONS, {nop.id: nop}):
+            for first, second in ((self.ex, nop), (nop, self.ex)):
+                ws = workspace.create(web.shared.WS_HOME, [first.jobs, second.jobs], f"first {first.id}")
+                web.shared.open_workspace(ws)
+                html = self.client.get("/runs?view=launch").get_data(as_text=True)
+                block = html[html.index('<section class="launch"'):html.index("</section>", html.index('<section class="launch"'))]
+                check = first is nop
+                self.assertEqual(('data-control="nop"' in block, "task check" in block), (check, check), first.id)
+                self.assertEqual(sorted(re.findall(r'title="This run was (\w+) at', html)), ["failed", "stopped"])     # All runs: each its own
+                self.assertIn('data-runs="1"', html)                                    # the header: the agent's folder, wherever it is
+                with web.app.test_request_context("/"):
+                    self.assertEqual([bool(web.runs.feasibility.control_of(j)) for _, j, _, _ in web.runs.offered()], [check])
+                    web.workspaces._COUNTS.clear()
+                    self.assertEqual(web.workspaces._counts(ws, (), ()), {"runs": int(not check), "checks": int(check)})
+                pulse = self.client.get("/runs/pulse").get_json()["signature"]
+                first.state = "running"
+                self.assertNotEqual(self.client.get("/runs/pulse").get_json()["signature"], pulse)
+                first.state = "failed" if check else "stopped"
+
+    def test_a_row_reads_the_end_of_the_record_that_placed_it(self):
+        """Two records write one folder: the block, its row's state and its withheld Delete are the first's, whichever is newer."""
+        from nullius import execution
+        later = self.run_in("later", 2.0)
+        shutil.rmtree(later.jobs); os.symlink(self.ex.jobs, later.jobs)
+        later.state = "failed"
+        for first, second in ((self.ex, later), (later, self.ex)):
+            with self.subTest(first=first.id), patch.dict(execution.EXECUTIONS, {first.id: first, second.id: second}, clear=True):
+                first._save(); second._save()
+                self.assertEqual(self.listed(self.a)[:3], ([f"run:{first.id}"], [], [first.state]))
+
     def opened(self, url):
         """(status, the recipe the builder opens at *url*)."""
         r = self.client.get(url)

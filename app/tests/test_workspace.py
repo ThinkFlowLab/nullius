@@ -511,8 +511,8 @@ class Cache(unittest.TestCase):
         with patch.object(workspace, "COUNTS_VERSION", workspace.COUNTS_VERSION + 1):
             self.assertIsNone(workspace.stored_counts(self.ws, key))
         path = os.path.join(self.ws.jobs_dir, "counts.json")
-        for bad in ("[1]", "{", '{"version": 1, "key": "x"}',
-                    json.dumps({"version": 1, "key": workspace._key_digest(key), "counts": {"runs": "3"}})):
+        for bad in ("[1]", "{", json.dumps({"version": workspace.COUNTS_VERSION, "key": "x"}),
+                    json.dumps({"version": workspace.COUNTS_VERSION, "key": workspace._key_digest(key), "counts": {"runs": "3", "checks": 1}})):
             with self.subTest(bad=bad):
                 with open(path, "w", encoding="utf-8") as fh:
                     fh.write(bad)

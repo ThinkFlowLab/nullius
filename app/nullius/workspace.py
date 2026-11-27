@@ -530,7 +530,7 @@ def _write_index(ws: Workspace, index: dict) -> None:
     ondisk.write_whole(_index_path(ws), lambda fh: json.dump(index, fh, ensure_ascii=False, indent=1))
 
 
-COUNTS_VERSION = 1   # bump when what counts.json holds changes
+COUNTS_VERSION = 2   # bump when what counts.json holds changes
 
 
 def _key_digest(key) -> str:

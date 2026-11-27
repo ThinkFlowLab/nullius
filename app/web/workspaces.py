@@ -76,9 +76,9 @@ def _counts(ws, recs, cat) -> dict:
     if stored is not None:
         _COUNTS[ws.name] = (key, stored)
         return stored
-    jobs, _, _, groups = runs_web._grouped(None if is_open else ws)
-    by_id = {j.job_id: j for j in jobs}
-    tallies = [runs_web._tally(g, by_id) for g in groups]
+    jobs, have, _, groups, runs, _ = runs_web._grouped(None if is_open else ws)
+    by_id = runs_web._first(jobs, have)
+    tallies = [runs_web._tally(g, by_id, runs.get) for g in groups]
     counts = {"runs": sum(t["n_runs"] for t in tallies), "checks": sum(t["n_checks"] for t in tallies)}
     if key is not None and all(j.state == "finished" for j in jobs):
         _COUNTS[ws.name] = (key, counts)

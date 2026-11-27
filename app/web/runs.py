@@ -42,7 +42,7 @@ def home():
 def index():
     if shared.STATE["workspace"] is None:
         return render_template("runs/start.html", workspaces=workspace.list_all(shared.WS_HOME))
-    jobs, have, mine, grouped = _grouped()
+    jobs, have, mine, grouped, runs, twice = _grouped()
     # Runs started from the builder whose job Harbor has not written yet.
     preparing = [(jid, e) for e in mine if e.state in execution.ALIVE for jid in e.summary()["job_ids"] if jid not in have]
     # a launch whose runs wrote no job yet (or never will: refused, stopped) is still shown
@@ -51,15 +51,18 @@ def index():
                                workspaces=workspace.list_all(shared.WS_HOME))
     # A Harbor killed by a Stop (or dead with the run) leaves its result
     # record saying trials are running; the runner's record says otherwise.
-    ended = {j.job_id: shared.ended_for(j.job_id, j) for j in jobs}
+    # Each folder by itself: of two folders of one id, the first is its launch's (``_first``), the other its own run's.
+    by_id, key = _first(jobs, have), lambda j: (j.job_id, j.dir)
+    ended = {key(j): shared.ended_for(j.job_id, j) if by_id[j.job_id] is not j else
+             runs[j.job_id].job_state(j.job_id) if j.job_id in runs else None for j in jobs}
     # The header, the chips and the mix bar describe the agents' trials. A
     # control (nop, oracle) is a check on the tasks, not a competitor: it is
     # listed on its own line as behaved or not (`feasibility.summary_of`),
     # and its trials never enter the totals.
-    verdicts = {j.job_id: feasibility.summary_of(j) for j in jobs}
+    verdicts = {key(j): feasibility.summary_of(j) for j in jobs}
     verdicts = {i: replace(v, running=False) if v and ended[i] else v for i, v in verdicts.items()}
-    agents = [j for j in jobs if verdicts[j.job_id] is None]
-    controls = [(j, verdicts[j.job_id]) for j in jobs if verdicts[j.job_id] is not None]
+    agents = [j for j in jobs if verdicts[key(j)] is None]
+    controls = [(j, verdicts[key(j)]) for j in jobs if verdicts[key(j)] is not None]
     totals = {k: 0 for k in classify.ORDER}
     n_trials = 0
     for j in agents:
@@ -71,7 +74,7 @@ def index():
     used = {}
     for j in jobs:
         entry = used.setdefault(j.dataset, {"runs": 0, "trials": 0})
-        if verdicts[j.job_id] is None:          # agents only, as the header counts them
+        if verdicts[key(j)] is None:          # agents only, as the header counts them
             entry["runs"] += 1
             entry["trials"] += len(j.trials)
     datasets = [
@@ -87,8 +90,8 @@ def index():
         "model": sorted({(j.model_name, j.model_name) for j in jobs}),
         "agent": sorted({(j.agent_label, j.agent_label or "—") for j in jobs}),
     }
-    by_id = {j.job_id: j for j in jobs}
-    groups = [_launch_view(g, by_id, verdicts, ended) for g in grouped]
+    first_verdicts, first_ended = ({i: d[key(j)] for i, j in by_id.items()} for d in (verdicts, ended))
+    groups = [_launch_view(g, by_id, first_verdicts, first_ended, runs.get, twice) for g in grouped]
     view = request.args.get("view") if request.args.get("view") in ("launch", "all") else "launch"
     states = {}
     for g in groups:
@@ -105,25 +108,46 @@ def index():
 
 
 def _grouped(ws=None):
-    """The open workspace's jobs (less those a merge stands for), the ids of all
-    it parsed, the run records that belong to it, and the launches By launch
-    shows: the runs grouped by the launch that made them (nullius.runs.launches)
-    - the builder's run record, else the same dataset within half an hour.
+    """The open workspace's jobs (less those a merge stands for), the folder of
+    each it parsed by id, the run records that belong to it, the launches By
+    launch shows: the runs grouped by the launch that made them
+    (nullius.runs.launches) - the builder's run record, else the same dataset
+    within half an hour - each of their jobs' run, the record that placed it
+    in its launch, and the jobs whose run is not known: two of those records
+    name it, or two folders here have its id (the first is the one read).
     ``ws``: another workspace's, read from its cache without opening it."""
     jobs = shared._load_jobs() if ws is None else workspace.load_jobs(ws, ws.job_roots or ws.roots, shared.run_ends())
-    have = {j.job_id for j in jobs}
+    have, twice = {}, set()
+    for j in jobs:
+        if have.setdefault(j.job_id, j.dir) != j.dir and os.path.realpath(have[j.job_id]) != os.path.realpath(j.dir):
+            twice.add(j.job_id)
     # The run records are the app's, not the workspace's: only those launched
     # into this workspace's roots, or with a job already written here, belong.
     real = _real_roots(None if ws is None else list(ws.roots) + list(ws.job_roots))
     mine = [e for e in execution.EXECUTIONS.values() if _launched_here(e, have, real)]
     merged = launches.merged_sources(jobs)
     jobs = [j for j in jobs if j.job_id not in merged]
-    return jobs, have, mine, launches.group(jobs, {e.id: _record(e, merged) for e in mine})
+    records = {e.id: _record(e, merged, have) for e in mine}
+    runs = {}
+    for e in mine:                                # as launches.group places them: the first record that names a job
+        twice.update(n for n in records[e.id][1] if runs.setdefault(n, e) is not e)
+    return jobs, have, mine, launches.group(list(_first(jobs, have).values()), records), runs, twice
 
 
-def _record(ex, merged=()) -> tuple:
-    """A run record as ``launches.group`` reads it, less the jobs a merge stands for."""
-    names = [str(x.get("name")) for x in ex.plan.jobs if str(x.get("name")) not in merged]
+def _first(jobs, have) -> dict:
+    """Job id -> job, of two folders of one id the first (``have``): the one a launch lists and a link opens."""
+    return {j.job_id: j for j in jobs if have[j.job_id] == j.dir}
+
+
+def _writes(ex, job_id, have) -> bool:
+    """Whether the folder a workspace holds under that name, ``have``, is the one this run writes."""
+    return job_id in have and execution.writing([ex], job_id, have[job_id]) is not None
+
+
+def _record(ex, merged=(), have=()) -> tuple:
+    """A run record as ``launches.group`` reads it, less the jobs a merge stands
+    for and those a workspace holds, ``have``, in a folder that is not the run's."""
+    names = [n for n in (str(x.get("name")) for x in ex.plan.jobs) if n not in merged and (n not in have or _writes(ex, n, have))]
     return ex.plan.name, names, ex.started, {str(x.get("launch") or "") for x in ex.plan.jobs}
 
 
@@ -152,14 +176,14 @@ def _every() -> tuple:
 _EVERY: dict = {}       # "last": (key, _every()) of the last call that found every job ended
 
 
-def _tally(g, by_id) -> dict:
+def _tally(g, by_id, owner=None) -> dict:
     """A launch's runs, its checks (nop, oracle) apart, as the Runs page and
     the Launches page count them: its jobs written (less those a merge stands
     for) and those its records name and that are not written yet, each shard
     one."""
     merged = launches.merged_sources([by_id[i] for i in g.job_ids])
     written, pending = [i for i in g.job_ids if i not in merged], [i for i in g.pending if i not in merged]
-    checks = sum(1 for i in written if feasibility.control_of(by_id[i])) + sum(1 for i in pending if _control_planned(i))
+    checks = sum(1 for i in written if feasibility.control_of(by_id[i])) + sum(1 for i in pending if _control_planned(i, owner))
     return {"n_runs": len(written) + len(pending) - checks, "n_checks": checks}
 
 
@@ -173,9 +197,9 @@ def _real_roots(roots=None) -> set:
 def _launched_here(ex, have, real) -> bool:
     """A run record belongs to a workspace when its job root is one of the
     workspace's roots, ``real`` (``_real_roots``; a Run adopts it there), or
-    one of its jobs is here, ``have``. Each record's root is resolved once per
-    request, however many workspaces ask."""
-    if any(str(x.get("name")) in have for x in ex.plan.jobs):
+    the folder of one of its jobs is here, ``have``. Each record's root is
+    resolved once per request, however many workspaces ask."""
+    if any(_writes(ex, str(x.get("name")), have) for x in ex.plan.jobs):
         return True
     jobs_dir = getattr(ex, "jobs", None)
     if not jobs_dir:
@@ -197,13 +221,13 @@ def _said(state) -> str:
     return "finished" if state == "done" else state
 
 
-def _state_of(job_id, j, ended):
+def _state_of(job_id, j, ended, owner):
     """What a run is doing now, in the words the block shows. The runner's
     record wins over Harbor's result record, which a Stop leaves saying
     "running"."""
     if j is not None and ended.get(job_id):
         return _said(ended[job_id][0])
-    ex = shared.run_for(job_id, j)
+    ex = owner(job_id)
     if ex is not None and ex.state in execution.ALIVE:
         return ex.live_state(job_id)
     if j is None:
@@ -219,11 +243,11 @@ def _state_of(job_id, j, ended):
     return "finished"
 
 
-def _control_planned(job_id) -> str:
+def _control_planned(job_id, owner=None) -> str:
     """``nop`` or ``oracle`` when a job not written yet is one of the run's
     controls by its plan, else ''. A standard plan names a declared control
     by that word; its setups are ``original`` or ``model``, never one."""
-    ex = shared.run_for(job_id)
+    ex = (owner or shared.run_for)(job_id)
     return "" if ex is None else next((_control_of(j) for j in ex.plan.jobs if str(j.get("name")) == job_id), "")
 
 
@@ -260,12 +284,11 @@ def _most_telling(states) -> str:
     return min(states, default="", key=lambda s: _TELLING.index(s) if s in _TELLING else len(_TELLING))
 
 
-def _host_of(job_id) -> str:
-    ex = shared.run_for(job_id)
+def _host_of(ex) -> str:
     return "" if ex is None else ex.plan.host.label if ex.plan.host else "this machine"
 
 
-def _fold(rows, ended, control=False) -> list:
+def _fold(rows, ended, owner, control=False) -> list:
     """A participant's shards as one row, ``shards`` its shards' own rows, when
     it has two or more and ``cli merge`` would put them together: their numbers
     are the merged job's (``launches.fold``). Missing evidence is not a zero:
@@ -290,7 +313,7 @@ def _fold(rows, ended, control=False) -> list:
         for r in group:
             m = _SHARD.search(r["job_id"])
             r["shard"] = index.get(r["job_id"]) or (int(m.group(1)) if m else None)
-            r["host"] = _host_of(r["job_id"])
+            r["host"] = _host_of(owner(r["job_id"]))
         group.sort(key=lambda r: (r["shard"] is None, r["shard"] or 0, r["job_id"]))
         states = [r["state"] for r in group]
         state = _most_telling(states)
@@ -314,35 +337,36 @@ def offered(ws=None) -> list:
     """The runs Compare offers from the open workspace (or ``ws``): (launch, run, the job ids it stands for, its
     shards' rows as Runs lists them), newest launch first, checks included, a participant's shards one run as
     the Runs page folds them."""
-    jobs, _, _, grouped = _grouped(ws)
-    by_id = {j.job_id: j for j in jobs}
+    jobs, have, _, grouped, runs, _ = _grouped(ws)
+    by_id = _first(jobs, have)
     out = []
     for g in grouped:
         rows = [{"job": by_id[i], "job_id": i, "state": "finished", "control": feasibility.control_of(by_id[i])} for i in g.job_ids]
-        for r in _fold(rows, {}):
+        for r in _fold(rows, {}, runs.get):
             out.append((g, r["job"], [s["job_id"] for s in r.get("shards", [r])] + list(r["job"].merged_from), r.get("shards", [])))
     return out
 
 
-def _launch_view(g, by_id, verdicts, ended) -> dict:
+def _launch_view(g, by_id, verdicts, ended, owner, twice=()) -> dict:
     """One launch as its block draws it: the task checks, the agents ranked on
-    one scale, the runs its record named that Harbor has not written yet."""
+    one scale, the runs its record named that Harbor has not written yet.
+    ``owner``, ``twice``: as ``_runs_of``'s."""
     jobs = [by_id[i] for i in g.job_ids]
     checks = [(j, verdicts[j.job_id]) for j in jobs if verdicts[j.job_id] is not None]
-    rows = [{"job": j, "job_id": j.job_id, "state": _state_of(j.job_id, j, ended)} for j in jobs if verdicts[j.job_id] is None]
-    waiting = [(i, c) for i, c in ((i, _control_planned(i)) for i in g.pending) if c]
-    rows += [{"job": None, "job_id": i, "state": _state_of(i, None, ended)} for i in g.pending if i not in dict(waiting)]
+    rows = [{"job": j, "job_id": j.job_id, "state": _state_of(j.job_id, j, ended, owner)} for j in jobs if verdicts[j.job_id] is None]
+    waiting = [(i, c) for i, c in ((i, _control_planned(i, owner)) for i in g.pending) if c]
+    rows += [{"job": None, "job_id": i, "state": _state_of(i, None, ended, owner), "twice": i in twice} for i in g.pending if i not in dict(waiting)]
     for r in rows:
         if r["state"] == "refused":
-            r["why"] = shared.run_for(r["job_id"]).refused(r["job_id"])
-    rows = _fold(rows, ended)
+            r["why"] = owner(r["job_id"]).refused(r["job_id"])
+    rows = _fold(rows, ended, owner)
     rate = lambda r: r["job"].adjusted_solve_rate if r["job"] is not None and r["job"].adjusted_solve_rate is not None else -1.0
     rows.sort(key=lambda r: (_STATE_ORDER.get(r["state"], 9), -rate(r), r["job_id"]))
     # The controls are rows of their own at the top of the table, written or still to come, nop before oracle,
     # kept once they end.
-    controls = [{"job": j, "job_id": j.job_id, "state": _state_of(j.job_id, j, ended), "control": v.control, "verdict": v} for j, v in checks]
-    controls += [{"job": None, "job_id": i, "state": _state_of(i, None, ended), "control": c, "verdict": None} for i, c in waiting]
-    controls = _fold(controls, ended, control=True)
+    controls = [{"job": j, "job_id": j.job_id, "state": _state_of(j.job_id, j, ended, owner), "control": v.control, "verdict": v} for j, v in checks]
+    controls += [{"job": None, "job_id": i, "state": _state_of(i, None, ended, owner), "control": c, "verdict": None, "twice": i in twice} for i, c in waiting]
+    controls = _fold(controls, ended, owner, control=True)
     controls.sort(key=lambda r: (feasibility.CONTROLS.index(r["control"]) if r["control"] in feasibility.CONTROLS else 9, r["job_id"]))
     # judged over every shard: a folded control's verdict is over all its trials, and what one shard lacks is said of that shard
     checks = [(r["job"], r["verdict"]) for r in controls if r["verdict"] is not None]
@@ -372,16 +396,16 @@ def _launch_view(g, by_id, verdicts, ended) -> dict:
     counts = {}
     for r in leaves(controls + rows):
         counts[r["state"]] = counts.get(r["state"], 0) + 1
-    ex = shared.run_for((g.job_ids + g.pending)[0])
-    return {"gone": _deletion(_runs_of(g)),
+    ex = owner((g.job_ids + g.pending)[0])
+    known = not set(twice) & set(g.job_ids + g.pending)         # else the links that open a run would open another
+    return {"gone": _deletion(_runs_of(g, owner, twice)),
             "launch": g, "checks": checks, "verdict": verdict,
             "controls": controls, "checked": checked, "agents": rows,
             "n_tasks": n_tasks, "compare": finished,
-            **_tally(g, by_id),
-            "paused": next((i for i in g.job_ids + g.pending
-                            if (shared.run_for(i) is not None and shared.run_for(i).state == "paused")), None),
+            **_tally(g, by_id, owner),
+            "paused": next((i for i in g.job_ids + g.pending if known and owner(i) is not None and owner(i).state == "paused"), None),
             "summary": " · ".join(f"{n} {s}" for s, n in sorted(counts.items(), key=lambda kv: _STATE_ORDER.get(kv[0], 9))),
-            "recipe": (g.job_ids + g.pending)[0] if g.source == "record" and ex is not None and ex.plan.recipe else None,
+            "recipe": (g.job_ids + g.pending)[0] if known and g.source == "record" and ex is not None and ex.plan.recipe else None,
             "feasibility": checks[0][0].job_id if checks else None,
             "dataset_title": shared.dataset_title(g.dataset) if g.dataset and g.dataset != "mixed" else (g.dataset or "—")}
 
@@ -394,8 +418,12 @@ def _roots_pulse() -> str:
     at no other time, so a page that polls it reloads only for a reason.
     Nothing is parsed; this is a handful of stats per job."""
     dirs = parse.find_job_dirs(shared.STATE["job_roots"] or [])
-    have = {os.path.basename(d) for d in dirs}
-    marks = [(f"run:{e.id}", e.state, 0) for e in execution.EXECUTIONS.values() if _launched_here(e, have, _real_roots())]
+    have = {os.path.basename(d): d for d in reversed(dirs)}        # of two of one name the first, as ``_grouped``
+    # the other folders of a name: All runs lists each with its own run's end
+    others = [(os.path.basename(d), d) for d in dirs if have[os.path.basename(d)] != d]
+    names = lambda e: {str(x.get("name")) for x in e.plan.jobs}
+    marks = [(f"run:{e.id}", e.state, 0) for e in execution.EXECUTIONS.values()
+             if _launched_here(e, have, _real_roots()) or any(n in names(e) and _writes(e, n, {n: d}) for n, d in others)]
     for d in dirs:
         feed = os.path.join(d, "events.jsonl")
         marks.append((os.path.basename(d), os.path.isfile(os.path.join(d, "result.json")),
@@ -567,6 +595,11 @@ def job(job_id):
     # every job, not the one alone: its Delete (_deletable) walks the workspace anyway, and one folder first costs more
     j = shared._find_job(shared._jobs_for_request(), job_id)
     ex = shared.run_on_page(job_id, j)
+    if j is None and ex is None and request.args.get("workspace"):
+        # not to be written under that workspace's roots: a run a written sibling brought there, as its Runs page
+        # lists it, unless two of its runs name the job
+        runs, twice = _grouped(shared._record_workspace())[4:]
+        ex = None if job_id in twice else runs.get(job_id)
     ended = ex.job_state(job_id) if ex is not None else None
     # this job's own state beside the run's: ended, or a part still to come while another runs
     own = ((execution.NOT_RUN, None) if ex is not None and ex.state not in execution.ALIVE and ex.never_ran(job_id)
@@ -711,13 +744,14 @@ def job_task_set(job_id):
     return redirect(url_for("benchmark_tasks", key=bench["key"], dataset=entry["dataset"], set=entry["name"]))
 
 
-def _runs_of(g, owner=None) -> list:
+def _runs_of(g, owner=None, twice=()) -> list:
     """The runs Nullius made that hold every row of the launch *g*, and no job
-    outside it; [] when a row is not one of theirs. ``owner``: a job's run."""
+    outside it; [] when a row is not one of theirs. ``owner``: a job's run.
+    ``twice``: the jobs whose run is not known (``_grouped``): []."""
     owner = owner or shared.run_for
     ids = g.job_ids + g.pending
     runs = list({id(e): e for e in map(owner, ids)}.values())
-    if None in runs or any(not {str(x.get("name")) for x in e.plan.jobs} <= set(ids) for e in runs):
+    if None in runs or set(twice) & set(ids) or any(not {str(x.get("name")) for x in e.plan.jobs} <= set(ids) for e in runs):
         return []
     return runs
 
@@ -749,8 +783,10 @@ def _deletable(job_id, ex):
     """The key of this job's launch when the Runs page offers its Delete, else None."""
     if ex is None or ex.state in execution.ALIVE:
         return None
-    g = next((g for g in _grouped()[3] if job_id in g.job_ids + g.pending), None)
-    return g.key if g is not None and _deletion(_runs_of(g)) else None
+    grouped, runs, twice = _grouped()[3:]
+    g = next((g for g in grouped if job_id in g.job_ids + g.pending), None)
+    # a job shown from another workspace is not the open one's of that name
+    return g.key if g is not None and runs.get(job_id) is ex and _deletion(_runs_of(g, runs.get, twice)) else None
 
 
 def _run_state(e) -> str:
@@ -894,10 +930,11 @@ def launch_delete(key):
     if shared.STATE["workspace"] is None and not every:
         abort(404)
     back = url_for("launches_page") if every else url_for("index", view="launch")
-    g = next((g for g in (_every()[1] if every else _grouped()[3]) if g.key == key), None)
+    grouped, here, twice = (_every()[1], {}, ()) if every else _grouped()[3:]
+    g = next((g for g in grouped if g.key == key), None)
     if g is None:
         abort(404)
-    runs = _runs_of(g)
+    runs = _runs_of(g, None if every else here.get, twice)
     if not runs:
         flash(f"{g.title} has runs that Nullius did not start: it cannot be deleted here.", "error")
         return redirect(back)
