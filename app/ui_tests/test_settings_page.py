@@ -1210,6 +1210,9 @@ class StartUp(unittest.TestCase):
             os.environ.update(env)
             return web.parser().parse_args(list(argv))
 
+    def test_help_names_the_command_as_typed(self):
+        self.assertTrue(web.parser().format_help().startswith("usage: nullius serve "))
+
     def test_app_host_and_app_port_are_the_defaults_and_the_flags_win(self):
         a = self.args(APP_HOST="0.0.0.0", APP_PORT="6000")
         self.assertEqual((a.host, a.port), ("0.0.0.0", 6000))

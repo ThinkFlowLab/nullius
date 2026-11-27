@@ -28,6 +28,14 @@
     },
     "participant": true,
     "unit_end": true,
+    "describe": true,
+    "list_command": [
+      "python3",
+      "{here}/driver.py",
+      "{here}/agents.json",
+      "{here}/nop.py",
+      "{here}/runner.py"
+    ],
     "task_given": true
   },
   "mcp_servers": {
@@ -50,6 +58,7 @@
     {
       "id": "test_nogdrive",
       "label": "Without Google Drive",
+      "subset_of": "test_all",
       "summary": "The upstream's test_nogdrive.json: every task but the 8 that need a Google account's credentials.",
       "path": "evaluation_examples/test_nogdrive.json",
       "sha256": "fcb9497e93a8986407345d3012c872c9c2fed253420730fbea64ccfcace67dbb",
@@ -66,6 +75,7 @@
     {
       "id": "test_small",
       "label": "Small",
+      "subset_of": "test_all",
       "summary": "The upstream's test_small.json: a few tasks of each domain.",
       "path": "evaluation_examples/test_small.json",
       "sha256": "bb29275171b78728d71825b125af311d74e66bb2a6d693c45c497d380b1fc640",
@@ -74,6 +84,7 @@
     {
       "id": "test_infeasible",
       "label": "Infeasible",
+      "subset_of": "test_all",
       "summary": "The upstream's test_infeasible.json: tasks that cannot be done, passed by answering FAIL.",
       "path": "evaluation_examples/test_infeasible.json",
       "sha256": "1b447d0462b1bdac4b660e0dd6e6add6d01c17a9e684702c701abcffda409abb",
@@ -82,7 +93,24 @@
   ],
   "units": {
     "noun": "task",
-    "nouns": "tasks"
+    "nouns": "tasks",
+    "categories": {
+      "domain": {
+        "label": "App",
+        "names": {
+          "chrome": "Chrome",
+          "gimp": "GIMP",
+          "libreoffice_calc": "LibreOffice Calc",
+          "libreoffice_impress": "LibreOffice Impress",
+          "libreoffice_writer": "LibreOffice Writer",
+          "multi_apps": "Several apps",
+          "os": "OS",
+          "thunderbird": "Thunderbird",
+          "vlc": "VLC",
+          "vs_code": "VS Code"
+        }
+      }
+    }
   },
   "score": {
     "kind": "score",
@@ -90,7 +118,7 @@
   },
   "setups": {
     "original": {
-      "summary": "OSWorld's own agents as published: the agent option's script (scripts/python/run_*.py) on the task, with its own prompts, parser, history and step limit, asking one of the models it is published with, on the docker provider's VM, scored by DesktopEnv.evaluate.",
+      "summary": "OSWorld runs the selected agent's own script (scripts/python/run_*.py) on the task, with its published prompts, parser, history and step limit.\n\nThe agent uses one of the models it is published with, on the Docker provider's VM.\n\nDesktopEnv.evaluate scores the result.",
       "models": [
         "MiniMax-M3",
         "gpt-4o",
@@ -263,6 +291,7 @@
         {
           "id": "test_nogdrive",
           "label": "Without Google Drive",
+          "subset_of": "test_all",
           "summary": "The upstream's test_nogdrive.json: every task but the 8 that need a Google account's credentials. The live MBTA booking task is retired at this release.",
           "path": "evaluation_examples/test_nogdrive.json",
           "sha256": "9270c11fe809eb4c4e35a78a47cdb50717ea76557c1b9164c183e8e8b8d9ce91",
@@ -279,6 +308,7 @@
         {
           "id": "test_small",
           "label": "Small",
+          "subset_of": "test_all",
           "summary": "The upstream's test_small.json: a few tasks of each domain.",
           "path": "evaluation_examples/test_small.json",
           "sha256": "bb29275171b78728d71825b125af311d74e66bb2a6d693c45c497d380b1fc640",
@@ -287,6 +317,7 @@
         {
           "id": "test_infeasible",
           "label": "Infeasible",
+          "subset_of": "test_all",
           "summary": "The upstream's test_infeasible.json: tasks that cannot be done, passed by answering FAIL.",
           "path": "evaluation_examples/test_infeasible.json",
           "sha256": "1b447d0462b1bdac4b660e0dd6e6add6d01c17a9e684702c701abcffda409abb",
@@ -309,11 +340,19 @@
         },
         "participant": true,
         "unit_end": true,
+        "describe": true,
+        "list_command": [
+          "python3",
+          "{here}/driver.py",
+          "{here}/agents.json",
+          "{here}/nop.py",
+          "{here}/runner.py"
+        ],
         "task_given": true
       },
       "setups": {
         "original": {
-          "summary": "OSWorld's own agents as published: the agent option's script (scripts/python/run_*.py) on the task, with its own prompts, parser, history and step limit, asking one of the models it is published with, on the docker provider's VM, scored by DesktopEnv.evaluate. At OSWorld's desktop-env 1.0.3 release: its evaluator fixes change the score of some tasks and one task is retired, so its runs compare with each other only, not with the paper's or the earlier pin's.",
+          "summary": "OSWorld runs the selected agent's own script (scripts/python/run_*.py) on the task, with its published prompts, parser, history and step limit.\n\nThe agent uses one of the models it is published with, on the Docker provider's VM.\n\nDesktopEnv.evaluate scores the result. At OSWorld's desktop-env 1.0.3 release, evaluator fixes change some task scores and one task is retired. Runs of this version compare only with each other, not with the paper or the earlier pin.",
           "models": [
             "MiniMax-M3",
             "gpt-4o",
@@ -366,5 +405,23 @@
         "branch": "main"
       }
     }
-  }
+  },
+  "task_parts": [
+    {
+      "id": "os",
+      "label": "OS tasks",
+      "prefixes": [
+        "os__"
+      ]
+    },
+    {
+      "id": "office",
+      "label": "Office tasks",
+      "prefixes": [
+        "libreoffice_calc__",
+        "libreoffice_impress__",
+        "libreoffice_writer__"
+      ]
+    }
+  ]
 }

@@ -59,17 +59,15 @@ class PageCase(unittest.TestCase):
 
 
 class OriginTags(PageCase):
-    """Every benchmark card and page says whether it is official - the
-    publisher's benchmark - or an experiment: a tag
-    beside the category."""
+    """Every benchmark page says whether it is official - the publisher's
+    benchmark - or an experiment, as a tag; the cards are filtered by it."""
 
-    def test_a_card_and_its_page_carry_the_origin(self):
+    def test_a_page_carries_the_origin_and_a_card_is_filtered_by_it(self):
         key = "terminal-bench"
-        self.assertIn('<span class="origin-tag official">Official</span>', self.card(key))
+        self.assertIn('data-f-origin="official&#10;"', self.card(key))                          # filtered by, not tagged
+        self.assertNotIn('origin-tag', self.card(key))
         self.assertIn('<span class="origin-tag official">Official</span>', self.page_html(key))
-        self.assertIn('<span class="origin-tag official">Official</span>', self.card("gaia"))
         self.assertIn('<span class="origin-tag official">Official</span>', self.page_html("gaia"))
-        self.assertIn('<span class="bench-card-tags"><span class="cat-tag">', self.card(key))      # beside the category, on the left
 
     def test_the_list_is_cards_by_default_and_a_table_on_request(self):
         self.assertIn('href="/benchmarks?view=table" aria-label="Table" title="Table" aria-current="false"', self.html)
@@ -131,19 +129,19 @@ class BenchmarksList(PageCase):
         keys = re.findall(r'<a class="card-link" href="/benchmarks/([^"]+)"', self.html)
         self.assertEqual(sorted(keys), sorted(b.key for b in cat.listed_benchmarks))
         self.assertEqual(len(keys), 12)
-        # two shelves, the official benchmarks then the experiments; a shelf with nothing on it is not shown
-        official = self.html[self.html.index('data-shelf="official"'):].split('</section>', 1)[0]
-        for b in cat.listed_benchmarks:
-            with self.subTest(b.key):
-                self.assertEqual('/benchmarks/%s"' % b.key in official, b.origin == "official")
-        self.assertEqual('data-shelf="experiment"' in self.html, any(b.origin == "experiment" for b in cat.listed_benchmarks))
+        # one catalogue: no shelf per origin; the origin filters the cards, never a tag on them
+        self.assertNotIn("data-shelf", self.html)
+        self.assertIn('data-f-origin="official&#10;experiment&#10;"', self.card("locomo"))
+        self.assertNotIn("Experiment", visible(self.card("locomo")))
 
     def test_a_card_says_what_it_holds(self):
         swe = visible(self.card("swe-bench-verified"))
-        for fact in ("Coding", "Harbor", "SWE-bench Verified", "Tasks 500", "Dataset 1", "Scored by Tests"):
+        for fact in ("Coding", "SWE-bench Verified", "Tasks 500", "Dataset 1", "Scored by Tests"):
             self.assertIn(fact, swe)
+        self.assertNotIn("Harbor", swe)                                             # what runs it is a filter, not a tag
+        self.assertIn('harbor&#10;"', self.card("swe-bench-verified"))
         memory = visible(self.card("longmemeval"))
-        for fact in ("Nullius", "Tasks each 500", "Datasets 3", "Scored by GPT-4o judge"):
+        for fact in ("Memory", "Tasks each 500", "Datasets 3", "Scored by GPT-4o judge"):
             self.assertIn(fact, memory)
         self.assertNotIn("benchmark.json", memory)                                  # the folder is on the benchmark's page, not its card
         self.assertIn('data-keys="longmemeval longmemeval-s longmemeval-m longmemeval-oracle"', self.card("longmemeval"))
@@ -197,7 +195,7 @@ class BenchmarkPage(PageCase):
         self.assertIn('aria-current="page" data-ref="osworld1"><b>desktop-env-v1.0.3</b>', nav)   # the release is the default
         self.assertIn('data-ref="osworld1@044bc33"', nav)
         self.assertIn('data-build-run href="/new-run?standard=osworld1"', html)                # Build a run opens the version shown
-        self.assertIn("<b>main (044bc33)</b>", nav)                                          # an untagged pin: its branch
+        self.assertIn('<b title="main (044bc33)">main</b>', nav)                            # an untagged pin: its branch, its commit a tooltip
         page = shown(html)
         self.assertIn("xlang-ai/OSWorld @ desktop-env-v1.0.3 · 9d6f711", page)
         self.assertNotIn("xlang-ai/OSWorld @ main · 044bc33", page)
@@ -245,7 +243,13 @@ class BenchmarkPage(PageCase):
             self.assertEqual(self.route_case(key), "non-harbor")                     # the standard's, not Harbor's
             self.assertIn(f'href="/new-run?standard={key}"', self.page_html(key))
             self.assertNotIn("No usable route", self.page(key))
-            self.assertIn('<span class="origin-tag official">Official</span>', self.page_html(key))
+            self.assertRegex(self.page_html(key), r'<span class="origin-tag official[^"]*"[^>]*>Official</span>')
+
+    def test_an_experiment_says_what_it_changes_and_the_official_version_does_not(self):
+        html = self.page_html("locomo")
+        self.assertIn('<h2 id="changes-full">Changes from official</h2>', html)
+        self.assertEqual(html.count("Changes from official"), 1)
+        self.assertIn('<a href="https://github.com/snap-research/locomo/pull/41">open pull request #41</a>.', html)
 
     def test_an_option_with_a_pattern_shows_its_example_not_the_pattern(self):
         for key in ("osworld2", "gsm8k", "humaneval", "gaia", "osworld1", "tau3-bench"):
@@ -265,14 +269,19 @@ class BenchmarkPage(PageCase):
         self.assertNotIn("Setup: scoring_programs", osworld2)
         self.assertIn("Setup: Docker for the tasks' VMs", self.page("osworld1"))
 
-    def test_a_card_names_what_its_options_need_by_label(self):
-        for key, said in (("locomo", "NVIDIA GPU"), ("longmemeval", "NVIDIA GPU, NVIDIA GPU with 12000 MiB"),
-                          ("osworld2", "Docker, Scoring tools"), ("tau3-bench", "Sandbox runtime")):
+    def test_what_its_options_need_filters_the_cards_by_label(self):
+        for key, needs in (("locomo", "cuda_gpu"), ("longmemeval", "cuda_gpu&#10;stella_gpu"), ("osworld2", "docker&#10;scoring_programs"),
+                           ("tau3-bench", "sandbox&#10;docker"), ("swe-bench-verified", "docker"), ("gsm8k", "none")):   # Harbor or images need Docker
             with self.subTest(key):
                 card = self.card(key)
-                self.assertIn(f'title="Some of its options need {said} installed on the machine it runs on: see its page"', card)
-                self.assertIn(f"</svg>needs {said}</div>", card)
-        self.assertNotIn("_gpu", self.html)
+                self.assertIn(f'data-f-needs="{needs}&#10;"', card)
+                self.assertNotIn("needs", visible(card))                             # a filter, not a note on the card
+        menu = self.html[self.html.index('data-filter-menu="needs"'):]
+        menu = visible(menu[:menu.index("</fieldset>")])
+        for said in ("Nothing", "Docker", "NVIDIA GPU", "NVIDIA GPU with 12000 MiB", "Sandbox runtime", "Scoring tools"):
+            self.assertIn(said, menu)
+        self.assertNotIn("Docker for the tasks", menu)                              # one Docker, by its shortest label
+        self.assertNotIn("_gpu", visible(self.html))
 
 
 class DatasetsOnTheirPage(PageCase):

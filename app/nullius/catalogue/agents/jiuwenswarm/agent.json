@@ -2,6 +2,7 @@
   "schema": "nullius.agent/v1",
   "key": "jiuwenswarm",
   "label": "JiuwenSwarm",
+  "company": "openJiuwen",
   "summary": "openJiuwen's WorkSwarm agent.",
   "start": {
     "acp": [

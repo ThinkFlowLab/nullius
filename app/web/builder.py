@@ -44,9 +44,11 @@ def new_run():
     # to rebuild a recipe from (fromJob). ?saved=<id>: a saved recipe, as the
     # Saved recipes dialog loads it. Individual query fields also prefill the form.
     like = request.args.get("like")
-    run = request.args.get("run") or (like if like and _kept_recipe(like) else None)
-    if run:
-        ex = execution.for_job(run)
+    run = request.args.get("run") or like
+    ex = shared.run_on_page(run, shared._job_for_request(run), here=True) if run else None
+    if ex is None and request.args.get("run") and not request.args.get("workspace"):
+        ex = shared.run_for(run)                  # a bare ?run=: the open workspace's first, then any of that name
+    if request.args.get("run") or (ex and ex.plan.recipe):
         if ex is None or not ex.plan.recipe:
             abort(404)
         data["loadRecipe"] = ex.plan.recipe
@@ -73,7 +75,6 @@ def new_run_benchmarks():
     cat = shared._catalog_cached()
     # a benchmark with versions carries each one's Tasks (the default's under ""), for the builder to show the chosen one's
     items = [dict(i, pick={"value": i["key"], "one": True}, id="pick-bench-" + i["key"], title={"text": i["title"], "title": i["domain"]},
-                  origin=i["default_origin"],
                   data={"tasks": json.dumps({"": i["tasks"], **i["versions"]})} if i["versions"] else None)
              for i in catalogue.benchmark_cards(cat)]
     every = catalogue.benchmark_choices(cat)
@@ -96,13 +97,14 @@ def new_run_agents():
     b = definitions.find(benches, request.args.get("benchmark", ""))
     if b is None:
         abort(404)
+    procedure = standard_recipe.procedure_label(b)
     name, b = b["label"], dict(b, label=definitions.title(b))     # its own agents keep its plain name, whatever its version
     kind = b["family"]
     found = [e for e in standard_recipe.entries(kind, benches=[b], every=True, own=True)["entries"] if not e["d"].get("example")]
     found.sort(key=lambda e: 0 if e["d"].get("benchmark") == b["key"] else 2 if e["d"].get("benchmark") else 1)   # its own, the catalogue's, others' own
-    # a benchmark with agents of its own runs them as its Original setup; another offers that setup as one more card
+    # a benchmark with agents of its own runs them as its procedure; another offers its procedure as one more card
     setups = [] if any(e["d"].get("benchmark") == b["key"] for e in found) else [k for k in (b.get("setups") or {}) if k == "original"]
-    items = [_setup_card(b, k) for k in setups] + [_pick_card(b, e) for e in found]
+    items = [_setup_card(b, k, procedure) for k in setups] + [_pick_card(b, e) for e in found]
     names = dict(definitions.FROM, benchmark=f"{name}'s own", elsewhere="Other benchmarks' agents")
     choices = {"protocol": [(p, p) for p in ("ACP", "A command", "Its own script", "JSON lines")
                             if any(i["protocol"] and i["protocol"]["value"] == p for i in items)],
@@ -115,19 +117,14 @@ def new_run_agents():
                            layout="table" if request.args.get("view") == "table" else "cards")
 
 
-def _setup_card(b: dict, key: str) -> dict:
-    """The benchmark as published, run by its own code: a pick card beside the agents or capabilities."""
+def _setup_card(b: dict, key: str, procedure: str) -> dict:
+    """The selected version's own procedure, run by its own code: a pick card beside the agents or capabilities, named
+    as its settings tab is."""
     x = b["setups"][key]
-    title = x.get("reference_agent") or ("No agent · Original" if b["family"] == "agent" else "Original " + _kind_of(b))
-    return {"pick": {"value": key}, "id": "pick-" + key, "icon": "#i-origin", "title": {"text": title, "title": x.get("summary", "")},
-            "search": " ".join([title, b["label"], "as published"]), "published": "As published", "origin": origin_tag("benchmark"), "protocol": "",
+    return {"pick": {"value": key}, "id": "pick-" + key, "icon": "#i-origin", "title": {"text": procedure, "title": x.get("summary", "")},
+            "search": " ".join([procedure, b["label"], "its own procedure"]), "origin": origin_tag("benchmark"), "protocol": "",
             "fit": {"text": "Can run it", "value": "fit"}, "from": {"text": b["label"], "value": "benchmark"},
             "proves": [], "ticks": [], "alert": None}
-
-
-def _kind_of(b: dict) -> str:
-    kinds = sorted({p.split(".", 1)[1].split("/")[0] for p in b.get("needs") or []})
-    return kinds[0] if kinds else "capability"
 
 
 def _pick_card(b: dict, e: dict) -> dict:
@@ -151,7 +148,7 @@ def _pick_card(b: dict, e: dict) -> dict:
     return {"pick": {"value": d["_ref"], "disabled": bool(why)}, "id": "pick-" + d["_ref"].replace(":", "-").replace("@", "-"),
             "icon": agent_mark_url(d["key"]) if b["family"] == "agent" else "", "title": {"text": title, "title": d.get("summary", "")},
             "search": " ".join([title, d["key"], version, e["protocol"], d.get("summary", "")]),
-            "protocol": {"text": e["protocol"], "value": e["protocol"]}, "published": "",
+            "protocol": {"text": e["protocol"], "value": e["protocol"]},
             "origin": origin_tag("benchmark" if d.get("benchmark") else definitions.origin_of(d)),
             "fit": {"text": "Cannot" if why else "Can run it", "value": "unfit" if why else "fit"}, "from": there,
             "proves": [{"text": r["label"], "value": r["port"]} for r in rows.values()],
@@ -412,11 +409,6 @@ def recipes_import():
         return jsonify(ok=True, **recipe_store.import_(items, lenient=wrapped and body.get("lenient") is True))
     except ValueError as e:
         return jsonify(ok=False, error="Not imported: " + str(e)), 400
-
-
-def _kept_recipe(job_id: str) -> bool:
-    ex = execution.for_job(job_id)
-    return bool(ex and ex.plan.recipe)
 
 
 def _host_target():

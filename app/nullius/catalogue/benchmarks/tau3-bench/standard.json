@@ -16,6 +16,7 @@
     "license": "MIT"
   },
   "driver": {
+    "describe": true,
     "command": [
       "{install}/.venv/bin/python",
       "{here}/driver.py"
@@ -80,7 +81,21 @@
   ],
   "units": {
     "noun": "task",
-    "nouns": "tasks"
+    "nouns": "tasks",
+    "categories": {
+      "intent": {
+        "label": "Issue",
+        "names": {
+          "mms_issue": "MMS (picture/group messaging)",
+          "mobile_data_issue": "Mobile data/slow internet",
+          "service_issue": "No service/connection"
+        }
+      },
+      "persona": {
+        "label": "Persona",
+        "names": {"None": "No persona"}
+      }
+    }
   },
   "simulator": {
     "model": "gpt-4.1-2025-04-14",
@@ -121,7 +136,7 @@
   },
   "setups": {
     "original": {
-      "summary": "The upstream's own agent (LLMAgent at its defaults, temperature 0) as the run's model, in the upstream's batch runner exactly as tau2 run runs it: its Orchestrator, user simulator, evaluator and judge, nothing of Nullius's in the conversation - the leaderboard's standard submission, which ranks models.",
+      "summary": "The upstream's batch runner runs its own LLMAgent at its defaults (temperature 0), using the run's model, exactly as tau2 run does.\n\nIt uses the upstream's Orchestrator, user simulator, evaluator and judge, with nothing from Nullius in the conversation.\n\nThis is the leaderboard's standard submission procedure, which ranks models.",
       "providers": {
         "openai": "",
         "openrouter": "",

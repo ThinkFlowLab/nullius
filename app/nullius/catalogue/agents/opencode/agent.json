@@ -2,6 +2,7 @@
   "schema": "nullius.agent/v1",
   "key": "opencode",
   "label": "OpenCode",
+  "company": "Anomaly",
   "summary": "The open-source terminal coding agent.",
   "upstream": {
     "package": "opencode-ai",

@@ -4,7 +4,7 @@
         <form method="post" action="{{ url_for('launch_delete', key=L.key) }}">
           <input type="hidden" name="csrf" value="{{ csrf_token() }}">{% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
           <ul>{{ caller() }}</ul>
-          <p>{{ k }} folder{{ '' if k == 1 else 's' }} · {{ gone.bytes|filesizeformat }}{% if n %} · {{ n }} judgement{{ '' if n == 1 else 's' }}{% endif %}{% if wss %} · workspace{{ '' if wss|length == 1 else 's' }} {{ wss|join(', ') }}{% endif %}</p>
+          <p>{{ k }} folder{{ '' if k == 1 else 's' }} · {{ gone.bytes|filesizeformat }}{% if n %} · up to {{ n }} judgement{{ '' if n == 1 else 's' }}{% endif %}{% if wss %} · workspace{{ '' if wss|length == 1 else 's' }} {{ wss|join(', ') }}{% endif %}</p>
           {% for h, c in gone.hosts.items() %}<label><input type="checkbox" name="host" value="{{ h }}" checked> Its cop{{ 'y' if c == 1 else 'ies' }} on <b>{{ h }}</b></label>{% endfor %}
           <div class="launch-delete-acts"><button type="submit" formmethod="dialog" class="btn ghost" autofocus>Keep it</button><button type="submit" class="btn danger">Delete launch</button></div>
         </form>

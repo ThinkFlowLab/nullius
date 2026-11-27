@@ -158,10 +158,18 @@ class GaiaDriver(unittest.TestCase):
                     return_value=io.BytesIO(json.dumps(reply).encode())), self.assertRaisesRegex(RuntimeError, "no textual answer"):
                 self.driver.answer("fixture-task", str(self.workspace), "original", "model", "https://fixture.invalid", "key")
 
-    def test_units_names_only_selected_split_and_oracle_exposes_reference_for_leak_check(self):
+    def test_units_and_describe_name_only_selected_split_and_oracle_exposes_reference_for_leak_check(self):
         self.assertEqual(self.driver.units(DATASET), {"units": ["fixture-task"]})
         with self.assertRaisesRegex(ValueError, "differs"):
             self.driver.units("gaia-validation")
+        with patch.dict(self.driver.ROWS, {"second-task": dict(self.row, task_id="second-task", Question="How many?", Level="1")}):
+            described = self.driver.describe(DATASET)
+        self.assertEqual(described, {"units": {
+            "fixture-task": {"title": self.row["Question"], "text": self.row["Question"], "categories": {"level": "1"}},
+            "second-task": {"title": "How many?", "text": "How many?", "categories": {"level": "1"}}}})
+        with self.assertRaisesRegex(ValueError, "differs"):
+            self.driver.describe("gaia-validation")
+        self.assertIs(json.loads((DRIVER.parent / "standard.json").read_text())["driver"]["describe"], True)
         result = self.driver.oracle("fixture-task", str(self.workspace))
         self.assertEqual(result["answer"], "FINAL ANSWER: synthetic-reference")
         self.assertEqual((self.workspace / ".gaia-oracle-answer.txt").read_text(), "synthetic-reference")

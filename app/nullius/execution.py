@@ -120,7 +120,7 @@ from typing import Callable, Dict, List, Optional
 
 from nullius import hosts, ondisk, paths, prices as price_list, progress, providers, redact, secrets, settings, workspace
 from nullius.judge import store as judgements
-from nullius.runs import parse
+from nullius.runs import parse, uid as job_uid
 from nullius.harbor import source as harbor_source
 from nullius.standard.backends import container
 from nullius.standard.runner import payload as standard_payload
@@ -1140,10 +1140,12 @@ class Execution:
 
         The exact code imported here travels, including source edits, so
         installed wheels and editable checkouts have the same behaviour.
-        Configuration and credential stores are not payload inputs.
+        Configuration and credential stores are not payload inputs; the
+        task sets the recipe runs are, from the user catalogue.
         """
         try:
-            return standard_payload.build(app_root(self.root), catalogue=self._catalogue)
+            return standard_payload.build(app_root(self.root), catalogue=self._catalogue,
+                                          sets=standard_payload.recipe_sets(self.plan.recipe))
         except (OSError, ValueError) as e:
             self._fail("app", "the standard runner could not be packed: " + str(e)[-300:])
             return None
@@ -1644,16 +1646,39 @@ def active() -> List[Execution]:
     return [e for e in EXECUTIONS.values() if e.state in ALIVE]
 
 
+def writers() -> Dict[str, List[Execution]]:
+    """Each job a plan names -> the executions whose script writes it, newest
+    first; those started at once, as listed."""
+    out: Dict[str, List[Execution]] = {}
+    for e in EXECUTIONS.values():
+        for j in e.plan.jobs:
+            out.setdefault(str(j.get("name")), []).append(e)
+    for runs in out.values():
+        if len(runs) > 1:
+            runs.sort(key=lambda e: -e.started)
+    return out
+
+
+def writing(runs: List[Execution], job_id: str, path: Optional[str] = None, roots=None) -> Optional[Execution]:
+    """The first of *runs*, ``writers()``'s of this job, that is the run of
+    one job folder. ``path``: the job's folder on disk; its run writes that
+    very folder, links resolved. ``roots``: a workspace's resolved job roots,
+    for a job not written yet; its run's folder for it is one those roots
+    would find, a root or its folder of that name. Neither: the newest of
+    that name."""
+    real = path and os.path.realpath(path)
+    for e in runs:
+        out = os.path.realpath(os.path.join(e.jobs, job_id)) if path or roots is not None else None
+        if (not path or out == real) and (roots is None or out in roots
+                                          or any(os.path.realpath(os.path.join(r, job_id)) == out for r in roots)):
+            return e
+    return None
+
+
 def owners() -> Dict[str, Execution]:
     """Each job a plan names -> the newest execution whose script writes it; of
     several started at once, the first listed."""
-    out: Dict[str, Execution] = {}
-    for e in EXECUTIONS.values():
-        for j in e.plan.jobs:
-            name = str(j.get("name"))
-            if name not in out or e.started > out[name].started:
-                out[name] = e
-    return out
+    return {name: runs[0] for name, runs in writers().items()}
 
 
 def run_ends(owner: Optional[Dict[str, Execution]] = None) -> Dict[str, Optional[tuple]]:
@@ -1665,25 +1690,7 @@ def run_ends(owner: Optional[Dict[str, Execution]] = None) -> Dict[str, Optional
             for name, e in (owners() if owner is None else owner).items()}
 
 
-def for_job(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Optional[Execution]:
-    """The newest execution whose script writes this job, if any - the one
-    the job page shows beside the job, or instead of it while Harbor has
-    not written it yet. ``owner``: ``owners()``, when the caller holds it."""
-    return (owners() if owner is None else owner).get(job_id)
-
-
 ENDED = ("stopped", "failed", "done")
-
-
-def ended_for(job_id: str, owner: Optional[Dict[str, Execution]] = None) -> Optional[tuple]:
-    """``(state, finished_at)`` when the run that writes this job has ended
-    - stopped, failed or done - by the runner's own record; None while it
-    is alive or when no run of this application wrote the job. A Harbor
-    killed by a Stop leaves its feed without ``job.end`` and its result
-    record with trials "running", so a page reading either alone would say
-    the job goes on; this is the fact that says otherwise. ``owner``: as ``for_job``'s."""
-    ex = for_job(job_id, owner)
-    return ex.job_state(job_id) if ex is not None else None
 
 
 class Followed(RuntimeError):
@@ -1830,34 +1837,73 @@ def deletable(names: List[str], root: Optional[str] = None) -> None:
         _deletable(n, root)
 
 
-def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, ends: dict) -> dict:
+def _run_deletion(name: str, home: str, root: Optional[str], holding: Callable, ends: dict, final: bool = False) -> dict:
+    """What deleting the run *name* removes. Its judgements are counted, the
+    older records its workspaces kept included, nothing written; *final* (the
+    delete itself) copies in first those older records one of its jobs alone
+    owns (`judgements.adopt_owned`), and names their folders (``judged``) to remove with it.
+    ``uids``: its jobs' identities and where each came from (``Job.uid_source``),
+    whose judgements ``delete`` keeps when a copy is found elsewhere."""
     path, rec = _deletable(name, root)
     plan = rec.get("plan") or {}
     # a run refused at the name check never made the host folder: one of that name there is not its own
     host = hosts.parse(plan["host"]) if plan.get("host") and (rec.get("launched") or rec.get("step") not in ("connect", "name")) else None
-    held = []
+    held, olds = [], []
     for ws, roots in holding(path):
         dirs = parse.find_job_dirs(roots)
-        ids = [j.job_id for j in workspace.load_jobs(ws, roots, ends)]
-        # a job of the same id from another root shares these judgements: they stay
-        others = {e.get("job_id") for d, e in workspace.job_index(ws).items() if d not in dirs}
-        judged = judgements.job_dirs(ws.dir, [i for i in ids if i.split("~")[0] not in others])
-        held.append({"ws": ws, "roots": roots, "jobs": dirs,
-                     "judged": judged, "judgements": sum(len(os.listdir(d)) for d in judged)})
-    return {"name": name, "dir": path, "bytes": size_of(path), "host": host, "workspaces": held,
-            "judgements": sum(w["judgements"] for w in held)}
+        jobs = workspace.load_jobs(ws, roots, ends)
+        judged = []
+        if final:                            # the workspace's records from before: those of its jobs alone copied in
+            done = judgements.adopt_owned(ws, dirs=set(dirs)) or set()
+            judged = [d for d in judgements.job_dirs(ws.dir, [j.job_id for j in jobs])
+                      if all(os.path.join(d, n) in done for n in os.listdir(d) if n.endswith(".json"))]
+        else:                                # else counted as they are
+            olds += [judgements.overlay(ws.dir, j) for j in jobs]
+        held.append({"ws": ws, "roots": roots, "jobs": dirs, "judged": judged})
+    uids = {j.uid: j.uid_source for j in (parse.parse_job(d, trials=False) for d in parse.find_job_dirs([os.path.join(path, "jobs")]))
+            if j.uid}
+    return {"name": name, "dir": path, "bytes": size_of(path), "host": host, "workspaces": held, "uids": uids,
+            "judged": judgements.job_dirs(judgements.home(), sorted(uids)),
+            "judgements": judgements.records_of(judgements.home(), uids, olds)}
 
 
-def deletion(names: List[str], home: str, root: Optional[str] = None, holding: Optional[Callable] = None) -> dict:
+def _judged_elsewhere(home: str, paths: list, uids: set) -> set:
+    """Which of the jobs *uids* of the run folders *paths*, deleted together,
+    keep their judgements: those with another folder of the same identity
+    outside them - a copy - under a root of any workspace or another run, read
+    afresh, never from a cache; all of them when one of those roots cannot be
+    read, since who owns them is then unknown."""
+    try:
+        return _copies(home, paths, uids)
+    except OSError:
+        return set(uids)
+
+
+def _copies(home: str, paths: list, uids: set) -> set:
+    outside = lambda d: all(os.path.commonpath([os.path.realpath(d), p]) != p for p in paths)
+    roots = []
+    for ws in workspace.list_all(home):
+        if not all(os.path.isdir(r) for r in ws.job_roots or ws.roots):
+            return set(uids)
+        roots += ws.job_roots or ws.roots
+    roots += [j for parent in {os.path.dirname(p) for p in paths} for e in os.scandir(parent)
+              if e.is_dir(follow_symlinks=False) and e.path not in paths and os.path.isdir(j := os.path.join(e.path, "jobs"))]
+    return {job_uid.strict(d) for d in parse.find_job_dirs(roots, strict=lambda name: True) if outside(d)} & uids
+
+
+def deletion(names: List[str], home: str, root: Optional[str] = None, holding: Optional[Callable] = None,
+             final: bool = False) -> dict:
     """What deleting the runs *names* of one launch removes: per run (``runs``)
     its folder and size, the host copy that is its own, and per workspace that
     holds it its roots, parsed jobs and judgement folders; the totals, and the
     number of copies per host. ValueError when any of them is alive or is not
     a run: nothing goes then. ``holding``: a run folder's ``workspace.holding``,
-    when the caller has it already."""
+    when the caller has it already. Its judgement folders in the user's store
+    (``judged``) are those of every job of the runs; ``delete`` decides which
+    go once the runs went."""
     holding = holding or (lambda path: workspace.holding(home, path))
     ends = run_ends()
-    runs = [_run_deletion(n, home, root, holding, ends) for n in dict.fromkeys(names)]
+    runs = [_run_deletion(n, home, root, holding, ends, final) for n in dict.fromkeys(names)]
     copies: Dict[str, int] = {}
     for r in runs:
         if r["host"]:
@@ -1872,9 +1918,11 @@ def delete(names: List[str], home: str, root: Optional[str] = None, copies=(), r
     in every workspace, and its copy on its host when that host's label is in
     *copies*. Returns ``deletion``'s answer, with ``stays``: the runs whose
     folder could not go (they keep everything else), and ``kept``: one line
-    per thing that stays."""
-    gone = deletion(names, home, root)
+    per thing that stays. The judgements of the user's store go last, once
+    every folder went or stayed: those of a job no folder of which is left."""
+    gone = deletion(names, home, root, final=True)
     gone["stays"], gone["kept"] = [], []
+    went = []
     for r in gone["runs"]:
         try:
             shutil.rmtree(r["dir"])
@@ -1882,11 +1930,11 @@ def delete(names: List[str], home: str, root: Optional[str] = None, copies=(), r
             gone["stays"].append(r["name"])
             gone["kept"].append(f"{r['name']} stays in {r['dir']}: {e.strerror or e}")
             continue
+        went.append(r)
         for key in [k for k, e in EXECUTIONS.items() if os.path.realpath(e.dir) == r["dir"]]:
             del EXECUTIONS[key]
         for w in r["workspaces"]:
-            for d in w["judged"]:
-                shutil.rmtree(d, ignore_errors=True)
+            judgements.forget(w["ws"].dir, w["judged"])
             # read again: another run of the launch may have left this workspace already
             ws = workspace.load(home, w["ws"].name)
             if ws is not None:
@@ -1896,4 +1944,10 @@ def delete(names: List[str], home: str, root: Optional[str] = None, copies=(), r
             rc, out = (run or subprocess_run)(host.argv(f"rm -rf {_rq(REMOTE_HOME + '/runs/' + r['name'])}", timeout=15), 60)
             if rc != 0:
                 gone["kept"].append(f"the copy of {r['name']} on {host.label} stays: " + redact.redact(out.strip()[-200:]))
+    # a run that stayed, even in part, keeps its jobs' identities as they were read before the delete
+    uids = {u for r in went for u in r["uids"]} - {u for r in gone["runs"] if r not in went for u in r["uids"]}
+    if uids and judgements.job_dirs(judgements.home(), sorted(uids)):
+        uids -= _judged_elsewhere(home, [r["dir"] for r in went], uids)
+        for d in judgements.job_dirs(judgements.home(), sorted(uids)):
+            judgements.remove(d)
     return gone

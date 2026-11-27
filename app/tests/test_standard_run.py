@@ -1005,6 +1005,14 @@ class RunTest(unittest.TestCase):
         names = [s["tool_calls"][0]["function_name"] for s in t["steps"] if s.get("tool_calls")]
         self.assertEqual(names, ["fakemem.add"] * 3 + ["fakemem.recall"])
         self.assertIn("green", t["steps"][-1]["message"])
+        asked = {}
+        for unit in ("q1", "q2"):
+            trial = [d for d in os.listdir(job_dir) if d.startswith(unit + "__")][0]
+            with open(os.path.join(job_dir, trial, "agent", "trajectory.json")) as f:
+                asked[unit] = [s["tool_calls"][0]["arguments"] for s in json.load(f)["steps"] if s.get("tool_calls")][-1]
+        # the question's own date reaches the memory; a question without one sends none
+        self.assertEqual(asked, {"q1": {"question": "What colour is the bike?", "date": "2023/05/30 (Tue) 23:40"},
+                                 "q2": {"question": "What was lunch?"}})
 
     def test_a_capabilitys_agent_limit_bounds_each_add_and_recall_not_the_whole(self):
         """A memory adds a unit's sessions one by one: three adds of 0.6 s each pass an agent limit of

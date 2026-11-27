@@ -6,6 +6,8 @@ instance, the problem statement, the gold patch, the image's name, the eval
 script the harness runs and the name of the log parser that reads its output.
 
 units  - the instance ids, in the dataset's order
+describe - the problem statement as its text, its first line as its title;
+         its repository and the dataset's difficulty as categories
 setup  - the problem statement as the prompt, verbatim; the instance's own
          image (``image``: the authors' prebuilt image, pulled by the digest
          its tag had when pinned here, ``images.json``), ``/testbed`` as the
@@ -64,6 +66,15 @@ def units(dataset):
     return {"units": list(rows())}
 
 
+def describe(dataset=None, **_):
+    out = {}
+    for unit, r in rows().items():
+        text = r["problem_statement"]
+        title = next((line.strip() for line in text.splitlines() if line.strip()), "")
+        out[unit] = {"title": title, "text": text, "categories": {"repo": r["repo"], "difficulty": r["difficulty"]}}
+    return {"units": out}
+
+
 def setup(unit, dir):
     r = row(unit)
     capture = (f"cd {WORKDIR} && git add -A && "
@@ -102,7 +113,7 @@ def oracle(unit, dir):
                                     "run": ["git", "-C", WORKDIR, "apply", "-v", "/tmp/gold.patch"], "seconds": SOLVE_SECONDS}}
 
 
-HANDLERS = {"units": units, "setup": setup, "score": score, "oracle": oracle}
+HANDLERS = {"units": units, "describe": describe, "setup": setup, "score": score, "oracle": oracle}
 for line in sys.stdin:
     try:
         req = json.loads(line)

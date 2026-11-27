@@ -36,14 +36,14 @@ class Listing(unittest.TestCase):
     def test_what_its_options_need_of_a_machine_is_named_by_label_and_by_key_without_one(self):
         cat = catalog.load(catalog.ROOT)
         by = {r["b"].key: r for r in recipe.benchmarks(cat)}
-        self.assertEqual(by["locomo"]["host"], ["NVIDIA GPU"])
-        self.assertEqual(by["osworld2"]["host"], ["Docker", "Scoring tools"])
+        self.assertEqual(by["locomo"]["host"], {"cuda_gpu": "NVIDIA GPU"})
+        self.assertEqual(by["osworld2"]["host"], {"docker": "Docker", "scoring_programs": "Scoring tools"})
         self.assertIsNone(by["gsm8k"]["host"])
         defs, bad = definitions.load("benchmark")
         bare = [dict(d, host={n: {k: v for k, v in r.items() if k != "label"} for n, r in d["host"].items()}) if d.get("host") else d
                 for d in defs]
         with mock.patch.object(definitions, "load", return_value=(bare, bad)):
-            self.assertEqual({r["b"].key: r["host"] for r in recipe.benchmarks(cat)}["longmemeval"], ["cuda_gpu", "stella_gpu"])
+            self.assertEqual({r["b"].key: r["host"] for r in recipe.benchmarks(cat)}["longmemeval"], {"cuda_gpu": "cuda_gpu", "stella_gpu": "stella_gpu"})
 
 
 class HostLabels(unittest.TestCase):

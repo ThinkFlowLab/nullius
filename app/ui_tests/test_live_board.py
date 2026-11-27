@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 from html import escape, unescape
 import shutil
@@ -123,6 +124,7 @@ class LiveBoard(unittest.TestCase):
         from nullius import execution
         plan = execution.Plan(name="running-run", script="true", jobs=[{"name": "running-run"}])
         ex = execution.Execution(plan, root=str(self.root / "runs"), run=lambda *a, **k: (0, ""))
+        ex.jobs = str(self.root)                                         # the run writes the fixture's folder
         ex.state, ex.finished = "stopped", 1789773420.0                  # 2026-09-18T23:17:00Z
         with patch.dict(execution.EXECUTIONS, {ex.id: ex}, clear=True):
             s = self.client.get("/job/running-run/live").get_json()
@@ -217,6 +219,7 @@ class LiveBoard(unittest.TestCase):
         job = parse.parse_job(str(folder))
         plan = execution.Plan(name="no-feed", script="true", jobs=[{"name": "no-feed"}])
         ex = execution.Execution(plan, root=str(self.root / "runs"), run=lambda *a, **k: (0, ""))
+        ex.jobs = str(self.root)
         with patch.object(workspace, "load_jobs", return_value=[job]), patch.dict(execution.EXECUTIONS, {ex.id: ex}, clear=True):
             for state in ("failed", "stopped", "done"):
                 with self.subTest(state=state):
@@ -387,6 +390,7 @@ class LiveBoard(unittest.TestCase):
         from nullius import execution
         plan = execution.Plan(name="old-run", script="true", jobs=[{"name": "old-run"}])
         ex = execution.Execution(plan, root=str(self.root / "logs-test"), run=lambda *a, **k: (0, ""))
+        ex.jobs = str(self.root)
         with patch.dict(execution.EXECUTIONS, {ex.id: ex}, clear=True):
             for jobs in ([], [self.no_feed]):
                 with self.subTest(job_exists=bool(jobs)), patch.object(workspace, "load_jobs", return_value=jobs):
@@ -462,6 +466,8 @@ for (const query of ['', '?view=live', '?view=logs', '?view=results']) {
         self.assertEqual(out["flight"].count('<tr class="lb-row lb-ended'), len(done))
         self.assertLess(out["flight"].rfind('lbp-'), out["flight"].find('lb-ended'))          # the running on top, the ended below
         self.assertIn('class="lb-open-row" href="/trial/demo-x3/', out["flight"])              # an ended trial opens its page
+        other = self.render(s, trialBase="/job/demo-x3?workspace=b")
+        self.assertRegex(other["flight"], r'href="/trial/demo-x3/[^"?]+\?workspace=b"')        # and stays in the job's workspace
         named = self.render(dict(s, trials=[dict(running[0], task="4")]), noun="task")
         self.assertIn(">Task 4<", named["flight"])                                            # a bare number reads with its noun
         self.assertIn('class="lb-tile done lbo-resolved', out["tiles"])                  # a resolved trial's tile
@@ -566,13 +572,13 @@ for (const query of ['', '?view=live', '?view=logs', '?view=results']) {
 
     def test_renderer_reads_harbors_recorded_run(self):
         s = json.loads((FIXTURE / "harbor-oracle-x4" / "expected.json").read_text())
-        out = self.render(s)
+        out = self.render(s, results="/job/demo-x3?workspace=b&view=results")
         self.assertTrue(out["finished"]); self.assertEqual(out["status"], "")
         self.assertEqual(out["tiles"].count('class="lb-tile done lbo-resolved'), 4)
         for task in ("harbor/hello-world", "harbor/hello-alpine", "reward-kit-example", "harbor/hello-user"):
             self.assertIn(escape(task.split("/")[-1]), out["tiles"])      # no tile is blank
         self.assertIn("The feed saw 4 of 4 trials end, 4 resolved", visible(out["flight"]))
-        self.assertIn('href="?view=results"', out["flight"])              # the settled board points at Results
+        self.assertIn('href="/job/demo-x3?workspace=b&amp;view=results"', out["flight"])   # the settled board points at Results, the page's own
         self.assertIn("100", out["stats"])                                 # raw and adjusted so far, from the feed's outcomes
         self.assertNotIn("$0", self.board(out)); self.assertNotIn("tokens", out["meta"])   # the oracle reports no counters
         opened = self.render(s, selected=s["trials"][0]["trial"])
@@ -713,6 +719,96 @@ for (const query of ['', '?view=live', '?view=logs', '?view=results']) {
         self.assertEqual(self.render(dict(s, trials=crowd, counts=dict(s["counts"], running=20, total=20, completed=0)), showAll=True)["flight"].count('<tr class="lb-row'), 20)
         many = self.render(dict(s, trials=crowd * 4))
         self.assertTrue(many["manyTiles"])                                             # past sixty trials, smaller tiles
+
+class ARunAndItsJob(unittest.TestCase):
+    """A run is shown on the job its own folder holds: never on a job of that
+    name in another workspace, a link to its neighbour, or a newer run's."""
+
+    def setUp(self):
+        from nullius import execution
+        stack = ExitStack(); self.addCleanup(stack.close)
+        self.tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="nullius-ui-owner-")))
+        self.ex = self.run_in("runs", 1.0)
+        stack.enter_context(patch.object(web.shared, "WS_HOME", str(self.tmp / "workspaces")))
+        stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}, clear=True))
+        stack.enter_context(patch.dict(execution.EXECUTIONS, {self.ex.id: self.ex}, clear=True))
+        stack.enter_context(patch.dict(web.app.config, TESTING=True))
+        self.a = workspace.create(web.shared.WS_HOME, [self.ex.jobs], "A")
+        web.shared.open_workspace(self.a)
+        self.client = web.app.test_client()
+
+    def run_in(self, root, started):
+        from nullius import execution
+        ex = execution.Execution(execution.Plan(name="job-x", script="true", jobs=[{"name": "job-x"}], recipe={"name": root}),
+                                 root=str(self.tmp / root), run=lambda *a, **k: (0, ""))
+        ex.id, ex.started, ex.state, ex.finished = f"job-x-{root}", started, "stopped", 1789773420.0
+        job_with_feed(Path(ex.jobs), "job-x")
+        return ex
+
+    def other(self, label, link=None):
+        """Another workspace: with its own job-x, or a link to *link* under that name."""
+        root = self.tmp / label
+        job_with_feed(root, "job-x") if link is None else (root.mkdir(), (root / "job-x").symlink_to(link))
+        return workspace.create(web.shared.WS_HOME, [str(root)], label)
+
+    def shown(self, ws):
+        """(the run whose strip the job page of *ws* shows, the recipe its New run opens, the poll's ended_by)."""
+        html = self.client.get(f"/job/job-x?workspace={ws.name}").get_data(as_text=True)
+        strip = re.search(r'data-stop="/run/([^"/]+)/stop"', html)
+        self.assertEqual(bool(strip), 'id="tab-logs"' in html); self.assertEqual(bool(strip), 'id="ended-by-runner"' in html)
+        link = unescape(re.search(r'href="(/new-run\?[^"]*)"', html).group(1))
+        recipe = re.search(r'"loadRecipe":\s*\{"name":\s*"(\w+)"', self.client.get(link).get_data(as_text=True))
+        return strip and strip.group(1), recipe and recipe.group(1), self.client.get(f"/job/job-x/live?workspace={ws.name}").get_json().get("ended_by")
+
+    def test_a_job_of_that_name_elsewhere_is_not_the_run_s(self):
+        from nullius import execution
+        mine = (self.ex.id, "runs", "stopped")
+        self.assertEqual(self.shown(self.a), mine)
+        self.assertEqual(self.shown(self.other("b")), (None, None, None))
+        job_with_feed(Path(self.ex.jobs), "sibling")
+        self.assertEqual(self.shown(self.other("neighbour", Path(self.ex.jobs) / "sibling")), (None, None, None))
+        self.assertEqual(self.shown(self.other("linked", Path(self.ex.jobs) / "job-x")), mine)
+        newer = self.run_in("newer", 2.0)
+        with patch.dict(execution.EXECUTIONS, {newer.id: newer}):
+            self.assertEqual(self.shown(self.a), mine)
+            self.assertEqual(self.shown(workspace.create(web.shared.WS_HOME, [newer.jobs], "N")), (newer.id, "newer", "stopped"))
+
+    def opened(self, url):
+        """(status, the recipe the builder opens at *url*)."""
+        r = self.client.get(url)
+        recipe = re.search(r'"loadRecipe":\s*\{"name":\s*"(\w+)"', r.get_data(as_text=True))
+        return r.status_code, recipe and recipe.group(1)
+
+    def test_a_job_not_written_yet_is_prepared_only_where_its_run_writes(self):
+        """Two runs plan job-x, neither wrote it: each workspace prepares its own, one that would not find it none."""
+        from nullius import execution
+        later = self.run_in("later", 2.0)
+        for ex in (self.ex, later):
+            shutil.rmtree(Path(ex.jobs) / "job-x")
+        (self.tmp / "empty").mkdir(); job_with_feed(Path(self.ex.jobs), "sibling")
+        spaces = [(self.a, self.ex), (workspace.create(web.shared.WS_HOME, [later.jobs], "L"), later),
+                  (workspace.create(web.shared.WS_HOME, [str(self.tmp / "empty")], "Empty"), None),
+                  (workspace.create(web.shared.WS_HOME, [str(Path(self.ex.jobs) / "sibling")], "Sibling"), None),
+                  (self.other("linked", Path(self.ex.jobs) / "job-x"), self.ex)]
+        for runs in ({}, {later.id: later}):                   # A's run alone, then the later one too
+            for ws, ex in spaces:
+                with self.subTest(ws.label, later=bool(runs)), patch.dict(execution.EXECUTIONS, runs):
+                    ex = ex if runs or ex is self.ex else None
+                    r = self.client.get(f"/job/job-x?workspace={ws.name}")
+                    strip = re.search(r'data-stop="/run/([^"/]+)/stop"', r.get_data(as_text=True))
+                    self.assertEqual((r.status_code, strip and strip.group(1)), (200, ex.id) if ex else (404, None))
+                    for ask in ("like", "run"):
+                        self.assertEqual(self.opened(f"/new-run?{ask}=job-x&workspace={ws.name}"),
+                                         (200, os.path.basename(ex.root)) if ex else (404, None), ask)
+
+    def test_a_bare_run_link_opens_the_run_of_that_name(self):
+        """/new-run with no workspace named: ?run= opens the open workspace's run first, then any of that name."""
+        for ws in (self.a, self.other("empty", self.tmp / "nowhere"), self.other("imported")):
+            web.shared.open_workspace(ws)
+            self.assertEqual(self.opened("/new-run?run=job-x"), (200, "runs"), ws.label)
+            # ?like= stays in the open workspace: its run, no job, or the job's own record
+            self.assertEqual(self.opened("/new-run?like=job-x"), {"A": (200, "runs"), "empty": (404, None), "imported": (200, None)}[ws.label])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -152,7 +152,7 @@ def prepare(checkout: Path, licence_source: Path | None = None):
     bundled = Path(__file__).resolve().parent / "catalogue"
     source_catalogue = checkout / "app" / "nullius" / "catalogue"
     pending.catalogue_snapshot = source_catalogue.resolve() == bundled.resolve()
-    for kind in ("benchmarks", "agents", "features", "capabilities"):
+    for kind in ("benchmarks", "agents", "features", "capabilities", "sets"):
         parent = source_catalogue / kind
         _no_symlinks(parent)
         if not parent.exists():
@@ -269,7 +269,7 @@ def migrate_providers(apply_it: bool) -> int:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Copy legacy settings, custom catalogue entries and workspaces; preview by default.")
+    parser = argparse.ArgumentParser(prog="nullius migrate", description="Copy legacy settings, custom catalogue entries and workspaces; preview by default.")
     parser.add_argument("--from", dest="checkout", type=Path, help="existing Nullius checkout (left unchanged)")
     parser.add_argument("--secrets", type=Path, help="also copy a legacy benchmark licence directory")
     parser.add_argument("--providers", action="store_true",

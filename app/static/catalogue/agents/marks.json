@@ -4,5 +4,7 @@
   "mini-swe-agent": "catalogue/agents/mini-swe-agent.svg",
   "opencode": "catalogue/agents/opencode.svg",
   "codex": "brand/marks.svg#openai",
-  "terminus-2": "brand/marks.svg#harbor"
+  "terminus-2": "brand/marks.svg#harbor",
+  "digitalmate": "catalogue/agents/digitalmate.svg",
+  "swe-agent": "catalogue/agents/swe-agent.ico"
 }

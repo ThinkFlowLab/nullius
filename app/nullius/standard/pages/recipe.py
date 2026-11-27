@@ -35,6 +35,7 @@ command.
 from __future__ import annotations
 
 import math
+import os
 import re
 import shlex
 from typing import Callable, Dict, List, Optional
@@ -46,7 +47,7 @@ from nullius.standard.calls import exchanges, ledger, relay
 from nullius.standard.contract import definitions, match, ports
 from nullius.standard.proofs import prove
 from nullius.standard.requirements import hostreq
-from nullius.standard.runner import run
+from nullius.standard.runner import run, sets
 from nullius.standard.runner.retries import MAX_RETRIES
 
 CHOOSE_PROVIDER = "Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider."
@@ -122,7 +123,8 @@ def _capability_kind(b: dict) -> str:
 def benchmarks(cat) -> List[dict]:
     """The benchmarks the Benchmarks page and the builder's Benchmark step list: each of the catalogue's listed
     entries (``Catalog.listed_benchmarks``, whichever runner runs it) as ``b``, with its ``datasets``, its ``tasks``
-    and their ``unit`` (``Catalog.tasks_of``), what some of its options need of a machine (``host``, by label, None for nothing),
+    and their ``unit`` (``Catalog.tasks_of``), what it needs of a machine (``host``, each name's label, None for nothing: what its options need, and Docker when
+    its tasks run in images or Harbor runs it),
     what it is run with: ``family`` agent or capability (a benchmark only Harbor runs runs agents) and, for a
     capability, its ``kind``; ``versions``, another version's tasks and unit by version; and ``origins``, its versions'
     origins, each once, the default version's first."""
@@ -132,7 +134,7 @@ def benchmarks(cat) -> List[dict]:
         d = defs.get(b.key) or {}
         tasks, unit = cat.tasks_of(b)
         out.append({"b": b, "datasets": cat.datasets_of(b), "tasks": tasks, "unit": unit,
-                    "host": [hostreq.label(d, n) for n in sorted(d["host"])] if d.get("host") else None,
+                    "host": _machine_needs(b, d),
                     "family": d.get("family") or "agent", "kind": _capability_kind(d),
                     "origins": origins(d) if d else [b.origin],
                     # another version's tasks, when its datasets count differently (``Catalog.in_version``)
@@ -146,6 +148,25 @@ def origins(d: dict) -> List[str]:
     return list(dict.fromkeys([every.get(d["_default"]) or definitions.origin_of(d), *every.values()]))
 
 
+def _machine_needs(b, d: dict) -> Optional[dict]:
+    """What a listed benchmark needs of a machine, each name's label: what its options need, and Docker when its
+    tasks run in images or Harbor runs it (a Harbor run needs ``docker ps`` to answer)."""
+    out = {n: hostreq.label(d, n) for n in sorted(d.get("host") or {})}
+    if "docker" not in out and ("harbor" in b.harness or any(e.get("image") for e in (d.get("environments") or {}).values())):
+        out["docker"] = "Docker"
+    return out or None
+
+
+def _short(label: str) -> str:
+    """A version's label as the builder names it: without its commit."""
+    return re.sub(r"\s*\([0-9a-f]{7,40}\)$", "", label)
+
+
+def procedure_label(b: dict) -> str:
+    """The selected benchmark version whose own procedure runs by default."""
+    return " · ".join(filter(None, (b["label"], _short(definitions.version_label(b) or ""))))
+
+
 def _bench_page(b: dict) -> dict:
     """A benchmark as a page shows it. ``controls``: the ones it declares,
     each with who wrote it and where it comes from - what the builder offers
@@ -156,11 +177,15 @@ def _bench_page(b: dict) -> dict:
     controls = [{**{k: c[k] for k in ("key", "label", "source", "from", "expect")}, "must": prove.must_score(c["expect"])}
                 for c in (definitions.control(b, w) for w in definitions.CONTROLS) if c]
     versioned = definitions.version_of(b) is not None
+    task_sets = sets.rows(b["key"])
     return {"key": b["key"], "label": b["label"], "summary": b["summary"], "family": b["family"], "kind": _capability_kind(b),
+            "procedure": procedure_label(b),
+            "origin": definitions.origin_of(b),
             "ref": definitions.ref_of(b) if "_version" in b else b["key"],
             "version": b["_version"] if versioned else "",
             # its versions, each by the ref a recipe names it with (the bare key: the default)
             "versions": [{"ref": b["key"] if v == b.get("_default") else f"{b['key']}@{v}", "version": v, "default": v == b.get("_default"),
+                          "choice_label": _short((b.get("_labels") or {}).get(v) or v),
                           "label": (b.get("_labels") or {}).get(v) or v, "origin": (b.get("_origins") or {}).get(v) or "official"}
                          for v in b.get("_versions") or []] if versioned else [],
             "environments": {n: {"summary": e.get("summary", ""), "local_ok": bool(e.get("local_ok")), "network": e.get("network"),
@@ -203,10 +228,17 @@ def _bench_page(b: dict) -> dict:
                      for n, r in hostreq.all_of(b).items()},
             "datasets": [{"id": d["id"], "label": d.get("label") or d["id"], "summary": d.get("summary", ""), "units": d.get("units"),
                           "environment": d.get("environment") or "",
+                          # the list it is cut from, when the benchmark declares one: drawn as that dataset's own task set
+                          "subset_of": d.get("subset_of") or "",
                           "controls": [dict(c, **{k: status[d["id"]][c["key"]][k] for k in ("proven", "short", "failed")})
                                        for c in controls],
                           "proofs": {k: status[d["id"]][k]["proven"] for k in ("units", "leak")},
-                          "failed": {k: status[d["id"]][k]["failed"] for k in ("units", "leak") if status[d["id"]][k]["failed"]}}
+                          "failed": {k: status[d["id"]][k]["failed"] for k in ("units", "leak") if status[d["id"]][k]["failed"]},
+                          # the user's task sets cut from it (standard/runner/sets.py), each with the version it was made at;
+                          # a set of several datasets under each, its ``units`` its ids of this one
+                          "sets": [dict(s, units=s["parts"][d["id"]], whole=s["units"],
+                                        version_label=sets.version_label(b, s["version"]) if s["version"] else "")
+                                   for s in task_sets if d["id"] in s["parts"]]}
                          for d in b["datasets"]]}
 
 
@@ -463,8 +495,48 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     dss = [x for x in b["datasets"] if x["id"] in wanted]
     dss.sort(key=lambda x: wanted.index(x["id"]))
     unknown = [x for x in wanted if x not in {y["id"] for y in b["datasets"]}]
+    # lists cut from one list (subset_of) overlap: one of them a run, as the builder draws one of each
+    whole = {x["id"]: x.get("subset_of") or x["id"] for x in dss}
+    twice = [x for x in dss if [whole[y["id"]] for y in dss].count(whole[x["id"]]) > 1]
+    if twice:
+        add("dataset", f"{' and '.join(x.get('label') or x['id'] for x in twice)} share their tasks: choose one of them.")
     if not dss or unknown:
         add("dataset", f"Choose one or more of {b['label']}'s datasets" + (f" ({', '.join(unknown)} is not one)" if unknown else "") + ".")
+    # a chosen dataset's task set (``task_sets``: {dataset: NAME}), run in place of all its tasks; a recipe from
+    # before sets were frozen may name one NAME@N
+    set_of = {}                        # {dataset: {name, label, units, ids}}
+    asked = recipe.get("task_sets") or {}
+    if not isinstance(asked, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in asked.items()):
+        add("dataset", "Task sets are a dataset with a set's name each.")
+        asked = {}
+    for ds_id, ref in asked.items():
+        if ds_id not in {x["id"] for x in dss}:
+            add("dataset", f"The task set {ref} is for {ds_id}, a dataset not chosen.")
+            continue
+        try:
+            set_name, rev = sets.split_ref(ref)
+        except sets.Refused as e:
+            add("dataset", f"Task set {ref}: {e}.")
+            continue
+        try:
+            if not os.path.isfile(sets.path_of(b["key"], set_name)):
+                add("dataset", f"{b['label']} has no task set {set_name}: choose another, or all of {ds_id}'s tasks.")
+                continue
+            entry = sets.load(b["key"], set_name)
+        except sets.Refused as e:
+            add("dataset", sets.plain(e, b["key"], set_name))
+            continue
+        try:
+            got = sets.latest(entry, rev)
+        except sets.Refused as e:
+            add("dataset", f"Task set {ref}: {e}.")
+            continue
+        part = sets.parts(entry, got).get(ds_id)
+        if part is None:
+            add("dataset", f"The task set {sets.label_of(entry)} is cut from the dataset{'s' if len(sets.datasets_of(entry)) > 1 else ''} "
+                           f"{', '.join(sets.datasets_of(entry))}, not {ds_id}.")
+            continue
+        set_of[ds_id] = {"name": set_name, "label": sets.label_of(entry), "units": len(part), "ids": set(part)}
     side = "agent" if b["family"] == "agent" else "capability"
     # A control the benchmark declares (nop, oracle) is a choice beside the agents or capabilities: it runs
     # nothing as you and calls no model - a judged benchmark's judge only - so it asks for neither.
@@ -484,7 +556,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         control = ref in definitions.CONTROLS
         given, opts = {}, {}
         if ref == "model":
-            add("agent", "Choose Original, then choose the model on the Model step.")
+            add("agent", "Use the selected benchmark version's procedure, then choose the model on the Model step.")
             continue
         own = definitions.own_agent(base, ref) if ":" in ref else None
         if ":" in ref and own is None:
@@ -818,7 +890,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     nouns = bench_nouns = (b.get("units") or {}).get("nouns", "units")   # a dataset's count is always the benchmark's
     if picks and all(p.get("setup") for p in picks):          # only setups: a unit is theirs (a conversation)
         nouns = picks[0]["o"]["units"]["nouns"]
-    each = [None if picks and all(p.get("setup") for p in picks) else x.get("units") for x in dss]   # a setup's count is not the dataset's
+    each = [None if picks and all(p.get("setup") for p in picks) else (set_of[x["id"]]["units"] if x["id"] in set_of else x.get("units"))
+            for x in dss]   # a setup's count is not the dataset's; a task set's is its own
     total = sum(each) if all(each) else None
     n = sum(min(limit, t) for t in each) if isinstance(limit, int) and total else (limit or total)
     of = len(targets)
@@ -843,7 +916,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         o, control, given = p["o"], p["control"], p["given"]
         m = p["model"] if p.get("setup") else model
         words = ["nullius", "standard", "run", definitions.ref_of(b), o["_ref"], *(["--model", m] if m else []), "--provider", provider,
-                 "--dataset", d["id"], *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
+                 "--dataset", d["id"], *(["--set", set_of[d["id"]]["name"]] if d["id"] in set_of else []),
+                 *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
                  *[w for k, v in options_for_pick(d, p).items() for w in ("--bench-option", f"{k}={v}")],
                  *(["--attempts", str(repeat)] if repeat > 1 else []),
                  *(["--retries", str(retries)] if retries != own_retries else []),
@@ -928,16 +1002,15 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             return [STEP["agent"], "Check", f"{o['label']} ({o['key']}) · {o['source']} · {o['from']}"]
         if p.get("agent"):
             return [STEP["agent"], "Participant", f"{p['agent']['label']} · {p['agent'].get('benchmark_label') or b['label']}'s own"]
-        if p.get("setup"):
-            original = (b.get("setups") or {}).get("original") or {}
-            label = original.get("reference_agent") or ("No agent · Original" if side == "agent" else "Original " + (_bench_page(b)["kind"] or "capability"))
-            return [STEP["agent"], "Participant", label]
+        if p.get("setup"):                                                          # the version's own procedure
+            return [STEP["agent"], "Participant", f"{b['label']} · its own procedure"]
         proven = ", ".join(f"{q} {r.get('passed', '')}".strip() for q, r in (o.get("proven") or {}).items() if q in b["needs"])
         return [STEP["agent"], "Agent" if side == "agent" else "Capability", f"{o['label']} · {protocol(o)} · proven {proven}"]
     out["review"] = [[STEP["benchmark"], "Benchmark", f"{b['label']} · needs {', '.join(b['needs'])}"],
                      [STEP["runner"], "Runner", "Nullius"],
                      [STEP["dataset"], "Datasets" if many else "Dataset",
-                      ", ".join(f"{x.get('label') or x['id']}" + (f" · {x['units']} {bench_nouns}" if x.get("units") else "") for x in dss)],
+                      ", ".join(f"{x.get('label') or x['id']}" + (f" · task set {set_of[x['id']]['label']} · {set_of[x['id']]['units']} {bench_nouns}"
+                                                                   if x["id"] in set_of else f" · {x['units']} {bench_nouns}" if x.get("units") else "") for x in dss)],
                      *[[STEP["limits" if (b.get("options") or {})[k].get("limit") else "dataset" if (b.get("options") or {})[k].get("step") else "agent"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
                         _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)")
                         + ("" if all(per_ds[x["id"]].get(k) == v for x in dss) else f" · {', '.join(x.get('label') or x['id'] for x in dss if per_ds[x['id']].get(k) == v)}")]
@@ -994,7 +1067,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if any(p["control"] for p in picks) and any(definitions.own_image(e) for e in (b.get("environments") or {}).values()):
         notes.append(f"Each {(b.get('units') or {}).get('noun', 'unit')} of {b['label']} is its own image: the control "
                      "runs in it, so docker is needed where it runs, whatever the backend.")
-    if not isinstance(limit, int):
+    # Run asks first before every task of the datasets; a task set is a choice of tasks made already
+    if not isinstance(limit, int) and not set_of:
         out["confirm"] = f"Run all {total or ''} {nouns} of {b['label']}{' (' + ', '.join(x.get('label') or x['id'] for x in dss) + ')' if many else ''} with {', '.join(p['o']['label'] for p in picks)}?".replace("  ", " ")
     return out
 

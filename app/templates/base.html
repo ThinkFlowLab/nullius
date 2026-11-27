@@ -104,6 +104,7 @@
         <div class="nav-label">Analyse</div>
         <a class="nav-item {{ 'on' if ep in ('index', 'job', 'trial', 'save_trace') }}" href="{{ url_for('index') }}" data-label="Runs" aria-label="Runs"><svg class="ic"><use href="#i-runs"/></svg><span class="lbl">Runs</span></a>
         <a class="nav-item {{ 'on' if ep in ('compare', 'compare_task') }}" href="{{ url_for('compare') }}" data-label="Compare" aria-label="Compare"><svg class="ic"><use href="#i-compare"/></svg><span class="lbl">Compare</span></a>
+        <a class="nav-item {{ 'on' if ep in ('leaderboard', 'scoring_page') }}" href="{{ url_for('leaderboard') }}" data-label="Leaderboard" aria-label="Leaderboard"><svg class="ic"><use href="#i-leaderboard"/></svg><span class="lbl">Leaderboard</span></a>
       </div>
       <div class="nav-group">
         <div class="nav-label">Run</div>
@@ -418,6 +419,7 @@ document.querySelectorAll('.toast').forEach(t => {
 </script>
 {% endif %}
 <script src="{{ url_for('static', filename='controls.js') }}"></script>
+{% if judgements_unmoved() %}<script src="{{ url_for('static', filename='judgements-move.js') }}" data-url="{{ url_for('judgements_move') }}" data-csrf="{{ csrf_token() }}"></script>{% endif %}
 {% if not embedded %}
 <dialog id="settings-modal" class="settings-modal" aria-labelledby="settings-modal-title">
   <header class="settings-modal-head">

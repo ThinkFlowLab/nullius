@@ -1,7 +1,7 @@
 """Run LongMemEval over JSON lines using its pinned upstream code and client.
 
-For cap.memory/v1, setup feeds history sessions to add and the question to
-recall. produce uses the upstream history-chats prompt and reader call on
+For cap.memory/v1, setup feeds history sessions to add and the question,
+with its question date, to recall. produce uses the upstream history-chats prompt and reader call on
 recalled text. The reading option selects chain-of-note (800 tokens) or
 direct answers (500). Recalled text is not truncated: upstream truncation
 requires structured sessions. Reader calls retain upstream's unbounded
@@ -148,6 +148,18 @@ def units(dataset, setup=None):
     return {"units": [q for q in index() if kind == "all" or TYPES[q] == kind]}
 
 
+def describe(dataset, **_):
+    out = {}
+    for unit in units(dataset)["units"]:
+        q = entry(unit)
+        # questions are relative to their date; an abstention question's id ends _abs
+        date = q.get("question_date")
+        out[unit] = {"title": q["question"], "text": f"{q['question']}\n\nQuestion date: {date}" if date else q["question"],
+                     "categories": {"question_type": str(q["question_type"]),
+                                    "abstention": "yes" if unit.endswith("_abs") else "no"}}
+    return {"units": out}
+
+
 def setup(unit, dir):
     q = entry(unit)
     dates = q.get("haystack_dates") or [""] * len(q["haystack_session_ids"])
@@ -156,7 +168,10 @@ def setup(unit, dir):
         ts = [{"role": t.get("role") or "user", "text": str(t.get("content") or "")} for t in turns]
         sessions.append({"id": str(sid), "date": date or "", "turns": ts,
                          "text": f"Session Date: {date}\n" + "\n".join(f"{t['role']}: {t['text']}" for t in ts)})
-    return {"memory": {"add": sessions, "recall": [{"id": unit, "question": q["question"]}]}}
+    ask = {"id": unit, "question": q["question"]}
+    if q.get("question_date"):
+        ask["date"] = q["question_date"]
+    return {"memory": {"add": sessions, "recall": [ask]}}
 
 
 def produce(unit, dir, recalled, model, base_url, key):
@@ -373,7 +388,7 @@ def score_setup(unit, dir, judge):
                                    ("expansion_join", "separate"), ("gen_length", "upstream"))}}}
 
 
-HANDLERS = {"units": units, "setup": setup, "produce": produce, "score": score, "oracle": oracle, "answer": answer}
+HANDLERS = {"describe": describe, "units": units, "setup": setup, "produce": produce, "score": score, "oracle": oracle, "answer": answer}
 for line in sys.stdin:
     try:
         req = json.loads(line)

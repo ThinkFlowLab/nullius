@@ -1,7 +1,8 @@
 """Deleting a launch Nullius made, one run or a shard per machine: per run its
 folder, its roots and parsed jobs in every workspace, the judgements of its
-trials there, and its host copy when asked; never a launch with a run still
-going, nor a folder that is not a run's."""
+jobs - unless a copy of a job is still found, or a root cannot be read - and
+its host copy when asked; never a launch with a run still going, nor a folder
+that is not a run's."""
 from __future__ import annotations
 
 import json
@@ -13,6 +14,7 @@ from unittest.mock import patch
 
 from nullius import execution, hosts, workspace
 from nullius.judge import store
+from nullius.runs import parse
 
 from tests.test_workspace import _job_dir, _write_json
 
@@ -23,6 +25,8 @@ class RunDelete(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.root, self.home = os.path.join(self.tmp, "runs"), os.path.join(self.tmp, "ws")
         patcher = patch.dict(execution.EXECUTIONS, clear=True); patcher.start(); self.addCleanup(patcher.stop)
+        self.data = os.path.join(self.tmp, "data")
+        patcher = patch.object(store, "home", return_value=self.data); patcher.start(); self.addCleanup(patcher.stop)
         self.jobs = self.run_("r1")
         other = os.path.join(self.tmp, "elsewhere"); _job_dir(other, "job-b")
         self.a = workspace.create(self.home, [self.jobs, other], label="a")
@@ -42,15 +46,16 @@ class RunDelete(unittest.TestCase):
 
     def test_it_asks_what_goes(self):
         gone = execution.deletion(["r1"], self.home, self.root)
-        self.assertEqual((gone["bytes"], gone["judgements"], gone["workspaces"], gone["hosts"]), (gone["runs"][0]["bytes"], 4, ["a", "b"], {}))
+        self.assertEqual((gone["bytes"], gone["judgements"], gone["workspaces"], gone["hosts"]), (gone["runs"][0]["bytes"], 2, ["a", "b"], {}))
         gone = gone["runs"][0]
         self.assertEqual(gone["dir"], os.path.realpath(os.path.join(self.root, "r1")))
         self.assertGreater(gone["bytes"], 0)
         self.assertEqual(sorted(w["ws"].name for w in gone["workspaces"]), ["a", "b"])
-        self.assertEqual(gone["judgements"], 4)                                      # job-a's, in both lanes, in a and b
+        self.assertEqual(gone["judgements"], 2)                                      # job-a's, in both lanes, once however many workspaces held it
         self.assertIsNone(gone["host"])
 
     def test_it_deletes_the_folder_its_roots_and_its_judgements_only(self):
+        uid = self.uid("job-a")
         execution.delete(["r1"], self.home, self.root)
         self.assertFalse(os.path.exists(os.path.join(self.root, "r1")))
         a, b, c = (workspace.load(self.home, n) for n in "abc")
@@ -63,19 +68,132 @@ class RunDelete(unittest.TestCase):
         for ws in (a, c):
             self.assertEqual(len(store.job_dirs(ws.dir, ["job-b"])), 2)                # another root's judgements stay
         self.assertEqual(len(store.job_dirs(c.dir, ["job-a"])), 2)                     # c never held the run
+        self.assertEqual(store.job_dirs(self.data, [uid]), [])
+
+    def uid(self, name, root=None):
+        return parse.parse_job(os.path.join(root or self.jobs, name), trials=False).uid
+
+    def judged(self, root, name):
+        """A judgement of the job *name* under *root* in the user's store, as the pages make it."""
+        job = parse.parse_job(os.path.join(root, name))
+        store.save(self.data, job.uid, "t0", {"questions": "v", "answers": {"q": 1}})
+        return job.uid
+
+    def test_a_copy_elsewhere_or_a_root_that_cannot_be_read_keeps_the_judgements(self):
+        uid = self.judged(self.jobs, "job-a")
+        twin = os.path.join(self.tmp, "twin"); shutil.copytree(os.path.join(self.jobs, "job-a"), os.path.join(twin, "job-a"))
+        d = workspace.create(self.home, [twin], label="d")
+        self.assertEqual(execution.deletion(["r1"], self.home, self.root)["judgements"], 2)     # asked: its jobs' all, nothing checked
+        execution.delete(["r1"], self.home, self.root)
+        self.assertTrue(store.job_dirs(self.data, [uid]))                                       # a copy is in d
+        shutil.rmtree(twin)                                                          # d's root is gone: who owns them is unknown
+        self.run_("r2")
+        self.assertEqual(self.uid("job-a", os.path.join(self.root, "r2", "jobs")), uid)
+        execution.delete(["r2"], self.home, self.root)
+        self.assertTrue(store.job_dirs(self.data, [uid]))
+        workspace.delete(self.home, d.name)
+        self.run_("r3")
+        execution.delete(["r3"], self.home, self.root)
+        self.assertEqual(store.job_dirs(self.data, [uid]), [])
+
+    def test_a_copy_whose_config_cannot_be_read_keeps_the_judgements(self):
+        cfg = os.path.join(self.jobs, "job-a", "config.json")
+        _write_json(cfg, dict(json.load(open(cfg)), standard={"uuid": "11111111-2222-3333-4444-555555555555"}))
+        uid = self.judged(self.jobs, "job-a")
+        twin = os.path.join(self.tmp, "twin"); shutil.copytree(os.path.join(self.jobs, "job-a"), os.path.join(twin, "job-a"))
+        workspace.create(self.home, [twin], label="d")
+        with open(os.path.join(twin, "job-a", "config.json"), "w") as fh:
+            fh.write('{"job_name": "job-a", "standard": {"uu')                          # cut short: whose it is, unknown
+        self.assertNotEqual(self.uid("job-a", twin), uid)                              # the display parse derives another
+        execution.delete(["r1"], self.home, self.root)
+        self.assertTrue(store.job_dirs(self.data, [uid]))
+
+    def test_a_copy_whose_folder_cannot_be_searched_keeps_the_judgements(self):
+        uid = self.judged(self.jobs, "job-a")
+        twin = os.path.join(self.tmp, "twin"); shutil.copytree(os.path.join(self.jobs, "job-a"), os.path.join(twin, "job-a"))
+        workspace.create(self.home, [twin], label="d")
+        inside = os.path.join(twin, "job-a", "")
+
+        def denied(real):                               # its root listed, the folder without search permission
+            def call(path, *a, **k):
+                if isinstance(path, (str, os.PathLike)) and os.fspath(path).startswith(inside):
+                    raise PermissionError(13, "Permission denied", path)
+                return real(path, *a, **k)
+            return call
+        with patch.object(os, "stat", denied(os.stat)), patch("builtins.open", denied(open)):
+            execution.delete(["r1"], self.home, self.root)
+        self.assertTrue(store.job_dirs(self.data, [uid]))
+
+    def test_another_job_of_the_same_name_does_not_keep_them(self):
+        uid = self.judged(self.jobs, "job-a")
+        other = os.path.join(self.tmp, "other"); _job_dir(other, "job-a")
+        _write_json(os.path.join(other, "job-a", "result.json"), {"id": "j2", "started_at": "2026-09-05T00:00:00Z", "stats": {}})
+        workspace.create(self.home, [other], label="d")
+        self.assertNotEqual(self.uid("job-a", other), uid)
+        execution.delete(["r1"], self.home, self.root)
+        self.assertEqual(store.job_dirs(self.data, [uid]), [])
+
+    def test_runs_of_one_launch_deleted_together_are_no_copy_of_each_other(self):
+        uid = self.judged(self.jobs, "job-a")
+        self.run_("r2")
+        execution.delete(["r1", "r2"], self.home, self.root)
+        self.assertEqual(store.job_dirs(self.data, [uid]), [])
+
+    def test_a_run_that_stays_keeps_the_judgements_of_its_jobs(self):
+        uid = self.judged(self.jobs, "job-a")
+        r2 = os.path.dirname(self.run_("r2"))                                          # a copy of job-a, deleted with r1
+        real = shutil.rmtree
+
+        def fails(path, *a, **k):
+            if os.path.realpath(path) == os.path.realpath(r2):
+                os.remove(os.path.join(r2, "jobs", "job-a", "config.json"))           # in part: its identity read now is another
+                raise PermissionError(13, "Permission denied", path)
+            return real(path, *a, **k)
+        with patch.object(execution.shutil, "rmtree", fails):
+            got = execution.delete(["r1", "r2"], self.home, self.root)
+        self.assertEqual(got["stays"], ["r2"])
+        self.assertTrue(store.job_dirs(self.data, [uid]))
+        with self.subTest("a root that cannot be listed when they are decided"), \
+                patch.object(execution, "_copies", side_effect=PermissionError(13, "Permission denied")):
+            _job_dir(os.path.join(r2, "jobs"), "job-a")                                 # whole again: job-a's last folder
+            execution.delete(["r2"], self.home, self.root)
+            self.assertTrue(store.job_dirs(self.data, [uid]))
+
+    def test_a_copy_is_told_from_its_files_not_from_a_cached_parse(self):
+        start = lambda d, at: _write_json(os.path.join(d, "result.json"), {"id": "j1", "started_at": at, "stats": {}})
+        start(os.path.join(self.jobs, "job-a"), "2026-09-04T00:00:00Z")
+        uid = self.judged(self.jobs, "job-a")
+        twin = os.path.join(self.tmp, "twin"); _job_dir(twin, "job-a"); start(os.path.join(twin, "job-a"), "2026-09-05T00:00:00Z")
+        d = workspace.create(self.home, [twin], label="d")
+        workspace.load_jobs(d, d.roots)                                              # cached as another job
+        res = os.path.join(twin, "job-a", "result.json"); st = os.stat(res)
+        start(os.path.join(twin, "job-a"), "2026-09-04T00:00:00Z")                    # now a copy: same size, same time
+        os.utime(res, ns=(st.st_atime_ns, st.st_mtime_ns))
+        self.assertEqual(self.uid("job-a", twin), uid)
+        execution.delete(["r1"], self.home, self.root)
+        self.assertTrue(store.job_dirs(self.data, [uid]))
+
+    def test_a_job_of_the_same_id_under_a_root_that_cannot_be_read_keeps_the_old_records(self):
+        twin = os.path.join(self.tmp, "twin"); _job_dir(twin, "job-a")
+        self.a.roots.append(twin); workspace.save(self.a); workspace.load_jobs(self.a, self.a.roots)
+        os.rename(twin, twin + ".unmounted")
+        workspace.load_jobs(self.a, [self.jobs])                                     # a page of the run's root alone
+        self.assertEqual(sorted(e.get("job_id") for e in workspace.job_index(self.a).values()), ["job-a", "job-a", "job-b"])
+        execution.delete(["r1"], self.home, self.root)
+        self.assertEqual(len(store.job_dirs(self.a.dir, ["job-a"])), 2)
 
     def test_a_job_of_the_same_id_in_another_root_keeps_its_judgements(self):
         twin = os.path.join(self.tmp, "twin"); _job_dir(twin, "job-a")
         self.a.roots.append(twin); workspace.save(self.a); workspace.load_jobs(self.a, self.a.roots)
         execution.delete(["r1"], self.home, self.root)
-        self.assertEqual(len(store.job_dirs(self.a.dir, ["job-a"])), 2)
+        self.assertEqual(len(store.job_dirs(self.data, [self.uid("job-a", twin)])), 2)   # a copy: its records follow it
         self.assertEqual(store.job_dirs(self.b.dir, ["job-a"]), [])
 
     def test_a_job_of_the_same_id_deleted_from_another_root_keeps_none(self):
         twin = os.path.join(self.tmp, "twin"); _job_dir(twin, "job-a")
         self.a.roots.append(twin); workspace.save(self.a); workspace.load_jobs(self.a, self.a.roots)
         shutil.rmtree(os.path.join(twin, "job-a"))                                   # the older copy deleted by hand
-        self.assertEqual(execution.deletion(["r1"], self.home, self.root)["judgements"], 4)
+        self.assertEqual(execution.deletion(["r1"], self.home, self.root)["judgements"], 2)
         execution.delete(["r1"], self.home, self.root)
         self.assertEqual(store.job_dirs(self.a.dir, ["job-a"]), [])
 
@@ -211,7 +329,7 @@ class Owners(unittest.TestCase):
                 found = [e for e in recs if any(j["name"] == job for j in e.plan.jobs)]
                 before = max(found, key=lambda e: e.started) if found else None     # Reference scan: once per job.
                 self.assertIs(owner.get(job), before)
-                self.assertIs(execution.for_job(job), before); self.assertIs(execution.for_job(job, owner), before)
+                self.assertIs(execution.writing(execution.writers().get(job, ()), job), before)
         self.assertEqual({j: e.id for j, e in owner.items()}, {"a": "new", "b": "tie-1", "c": "tie-1"})
 
 

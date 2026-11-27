@@ -47,6 +47,7 @@ class Value:
     baseline: bool = False
     tag: str = ""           # a short name, where the full one does not fit (a scatter's dot)
     series: int = 0         # its colour, 1 on, the same in every chart; 0 for none
+    key: str = ""
 
     def cls(self, shape: str) -> str:
         """A mark's classes: its shape, its series (``s1`` to ``s<SERIES>``, cycling) and whether it is a check."""
@@ -105,6 +106,7 @@ class Mark:
     y2: float = 0.0
     cls: str = ""
     title: str = ""
+    key: str = ""
 
 
 @dataclass(frozen=True)
@@ -115,6 +117,7 @@ class Text:
     anchor: str = "start"
     cls: str = ""
     leading: float = _LINE
+    key: str = ""
 
 
 @dataclass(frozen=True)
@@ -256,24 +259,25 @@ _S_HEIGHT, _S_LEFT, _S_TOP, _S_BOTTOM = 270.0, 48.0, 22.0, 38.0
 _TAG_W, _TAG_H = 7.5, 13.0     # a tag's width per character and its height, at the template's font size
 
 
-def _tag_box(px: float, py: float, width: float, side: str) -> tuple:
+def _tag_box(px: float, py: float, width: float, side: str, radius=_DOT, extra=0) -> tuple:
     """Where a tag ``width`` wide goes on ``side`` of a dot at (px, py): (x, baseline, anchor, box)."""
-    gap = _DOT + 3
+    gap = radius + 3
     x, base, anchor = {"right": (px + gap, py + 4, "start"), "left": (px - gap, py + 4, "end"),
-                       "above": (px, py - gap - 2, "middle"), "below": (px, py + gap + 10, "middle")}[side]
+                       "above": (px, py - gap - 2 - extra, "middle"), "below": (px, py + gap + 10, "middle")}[side]
     x0 = {"start": x, "end": x - width, "middle": x - width / 2}[anchor]
-    return x, base, anchor, (x0, base - _TAG_H + 3, x0 + width, base + 3)
+    return x, base, anchor, (x0, base - _TAG_H + 3, x0 + width, base + 3 + extra)
 
 
 def _overlaps(a: tuple, b: tuple) -> bool:
     return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
 
 
-def scatter(x: Metric, y: Metric) -> Panel:
+def scatter(x: Metric, y: Metric, *, tiles=False) -> Panel:
     """A dot per item at (x, y), and its tag (``Value.tag``, else its place in the order) beside it, spelled out in a
     key under the plot. Every item keeps its own dot: items at one place are set in a ring around it, each tag outward
     from its dot. Any other tag takes the first side of its dot inside the plot and clear of the dots and tags before
     it."""
+    radius = 11 if tiles else _DOT
     pairs = list(zip(x.values, y.values))
     tags = [a.tag or str(i + 1) for i, (a, _) in enumerate(pairs)]
     shown = [(t, a, b) for t, (a, b) in zip(tags, pairs) if a.value is not None and b.value is not None]
@@ -291,29 +295,42 @@ def scatter(x: Metric, y: Metric) -> Panel:
         places.setdefault((sx(item[1].value), sy(item[2].value)), []).append(item)
     dots = []     # (x, y, the tag's place on its ring or None, tag, x value, y value)
     for (px, py), group in places.items():
-        ring = max(_DOT * 2, len(group) * (2 * _DOT + 4) / (2 * math.pi)) if len(group) > 1 else 0.0
+        ring = max(radius * 2, len(group) * (2 * radius + 4) / (2 * math.pi)) if len(group) > 1 else 0.0
         for k, item in enumerate(group):
             turn = 2 * math.pi * k / len(group) - math.pi / 2
             at = (round(px + (ring + 11) * math.cos(turn), 2), round(py + (ring + 11) * math.sin(turn) + 4, 2)) if ring else None
             dots.append((round(px + ring * math.cos(turn), 2), round(py + ring * math.sin(turn), 2), at, *item))
-    taken = [(px - _DOT, py - _DOT, px + _DOT, py + _DOT) for px, py, *_ in dots]
-    taken += [(tx - _TAG_W, ty - _TAG_H + 3, tx + _TAG_W, ty + 3) for _, _, (tx, ty), *_ in (d for d in dots if d[2])]
+    if tiles:
+        placed = []
+        for px, py, *rest in dots:
+            candidates = [(max(left + radius, min(right - radius, px + dx)),
+                           max(top + radius, min(bottom - radius, py + dy)))
+                          for distance in range(0, 100, 2)
+                          for dx, dy in ((distance, 0), (-distance, 0), (0, distance), (0, -distance))]
+            px, py = next(((cx, cy) for cx, cy in candidates if all(math.hypot(cx-ox, cy-oy) >= 2*radius+2 for ox, oy, *_ in placed)), candidates[-1])
+            placed.append((px, py, *rest))
+        dots = placed
+    taken = [(px - radius, py - radius, px + radius, py + radius) for px, py, *_ in dots]
+    taken += [(tx - _TAG_W, ty - _TAG_H + 3, tx + _TAG_W, ty + 3) for _, _, (tx, ty), *_ in (d for d in dots if d[2] and not tiles)]
     for px, py, at, tag, a, b in dots:
-        marks.append(Mark("circle", px, py, r=_DOT, cls=a.cls("dot"),
+        marks.append(Mark("tile" if tiles else "circle", px, py, r=radius, cls=a.cls("dot"), key=a.key,
                           title=f"{tag} {a.name}: {x.label} {a.reading}, {y.label} {b.reading}"))
-        if at:      # on a ring, the tag sits outward from its dot
+        if at and not tiles:      # on a ring, the tag sits outward from its dot
             texts.append(Text(*at, (tag,), "middle", "tag"))
             continue
-        width = _TAG_W * len(tag)
-        spots = [_tag_box(px, py, width, side) for side in ("right", "left", "above", "below")]
+        width = _TAG_W * max(len(tag), len(a.note) if tiles else 0)
+        extra = 15 if tiles and a.note else 0
+        offsets = [0] if not tiles else [0] + [sign*d for d in range(15, 211, 15) for sign in (1, -1)]
+        spots = [_tag_box(px, py + offset, width, side, radius, extra)
+                 for offset in offsets for side in ("right", "left", "above", "below")]
         inside = [s for s in spots if s[3][0] >= left and s[3][2] <= right and s[3][1] >= top and s[3][3] <= bottom]
         tx, base, anchor, box = next((s for s in inside if not any(_overlaps(s[3], t) for t in taken)), (inside or spots)[0])
         taken.append(box)
-        texts.append(Text(tx, base, (tag,), anchor, "tag"))
+        texts.append(Text(tx, base, (tag, a.note) if tiles and a.note else (tag,), anchor, "tag", key=a.key))
     key_y = _S_HEIGHT + 8
     key = _LEFT + (12 if any(a.series for a, _ in pairs) else 0)
     drawn = {id(d[4]) for d in dots}
-    for tag, (a, _) in zip(tags, pairs):
+    for tag, (a, _) in ([] if tiles else zip(tags, pairs)):
         # a name the caller numbered already (two runs of one agent) is not numbered twice
         lines = tuple(textwrap.wrap(a.name if a.name.startswith(f"{tag}. ") else f"{tag}. {a.name}", _CHARS))
         if a.series:        # its colour beside its name

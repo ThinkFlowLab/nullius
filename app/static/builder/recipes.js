@@ -61,9 +61,7 @@
     const steps = shown.map((s, n) => `<section class="rcp-step"><h3><em>0${n + 1}</em>${esc(C.STEPS[s])}</h3>${d.rows.filter(([i]) => i === s).map(([, t, v]) => `<div class="rcp-row"><small>${esc(t)}</small><span>${esc(v)}</span></div>`).join('')}</section>`).join('');
     show(head(item.name, true) + warn + steps + `<h3 class="rcp-json-h">JSON</h3><pre class="rcp-json">${esc(JSON.stringify(item.recipe, null, 2))}</pre>`, true);
   }
-  function ask(item) {
-    show(head('Delete recipe ' + item.name) + `<div class="launch-delete-acts"><button type="button" class="btn ghost" data-close autofocus>Keep it</button><button type="button" class="btn danger" data-delete="${esc(item.id)}">Delete recipe</button></div>`, false);
-  }
+  const ask = item => show(C.deleteAsk(item, 'rcp-dialog-h', esc), false);
   function download(item) {
     const url = URL.createObjectURL(new Blob([JSON.stringify(item.recipe, null, 2) + '\n'], {type: 'application/json'})), a = document.createElement('a');
     a.href = url; a.download = (item.recipe.name || 'recipe') + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);

@@ -562,6 +562,11 @@ def render_benchmark_page(entry, cat, by_key: dict, versions: list) -> str:
     if entry.published:
         out += ["## As published", "",
                 _table(["Harbor agent, among the builder's", "Model", "What it is"], [[f"`{entry.published['agent']}`", "any", entry.published["says"]]]), ""]
+    fixes = [(v["_ref"], f) for v in (versions if d else []) for f in (v.get("upstream") or {}).get("fixes") or []]
+    if fixes:
+        out += ["## Changes from official", ""]
+        out += [f"- `{ref}`: {_cell(t + (f'[{w}]({u})' if u else '') + rest)}" for ref, f in fixes
+                for t, w, u, rest in [definitions.fix_parts(f)]] + [""]
     if entry.good_to_know:
         out += ["## Good to know", ""]
         out += [f"- {_cell(note)}" for note in entry.good_to_know] + [""]
