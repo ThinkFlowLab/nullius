@@ -116,45 +116,50 @@ class Client:
     def job(self, job_id: str, workspace: Optional[str] = None) -> dict:
         return self.request("GET", self._q("jobs", job_id), workspace=workspace)
 
-    def live(self, job_id: str) -> dict:
-        return self.request("GET", self._q("jobs", job_id, "live"))
+    def live(self, job_id: str, workspace: Optional[str] = None) -> dict:
+        return self.request("GET", self._q("jobs", job_id, "live"), workspace=workspace)
 
     def trial(self, job_id: str, trial: str, workspace: Optional[str] = None) -> dict:
         return self.request("GET", self._q("jobs", job_id, "trials", trial), workspace=workspace)
 
     def conversation(self, job_id: str, trial: str, **query) -> dict:
-        """The trial's conversation, paged: ``q``, ``kind``, ``page``, ``step``."""
+        """The trial's conversation, paged: ``q``, ``kind``, ``page``, ``step``; ``workspace`` as the other reads."""
         return self.request("GET", self._q("jobs", job_id, "trials", trial, "conversation"), **query)
 
-    def trace(self, job_id: str, trial: str) -> dict:
-        return self.request("GET", self._q("jobs", job_id, "trials", trial, "trace"))
+    def trace(self, job_id: str, trial: str, workspace: Optional[str] = None) -> dict:
+        return self.request("GET", self._q("jobs", job_id, "trials", trial, "trace"), workspace=workspace)
 
-    def artifacts(self, job_id: str, trial: str) -> list:
-        return self.request("GET", self._q("jobs", job_id, "trials", trial, "artifacts"))
+    def artifacts(self, job_id: str, trial: str, workspace: Optional[str] = None) -> list:
+        return self.request("GET", self._q("jobs", job_id, "trials", trial, "artifacts"), workspace=workspace)
 
-    def artifact(self, job_id: str, trial: str, key: str) -> dict:
-        return self.request("GET", self._q("jobs", job_id, "trials", trial, "artifacts", key))
+    def artifact(self, job_id: str, trial: str, key: str, workspace: Optional[str] = None) -> dict:
+        return self.request("GET", self._q("jobs", job_id, "trials", trial, "artifacts", key), workspace=workspace)
 
     def compare(self, *job_ids: str, matched: bool = False, workspace: Optional[str] = None) -> dict:
         return self.request("GET", "/compare", job=list(job_ids), matched=matched, workspace=workspace)
 
+    def leaderboard(self, workspace: Optional[str] = None) -> dict:
+        """The workspace's agents ranked by their composite score, under the server's Scoring settings."""
+        return self.request("GET", "/leaderboard", workspace=workspace)
+
     # judgements: reading one is free, asking is a paid model call for each trial
 
-    def judgements(self, job_id: str, lane: str = "decision") -> dict:
+    def judgements(self, job_id: str, lane: str = "decision", workspace: Optional[str] = None) -> dict:
         """One judge's records for a job: ``judged``, ``trials``, ``records`` by trial."""
-        return self.request("GET", self._q("jobs", job_id, "judgements"), lane=lane)
+        return self.request("GET", self._q("jobs", job_id, "judgements"), lane=lane, workspace=workspace)
 
-    def judgement(self, job_id: str, trial: str, lane: str = "decision") -> dict:
-        return self.request("GET", self._q("jobs", job_id, "trials", trial, "judgement"), lane=lane)
+    def judgement(self, job_id: str, trial: str, lane: str = "decision", workspace: Optional[str] = None) -> dict:
+        return self.request("GET", self._q("jobs", job_id, "trials", trial, "judgement"), lane=lane, workspace=workspace)
 
-    def judge(self, job_id: str, trial: str, lane: str = "decision") -> dict:
+    def judge(self, job_id: str, trial: str, lane: str = "decision", workspace: Optional[str] = None) -> dict:
         """Ask a judge (``decision`` or ``llm``) about one trial: the record as stored."""
-        return self.request("POST", self._q("jobs", job_id, "trials", trial, "judge"), {"lane": lane}, wait=600)
+        return self.request("POST", self._q("jobs", job_id, "trials", trial, "judge"), {"lane": lane}, wait=600, workspace=workspace)
 
-    def judge_job(self, job_id: str, lane: str = "decision", confirm: bool = False) -> dict:
+    def judge_job(self, job_id: str, lane: str = "decision", confirm: bool = False, workspace: Optional[str] = None) -> dict:
         """Ask about every trial of the job that judge has not judged. Without ``confirm`` it is refused with
         ``todo``, how many it would ask; the call returns when all are asked."""
-        return self.request("POST", self._q("jobs", job_id, "judge"), {"lane": lane, **({"confirm": True} if confirm else {})}, wait=6 * 3600)
+        return self.request("POST", self._q("jobs", job_id, "judge"), {"lane": lane, **({"confirm": True} if confirm else {})},
+                            wait=6 * 3600, workspace=workspace)
 
     # recipes and runs
 
@@ -259,14 +264,18 @@ def main(argv=None) -> int:
     p.add_argument("job_ids", nargs="+")
     p.add_argument("--matched", action="store_true")
     p.add_argument("--workspace")
+    p = sub.add_parser("leaderboard", help="the workspace's agents ranked by composite score")
+    p.add_argument("--workspace")
     p = sub.add_parser("judgements", help="a judge's records for a job")
     p.add_argument("job_id")
     p.add_argument("--lane", choices=("decision", "llm"), default="decision")
+    p.add_argument("--workspace")
     p = sub.add_parser("judge", help="ask a judge about one trial, or a job's unjudged trials: a paid call each")
     p.add_argument("job_id")
     p.add_argument("trial", nargs="?")
     p.add_argument("--lane", choices=("decision", "llm"), default="decision")
     p.add_argument("--yes", action="store_true", help="ask about every unjudged trial of the job")
+    p.add_argument("--workspace")
     sub.add_parser("recipes", help="the saved recipes")
     p = sub.add_parser("check", help="what Review shows for a recipe; starts nothing")
     p.add_argument("recipe", metavar="RECIPE")
@@ -307,8 +316,10 @@ def main(argv=None) -> int:
                    "jobs": lambda: nx.jobs(a.workspace),
                    "job": lambda: nx.trial(a.job_id, a.trial, a.workspace) if a.trial else nx.job(a.job_id, a.workspace),
                    "compare": lambda: nx.compare(*a.job_ids, matched=a.matched, workspace=a.workspace),
-                   "judgements": lambda: nx.judgements(a.job_id, a.lane),
-                   "judge": lambda: nx.judge(a.job_id, a.trial, a.lane) if a.trial else nx.judge_job(a.job_id, a.lane, confirm=a.yes),
+                   "leaderboard": lambda: nx.leaderboard(a.workspace),
+                   "judgements": lambda: nx.judgements(a.job_id, a.lane, a.workspace),
+                   "judge": lambda: (nx.judge(a.job_id, a.trial, a.lane, a.workspace) if a.trial
+                                     else nx.judge_job(a.job_id, a.lane, confirm=a.yes, workspace=a.workspace)),
                    "check": lambda: nx.check(_recipe_arg(a.recipe), a.where),
                    "status": lambda: nx.run(a.run_id, a.since), "stop": lambda: nx.stop(a.run_id),
                    "continue": lambda: nx.continue_(a.run_id)}[a.cmd]()

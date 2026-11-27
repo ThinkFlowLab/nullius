@@ -33,7 +33,7 @@ nullius access revoke ID
 
 | Access | Allows |
 | --- | --- |
-| Read, `read` (default) | Catalogue, jobs, trials, judgements, comparisons, saved recipes, runs |
+| Read, `read` (default) | Catalogue, jobs, trials, judgements, comparisons, the leaderboard, saved recipes, runs |
 | Read and run, `run` | Read, and check, start, continue and stop runs, ask a judge, save recipes |
 
 - Shown once, at creation. The server keeps its hash.
@@ -61,10 +61,11 @@ job["adjusted_solve_rate"], job["counts"]
 
 | Call | Gives |
 | --- | --- |
-| `info()`, `catalogue()`, `workspaces()` | The server, what it can run, its workspaces |
+| `info()`, `catalogue()`, `workspaces()` | The server, what it can run with each benchmark's [task sets](cli/task-sets.md), its workspaces |
 | `jobs()`, `job(id)`, `live(id)` | As `nullius runs list` and `show --json`; the live board |
 | `trial(job, trial)`, `conversation(...)`, `trace(...)`, `artifacts(...)`, `artifact(..., key)` | One trial and its evidence, redacted as on the pages |
 | `compare(a, b, ..., matched=False)` | As `nullius compare --json` |
+| `leaderboard()` | As `nullius leaderboard --json`, under the server's Scoring settings |
 | `judgements(job)`, `judgement(job, trial)` | A judge's stored answers; `lane="llm"` for the LLM judge |
 | `judge(job, trial)`, `judge_job(job, confirm=False)` | Ask a judge: [below](#asking-a-judge) |
 | `recipes()`, `recipe(id_or_name)`, `save_recipe(recipe)` | The builder's saved recipes |
@@ -72,6 +73,8 @@ job["adjusted_solve_rate"], job["counts"]
 | `start(recipe, where=None, name=None, confirm=False)` | `runs`: one per machine |
 | `runs()`, `run(id, since=0)`, `follow(id)`, `wait(id)` | State, stages, log |
 | `stop(id)`, `continue_(id)` | Stop; answer a paused run |
+
+Jobs are the open workspace's; `workspace="NAME"` on a read or a judge call names another.
 
 A refusal raises `ApiError`: the server's sentence, `status`, `document`. A redirect is refused: give the final address.
 
@@ -84,6 +87,8 @@ A run starts as Review starts it.
 | The recipe has errors (400) | Fixed: `errors` names them |
 | A machine lacks a prerequisite (409) | Met: `machines` lists each |
 | The recipe asks a question (409), such as the whole dataset | `confirm=True` |
+
+A recipe's `task_sets` runs a task set in place of a dataset's tasks: `{"test": "first-two"}`, a name the catalogue lists. It asks no question.
 
 - Build a recipe in the [run builder](builder.md), save it, start it by name.
 - Each start is a new run: the recipe's name and the second, or `name`.
@@ -109,6 +114,7 @@ export NULLIUS_SERVER=http://bench.internal:5057 NULLIUS_TOKEN=...
 nullius remote jobs
 nullius remote job JOB [TRIAL]
 nullius remote compare JOB JOB [--matched]
+nullius remote leaderboard
 nullius remote judgements JOB [--lane llm]
 nullius remote judge JOB [TRIAL] [--lane llm] [--yes]
 nullius remote check RECIPE
@@ -117,7 +123,7 @@ nullius remote status RUN
 nullius remote stop RUN
 ```
 
-`RECIPE`: a recipe file, or a saved recipe's name or id. One JSON document on stdout. Exit 3 not found, 4 refused or unreachable; `run --follow` exits 4 unless the run ends `done`.
+`RECIPE`: a recipe file, or a saved recipe's name or id. `--workspace NAME` on a read or `judge` names another workspace. One JSON document on stdout. Exit 3 not found, 4 refused or unreachable; `run --follow` exits 4 unless the run ends `done`.
 
 ## Assistants
 
@@ -125,7 +131,7 @@ nullius remote stop RUN
 NULLIUS_SERVER=http://bench.internal:5057 NULLIUS_TOKEN=... nullius mcp
 ```
 
-Tools: read jobs, trials, judgements and comparisons; check, start, follow and stop runs; ask a judge about one trial. A `read` token makes it read-only. `start_run` starts only with `confirm` when the recipe asks a question.
+Tools: read jobs, trials, judgements, comparisons and the leaderboard; check, start, follow and stop runs; ask a judge about one trial. A `read` token makes it read-only. `start_run` starts only with `confirm` when the recipe asks a question.
 
 ## Routes
 
@@ -138,7 +144,7 @@ Tools: read jobs, trials, judgements and comparisons; check, start, follow and s
 | `GET /jobs`, `/jobs/<job>`, `/jobs/<job>/live` | read |
 | `GET /jobs/<job>/trials/<trial>`, `…/conversation`, `…/trace`, `…/artifacts`, `…/artifacts/<key>` | read |
 | `GET /jobs/<job>/judgements`, `/jobs/<job>/trials/<trial>/judgement` (`?lane=decision\|llm`) | read |
-| `GET /compare?job=A&job=B[&matched=1]` | read |
+| `GET /compare?job=A&job=B[&matched=1]`, `/leaderboard` | read |
 | `GET /recipes`, `/recipes/<id or name>` | read |
 | `GET /runs`, `/runs/<run>[?since=N]` | read |
 | `POST /recipes` | run |
@@ -146,4 +152,4 @@ Tools: read jobs, trials, judgements and comparisons; check, start, follow and s
 | `POST /runs/<run>/stop`, `/runs/<run>/continue` | run |
 | `POST /jobs/<job>/trials/<trial>/judge`, `/jobs/<job>/judge` | run |
 
-Jobs are the open workspace's; `?workspace=NAME` reads another.
+Jobs are the open workspace's; `?workspace=NAME` reads another, and judges a job there.

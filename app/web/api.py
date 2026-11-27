@@ -9,7 +9,7 @@ served-name rule (``shared._served_name``) leaves them to their token.
 recipes and asks a judge. Nothing here reads or writes Settings, a key or a licence.
 
 A read answers the document its command prints with ``--json``
-(``nullius.runs.cli``, ``nullius.compare.cli``, ``nullius.workspace_cli``).
+(``nullius.runs.cli``, ``nullius.compare.cli``, ``nullius.leaderboard.cli``, ``nullius.workspace_cli``).
 A run is a recipe of the Nullius standard, started as Review starts it:
 compiled on the server, its prerequisites asked first, the question Review
 asks answered by ``confirm``. A Harbor recipe is started from the builder.
@@ -30,11 +30,13 @@ from nullius import access, execution, providers
 from nullius.catalogue import catalog
 from nullius.compare import cli as compare_cli, comparison
 from nullius.judge import client as judge_client, store as judge_store
+from nullius.leaderboard import service as leaderboard_service
 from nullius.recipes import store as recipe_store
 from nullius.redact import redact
 from nullius.runs import artifacts, cli as runs_cli
 from nullius.standard.contract import definitions, match
 from nullius.standard.pages import recipe as standard_recipe
+from nullius.standard.runner import sets as task_sets
 from nullius import workspace, workspace_cli
 
 from .core import app
@@ -69,6 +71,9 @@ def api(scope: str):
             if not access.allows(record, scope):
                 return _error(403, f"This token's scope is {record['scope']}: this needs {scope}.")
             g.api_token = record
+            name = request.args.get("workspace")
+            if name and workspace.load(shared.WS_HOME, name) is None:      # else a page's 404, which blames the address
+                return _error(404, f"no workspace {name!r}")
             try:
                 return view(*args, **kwargs)
             except HTTPException as e:
@@ -122,7 +127,8 @@ def api_info():
 @api("read")
 def api_catalogue():
     """The benchmarks with the runners that can run each, the agents and the capabilities; a standard benchmark with
-    its datasets and what fits it, by the reference a recipe names it with. A benchmark and an agent say their origin."""
+    its datasets, its task sets as its page lists them (a recipe's ``task_sets`` names one for a dataset) and what fits
+    it, by the reference a recipe names it with. A benchmark and an agent say their origin."""
     defs = {kind: definitions.load(kind)[0] for kind in definitions.KINDS}
     fits = match.table(defs["benchmark"], defs["agent"], defs["capability"])
     standard = {b["key"]: b for b in defs["benchmark"]}
@@ -133,6 +139,7 @@ def api_catalogue():
         if s:
             row.update(family=s["family"], needs=s.get("needs") or [],
                        datasets=[{"id": d["id"], "label": d.get("label"), "units": d.get("units")} for d in s["datasets"]],
+                       task_sets=task_sets.rows(b.key),
                        fits=[ref for ref, why in fits.get(b.key, {}).items() if not why])
         benchmarks.append(row)
     others = {kind: [{"key": d["key"], "ref": d.get("_ref") or d["key"], "label": d.get("label"), "summary": d.get("summary"),
@@ -262,6 +269,17 @@ def api_compare():
     except ValueError as e:
         return _error(404, str(e))
     return _json(compare_cli.document(comparison.build(selected, "matched" if request.args.get("matched") in ("1", "true") else "whole")))
+
+
+@app.route(PREFIX + "/leaderboard")
+@api("read")
+def api_leaderboard():
+    """The workspace's composite agent scores, by the server's Scoring settings: the document
+    ``nullius leaderboard --json`` prints, its trajectory counts included."""
+    ws = shared.STATE["workspace"]
+    name = request.args.get("workspace") or (ws.name if ws else "")
+    jobs = leaderboard_service.qualified(shared._jobs_for_request())
+    return _json(leaderboard_service.document(jobs, workspace=name, workspace_open=bool(name or shared.STATE["roots"]), deferred=True))
 
 
 # Judgements: a judge model's answers about a trial, kept by the job they judge (web/judge.py). Reading one is

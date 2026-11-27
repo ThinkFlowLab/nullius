@@ -28,7 +28,7 @@ _RUN = {"run_id": dict(_S, description="a run id, as start_run or list_runs retu
 TOOLS = {
     "server_info": ("The server's version, this token's scope, and the machines a run can go to.", {}, [],
                     lambda nx, a: nx.info()),
-    "catalogue": ("Benchmarks with their datasets and what fits each, agents and capabilities.", {}, [],
+    "catalogue": ("Benchmarks with their datasets, task sets and what fits each, agents and capabilities.", {}, [],
                   lambda nx, a: nx.catalogue()),
     "list_jobs": ("The jobs of the open workspace: dataset, agent, model, outcome counts, raw and adjusted solve rate.", {}, [],
                   lambda nx, a: nx.jobs()),
@@ -44,6 +44,9 @@ TOOLS = {
                      {"job_ids": {"type": "array", "items": _S, "minItems": 2},
                       "matched": dict(_B, description="only the tasks every job ran")}, ["job_ids"],
                      lambda nx, a: nx.compare(*a["job_ids"], matched=a.get("matched") is True)),
+    "get_leaderboard": ("The open workspace's agents ranked by composite score: each one's overall score, rank and "
+                        "score by axis, with the runs each score reads. A score is partial when `reasons` says so.", {}, [],
+                        lambda nx, a: nx.leaderboard()),
     "get_judgements": ("A judge model's stored answers about a job's trials (lane: decision or llm). Free to read.",
                        {**_JOB, "lane": _S}, ["job_id"], lambda nx, a: nx.judgements(a["job_id"], a.get("lane") or "decision")),
     "judge_trial": ("Ask a judge model about one trial. A paid model call: ask only when the person wants it.",

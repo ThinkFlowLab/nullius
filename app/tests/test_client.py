@@ -92,6 +92,8 @@ class Calls(Case):
                 (lambda: self.nx.artifact("j", "t", "result"), "GET", "/jobs/j/trials/t/artifacts/result", "", None),
                 (lambda: self.nx.compare("a", "b", matched=True), "GET", "/compare", "job=a&job=b&matched=1", None),
                 (lambda: self.nx.compare("a", "b"), "GET", "/compare", "job=a&job=b", None),
+                (lambda: self.nx.leaderboard(), "GET", "/leaderboard", "", None),
+                (lambda: self.nx.leaderboard("nightly"), "GET", "/leaderboard", "workspace=nightly", None),
                 (lambda: self.nx.judgements("j"), "GET", "/jobs/j/judgements", "lane=decision", None),
                 (lambda: self.nx.judgement("j", "t", lane="llm"), "GET", "/jobs/j/trials/t/judgement", "lane=llm", None),
                 (lambda: self.nx.judge("j", "t"), "POST", "/jobs/j/trials/t/judge", "", {"lane": "decision"}),
@@ -114,6 +116,24 @@ class Calls(Case):
             self.assertEqual(call(), {"ok": path})
             self.assertEqual(self.last(), {"method": method, "path": "/api/v1" + path, "query": query,
                                            "auth": "Bearer " + TOKEN, "body": body})
+
+    def test_every_call_on_a_job_s_record_names_another_workspace(self):
+        for call, method, path, query, body in (
+                (lambda: self.nx.job("j", "w"), "GET", "/jobs/j", "workspace=w", None),
+                (lambda: self.nx.live("j", "w"), "GET", "/jobs/j/live", "workspace=w", None),
+                (lambda: self.nx.trial("j", "t", "w"), "GET", "/jobs/j/trials/t", "workspace=w", None),
+                (lambda: self.nx.conversation("j", "t", page=2, workspace="w"), "GET", "/jobs/j/trials/t/conversation", "page=2&workspace=w", None),
+                (lambda: self.nx.trace("j", "t", "w"), "GET", "/jobs/j/trials/t/trace", "workspace=w", None),
+                (lambda: self.nx.artifacts("j", "t", "w"), "GET", "/jobs/j/trials/t/artifacts", "workspace=w", None),
+                (lambda: self.nx.artifact("j", "t", "result", "w"), "GET", "/jobs/j/trials/t/artifacts/result", "workspace=w", None),
+                (lambda: self.nx.compare("a", "b", workspace="w"), "GET", "/compare", "job=a&job=b&workspace=w", None),
+                (lambda: self.nx.judgements("j", workspace="w"), "GET", "/jobs/j/judgements", "lane=decision&workspace=w", None),
+                (lambda: self.nx.judgement("j", "t", "llm", "w"), "GET", "/jobs/j/trials/t/judgement", "lane=llm&workspace=w", None),
+                (lambda: self.nx.judge("j", "t", workspace="w"), "POST", "/jobs/j/trials/t/judge", "workspace=w", {"lane": "decision"}),
+                (lambda: self.nx.judge_job("j", confirm=True, workspace="w"), "POST", "/jobs/j/judge", "workspace=w", {"lane": "decision", "confirm": True})):
+            self.answer(method, path, {"ok": path})
+            self.assertEqual(call(), {"ok": path})
+            self.assertEqual((self.last()["query"], self.last()["body"]), (query, body), path)
 
     def test_a_refusal_raises_with_the_server_s_sentence_its_status_and_its_document(self):
         self.answer("POST", "/runs", {"error": "A machine lacks what this recipe needs: see machines.", "machines": [{"where": "local"}]}, 409)
@@ -236,6 +256,10 @@ class Remote(Case):
         self.assertEqual(json.loads(self.remote("job", "a", "t")[1]), {"trial": {"trial_name": "t"}})
         self.assertEqual(self.remote("compare", "a", "b", "--matched")[0], 0)
         self.assertEqual(self.last()["query"], "job=a&job=b&matched=1")
+        self.answer("GET", "/leaderboard", {"rows": []})
+        self.assertEqual((json.loads(self.remote("leaderboard")[1]), self.last()["query"]), ({"rows": []}, ""))
+        self.remote("leaderboard", "--workspace", "nightly")
+        self.assertEqual(self.last()["query"], "workspace=nightly")
 
     def test_the_flags_name_the_server_too(self):
         self.answer("GET", "", {"api": 1})
@@ -282,6 +306,9 @@ class Remote(Case):
         self.assertEqual(self.last()["body"], {"lane": "decision", "confirm": True})
         self.answer("GET", "/jobs/a/judgements", {"judged": 0, "records": {}})
         self.assertEqual(self.remote("judgements", "a")[0], 0)
+        for argv, query in ((("judgements", "a"), "lane=decision&workspace=w"), (("judge", "a", "t"), "workspace=w"), (("judge", "a", "--yes"), "workspace=w")):
+            self.remote(*argv, "--workspace", "w")                              # a job read in another workspace is judged there
+            self.assertEqual(self.last()["query"], query, argv)
 
     def test_run_follow_prints_the_log_and_exits_by_how_the_run_ended(self):
         for state, code in (("done", 0), ("failed", 4)):
@@ -319,6 +346,9 @@ class McpTools(Case):
         self.answer("POST", "/runs/check", {"ready": True, "confirm": "Run all?"})
         self.call("check_run", {"recipe": "nightly", "where": "bench"})
         self.assertEqual(self.last()["body"], {"recipe": "nightly", "where": "bench"})
+        self.answer("GET", "/leaderboard", {"rows": [{"name": "Codex", "rank": 1}]})
+        got = self.call("get_leaderboard")["result"]
+        self.assertEqual((got["isError"], json.loads(got["content"][0]["text"])), (False, {"rows": [{"name": "Codex", "rank": 1}]}))
 
     def test_start_run_says_yes_only_when_told(self):
         self.answer("POST", "/runs", {"runs": []})
