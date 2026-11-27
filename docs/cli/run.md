@@ -179,7 +179,7 @@ HumanEval/12
 
 | Rule | Detail |
 | --- | --- |
-| Refused | A unit outside the plan, more units than it holds, another dataset's set, or `--shard`. |
+| Refused | A unit outside the plan, more units than it holds, another dataset's set, `--shard`, or a [VM benchmark on Boat](../standard.md#the-boat-backend). |
 | Attempts | A unit begun gets all its `--attempts`; a unit not begun has none. |
 | The record | `config.json` keeps the plan's size, `datasets[0].n_tasks`, and the part, `standard.start_with`. |
 | The rates | Over the tasks run; the job's page and `runs show` say how many have run. |

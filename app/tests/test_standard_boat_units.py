@@ -123,14 +123,19 @@ class RelayPlacement(unittest.TestCase):
         self.assertEqual(got["OPENAI_API_KEY"], "fake-model-key")
         self.assertEqual(secrets.unpack(got[secrets.HANDED]), {"HF_TOKEN": b"fake-hf-token"})
 
-    def test_cli_forwards_models_options_and_divides_cap(self):
+    def test_cli_forwards_models_options_and_divides_cap_and_refuses_a_start(self):
+        command = ["run", "osworld1", "original", "--backend", "boat", "--boat-size", "default",
+                   "--model", "gpt-4o", "--provider", "openrouter", "--dataset", "test_small",
+                   "--limit", "2", "--max-usd", "1", "--max-calls", "5", "--served-by", "openai",
+                   "--price", "openai/gpt-4o=1,2", "--timeout", "agent=90"]
         with patch.object(boat_units, "run", return_value=("/job", False)) as launch, \
              patch.object(cli, "boat_credentials", return_value={"OPENAI_API_KEY": "fake-secret"}), \
-             patch("sys.stdout", new_callable=io.StringIO):
-            result = cli.main(["run", "osworld1", "original", "--backend", "boat", "--boat-size", "default",
-                               "--model", "gpt-4o", "--provider", "openrouter", "--dataset", "test_small",
-                               "--limit", "2", "--max-usd", "1", "--max-calls", "5", "--served-by", "openai",
-                               "--price", "openai/gpt-4o=1,2", "--timeout", "agent=90"])
+             patch("sys.stdout", new_callable=io.StringIO) as out:
+            # each task runs whole in its VM: a start on some of them is refused, nothing launched
+            self.assertEqual(cli.main(command + ["--start-with", "1"]), 2)
+            self.assertIn("--start-with", out.getvalue())
+            launch.assert_not_called()
+            result = cli.main(command)
         self.assertEqual(result, 0)
         words = launch.call_args.args[1]
         for flag, value in (("--model", "gpt-4o"), ("--max-usd", "0.5"), ("--max-calls", "5"),

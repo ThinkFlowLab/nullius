@@ -717,8 +717,8 @@ def boat_credentials(a, bench, other, vals) -> dict:
 def _boat_units(a, b, other) -> int:
     """A benchmark whose units boot VMs of their own, on Boat: each unit whole in a Boat VM (``boat_units``)."""
     from nullius.standard.runner import boat_units
-    if a.units or a.shard:
-        print("refused: whole-task Boat runs do not accept --units or --shard; choose a dataset and --limit")
+    if a.units or a.shard or a.start_with is not None:
+        print("refused: whole-task Boat runs do not accept --units, --shard or --start-with; choose a dataset and --limit")
         return 2
     ds = a.dataset or b["datasets"][0]["id"]
     vals, bad = definitions.bench_options_of(b, ds, options(a.bench_option),
