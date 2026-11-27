@@ -14,6 +14,7 @@
     "license": "Apache-2.0"
   },
   "driver": {
+    "describe": true,
     "command": [
       "python3",
       "{here}/driver.py"
@@ -41,7 +42,38 @@
   ],
   "units": {
     "noun": "task",
-    "nouns": "tasks"
+    "nouns": "tasks",
+    "categories": {
+      "difficulty": {
+        "label": "Difficulty",
+        "names": {
+          "easy": "Easy",
+          "medium": "Medium",
+          "hard": "Hard"
+        }
+      },
+      "category": {
+        "label": "Category",
+        "names": {
+          "software-engineering": "Software engineering",
+          "system-administration": "System administration",
+          "security": "Security",
+          "data-science": "Data science",
+          "scientific-computing": "Scientific computing",
+          "debugging": "Debugging",
+          "file-operations": "File operations",
+          "model-training": "Model training",
+          "data-processing": "Data processing",
+          "mathematics": "Mathematics",
+          "machine-learning": "Machine learning",
+          "personal-assistant": "Personal assistant",
+          "optimization": "Optimization",
+          "games": "Games",
+          "video-processing": "Video processing",
+          "data-querying": "Data querying"
+        }
+      }
+    }
   },
   "environments": {
     "task": {

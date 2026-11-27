@@ -194,6 +194,7 @@ These fields are stored in the standard's job and trial files ([Run a benchmark]
 | Field | What it is | Source | Works on |
 | --- | --- | --- | --- |
 | `standard.units_file` | In `config.json`: the units file's name, sha256 and ordered ids, before sharding and the limit. | measured | standard |
+| `standard.task_set` | In the same config: the task set run, with its id, name, hash, ids and version. | measured | standard |
 | `standard.constraints` | In the same config: what the machine allowed the run, when set. Shards may have different machine constraints; merging keeps the first shard's config values. | measured | standard |
 | `standard.served_by` | In the same config: the allowed OpenRouter provider slugs by model, in the order tried. | measured | standard |
 | `served / standard.served` | In the job's `result.json` and each trial's `result.json`, respectively: answered calls by provider (`calls`), calls naming none (`unnamed`), and each pinned model's `held`. Counts cover every relay route; the job also includes the benchmark's own relay. Tokens and cost are the agent's own calls'. | measured | standard |

@@ -19,6 +19,11 @@ Each page's command, or why there is none.
 | `/settings` | User `settings.json`, or the environment; `nullius paths` locates the file |
 | `/benchmarks` | `nullius standard list` for standard entries; Harbor entries on the page |
 | `/agents`, `/capabilities` | `nullius standard list` includes agents, capabilities and their proven ports |
+| A benchmark's *Task sets* | `nullius standard set list KEY` ([Task sets](task-sets.md)) |
+| `/benchmarks/<key>/tasks/<dataset>` | `nullius standard units KEY --dataset D`; a set's, `set show KEY NAME` |
+| Its *List tasks* (*List questions*) | `nullius standard units KEY --dataset D`, which makes the listing |
+| Its *Pick at random* | `nullius standard set create KEY NAME --dataset D --sample N [--seed S]` |
+| Save, rename or delete a task set | `nullius standard set create`, `--from-job` for a job's; `set rename`, `set delete` |
 | A benchmark's *Prove it* | `nullius standard prove KEY` ([Prove](prove.md)) |
 | *Prove its ports* | `nullius standard conform KEY` ([Conform](conform.md)) |
 | `/run` | `nullius standard run` per dataset and choice, `--shard I/N` per machine ([Run](run.md)) |

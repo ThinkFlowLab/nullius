@@ -606,6 +606,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                  options: Optional[dict] = None, launch: str = "", shard: Optional[dict] = None, repeat: int = 1,
                  retries: int = 0, bench_options: Optional[dict] = None,
                  simulator: str = "", prices: Optional[dict] = None, units_file: Optional[dict] = None,
+                 task_set: Optional[dict] = None,
                  constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
                  max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None,
                  exchanges: str = "", exchanges_max_mb: Optional[int] = None):
@@ -615,7 +616,10 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     say what differed. ``launch`` and ``shard``: a shard of a launch run over
     several machines (``shard``), which ``merge`` reads back. ``units_file``:
     the file a run's units were listed in (``run.units_file``), its name, its
-    sha256 and its units, said only for such a run. ``repeat``: how
+    sha256 and its units, said only for such a run. ``task_set``: the task
+    set a run's units came from (``sets.record``): its id, name, revision,
+    hash and units, and what ``set import`` rebuilds the entry from, said
+    only for such a run. ``repeat``: how
     many times each unit was run, each an attempt, said only when more than
     once; ``retries``: how many times an attempt could be tried again after a
     failure a further try might mend (``retries.retryable``), always said.
@@ -646,6 +650,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                                 **({"simulator": simulator} if simulator else {}), **({"options": options} if options else {}), **({"benchmark_options": bench_options} if bench_options else {}), **_control(other), **_setup(other),
                                 **({"launch": launch} if launch else {}), **({"shard": shard} if shard else {}),
                                 **({"units_file": units_file} if units_file else {}),
+                                **({"task_set": task_set} if task_set else {}),
                                 **({"repeat": repeat} if repeat > 1 else {}), "retries": retries, **({"prices": prices} if prices else {}),
                                 **({"constraints": constraints} if constraints else {}),
                                 **({"timeouts": timeouts} if timeouts else {}), **({"max_turns": max_turns} if max_turns else {}),

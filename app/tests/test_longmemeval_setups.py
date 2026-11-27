@@ -166,6 +166,19 @@ class Driver(unittest.TestCase):
             out = subprocess.run([sys.executable, DRIVER], input=lines, capture_output=True, text=True, env=env, timeout=60)
             return [json.loads(ln) for ln in out.stdout.splitlines()]
 
+    def test_describe_gives_question_text_and_respects_the_type_filter(self):
+        for kind in ("all", "knowledge-update"):
+            with self.subTest(kind=kind):
+                got = self.run_driver([{"op": "units", "dataset": "longmemeval_oracle"},
+                                       {"op": "describe", "dataset": "longmemeval_oracle"}],
+                                      {"question_type": kind}, questions=self.QUESTIONS)
+                expected = {qid: {"title": "Q?", "text": "Q?", "categories": {
+                    "question_type": category, "abstention": "yes" if qid.endswith("_abs") else "no"}}
+                            for qid, category in self.QUESTIONS if kind == "all" or category == kind}
+                self.assertEqual(got[1], {"units": expected})
+                self.assertEqual(list(got[1]["units"]), got[0]["units"])
+        self.assertIs(BENCH["driver"].get("describe"), True)
+
     def test_the_original_runs_run_generation_as_the_script_does_and_scores_with_evaluate_qa(self):
         judge = {"model": "gpt-4o-2024-08-06", "base_url": "http://judge/v1", "key": "k"}
         got = self.run_driver([

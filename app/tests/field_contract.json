@@ -420,6 +420,7 @@
    "standard",
    "started_at",
    "state",
+   "task_set",
    "total_cache_tokens",
    "total_cost_usd",
    "total_input_tokens",

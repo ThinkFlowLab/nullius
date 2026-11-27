@@ -204,6 +204,28 @@
       </section>
       {% endif %}
 
+      {% if std and (task_sets or local) %}
+      {#- The user's task sets (standard/runner/sets.py), each with the version it was made at; New task set opens the
+          first dataset's tasks, whose page chooses another. -#}
+      {% set wholes = std.datasets|rejectattr('subset_of')|list %}
+      <section class="bench-section" id="task-sets" aria-labelledby="task-sets-title">
+        <div class="bench-section-head"><h2 id="task-sets-title">Task sets{% if task_sets %} <span class="bench-n">{{ task_sets|length }}</span>{% endif %}</h2>
+          {% if local and wholes %}<a class="btn sm" href="{{ url_for('benchmark_tasks', key=b.key, dataset=wholes[0].id) }}">New task set</a>{% endif %}
+        </div>
+        {% if task_sets %}
+        <div class="tasks-scroll"><table class="grid bench-sets">
+          {% set made = task_sets|selectattr('version_label')|list %}
+          <thead><tr><th scope="col">Name</th><th scope="col">Dataset</th><th scope="col" class="num">{{ std.units.nouns|capitalize }}</th>{% if made %}<th scope="col" class="bench-made">Made at</th>{% endif %}<th scope="col">Date</th></tr></thead>
+          <tbody>{% for s in task_sets %}
+            <tr><td><a href="{{ url_for('benchmark_tasks', key=b.key, dataset=s.dataset, set=s.name) }}">{{ s.label }}</a>{% if s.description %}<small class="muted small">{{ s.description }}</small>{% endif %}</td>
+              <td>{% for d, n in s.parts.items() %}{{ (std.datasets|selectattr('id', 'equalto', d)|map(attribute='label')|first) or d }}{% if s.parts|length > 1 %} {{ n }}{{ ', ' if not loop.last }}{% endif %}{% endfor %}</td>
+              <td class="num">{{ s.units }}</td>{% if made %}<td class="bench-made nowrap">{{ s.version_label }}</td>{% endif %}<td class="nowrap">{{ s.date[:10] }}</td></tr>
+          {% endfor %}</tbody>
+        </table></div>
+        {% endif %}
+      </section>
+      {% endif %}
+
       {% for y in views %}{% set sfx = '' if y.default else '-' ~ y.version %}
       <div{{ vattr(y, 'bench-notes') }}>
       {% if y.changes %}

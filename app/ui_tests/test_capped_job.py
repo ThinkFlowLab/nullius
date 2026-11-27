@@ -176,7 +176,7 @@ class RunFactsOnTheJobPage(unittest.TestCase):
     text = CappedJobPage.text
 
     def header(self, html):
-        return re.search(r'<div class="run-meta run-identity".*?</header>', html, re.S)[0]
+        return re.search(r'<div class="run-meta run-identity".*?(?=<div class="page-head-actions">|</header>)', html, re.S)[0]
 
     def cards(self, html):
         """The header's cards that open, by the first word each card says (a fact's name, or the agent's): the

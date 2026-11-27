@@ -14,6 +14,7 @@
     "license": "CC-BY-NC-4.0"
   },
   "driver": {
+    "describe": true,
     "command": [
       "{install}/.venv/bin/python",
       "{here}/driver.py"

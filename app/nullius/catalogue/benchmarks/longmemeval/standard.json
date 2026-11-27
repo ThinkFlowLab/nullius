@@ -14,6 +14,7 @@
     "license": "MIT"
   },
   "driver": {
+    "describe": true,
     "command": [
       "{install}/.venv/bin/python",
       "{here}/driver.py"
@@ -87,7 +88,23 @@
   ],
   "units": {
     "noun": "question",
-    "nouns": "questions"
+    "nouns": "questions",
+    "categories": {
+      "question_type": {
+        "label": "Question type",
+        "names": {
+          "knowledge-update": "Knowledge update",
+          "temporal-reasoning": "Temporal reasoning",
+          "multi-session": "Multi-session",
+          "single-session-user": "Single-session user",
+          "single-session-assistant": "Single-session assistant",
+          "single-session-preference": "Single-session preference"
+        }
+      },
+      "abstention": {
+        "label": "Abstention"
+      }
+    }
   },
   "controls": {
     "nop": {

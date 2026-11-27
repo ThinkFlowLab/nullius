@@ -1633,6 +1633,11 @@ def problems(d: dict, kind: str) -> List[str]:
                 bad.append("driver.participant: true or false - whether setup is told the participant's kind")
             if "unit_end" in drv and not isinstance(drv["unit_end"], bool):
                 bad.append("driver.unit_end: true or false - whether the driver is told each unit's end")
+            if "describe" in drv and not isinstance(drv["describe"], bool):
+                bad.append("driver.describe: true or false - whether the driver answers describe")
+            if "list_command" in drv:
+                # a listing's start: the standard library and the dataset's files, never the driver's install
+                bad += _command("driver.list_command", drv["list_command"], {"here"})
             if "task_given" in drv and not isinstance(drv["task_given"], bool):
                 bad.append("driver.task_given: true or false - whether the driver is told when the agent is given its task")
         bad += _mcp_servers(d.get("mcp_servers"), isinstance(drv, dict) and "install" in drv)
@@ -1660,11 +1665,30 @@ def problems(d: dict, kind: str) -> List[str]:
                     bad.append(f"{w}.sha256: the file's digest")
                 if not isinstance(x.get("units"), int) or x["units"] < 1:
                     bad.append(f"{w}.units: how many units it holds")
+            # a list cut from another of the benchmark's lists, which holds every unit it holds: the pages draw it as
+            # that dataset's own task set. One level: the list it names is cut from none
+            by_id = {x.get("id"): x for x in ds if isinstance(x, dict)}
+            for i, x in enumerate(ds):
+                if not isinstance(x, dict) or "subset_of" not in x:
+                    continue
+                whole = by_id.get(x["subset_of"]) if isinstance(x["subset_of"], str) else None
+                if whole is None or whole is x:
+                    bad.append(f"datasets[{i}].subset_of: the id of another of its datasets, the list this one is cut from")
+                elif "subset_of" in whole:
+                    bad.append(f"datasets[{i}].subset_of: {x['subset_of']} is cut from another list; name one cut from none")
+                elif isinstance(x.get("units"), int) and isinstance(whole.get("units"), int) and x["units"] > whole["units"]:
+                    bad.append(f"datasets[{i}].subset_of: it holds more units than {x['subset_of']}")
         u = d.get("units") or {}
         if not (isinstance(u.get("noun"), str) and isinstance(u.get("nouns"), str)):
             bad.append("units: {noun, nouns}")
         if "redistribute" in u and not isinstance(u["redistribute"], bool):
             bad.append("units.redistribute: false when the data may not be redistributed")
+        cats = u.get("categories", {})
+        if not isinstance(cats, dict) or not all(
+                isinstance(c, dict) and set(c) <= {"label", "names"} and isinstance(c.get("label", ""), str)
+                and isinstance(c.get("names", {}), dict) and all(isinstance(v, str) and v for v in c.get("names", {}).values())
+                for c in cats.values()):
+            bad.append("units.categories: {FIELD: {label, names: {VALUE: name}}}, how a listing's categories read")
         lim = d.get("limits")
         if lim is not None:
             if not isinstance(lim, dict):
