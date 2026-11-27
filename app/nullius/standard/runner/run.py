@@ -227,6 +227,16 @@ def key_header(provider: str, other: dict, env=os.environ) -> str:
     return providers.PROTOCOLS[providers.protocol_for(provider, apis, env)]["auth"]
 
 
+def reasoning(given, model: str) -> Dict[str, str]:
+    """``--reasoning [MODEL=]LEVEL``, repeatable: by model, how much it reasons (``relay.LEVELS``, as
+    OpenRouter's model list names them). Without ``MODEL=`` it is the run's model. Refused as
+    ``relay.parse_reasoning`` finds it wrong."""
+    out, bad = relay.parse_reasoning(given, model)
+    if bad:
+        raise Refused("; ".join(bad))
+    return out
+
+
 def served_by(given, model: str) -> Dict[str, List[str]]:
     """``--served-by [MODEL=]SLUG[,SLUG...]``, repeatable: by model, the
     serving providers that may answer it, in the order they are tried, and no
@@ -732,7 +742,7 @@ class Run:
                  constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
                  max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None, boat_size: str = boat.SIZE,
                  relay_container: bool = False, exchanges: str = exchange_store.DEFAULT,
-                 exchanges_max_mb: int = exchange_store.MAX_MB):
+                 exchanges_max_mb: int = exchange_store.MAX_MB, reasoning: Optional[Dict[str, str]] = None):
         """``proving``: the run is a conformance kit's, the one run that may
         start before the port it checks is proven - the family must still match.
         ``unsandboxed``: consent to execute code as the user: required for
@@ -806,6 +816,9 @@ class Run:
         run's relays (``relay.routing``) and recorded in the job's config.
         Refused when the provider routes no model to several (only
         ``openrouter`` does), or when it names a model the run does not call.
+        ``reasoning``: by model, the reasoning put on every request sent as
+        that model (:func:`reasoning`, ``relay.think``), recorded the same way;
+        refused when it names a model the run does not call.
         ``exchanges``: what each unit's relay keeps of its agent's calls
         (``exchanges``): ``whole``, the request as sent and the reply as it
         arrived; ``text``, without the pictures' bytes; ``off``, the call
@@ -879,8 +892,10 @@ class Run:
         # A benchmark scored by a model: its official judge, or the one asked for; its calls go through the relay
         # on a route of their own (<tag>-judge), recorded beside the unit's and never counted as the agent's.
         # The official one is written as its maker spells it; the run's provider may spell it otherwise.
+        # An experiment judge (``score.experiment_judge``) runs only when the run names its model.
         j = (bench.get("score") or {}).get("judge")
-        self.judge_model = (judge_model or providers.served_as(j["model"], provider)) if j else None
+        self.judge_model = ((judge_model or providers.served_as(j["model"], provider)) if j
+                            else judge_model or None if (bench.get("score") or {}).get("experiment_judge") else None)
         # A benchmark whose user a model plays: its driver's turns ask that model the same way, on <tag>-simulator.
         # A control holds no conversation, so it never asks it.
         sim = bench.get("simulator")
@@ -978,6 +993,16 @@ class Run:
             stray = [m for m in self.serving if m not in called]
             if stray:
                 raise Refused(f"--served-by names {', '.join(stray)}, which this run does not call: it calls "
+                              + (", ".join(called) or "no model"))
+        self.reasoning = dict(reasoning or {})
+        if self.reasoning:
+            bad = [f"{m}={v}" for m, v in self.reasoning.items() if v not in relay.LEVELS]
+            if bad:
+                raise Refused(f"--reasoning {', '.join(bad)}: the level is one of {', '.join(relay.LEVELS)}")
+            called = ([m for m in (self.judge_model,) if m] if other.get("_kind") == "control" else self.models_called())
+            stray = [m for m in self.reasoning if m not in called]
+            if stray:
+                raise Refused(f"--reasoning names {', '.join(stray)}, which this run does not call: it calls "
                               + (", ".join(called) or "no model"))
         self.bench_relay = None
         keyless = other.get("_kind") == "control" and not self.judge_model and not self.embed_model and not self.rerank_model
@@ -1222,7 +1247,7 @@ class Run:
                          # a shard of a list splits the listed units: they are its whole
                          shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit, by=self.shard_by)
                          if self.shard else None, units_file=self.units_file, task_set=self.task_set,
-                         repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving,
+                         repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving, reasoning=self.reasoning,
                          timeouts=self.timeouts, max_turns=self.forced_turns, max_calls=self.max_calls,
                          exchanges=self.exchanges, exchanges_max_mb=self.exchanges_max_mb,
                          simulator=self.simulator_model if self.other["_kind"] in ("agent", "upstream") and self.simulator_model else "")
@@ -1328,7 +1353,9 @@ class Run:
             self.say(f"{len(budget['over_unit'])} of the {self.bench['units']['nouns']} reached the cap of "
                      f"{ledgers.usd(budget['unit_max_usd'])} USD each and were cut off there")
         if self.halted:
-            self.say(f"stopped: the endpoint refused {REFUSED_IN_A_ROW} units in a row ({self.halted[0]}: "
+            why = ("the agent's first call was longer than the model's context window in" if self.halted[0] == relay.CONTEXT_ERROR
+                   else "the endpoint refused")
+            self.say(f"stopped: {why} {REFUSED_IN_A_ROW} units in a row ({self.halted[0]}: "
                      f"{redact(str(self.halted[1]))[:200]}); the {len(work) - len(results)} units not begun were not run")
         rewards = [(r.get("verifier_result") or {}).get("rewards", {}) for r in results]
         if self.bench["score"]["kind"] == "pass":
@@ -1873,7 +1900,7 @@ class Run:
                            **job.feed_outcome(self.bench["score"]["kind"], score, exc),
                            **{k: v for k, v in (res.get("agent_result") or {}).items() if k in FEED_TOTALS},
                            durations=job.feed_durations(res))
-        self.note_refusal(exc)
+        self.note_refusal(exc, calls)
         if exc and exc[0] == ledgers.ERROR and getattr(self, "_halt", None) is not None:
             with self._said:
                 self._cut.append(self.attempt_name(unit, r))
@@ -1939,15 +1966,19 @@ class Run:
                 **({"unit_max_usd": self.unit_max_usd, "over_unit": list(dict.fromkeys(getattr(self, "_over", [])))}
                    if self.unit_max_usd is not None else {})}
 
-    def note_refusal(self, exc: Optional[tuple]) -> None:
+    def note_refusal(self, exc: Optional[tuple], calls: Optional[List[dict]] = None) -> None:
         """A unit's end, counted toward the endpoint refusing the run: a wrong
         key or an unknown model fails every unit the same way, and running
-        the rest only repeats it (with their containers and relays). After
+        the rest only repeats it (with their containers and relays). So does
+        a model whose context window the agent's first call already overflows:
+        the unit's prompt and tools alone are longer. After
         ``REFUSED_IN_A_ROW`` such ends in a row, nothing more is begun."""
         if getattr(self, "_halt", None) is None:
             return
+        first = bool(exc) and exc[0] == relay.CONTEXT_ERROR and \
+            not any(c.get("status") == 200 and not c.get("side") for c in calls or [])
         with self._said:
-            if exc and exc[0] in REFUSALS:
+            if exc and (exc[0] in REFUSALS or first):
                 self._refused.append(exc)
                 if len(self._refused) >= REFUSED_IN_A_ROW and self.halted is None:
                     self.halted = exc
@@ -2122,7 +2153,8 @@ class Run:
         record = os.path.join(trial, ".work", "relay")
         # whether the relay keeps its agent's calls whole, and its bound: the class's defaults for a stand-in of a run
         keep = {"exchanges": getattr(self, "exchanges", Run.exchanges),
-                "exchanges_max_mb": getattr(self, "exchanges_max_mb", Run.exchanges_max_mb)}
+                "exchanges_max_mb": getattr(self, "exchanges_max_mb", Run.exchanges_max_mb),
+                "reasoning": getattr(self, "reasoning", None)}
         side = tuple((self.other.get("model") or {}).get("side_models") or ())
         key_header = self.key_header
         if self.backend in ("local", "boat") and not getattr(self, "relay_container", False):     # boat: the agent reaches it through its VM's tunnel
@@ -2789,7 +2821,9 @@ class Run:
                 plan = setup.get("memory") or {}
                 for s in plan.get("add") or []:
                     send("add", session=s)
-                recalled = [{"id": q.get("id"), "memory": send("recall", question=q["question"]).get("memory", "")}
+                # a question asked on a date of its own carries it: "how long ago" is counted from then, not from today
+                recalled = [{"id": q.get("id"), "memory": send("recall", question=q["question"],
+                                                               **({"date": q["date"]} if q.get("date") else {})).get("memory", "")}
                             for q in plan.get("recall") or []]
             except jsonl.Failed as e:
                 raise _Ended("NonZeroAgentExitCodeError", "the capability: " + str(e),

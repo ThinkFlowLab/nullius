@@ -679,6 +679,22 @@ serve({"units": units, "setup": setup, "oracle": oracle, "score": score})
 '''
 
 
+RECALLED = '''from nullius.standard.protocols.jsonl import serve
+import json
+ASKED = {"c:0": "Is it the red kite or the blue one?", "c:1": "Where did she move to last year?"}
+ANSWERS = {"c:0": "the red kite", "c:1": "the blue one"}
+def units(dataset):
+    return {"units": ["c"]}
+def setup(unit, dir):
+    return {"memory": {"add": [], "recall": [{"id": i, "question": q} for i, q in ASKED.items()]}}
+def oracle(unit, dir):
+    return {"answer": json.dumps(ANSWERS)}
+def score(unit, dir, transcript, answer):
+    return {"reward": 0.0}
+serve({"units": units, "setup": setup, "oracle": oracle, "score": score})
+'''
+
+
 class Leak(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -701,6 +717,16 @@ class Leak(unittest.TestCase):
                                          "file: answer.txt is already there after setup, in a file"])
         self.assertEqual(r["short"], 1)
         self.assertIn("under 12 characters", r["note"])
+
+    def test_a_capabilitys_answers_by_question_are_each_looked_for_in_their_own_question(self):
+        here = os.path.join(self.tmp, "recalled")
+        os.makedirs(here)
+        with open(os.path.join(here, "driver.py"), "w") as f:
+            f.write(RECALLED)
+        b = dict(self.b, key="recalled", family="capability", _here=here, datasets=[{"id": "all", "units": 1}])
+        r = prove.leak_check(prove._Driver(b, b["datasets"][0], self.tmp), ["c"], "capability")
+        # c:1's answer is in c:0's question, not its own: no leak; c:0's is in its own
+        self.assertEqual((r["looked_for"], r["problems"]), (2, ["c: c:0's answer is already there after setup, in the prompt"]))
 
     def test_a_declared_choice_question_is_counted_in_the_prompt_never_in_a_file(self):
         r = prove.leak_check(self.d, ["prompt", "file", "clean"], "agent", in_prompt="A choice question names its answer.")

@@ -44,9 +44,11 @@ def new_run():
     # to rebuild a recipe from (fromJob). ?saved=<id>: a saved recipe, as the
     # Saved recipes dialog loads it. Individual query fields also prefill the form.
     like = request.args.get("like")
-    run = request.args.get("run") or (like if like and _kept_recipe(like) else None)
-    if run:
-        ex = execution.for_job(run)
+    run = request.args.get("run") or like
+    ex = shared.run_on_page(run, shared._job_for_request(run), here=True) if run else None
+    if ex is None and request.args.get("run") and not request.args.get("workspace"):
+        ex = shared.run_for(run)                  # a bare ?run=: the open workspace's first, then any of that name
+    if request.args.get("run") or (ex and ex.plan.recipe):
         if ex is None or not ex.plan.recipe:
             abort(404)
         data["loadRecipe"] = ex.plan.recipe
@@ -224,8 +226,9 @@ def new_run_runner():
 def _standard_compile(recipe: dict) -> dict:
     out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, boat_unusable=boat.unusable,
                                   boat_size_problem=execute.boat_size_problem, unpriced=execute.unpriced)
-    # served_models: each model field's model as the run sends it, which Served by lists the providers of
-    return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models")}
+    # served_models: each model field's model as the run sends it, which Served by lists the providers of;
+    # own_reasoning: by field, what sets its reasoning in every job, which greys its select
+    return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models", "own_reasoning")}
 
 
 @app.route("/new-run/prerequisites", methods=["POST"])
@@ -413,11 +416,6 @@ def recipes_import():
         return jsonify(ok=False, error="Not imported: " + str(e)), 400
 
 
-def _kept_recipe(job_id: str) -> bool:
-    ex = execution.for_job(job_id)
-    return bool(ex and ex.plan.recipe)
-
-
 def _host_target():
     """The benchmark and its requirements a host check or install is about, and where: 'local' or a host of Settings."""
     shared._require_csrf()
@@ -583,6 +581,25 @@ def new_run_endpoints():
         return jsonify(ok=True, endpoints=providers.list_endpoints(provider, model))
     except ValueError as error:
         return jsonify(ok=False, endpoints=[], message=str(error)), 502
+
+
+@app.route("/new-run/reasoning", methods=["POST"])
+def new_run_reasoning():
+    """The reasoning levels one model offers, for the Model step's select beside it: asked each time it is chosen,
+    never kept. ``levels`` empty: it has none to choose."""
+    shared._require_csrf()
+    if not shared._local_client():
+        abort(403)
+    body = request.get_json(silent=True)
+    provider = body.get("provider") if isinstance(body, dict) else None
+    model = body.get("model") if isinstance(body, dict) else None
+    if providers.split(provider)[0] not in providers.PROVIDERS or not isinstance(model, str) or not model.strip():
+        return jsonify(ok=False, levels=[], default=None, message="Choose a provider and a model."), 400
+    try:
+        found = providers.list_reasoning(provider, model) or {"levels": [], "default": None}
+    except ValueError as error:
+        return jsonify(ok=False, levels=[], default=None, message=str(error)), 502
+    return jsonify(ok=True, **found)
 
 
 @app.route("/new-run/models", methods=["POST"])

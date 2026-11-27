@@ -6,7 +6,10 @@ def handle(op, **kw):
     if op == "units":
         return {"units": list(QS)}
     if op == "setup":
-        return {"memory": {"add": HISTORY, "recall": [{"id": kw["unit"], "question": QS[kw["unit"]][0]}]}}
+        ask = {"id": kw["unit"], "question": QS[kw["unit"]][0]}
+        if kw["unit"] == "q1":
+            ask["date"] = "2023/05/30 (Tue) 23:40"
+        return {"memory": {"add": HISTORY, "recall": [ask]}}
     if op == "produce":
         mem = kw["recalled"][0]["memory"]
         req = urllib.request.Request(kw["base_url"] + "/chat/completions", headers={"Content-Type": "application/json", "Authorization": "Bearer " + kw["key"]},

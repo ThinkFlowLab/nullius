@@ -539,6 +539,12 @@ def write_trial(trial_dir: str, *, job: str, bench: dict, other: dict, model: st
         res["verifier_result"] = {"rewards": rewards}
         if score.get("stopped"):
             res["verifier_result"]["stopped"] = str(score["stopped"])
+        also = score.get("complement")
+        if (isinstance(also, dict) and isinstance(also.get("label"), str) and type(also.get("score")) in (int, float)
+                and type(also.get("n")) is int and also["n"] > 0):
+            # a second score beside the reward, never in its place (an experiment judge's): the job weighs it by its n
+            res["verifier_result"]["complement"] = {"label": also["label"], "score": float(also["score"]), "n": also["n"],
+                                                   **({"why": also["why"]} if isinstance(also.get("why"), str) else {})}
         parts = score.get("parts")
         if isinstance(parts, dict) and isinstance(parts.get("n"), int) and not isinstance(parts["n"], bool) and parts["n"] > 0:
             # a score over several parts (a conversation's questions): the job's mean weighs it by them
@@ -609,7 +615,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                  task_set: Optional[dict] = None,
                  constraints: Optional[dict] = None, timeouts: Optional[dict] = None, max_turns: Optional[int] = None,
                  max_calls: Optional[int] = None, served_by: Optional[Dict[str, List[str]]] = None,
-                 exchanges: str = "", exchanges_max_mb: Optional[int] = None):
+                 exchanges: str = "", exchanges_max_mb: Optional[int] = None, reasoning: Optional[Dict[str, str]] = None):
     """``unsandboxed`` is true for an agent on the local backend only: in a
     container (``backend``, ``image``) it is not. ``standard.options`` holds
     every option's value, the defaults included, so two runs read side by side
@@ -633,7 +639,8 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     a unit's agent the run forced (``run --timeout``, ``--max-turns``,
     ``--max-calls``), when it forced any.
     ``served_by``: by model, the serving providers the run let answer it
-    (``--served-by``), said only for a run that pinned them.
+    (``--served-by``), said only for a run that pinned them. ``reasoning``: by
+    model, the reasoning the run set (``--reasoning``), said only for a run that set one.
     ``exchanges`` and ``exchanges_max_mb``: what each unit's relay kept of
     its agent's calls (``run --exchanges``) and its bound in MB, said for
     every run that gives them.
@@ -656,6 +663,7 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
                                 **({"timeouts": timeouts} if timeouts else {}), **({"max_turns": max_turns} if max_turns else {}),
                                 **({"max_calls": max_calls} if max_calls else {}),
                                 **({"served_by": dict(sorted(served_by.items()))} if served_by else {}),
+                                **({"reasoning": dict(sorted(reasoning.items()))} if reasoning else {}),
                                 **({"exchanges": exchanges, "exchanges_max_mb": exchanges_max_mb} if exchanges else {})},
                    "runner_items": [bench["units"]["noun"], bench["units"]["nouns"]],
                    "n_concurrent_trials": concurrency,

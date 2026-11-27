@@ -363,30 +363,44 @@ def request_memo(name: str) -> dict:
     return g.setdefault(f"_memo_{name}", {}) if has_request_context() else {}
 
 
-def _owners() -> dict:
-    """``execution.owners``, once per request: a page asks it of every job it lists."""
-    memo = request_memo("owners")
-    if "owners" not in memo:
-        memo["owners"] = execution.owners()
-    return memo["owners"]
+def _writers() -> dict:
+    """``execution.writers``, once per request: a page asks it of every job it lists."""
+    memo = request_memo("writers")
+    if "writers" not in memo:
+        memo["writers"] = execution.writers()
+    return memo["writers"]
 
 
-def run_for(job_id):
-    """``execution.for_job`` over this request's ``_owners``."""
-    return execution.for_job(job_id, _owners())
+def run_for(job_id, job=None, roots=None):
+    """``execution.writing`` over this request's ``_writers``; ``job``: the one read from disk, when there is one."""
+    return execution.writing(_writers().get(job_id, ()), job_id, job and job.dir, roots)
 
 
-def ended_for(job_id):
-    """``execution.ended_for`` over this request's ``_owners``."""
-    return execution.ended_for(job_id, _owners())
+def run_on_page(job_id, job, here=False):
+    """``run_for`` for a page of one job. Of a job not on disk, with a
+    workspace asked for by name, or the open one when ``here``: a run that
+    writes it under that workspace's roots. No workspace open: by name."""
+    ws = _record_workspace() if here or request.args.get("workspace") else None
+    if job is not None or ws is None:
+        return run_for(job_id, job)
+    return run_for(job_id, roots={os.path.realpath(r) for r in ws.job_roots or ws.roots})
+
+
+def ended_for(job_id, job=None):
+    """``(state, finished_at)`` once ``run_for``'s run ended this job
+    (``Execution.job_state``), else None. A Harbor killed by a Stop leaves its
+    feed without ``job.end`` and its result record with trials "running":
+    this is the fact that says the job does not go on."""
+    ex = run_for(job_id, job)
+    return ex.job_state(job_id) if ex is not None else None
 
 
 def run_ends():
-    """``execution.run_ends`` over this request's ``_owners``, once per request:
+    """``execution.run_ends`` over this request's ``_writers``, once per request:
     the Workspaces page reads every workspace."""
     memo = request_memo("run_ends")
     if "run_ends" not in memo:
-        memo["run_ends"] = execution.run_ends(_owners())
+        memo["run_ends"] = execution.run_ends({name: runs[0] for name, runs in _writers().items()})
     return memo["run_ends"]
 
 

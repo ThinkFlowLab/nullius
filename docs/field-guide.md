@@ -145,6 +145,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `n_infra` | Trials removed from the adjusted denominator as infrastructure failures or run-imposed interruptions. | derived | any |
 | `mean_score` | The mean graded score, weighted by each trial's number of scored parts when present. When no trial passes or fails, it is the headline and the rates read —. | derived | mixed |
 | `mean_score_planned` | Each trial's score, averaged over every planned trial; unscored: 0. Whole runs only. | derived | mixed |
+| `complement` | An experiment judge's share of answers right (LoCoMo's judge), weighted by how many it judged; beside `mean_score`, never in its place. Only when the run named a judge model. | derived | mixed |
 | `score_by_group · parts_by` | The mean score per value of the field the benchmark breaks it down by (a question's category), from `verifier/parts.json`. | derived | mixed |
 | `n_regressions` | Trials whose patch broke a previously passing test. | derived | swe-bench |
 | `counts` | Trials per outcome. | derived | any |
@@ -197,6 +198,7 @@ These fields are stored in the standard's job and trial files ([Run a benchmark]
 | `standard.task_set` | In the same config: the task set run, with its id, name, hash, ids and version. | measured | standard |
 | `standard.constraints` | In the same config: what the machine allowed the run, when set. Shards may have different machine constraints; merging keeps the first shard's config values. | measured | standard |
 | `standard.served_by` | In the same config: the allowed OpenRouter provider slugs by model, in the order tried. | measured | standard |
+| `standard.reasoning` | In the same config: the reasoning level set by model (`--reasoning`), in place of the caller's own. | measured | standard |
 | `served / standard.served` | In the job's `result.json` and each trial's `result.json`, respectively: answered calls by provider (`calls`), calls naming none (`unnamed`), and each pinned model's `held`. Counts cover every relay route; the job also includes the benchmark's own relay. Tokens and cost are the agent's own calls'. | measured | standard |
 | `held` | `true` when every answered call names an allowed provider, `unknown` for an absent or different name, and `null` for no answered calls. Names are lowercased with spaces as dashes and compared with the slug before `/`; endpoint variants cannot be verified. Merging different pins marks the affected models `unknown`. | inferred | standard |
 | `standard.cut` | The limit that cut a unit its benchmark still scored: `time`, `calls` or `end`. | measured | standard |

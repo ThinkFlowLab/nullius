@@ -10,7 +10,7 @@ the shards' with ``shard`` taken out and ``merged_from`` put in.
 
 What is merged must be one launch: the same launch id, benchmark and
 version, dataset, agent or capability and model, the same serving providers
-pinned for each model (``served_by``) and the same number of shards - else it
+pinned for each model (``served_by``), the same reasoning (``reasoning``) and the same number of shards - else it
 is refused, naming what differs, unless ``force``. Two trials of
 one unit are always refused, with the units named: one of them would be
 counted twice. So are shards whose lists of units (``run.units_file``) hold
@@ -49,7 +49,7 @@ from nullius.standard.contract.names import backend as backend_name
 SAME = (("launch", ("standard", "launch")), ("benchmark", ("standard", "benchmark")),
         ("benchmark version", ("standard", "benchmark_version")), ("dataset", ("datasets", 0, "name")),
         ("agent or capability", ("standard", "plugged")), ("model", ("agents", 0, "model_name")),
-        ("backend", ("standard", "backend")), ("serving providers", ("standard", "served_by")),
+        ("backend", ("standard", "backend")), ("serving providers", ("standard", "served_by")), ("reasoning", ("standard", "reasoning")),
         ("number of shards", ("standard", "shard", "of")), ("retries per attempt", ("standard", "retries")),
         ("task set", ("standard", "task_set")))
 

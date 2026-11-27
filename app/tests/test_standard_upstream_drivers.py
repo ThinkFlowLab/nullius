@@ -464,8 +464,9 @@ class Locomo(unittest.TestCase):
 
     def test_the_score_is_the_upstreams_eval_question_answering(self):
         p = _driver(self, self.b, self.up, self.data)
-        units = [f"s:{i}" for i in range(len(self.QA))]
-        said = [[p.request("score", unit=u, dir=self.tmp, transcript=[], answer=a)["reward"] for a in self.ANSWERS] for u in units]
+        per = [p.request("score", unit="s", dir=self.tmp, transcript=[], answer=json.dumps({f"s:{i}": a for i in range(len(self.QA))}))
+               for a in self.ANSWERS]
+        said = [[r["detail"]["per_question"][i]["f1"] for r in per] for i in range(len(self.QA))]
         theirs = _upstream_says(self.drv, self.up, (
             "import json, os, sys, contextlib\nsys.path.insert(0, os.environ['NULLIUS_UPSTREAM'])\n"
             "with contextlib.redirect_stdout(sys.stderr):\n    from task_eval.evaluation import eval_question_answering\n"
@@ -481,18 +482,18 @@ class Locomo(unittest.TestCase):
         """For category 3 the answer field's part before ";" (the authors'
         reasoning follows it): the reference scores 1 where the whole field would not."""
         p = _driver(self, self.b, self.up, self.data)
-        said = {u: p.request("oracle", unit=u, dir=self.tmp)["answer"] for u in ("s:0", "s:1", "s:2")}
-        self.assertEqual(said, {"s:0": "Likely yes", "s:1": "a cat, two dogs", "s:2": "Paris; the capital"})
-        for u, a in said.items():
-            self.assertEqual(p.request("score", unit=u, dir=self.tmp, transcript=[], answer=a)["reward"], 1.0, u)
-        self.assertLess(p.request("score", unit="s:0", dir=self.tmp, transcript=[], answer=self.QA[0]["answer"])["reward"], 1.0)
+        said = json.loads(p.request("oracle", unit="s", dir=self.tmp)["answer"])
+        self.assertEqual({u: said[u] for u in ("s:0", "s:1", "s:2")}, {"s:0": "Likely yes", "s:1": "a cat, two dogs", "s:2": "Paris; the capital"})
+        self.assertEqual(p.request("score", unit="s", dir=self.tmp, transcript=[], answer=json.dumps(said))["reward"], 1.0)
+        whole = p.request("score", unit="s", dir=self.tmp, transcript=[], answer=json.dumps(dict(said, **{"s:0": self.QA[0]["answer"]})))
+        self.assertLess(whole["detail"]["per_question"][0]["f1"], 1.0)
 
     def test_the_reader_prompt_is_the_upstreams(self):
         seen, base = _fake_model(self, " May 2023 ")
         p = _driver(self, self.b, self.up, self.data)
-        said = [p.request("produce", unit=u, dir=self.tmp, recalled=[{"id": u, "memory": "DATE: 1 May\nA: hi"}], model="gpt-4o-mini",
-                          base_url=base, key="k")["answer"] for u in ("s:2", "s:3")]
-        self.assertEqual(said, ["May 2023", "May 2023"])          # stripped, as get_gpt_answers keeps it
+        said = p.request("produce", unit="s", dir=self.tmp, recalled=[{"id": u, "memory": "DATE: 1 May\nA: hi"} for u in ("s:2", "s:3")],
+                         model="gpt-4o-mini", base_url=base, key="k")["answer"]
+        self.assertEqual(json.loads(said), {"s:2": "May 2023", "s:3": "May 2023"})          # stripped, as get_gpt_answers keeps it
         theirs = _upstream_says(self.drv, self.up, (
             "import json, os, sys, contextlib\nsys.path.insert(0, os.environ['NULLIUS_UPSTREAM'])\n"
             "with contextlib.redirect_stdout(sys.stderr):\n    from task_eval import gpt_utils\n"
@@ -504,16 +505,27 @@ class Locomo(unittest.TestCase):
         self.assertEqual({(s["model"], s["temperature"], s["max_tokens"], s["n"]) for s in seen}, {("gpt-4o-mini", 0, 32, 1)})
         self.assertEqual(seen[0]["messages"][0]["role"], "user")
 
+    def test_the_experiment_judge_is_asked_through_the_openai_client_the_reader_uses(self):
+        """Mem0's request, sent by the driver's own openai 0.28 to the run's judge route, never to the reader's."""
+        seen, base = _fake_model(self, '{"label": "CORRECT"}')
+        p = _driver(self, self.b, self.up, self.data)
+        got = p.request("score", unit="s", dir=self.tmp, transcript=[], answer=json.dumps({"s:2": "Paris"}),
+                        judge={"model": "gpt-4o-mini", "base_url": base, "key": "k"})
+        self.assertEqual({k: v for k, v in got.get("complement", {}).items() if k != "why"}, {"label": "Judge", "score": 1.0, "n": len(self.QA)}, got["detail"]["per_question"][0])
+        self.assertEqual({(s["model"], s["temperature"], json.dumps(s["response_format"])) for s in seen},
+                         {("gpt-4o-mini", 0.0, '{"type": "json_object"}')})
+        self.assertIn("Gold answer: Paris; the capital\nGenerated answer: Paris\n", seen[2]["messages"][0]["content"])
+
     def test_the_reader_is_run_chatgpt_as_published(self):
         """Its role follows the model's name, a name it does not know fails
         the question, and an API error is retried (here, once)."""
         seen, base = _fake_model(self, "Paris", fail_first=1)
         p = _driver(self, self.b, self.up, self.data)
-        ask = dict(unit="s:2", dir=self.tmp, recalled=[{"id": "s:2", "memory": "M"}], base_url=base, key="k")
-        self.assertEqual(p.request("produce", model="gpt-3.5-turbo-0125", **ask)["answer"], "Paris")
+        ask = dict(unit="s", dir=self.tmp, recalled=[{"id": "s:2", "memory": "M"}], base_url=base, key="k")
+        self.assertEqual(json.loads(p.request("produce", model="gpt-3.5-turbo-0125", **ask)["answer"]), {"s:2": "Paris"})
         self.assertEqual(len(seen), 2)                           # the 500 asked again, as run_chatgpt does
         self.assertEqual([(s["model"], s["messages"][0]["role"]) for s in seen], [("gpt-3.5-turbo", "system")] * 2)
-        with self.assertRaisesRegex(jsonl.Failed, "ValueError"):
+        with self.assertRaisesRegex(jsonl.Failed, "answered none of the 1 questions; the first: ValueError"):
             p.request("produce", model="claude-sonnet", **ask)
         self.assertEqual(len(seen), 2)                           # nothing asked
 
@@ -586,7 +598,7 @@ class LongMemEval(unittest.TestCase):
 
     def test_the_reader_prompt_is_the_upstreams_template(self):
         seen, base = _fake_model(self, " 18 days ")
-        p = _driver(self, self.b, self.up, self.data)
+        p = _driver(self, self.b, self.up, self.data, NULLIUS_OPTION_READING="direct")
         said = p.request("produce", unit="q1", dir=self.tmp, recalled=[{"id": "q1", "memory": "MEM"}], model="m", base_url=base, key="k")
         self.assertEqual(said["answer"], "18 days")
         prompt = seen[0]["messages"][0]["content"]
@@ -594,6 +606,17 @@ class LongMemEval(unittest.TestCase):
         self.assertTrue(prompt.endswith("History Chats:\n\nMEM\n\nCurrent Date: 2023/05/30\nQuestion: How many days?\nAnswer:"), prompt)
         # run_generation's main asks with these, gen_length 500 without chain of thought
         self.assertEqual({(s["model"], s["n"], s["temperature"], s["max_tokens"]) for s in seen}, {("m", 1, 0, 500)})
+
+    def test_recalled_as_picks_the_upstreams_template_for_it(self):
+        starts = {"chats-and-facts": "I will give you several history chats between you and a user, as well as the relevant user facts",
+                  "facts": "I will give you several facts extracted from history chats between you and a user."}
+        for value, start in starts.items():
+            seen, base = _fake_model(self, "18 days")
+            p = _driver(self, self.b, self.up, self.data, NULLIUS_OPTION_RECALLED_AS=value)
+            p.request("produce", unit="q1", dir=self.tmp, recalled=[{"id": "q1", "memory": "MEM"}], model="m", base_url=base, key="k")
+            prompt = seen[0]["messages"][0]["content"]
+            self.assertTrue(prompt.startswith(start), prompt)
+            self.assertIn("\n\nMEM\n\nCurrent Date: 2023/05/30\nQuestion: How many days?\n", prompt)
 
 
 if __name__ == "__main__":

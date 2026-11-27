@@ -731,7 +731,7 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
                key_header: str = "authorization", hosts: Optional[Dict[str, str]] = None,
                ledger: Optional[str] = None, serving: Optional[Dict[str, List[str]]] = None,
                timeout: Optional[int] = None, max_calls: Optional[int] = None, exchanges: str = "off",
-               exchanges_max_mb: int = exchange_store.MAX_MB) -> List[str]:
+               exchanges_max_mb: int = exchange_store.MAX_MB, reasoning: Optional[Dict[str, str]] = None) -> List[str]:
     """``docker run`` for a unit's relay: on the default bridge (its way to the
     provider), its port published on 127.0.0.1 only. The key is never given:
     ``key_file``, its file, is mounted read-only at ``RELAY_KEY_IN`` with
@@ -741,7 +741,8 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
     ``ledger``: the file of the run's spending cap, its folder mounted so
     this relay books its calls where every other relay of the job does.
     ``serving``: by model, the serving providers that may answer it, as the
-    unit's own relay is given them (``relay.Relay``). ``exchanges`` and
+    unit's own relay is given them (``relay.Relay``); ``reasoning`` the same,
+    by model, the level its requests are sent with. ``exchanges`` and
     ``exchanges_max_mb``: whether its calls are kept whole in its record
     folder, and the bound, always said."""
     a = [DOCKER, "run", "-d", "--name", name, "--label", f"{LABEL}={job}", *way_out(), *_userns(), "--user", _user(),
@@ -771,6 +772,9 @@ def relay_argv(image: str, *, name: str, job: str, app: str, record: str, key_fi
     for m, slugs in sorted((serving or {}).items()):
         if m in sends:
             a += ["--served-by", f"{m}={','.join(slugs)}"]
+    for m, level in sorted((reasoning or {}).items()):
+        if m in sends:
+            a += ["--reasoning", f"{m}={level}"]
     if key_header != "authorization":
         a += ["--key-header", key_header]
     if timeout:
@@ -1051,12 +1055,14 @@ class Unit:
                  doors: Iterable[Tuple[str, int, str]] = (), hosts: Optional[Dict[str, str]] = None,
                  ledger: Optional[str] = None, network_probe: Optional[str] = None, probe_now: bool = True,
                  serving: Optional[Dict[str, List[str]]] = None, timeout: Optional[int] = None, max_calls: Optional[int] = None,
-                 exchanges: str = "off", exchanges_max_mb: int = exchange_store.MAX_MB):
+                 exchanges: str = "off", exchanges_max_mb: int = exchange_store.MAX_MB,
+                 reasoning: Optional[Dict[str, str]] = None):
         self.job, self.tag, self.dir, self.image, self.app = job, tag, record_dir, image, app
         self.max_calls = max_calls
         self.exchanges, self.exchanges_max_mb = exchanges, exchanges_max_mb
         self.ledger = ledger
         self.serving = dict(serving or {})       # by model, the serving providers that may answer it
+        self.reasoning = dict(reasoning or {})   # by model, the reasoning its requests are sent with
         self.timeout = timeout
         self.servers = list(servers)             # licence servers, host:port each: a forwarder apiece
         self.doors = list(doors)                 # servers on this machine: (alias, port, socket), a door apiece
@@ -1085,7 +1091,8 @@ class Unit:
                               prices=self.prices, side_models=self.side_models, key_header=self.key_header,
                               hosts=self.hosts, ledger=self.ledger, serving=self.serving,
                               timeout=self.timeout, max_calls=self.max_calls,
-                              exchanges=self.exchanges, exchanges_max_mb=self.exchanges_max_mb)
+                              exchanges=self.exchanges, exchanges_max_mb=self.exchanges_max_mb,
+                              reasoning=self.reasoning)
             self.started.append(self.names["relay"])
             _docker(argv[1:])
             _docker(["network", "connect", "--alias", RELAY_ALIAS, self.names["network"], self.names["relay"]])
