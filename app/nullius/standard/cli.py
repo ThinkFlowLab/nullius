@@ -663,14 +663,14 @@ def start_with(bench: dict, value: str, dataset: str | None = None) -> dict:
             raise run.Refused(f"--start-with ids: {', '.join(twice)} given more than once")
         return {"ids": ids}
     if value.startswith("set:"):
-        return set_part(bench["key"], value[4:], dataset, "--start-with set:")
+        return set_units(bench["key"], value[4:], dataset, "--start-with set:")
     try:
         return {"units_file": run.units_file(value)}
     except run.Refused as e:
         raise run.Refused(str(e).replace("--units", "--start-with", 1))
 
 
-def set_part(benchmark: str, ref: str, dataset: str | None, flag: str) -> dict:
+def set_units(benchmark: str, ref: str, dataset: str | None, flag: str) -> dict:
     """The task set ``ref`` as a part of a run of ``dataset``: {"task_set": its record, "dataset": its dataset}. Of
     a set of several datasets, its list of ``dataset``, refused when it holds none; of a set of one, that one, for
     the run to check against its own."""
@@ -1110,7 +1110,7 @@ def cmd_rerun(a):
         part = None
         if a.task_set is not None:
             # a set of the job's benchmark: its tasks the job planned and has not run
-            part = set_part(str(std.get("benchmark") or "") if isinstance(std, dict) else "", a.task_set, ran or None, "--set ")
+            part = set_units(str(std.get("benchmark") or "") if isinstance(std, dict) else "", a.task_set, ran or None, "--set ")
         got = rerun.rerun(a.job, ids, reason=a.reason or "", concurrency=a.concurrency, retries=a.retries,
                           max_usd=a.max_usd, prices_unreachable=unreachable, licences=held, every_unfinished=a.unfinished,
                           count=a.next, task_set=part, **({"env": run_env(provider)} if a.from_run else {}))

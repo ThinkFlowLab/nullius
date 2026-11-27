@@ -218,7 +218,7 @@ class PartTest(unittest.TestCase):
                 std_cli.start_with(b, "set:both", dataset)
             self.assertIn(said, str(e.exception))
         job_dir = self.plan(name="mixed", start_with={"count": 1})
-        got = self.again(job_dir, [], task_set=std_cli.set_part(b["key"], "both", "all", "--set "))
+        got = self.again(job_dir, [], task_set=std_cli.set_units(b["key"], "both", "all", "--set "))
         self.assertEqual([x["unit"] for x in got["begun"]], ["t2"])
         # ids inline, as the run builder writes them
         self.assertEqual(std_cli.start_with(b, "ids:t2,t0"), {"ids": ["t2", "t0"]})
