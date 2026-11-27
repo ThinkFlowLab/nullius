@@ -7,13 +7,15 @@ own code at the tested commit ($NULLIUS_UPSTREAM), imported, not copied: its
 modules import torch, bert_score and the vendors' clients, so the driver runs
 in the environment of its own that standard.json declares (driver.install).
 
-units    - every question of categories 1 to 4, as <sample_id>:<n>: the
+units    - every conversation, by its sample_id, as the paper batches its
+           questions: the memory is given a conversation once and asked all of
+           its questions. Those of categories 1 to 4, each <sample_id>:<n>: the
            published code cannot ask or score the adversarial category 5, whose
            records have no "answer". The version "full", whose
            upstream reads their "adversarial_answer", has them too
-setup    - the question's conversation, a session at a time, for ``add``;
-           the question, for ``recall``
-produce  - LoCoMo's reader prompt over what the memory recalled, as its RAG
+setup    - the conversation, a session at a time, for ``add``; each of its
+           questions, for ``recall``
+produce  - for each question, LoCoMo's reader prompt over what the memory recalled, as its RAG
            mode builds it (task_eval/gpt_utils.py: the context, a blank line,
            QA_PROMPT; a category-2 question carries the date hint
            get_gpt_answers adds), asked by LoCoMo's own run_chatgpt
@@ -27,18 +29,19 @@ produce  - LoCoMo's reader prompt over what the memory recalled, as its RAG
            "gpt-3.5" is asked as gpt-3.5-turbo, as the system; one with
            "gpt-4", as the user; any other raises), it retries API,
            connection and unavailable errors without end (a rate limit with
-           no wait), and a reply with no text fails the question. The run's
-           turn_seconds bounds it: past them the question is the reader's
-           error and the driver is started again for the next. A category-5
+           no wait), and a reply with no text fails the question: that
+           question is left unscored, with its error, and the others go on.
+           The run's turn_seconds bounds the whole conversation. A category-5
            question is a choice between its false answer and "Not mentioned in
            the conversation", in get_gpt_answers' words and QA_PROMPT_CAT_5, its
            reply read by get_cat_5_answer; which comes first is drawn from the
-           unit's id, so every memory is asked the same
+           question's id, so every memory is asked the same
 score    - LoCoMo's own eval_question_answering (task_eval/evaluation.py) on
-           the one question: token F1 with its normalisation and Porter
+           each question: token F1 with its normalisation and Porter
            stemming, category 1 by comma-separated parts, category 3 against
            the reference's part before the first ";", category 5 whether it
-           says the conversation does not mention it
+           says the conversation does not mention it; the mean over the
+           questions scored, each question a part
 answer   - a setup's (original, model): LoCoMo's own task_eval/evaluate_qa.py,
            run as published on the one conversation - the version's
            questions, as its scripts feed it - with --model
@@ -56,7 +59,7 @@ answer   - a setup's (original, model): LoCoMo's own task_eval/evaluate_qa.py,
            scripts/generate_observations.sh and generate_session_summaries.sh
            pass (the latter's "---data-file" read as the --data-file it
            means). Its encoders run on a CUDA GPU, as published
-oracle   - the reference control: the question's own "answer" field as that
+oracle   - the reference control: each question's own "answer" field as that
            scorer reads it - for category 3, its first part (``gold``): there
            the field can carry the authors' reasoning after a ";", which
            LoCoMo's evaluation cuts off before scoring, so the whole field
@@ -90,26 +93,22 @@ def load():
     return DATA
 
 
-def question(unit):
-    sid, n = unit.rsplit(":", 1)
-    return load()[sid], load()[sid]["qa"][int(n)]
+def questions(unit):
+    """The conversation's questions the version asks, by id: <sample_id>:<n>."""
+    return {f"{unit}:{i}": q for i, q in enumerate(load()[unit]["qa"]) if q.get("category") in CATEGORIES}
 
 
 def units(dataset, setup=None):
-    if setup:                                    # a setup's unit is a conversation, as the paper batches its questions
-        return {"units": list(load())}
-    out = []
-    for sid, conv in load().items():
-        out += [f"{sid}:{i}" for i, q in enumerate(conv["qa"]) if q.get("category") in CATEGORIES]
-    return {"units": out}
+    return {"units": list(load())}
 
 
 def describe(dataset, **_):
     out = {}
-    for unit in units(dataset)["units"]:
-        q = question(unit)[1]
-        text = q["question"]
-        out[unit] = {"title": text, "text": text, "categories": {"category": str(q["category"])}}
+    for unit, conv in load().items():
+        c = conv["conversation"]
+        n = sum(1 for k in c if k.startswith("session_") and not k.endswith("date_time"))
+        out[unit] = {"title": f"{c.get('speaker_a')} and {c.get('speaker_b')}",
+                     "text": f"{n} sessions, {len(questions(unit))} questions"}
     return {"units": out}
 
 
@@ -141,8 +140,7 @@ def sessions(conv):
 
 
 def setup(unit, dir):
-    conv, q = question(unit)
-    return {"memory": {"add": sessions(conv), "recall": [{"id": unit, "question": q["question"]}]}}
+    return {"memory": {"add": sessions(load()[unit]), "recall": [{"id": i, "question": q["question"]} for i, q in questions(unit).items()]}}
 
 
 def reader_words(category):
@@ -168,13 +166,26 @@ CHOICE, UNMENTIONED = reader_words(5) if 5 in CATEGORIES else ("", "")
 
 
 def produce(unit, dir, recalled, model, base_url, key):
-    _, q = question(unit)
-    memory = recalled[0]["memory"] if recalled else ""
+    """Each question's answer by its id; a question the reader failed, its error."""
+    asked = questions(unit)
+    out = {}
+    for r in recalled:
+        try:
+            out[r["id"]] = read(r["id"], asked[r["id"]], r.get("memory") or "", model, base_url, key)
+        except Exception as e:
+            out[r["id"]] = {"error": f"{type(e).__name__}: {e}"}
+    if out and all(isinstance(a, dict) for a in out.values()):
+        raise RuntimeError(f"the reader answered none of the {len(out)} questions; the first: {next(iter(out.values()))['error']}")
+    return {"answer": json.dumps(out)}
+
+
+def read(qid, q, memory, model, base_url, key):
+    """LoCoMo's reader on one question."""
     asked = q["question"] + (HINT if q["category"] == 2 else "")
     prompt, choices = gpt_utils.QA_PROMPT, {}
     if q["category"] == 5:
         pair = [UNMENTIONED, q["adversarial_answer"]]
-        if random.Random(unit).random() >= 0.5:
+        if random.Random(qid).random() >= 0.5:
             pair.reverse()
         prompt, choices, asked = gpt_utils.QA_PROMPT_CAT_5, dict(zip("ab", pair)), q["question"] + CHOICE.format(*pair)
     query = (memory or "(nothing recalled)") + "\n\n" + prompt.format(asked)
@@ -187,7 +198,7 @@ def produce(unit, dir, recalled, model, base_url, key):
                                        temperature=0, wait_time=2)
     if choices:
         answer = gpt_utils.get_cat_5_answer(answer, choices)
-    return {"answer": answer.strip()}
+    return answer.strip()
 
 
 def reference(q):
@@ -285,16 +296,26 @@ def score(unit, dir, transcript, answer, setup=None, **_):
                                                        "answer": q.get(f"{k}_prediction"), "f1": q.get(f"{k}_f1")},
                                                       **({"retrieved": q.get(f"{k}_prediction_context"), "recall": q.get(f"{k}_recall")} if rag else {}))
                                                  for q in qa]}, **rag)}
-    _, q = question(unit)
-    with contextlib.redirect_stdout(sys.stderr):
-        values, _, _ = evaluation.eval_question_answering([dict(q, prediction=answer or "")], "prediction")
-    return {"reward": float(values[0]), "detail": {"question": q["question"], "reference": reference(q), "category": q["category"],
-                                                  "answer": answer, "evidence": q.get("evidence")}}
+    asked = questions(unit)
+    given = json.loads(answer) if answer else {}                 # nop: nothing, so every answer empty
+    got = {i: given.get(i, "") for i in asked if not isinstance(given.get(i), dict)}
+    values = []
+    if got:
+        with contextlib.redirect_stdout(sys.stderr):
+            values, _, _ = evaluation.eval_question_answering([dict(asked[i], prediction=a) for i, a in got.items()], "prediction")
+    f1 = dict(zip(got, (float(v) for v in values)))
+    parts = [{"n": n + 1, "text": q["question"], "group": q["category"], "score": f1[i]}
+             for n, (i, q) in enumerate(asked.items()) if i in f1]
+    return {"reward": sum(f1.values()) / len(f1) if f1 else 0.0, **({"parts": {"n": len(f1), "by": "category", "parts": parts}} if f1 else {}),
+            "detail": {"questions": len(asked), "scored": len(f1),
+                       "per_question": [dict({"id": i, "question": q["question"], "reference": reference(q), "category": q["category"],
+                                              "evidence": q.get("evidence")},
+                                             **({"answer": got[i], "f1": f1[i]} if i in f1 else {"error": given[i]["error"]}))
+                                        for i, q in asked.items()]}}
 
 
 def oracle(unit, dir):
-    _, q = question(unit)
-    return {"answer": gold(q)}
+    return {"answer": json.dumps({i: gold(q) for i, q in questions(unit).items()})}
 
 
 HANDLERS = {"describe": describe, "units": units, "setup": setup, "produce": produce, "score": score, "oracle": oracle, "answer": answer}

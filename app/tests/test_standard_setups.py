@@ -318,15 +318,14 @@ class Recipe(unittest.TestCase):
         self.assertIn("run locomo model --model vendor/their-model", custom["script"])
         self.assertTrue(self.compiled(others=["original"], model="")["errors"])
 
-    def test_locomo_dataset_counts_questions_when_only_its_original_runs(self):
+    def test_locomo_dataset_counts_conversations_when_only_its_original_runs(self):
         out = recipe.compile({"version": 1, "harness": "standard", "name": "locomo-experiment", "title": "LoCoMo",
                               "benchmark": "locomo", "datasets": ["locomo10"], "others": ["original"],
                               "model_choice": "any", "provider": "openai", "model": "gpt-4-turbo", "limit": "",
                               "concurrency": "", "unsandboxed": False, "where": "local", "backend": "local", "options": {}})
         self.assertEqual(out["errors"], [])
         rows = {r[1]: r[2] for r in out["review"]}
-        self.assertNotIn("1540 conversations", rows["Dataset"])
-        self.assertEqual(rows["Dataset"], "LoCoMo-10 · 1540 questions")
+        self.assertEqual(rows["Dataset"], "LoCoMo-10 · 10 conversations")
         self.assertEqual(rows["Scope"].split()[:2], ["all", "conversations"])   # the setup's own unit, with no count of its own
 
     def test_paper_filter_also_applies_to_a_memory_capability(self):
