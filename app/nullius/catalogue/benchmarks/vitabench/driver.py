@@ -7,8 +7,8 @@ units  - the dataset file's tasks, through the upstream's ``Task`` model
 setup  - the upstream agent's own prompt (``LLMAgent.system_prompt``) and its
          environment's tools, served by ``mcp_server.py``, which passes each call here
 turn   - the upstream's ``run_task`` in a thread: its Orchestrator, user simulator,
-         limits, retries and evaluator. The agent in it is ``AcpAgent``: a tool call made
-         over MCP is the agent's next message, which the Orchestrator executes; the final
+         limits, retries and evaluator. The agent in it is ``AcpAgent``: the tool calls made
+         over MCP at once are the agent's next message, which the Orchestrator executes; the final
          text of a turn is its next message to the user. ``turn`` answers ``done`` once
          the agent or the user says the upstream's stop token, or the Orchestrator ends it
 answer - the original: the upstream's own agent as the run's model, in the same run_task
@@ -23,6 +23,7 @@ three empty ones (``invalid_agent_message``); and a conversation started again b
 is told by ``restart``, except after it ended: an evaluator that raises is then the
 unit's error, the ACP agent being gone.
 """
+import atexit
 import contextlib
 import json
 import os
@@ -33,6 +34,7 @@ import socket
 import sys
 import tempfile
 import threading
+import time
 import uuid
 
 PROTOCOL, sys.stdout = sys.stdout, sys.stderr       # stdout is the protocol's: whatever the upstream prints goes to the log
@@ -72,6 +74,7 @@ The user says:""",
 用户说："""}
 ENDED_CALL = "Error: the conversation has ended ({why}); this call was not made."
 RESTARTED_CALL = "Error: the conversation was started again; this call was not made."
+GATHER = 0.1                                          # how close together calls are parallel ones
 WAIT = 590                     # under the 600 s a turn's answer is given
 STATE, _TASKS = {}, {}
 _CURRENT = [None]              # the conversation running: a driver holds one unit at a time
@@ -111,11 +114,24 @@ class AcpAgent(LLMAgent):
             if what == "call":                         # from an attempt before: not made
                 value[2](RESTARTED_CALL, True)
         if what == "call":
-            name, arguments, reply = value
-            tc = ToolCall(id="call_" + uuid.uuid4().hex[:16], name=str(name),
-                          arguments=arguments if isinstance(arguments, dict) else {}, requestor="assistant")
-            c.pending[tc.id] = reply
-            return AssistantMessage(role="assistant", content=None, tool_calls=[tc], cost=0.0), state
+            # Calls the agent made at once (within GATHER seconds) are one message, one step, as the upstream's
+            # agent's parallel calls are.
+            calls, until = [value], time.monotonic() + GATHER
+            while True:
+                with c.inbox.mutex:
+                    while c.inbox.queue and c.inbox.queue[0][0] == "call" and c.inbox.queue[0][2] == self.attempt:
+                        calls.append(c.inbox.queue.popleft()[1])
+                    other = bool(c.inbox.queue)
+                if other or time.monotonic() >= until:
+                    break
+                time.sleep(0.005)
+            tcs = []
+            for name, arguments, reply in calls:
+                tc = ToolCall(id="call_" + uuid.uuid4().hex[:16], name=str(name),
+                              arguments=arguments if isinstance(arguments, dict) else {}, requestor="assistant")
+                c.pending[tc.id] = reply
+                tcs.append(tc)
+            return AssistantMessage(role="assistant", content=None, tool_calls=tcs, cost=0.0), state
         said = AssistantMessage(role="assistant", content=value, cost=0.0)
         if not said.has_text_content():
             self.empty = message
@@ -399,6 +415,14 @@ def answer(unit, dir, setup, model, base_url, key, simulator=None, judge=None, a
 def score(unit, dir, transcript, answer, judge=None, setup=None):
     st, t = _state(unit), task(unit)
     c = st["conversation"]
+    try:
+        return _scored(st, t, c, dir)
+    finally:
+        if c is not None:
+            c.close()
+
+
+def _scored(st, t, c, dir):
     if c is None:
         run = st["original"]
     elif c.thread is None:                                # the null control: no message, as the upstream scores one
@@ -432,10 +456,9 @@ def score(unit, dir, transcript, answer, judge=None, setup=None):
         os.makedirs(out, exist_ok=True)
         with open(os.path.join(out, "simulation.json"), "w", encoding="utf-8") as f:
             f.write(run.model_dump_json(indent=2))
-    if c is not None:
-        c.close()
     return {"reward": info.reward, "passed": info.reward == 1.0, "detail": detail}
 
 
 if __name__ == "__main__":
+    atexit.register(_leave)                               # the last unit's socket folder, scored or not
     serve({"units": units, "setup": setup, "turn": turn, "answer": answer, "score": score}, out=PROTOCOL)

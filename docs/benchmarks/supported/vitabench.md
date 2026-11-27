@@ -55,7 +55,7 @@ Food delivery, in-store and travel requests from a simulated user, with up to 66
 
 ## Upstream limitations
 
-- The paper's judge, Claude 3.7 Sonnet, is retired, so Like the paper cannot run: every run names its judge model. Scores compare only between runs with the same judge, never with the paper's.
+- The paper's judge, Claude 3.7 Sonnet, is retired, so Like the paper cannot run: every agent's run names its judge model. Scores compare only between runs with the same judge, never with the paper's.
 - In 15 of the 100 Cross-scenario (English) tasks, the shops, orders or bookings the task relies on are missing, though the Chinese version has them: an agent may fail them through no fault of its own. Score with the Chinese datasets.
 - Its model calls carry configuration fields (base_url, headers, name, max_input_tokens) that OpenAI's API refuses with HTTP 400: run every model of a VitaBench run on OpenRouter (OpenAI's models are there as openai/...) or a custom endpoint.
 - A failed model call makes the upstream start the conversation again, up to 3 times, and each costs its calls.

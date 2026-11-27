@@ -110,6 +110,21 @@ class Upstream(unittest.TestCase):
             got = ask("tools/call", {"name": name, "arguments": arguments})["result"]
             return got["content"][0]["text"], got["isError"]
 
+        def at_once(*calls):
+            """Several calls sent before any answer, as an agent's parallel calls are."""
+            ids = []
+            for name, arguments in calls:
+                n[0] += 1
+                ids.append(n[0])
+                p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": n[0], "method": "tools/call",
+                                          "params": {"name": name, "arguments": arguments}}) + "\n")
+            p.stdin.flush()
+            while ids:
+                m = json.loads(p.stdout.readline())
+                if m.get("id") in ids:
+                    ids.remove(m["id"])
+        call.at_once = at_once
+
         def turn(said=None):
             t = [] if said is None else [{"role": "user", "text": "..."}, {"role": "agent", "text": said}]
             return d.request("turn", unit=unit, dir=ws, transcript=t, simulator=self.route, judge=self.route)
@@ -139,6 +154,17 @@ class Upstream(unittest.TestCase):
                          (1.0, "user_stop", 2, 1), r["detail"])
         self.assertNotIn("window_evaluations", r["detail"]["reward_info"])
         self.assertTrue(os.path.isfile(os.path.join(self.tmp, "unit", "verifier", "simulation.json")))
+
+    def test_calls_made_at_once_are_one_step_as_the_upstreams_parallel_calls(self):
+        _, _, call, turn, score = self.opened("cross-en", "A0812003", ["Lunch, please.", "Thanks. ###STOP###"])
+        turn()
+        args = {"longitude1": 1, "latitude1": 1, "longitude2": 1, "latitude2": 1}
+        call.at_once(("longitude_latitude_to_distance", args), ("longitude_latitude_to_distance", args))
+        turn("Ordered.")
+        score()
+        with open(os.path.join(self.tmp, "unit", "verifier", "simulation.json")) as f:
+            said = [m for m in json.load(f)["messages"] if m["role"] == "assistant" and m.get("tool_calls")]
+        self.assertEqual([len(m["tool_calls"]) for m in said], [2])
 
     def test_ten_tool_errors_score_zero_unjudged(self):
         _, _, call, turn, score = self.opened("delivery", "10711001", ["你好"])

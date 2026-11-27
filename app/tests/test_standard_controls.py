@@ -174,8 +174,9 @@ class ControlRun(unittest.TestCase):
         b["score"] = dict(b["score"], judge={"model": "judge-1", "says": "x", "retired": True})
         env = {"OPENAI_API_KEY": "k"}
         with self.assertRaises(run.Refused) as e:
-            run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env=env)
+            run.Run(b, {"_kind": "agent", "key": "a", "label": "A"}, model="m", provider="openai", env=env, unsandboxed=True, proving=True)
         self.assertIn("judge-1, is retired: name another with --judge-model", str(e.exception))
+        self.assertIsNone(run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env={}).judge_model)
         self.assertEqual(run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env=env,
                                  judge_model="judge-2").judge_model, "judge-2")
 
