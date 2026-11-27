@@ -35,6 +35,7 @@ class Table(unittest.TestCase):
         read -= {"DOCKER_CONFIG"}                                         # docker's own: where it keeps a login (sandbox.py reads the username)
         read -= {"DOCKER_HOST", "DOCKER_CONTEXT"}                         # docker's own: when set, container.py leaves the current context to them
         read -= {"XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}          # the user's session: where systemd-run finds its manager (constraints.session)
+        read -= {"NULLIUS_SERVER", "NULLIUS_TOKEN"}                       # the client's, on another machine: the server it asks and its token (client.py)
         missing = sorted(v for v in read if v not in settings.BY_NAME and v not in settings.STARTUP)
         self.assertEqual(missing, [], f"read by the application but neither on the page nor a named start-up option: {missing}")
         self.assertEqual(sorted(set(settings.BY_NAME) & set(settings.STARTUP)), [])

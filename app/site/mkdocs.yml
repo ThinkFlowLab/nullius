@@ -78,6 +78,7 @@ nav:
           - Core concepts: concepts.md
       - Run evaluations:
           - Run builder: builder.md
+          - From another machine: api.md
       - Understand results:
           - Read results: results.md
           - Judgement: judgement.md
@@ -134,6 +135,7 @@ nav:
       - Metrics:
           - Metric field guide: field-guide.md
       - Release notes:
+          - v0.3.0: releases/v0.3.0.md
           - v0.2.0: releases/v0.2.0.md
           - v0.1.1: releases/v0.1.1.md
           - v0.1.0: releases/v0.1.0.md

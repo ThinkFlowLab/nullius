@@ -369,6 +369,7 @@
    "agent_version",
    "agents",
    "budget",
+   "complement",
    "control_source",
    "counts",
    "dataset",
@@ -433,6 +434,7 @@
   "Trial": [
    "agent_info_name",
    "agent_version",
+   "complement",
    "cost_usd",
    "dir",
    "dur_agent",

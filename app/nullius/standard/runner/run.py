@@ -892,8 +892,10 @@ class Run:
         # A benchmark scored by a model: its official judge, or the one asked for; its calls go through the relay
         # on a route of their own (<tag>-judge), recorded beside the unit's and never counted as the agent's.
         # The official one is written as its maker spells it; the run's provider may spell it otherwise.
+        # An experiment judge (``score.experiment_judge``) runs only when the run names its model.
         j = (bench.get("score") or {}).get("judge")
-        self.judge_model = (judge_model or providers.served_as(j["model"], provider)) if j else None
+        self.judge_model = ((judge_model or providers.served_as(j["model"], provider)) if j
+                            else judge_model or None if (bench.get("score") or {}).get("experiment_judge") else None)
         # A benchmark whose user a model plays: its driver's turns ask that model the same way, on <tag>-simulator.
         # A control holds no conversation, so it never asks it.
         sim = bench.get("simulator")
