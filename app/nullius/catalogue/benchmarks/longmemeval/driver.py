@@ -1,8 +1,8 @@
 """Run LongMemEval over JSON lines using its pinned upstream code and client.
 
 For cap.memory/v1, setup feeds history sessions to add and the question,
-with its question date, to recall. produce uses the upstream history-chats prompt and reader call on
-recalled text. The reading option selects chain-of-note (800 tokens) or
+with its question date, to recall. produce uses the upstream reader prompt the recalled_as option names
+(history chats, chats and facts, or facts) and reader call on recalled text. The reading option selects chain-of-note (800 tokens) or
 direct answers (500). Recalled text is not truncated: upstream truncation
 requires structured sessions. Reader calls retain upstream's unbounded
 five-second rate-limit retries; an empty reply fails the question.
@@ -46,20 +46,28 @@ from openai import OpenAI                       # noqa: E402  the client evaluat
 COT = os.environ.get("NULLIUS_OPTION_READING", "con") == "con"
 
 
+# What the reader is told the recalled memory is: prepare_prompt's template for one value of
+# merge_key_expansion_into_value - history chats (none), chats and the facts extracted from them (merge),
+# or the extracted facts alone (replace).
+RECALLED_AS = {"history-chats": "merge_key_expansion_into_value is None", "chats-and-facts": "merge_key_expansion_into_value == 'merge'",
+               "facts": "merge_key_expansion_into_value == 'replace'"}
+
+
 def reader_template():
-    """prepare_prompt's template for retrieved history chats (``merge_key_expansion_into_value``
-    none), with chain of thought or without (``cot``, by the run's reading): a local name in the
-    upstream, so read from its source through the imported module."""
+    """prepare_prompt's template for what a memory recalled (``recalled_as``), with chain of thought or
+    without (``cot``, by the run's reading): a local name in the upstream, so read from its source
+    through the imported module."""
+    test = RECALLED_AS[os.environ.get("NULLIUS_OPTION_RECALLED_AS", "history-chats")]
     tree = ast.parse(textwrap.dedent(inspect.getsource(run_generation.prepare_prompt)))
     for node in ast.walk(tree):
-        if isinstance(node, ast.If) and "merge_key_expansion_into_value is None" in ast.unparse(node.test):
+        if isinstance(node, ast.If) and test in ast.unparse(node.test):
             for inner in node.body:
                 if isinstance(inner, ast.If) and ast.unparse(inner.test) == "cot":
                     for st in (inner.body if COT else inner.orelse):
                         if isinstance(st, ast.Assign) and isinstance(st.value, ast.Constant) \
                                 and [ast.unparse(t) for t in st.targets] == ["answer_prompt_template"]:
                             return st.value.value
-    raise RuntimeError("LongMemEval's prepare_prompt no longer holds its history-chats template where the driver reads it")
+    raise RuntimeError("LongMemEval's prepare_prompt no longer holds its reader template where the driver reads it")
 
 
 def gen_length():
