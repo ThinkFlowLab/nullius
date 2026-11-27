@@ -139,6 +139,7 @@ site](app/site/README.md).
 | [Quickstart](docs/getting-started.md) | Launch, open results, a first run |
 | [Core concepts](docs/concepts.md) | Benchmarks, agents, recipes, trials, evidence |
 | [Run builder](docs/builder.md) | The stages, the run, Harbor's pin |
+| [From another machine](docs/api.md) | Tokens, the Python client, `nullius remote`, MCP, the routes |
 | [Read results](docs/results.md) | Failures, controls, comparisons |
 | [Judgement](docs/judgement.md) | What a judge model is asked |
 | [The Nullius standard](docs/standard.md) | Ports, kits, setups, controls, proofs; importing |

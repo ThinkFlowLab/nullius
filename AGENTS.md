@@ -169,6 +169,7 @@ Short and plain: issues, pull requests, their comments, docs.
 | The run builder | `docs/builder.md`; `app/nullius/recipes/launch.py`; `app/static/builder/command-builder-core.js` |
 | A whole design | Docstrings of `execution.py`, `catalogue/catalog.py`, `harbor/source.py`, `runs/live.py` |
 | A command | `docs/cli/README.md` |
+| The API, its client, `nullius remote`, MCP | `docs/api.md`; docstring of `app/web/api.py` |
 | Settings and storage | `docs/settings/README.md`; `app/nullius/settings.py` |
 | Judgement; the PR judge | `docs/judgement.md`; docstring of `.github/scripts/judge_pr.py` |
 | A run that looks wrong, comparing runs | `/run-analysis` |
