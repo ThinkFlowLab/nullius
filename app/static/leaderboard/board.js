@@ -277,8 +277,11 @@
     if(fixed[th.dataset.col])return fixed[th.dataset.col];
     /* a score column is as wide as its name, measured in the header's own font */
     const style=getComputedStyle(th);ruler.font=`${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-    const name=th.textContent.trim(), spacing=parseFloat(style.letterSpacing)||0;
-    return Math.max(88,Math.ceil(ruler.measureText(name).width+spacing*name.length+parseFloat(style.paddingLeft)+parseFloat(style.paddingRight))+2);
+    const name=th.textContent.trim(), spacing=parseFloat(style.letterSpacing)||0, text=ruler.measureText(name).width+spacing*name.length;
+    /* beside the centred name, room for the sort arrow the stylesheet draws after it: 1.05rem, .25rem away */
+    const rem=parseFloat(getComputedStyle(document.documentElement).fontSize);ruler.font=`500 ${1.05*rem}px ${style.fontFamily}`;
+    const side=Math.max(parseFloat(style.paddingLeft),parseFloat(style.paddingRight),ruler.measureText('↓').width+.25*rem);
+    return Math.max(88,Math.ceil(text+2*side)+2);
   }
   /* the columns fill the card exactly: room to spare goes to the score columns alone, so #, Agent, Overall and the
      measures keep their width whatever is shown */
@@ -335,7 +338,8 @@
     let a=Math.min(...values),b=Math.max(...values);const pad=Math.max((b-a)*.12,steps[0]);a=Math.max(floor,a-pad);b=b+pad;
     const q=steps.find(q=>(b-a)/q<=n)||steps.at(-1);return {step:q,lo:Math.max(floor,Math.floor(a/q+1e-9)*q),hi:Math.ceil(b/q-1e-9)*q};
   }
-  const textWidth=(t,weight=600)=>{ruler.font=`${weight} 12px system-ui, sans-serif`;return Math.ceil(ruler.measureText(t).width);};
+  /* a name's width in the page's own font, the one the plot's text is drawn in */
+  const textWidth=(t,weight=600)=>{ruler.font=`${weight} 12px ${getComputedStyle(document.body).fontFamily}`;return Math.ceil(ruler.measureText(t).width);};
   function drawScatter() {
     const live=document.getElementById('lb-scatter'),plot=svg('svg'),W=plotWidth();
     PL.r=W-22;live.setAttribute('viewBox',`0 0 ${W} 426`);
@@ -549,5 +553,8 @@
     else requestAnimationFrame(()=>motion.reduced.matches?size():grow(box.dataset.col));
   },true);
   useFamily();updateTable();choose(selected);tableMotion=motion.table(table);deferred(generation).catch(()=>{});
+  /* what was measured before the interface's own font had loaded is measured again with it */
+  const remeasure=()=>{size();drawScatter();document.querySelectorAll('[data-chart^="radars-"] svg').forEach(pills);};
+  document.fonts?.ready.then(remeasure);document.fonts?.addEventListener?.('loadingdone',remeasure);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{columns();applyFamily();});
 })();
