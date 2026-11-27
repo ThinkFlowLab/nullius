@@ -61,7 +61,7 @@
     {% endcall %}
   </div>{% endset %}
 {% set actions %}
-    {% if execution and execution.plan.recipe %}<a class="btn sm ghost" href="{{ url_for('new_run', run=job.job_id) }}"
+    {% if execution and execution.plan.recipe %}<a class="btn sm ghost" href="{{ url_for('new_run', run=job.job_id, workspace=request.args.get('workspace') or none) }}"
       title="Open the run builder with the recipe this run was started from, every setting as it was; Run gives it a new name">New run like this</a>
     {% else %}<a class="btn sm ghost" href="{{ url_for('new_run', like=job.job_id, workspace=request.args.get('workspace') or none) }}"
       title="Open the run builder with what this run recorded: its agents and their parameters, model, dataset and task filter, limits, timeouts and Harbor; anything a recipe cannot say is named there">New run like this</a>{% endif %}

@@ -729,7 +729,7 @@ def snapshot(job_dir: str, now: datetime | None = None, ended: tuple | None = No
     """Read and fold a job directory's feed.
 
     Pass ``now`` for live timers. Replay uses the last event's timestamp. ``ended`` is ``(how, at)`` from the runner's own record
-    (`execution.ended_for`) when it knows the run is over: a feed Harbor
+    (`Execution.job_state`) when it knows the run is over: a feed Harbor
     never closed then settles instead of reading as a job still going.
     ``with_timeline`` adds :func:`timeline` under ``"timeline"`` for the page.
     """
