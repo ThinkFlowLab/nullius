@@ -351,7 +351,8 @@ for line in sys.stdin:
         "capability.py": '''"""{key}: cap.memory/v1 in JSON lines.
 
 add {{session}}      keep a session: {{id, date, turns: [{{role, text}}], text}}
-recall {{question}}  -> {{"memory": "what was kept that bears on the question"}}
+recall {{question, date}}  -> {{"memory": "what was kept that bears on the question"}}
+                     (date: when the question is asked, only when the benchmark has one)
 """
 import json
 import sys

@@ -1,7 +1,7 @@
 """Run LongMemEval over JSON lines using its pinned upstream code and client.
 
-For cap.memory/v1, setup feeds history sessions to add and the question to
-recall. produce uses the upstream history-chats prompt and reader call on
+For cap.memory/v1, setup feeds history sessions to add and the question,
+with its question date, to recall. produce uses the upstream history-chats prompt and reader call on
 recalled text. The reading option selects chain-of-note (800 tokens) or
 direct answers (500). Recalled text is not truncated: upstream truncation
 requires structured sessions. Reader calls retain upstream's unbounded
@@ -168,7 +168,10 @@ def setup(unit, dir):
         ts = [{"role": t.get("role") or "user", "text": str(t.get("content") or "")} for t in turns]
         sessions.append({"id": str(sid), "date": date or "", "turns": ts,
                          "text": f"Session Date: {date}\n" + "\n".join(f"{t['role']}: {t['text']}" for t in ts)})
-    return {"memory": {"add": sessions, "recall": [{"id": unit, "question": q["question"]}]}}
+    ask = {"id": unit, "question": q["question"]}
+    if q.get("question_date"):
+        ask["date"] = q["question_date"]
+    return {"memory": {"add": sessions, "recall": [ask]}}
 
 
 def produce(unit, dir, recalled, model, base_url, key):
