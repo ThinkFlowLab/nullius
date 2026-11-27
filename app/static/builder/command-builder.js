@@ -52,6 +52,54 @@
     }
     return {field, sync, acceptCompile};
   }
+  // Reasoning: a select on each model field's line, with the levels its model offers (POST /new-run/reasoning), asked
+  // when the model is chosen and kept only while the page is open. A model with none to choose says so, greyed. A field
+  // whose agent or benchmark sets its own reasoning in every job (the compile's own_reasoning) shows theirs, greyed.
+  function reasoningSelects({C, root, r, esc, request, csrf, compiled}) {
+    const FIELD = {model: 'model', simulator: 'simulator_model', judge: 'judge_model'};
+    const NAME = {model: 'model', simulator: 'user simulator', judge: 'judge'};
+    const asked = new Map();
+    const name = v => C.LEVEL_NAMES[v] || v;
+    // the model a field names, else the benchmark's official one
+    const modelOf = (rec, role) => String(rec[FIELD[role]] || (role === 'model' ? '' : (C.standardBench(rec) || {})[role]) || '').trim();
+    function levelsOf(rec, role) {
+      const provider = C.choiceOf(rec), model = modelOf(rec, role), key = provider + '\n' + model;
+      if (!model) return null;
+      if (!asked.has(key)) {
+        const entry = {result: null};
+        asked.set(key, entry);
+        request('/new-run/reasoning', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify({provider, model})})
+          .then(res => res.json()).catch(() => ({ok: false, levels: []}))
+          .then(result => { entry.result = result; sync(); });
+      }
+      return asked.get(key).result;
+    }
+    function select(rec, role) {
+      if (!C.reasoningRoles(rec).includes(role)) return '';
+      const label = `aria-label="Reasoning, ${NAME[role]}"`, own = ((compiled() || {}).own_reasoning || {})[role];
+      if (own && own.length) return `<select data-reasoning="${role}" ${label} title="Set by ${role === 'model' ? 'the agent' : 'the benchmark'}" disabled>`
+        + `<option>${esc(own.length === 1 ? name(own[0]) : 'Set by each agent')}</option></select>`;
+      const got = levelsOf(rec, role), levels = got && got.ok && Array.isArray(got.levels) ? got.levels : [];
+      if (got && got.ok && !levels.length) return `<select data-reasoning="${role}" ${label} disabled><option>No reasoning</option></select>`;   // the model has none to choose
+      if (!levels.length) return '';             // not known yet, or the list could not be read
+      // nothing chosen: the model's default, shown as a placeholder is, and any level may still be chosen
+      const set = (rec.reasoning || {})[role] || '', chosen = set || got.default || '';
+      const unset = v => !set && v === chosen ? ' data-placeholder' : '';
+      return `<select data-reasoning="${role}" ${label} data-default="${esc(got.default || '')}">` + (got.default ? '' : `<option value=""${unset('')}>Default</option>`)
+        + [...levels, ...(chosen && !levels.includes(chosen) ? [chosen] : [])].map(v => `<option value="${esc(v)}"${v === chosen ? ' selected' : ''}${unset(v)}>${esc(name(v))}${v === got.default ? ' (default)' : ''}</option>`).join('')
+        + '</select>';
+    }
+    const line = (rec, role) => `<span class="nb-reasoning" data-reasoning-of="${role}">${select(rec, role)}</span>`;
+    // each select drawn again in place when what it shows has changed: its levels arrived, its model or its owner changed
+    function sync() {
+      const rec = r();
+      root.querySelectorAll('[data-reasoning-of]').forEach(span => {
+        const html = select(rec, span.dataset.reasoningOf);
+        if (span.drawn !== html) { span.drawn = html; span.innerHTML = html; }
+      });
+    }
+    return {line, sync};
+  }
   // Saved recipes are the server's (/new-run/recipes, nullius/recipes/store.py); a browser on its host alone writes them.
   // move() sends what this browser kept before (nullius.recipes.v1, and the older nullius.recipes.v1.<workspace> lists)
   // to the lenient import, which skips names already saved, and removes those keys once the server answered. The
@@ -247,6 +295,7 @@
   // Served by's rows (servedRows above), given the models the server last named and what decided them (C.servedCompiled)
   const {field: servedField, sync: syncServed, acceptCompile} = servedRows({C, root, r, esc, button, compiled: () => runnerServed, providers: window.NulliusServingProviders,
     typing: role => !!root.querySelector(`[data-field="${role === 'model' ? role : role + '_model'}"][data-typing]`)});
+  const {line: reasoningLine, sync: syncReasoning} = reasoningSelects({C, root, r, esc, request: nulliusFetch, csrf: schema.csrf, compiled: () => runnerOut});
   // Switching runner keeps the recipe being edited, one per runner, for as long as the page is open: switching back finds it as it was.
   const keptByRunner = {};
   // Nullius's own mark for the standard; Harbor's for Harbor
@@ -807,13 +856,13 @@
       const lb = rec.model_choice === 'leaderboard' ? C.leaderboard(rec) : null, paper = rec.model_choice === 'paper' || !!lb;
       return `<div class="nb-sectionhead"><h2>Choose the model.</h2></div>` + modelChoiceCards(rec)
         + providerField(rec, C.providersOf(rec))
-        + field('Model', 'model', rec.model, {list:'nb-models', placeholder:paper && C.paperListed(rec) ? 'Choose a paper model' : 'Search or enter a model ID'})
+        + field('Model', 'model', rec.model, {list:'nb-models', placeholder:paper && C.paperListed(rec) ? 'Choose a paper model' : 'Search or enter a model ID', after: reasoningLine(rec, 'model')})
         + servedField(rec, 'model')
         // the benchmark's other models: the user simulator its conversations need, the judge that grades - each its official one
         // unless named; like the paper, the official one; like the leaderboard, its own and the options it fixes
-        + (b.simulator ? (paper ? fixed('Model for the user simulator', lb && lb.simulator || b.simulator, lb && lb.simulator ? 'leaderboard' : 'official') : field('Model for the user simulator', 'simulator_model', rec.simulator_model || '', {list: 'nb-models', placeholder: b.simulator + ' (official)',
+        + (b.simulator ? (paper ? fixed('Model for the user simulator', lb && lb.simulator || b.simulator, lb && lb.simulator ? 'leaderboard' : 'official') : field('Model for the user simulator', 'simulator_model', rec.simulator_model || '', {list: 'nb-models', placeholder: b.simulator + ' (official)', after: reasoningLine(rec, 'simulator'),
             hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator') : '')
-        + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)',
+        + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)', after: reasoningLine(rec, 'judge'),
             hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
         + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, ((b.options[k] || {}).names || {})[v] || v, 'leaderboard')).join('') : '')
         + keyLine(rec);
@@ -965,13 +1014,15 @@
       if (step === S.model) syncServed();
       if (!accepted.current) return;
       runnerOut = out; runnerOutKey = key;
+      if (step === S.model) syncReasoning();
       if (step === REVIEW) renderForm();
       refreshPlan();
     }, 120);
   }
   // the number of units a run takes, as typed: a number past the most the field takes is that most
   const atMost = (el, value) => el.max !== '' && value !== '' && Number(value) > Number(el.max) ? Number(el.max) : value;
-  const field = (label,key,value,{type='text',hint='',list='',min='',max='',placeholder='',declared=false}={}) => `<label class="nb-field">${label}<input${declared?' class="nb-declared"':''} aria-label="${esc(label)}" data-field="${key}" type="${type}" value="${esc(value)}" ${list?`list="${list}"`:''} ${min!==''?`min="${min}"`:''} ${max!==''?`max="${max}"`:''} ${type==='number'?'step="any"':''} placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false">${hint?`<small>${hint}</small>`:''}</label>`;
+  // after: what sits on the input's line, after it (a model's reasoning)
+  const field = (label,key,value,{type='text',hint='',list='',min='',max='',placeholder='',declared=false,after=''}={}) => { const input = `<input${declared?' class="nb-declared"':''} aria-label="${esc(label)}" data-field="${key}" type="${type}" value="${esc(value)}" ${list?`list="${list}"`:''} ${min!==''?`min="${min}"`:''} ${max!==''?`max="${max}"`:''} ${type==='number'?'step="any"':''} placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false">`; return `<label class="nb-field">${label}${after?`<span class="nb-model-line">${input}${after}</span>`:input}${hint?`<small>${hint}</small>`:''}</label>`; };
   const select = (label,key,value,options) => `<label class="nb-field">${label}<select data-field="${key}">${options.map(([v,t])=>`<option value="${esc(v)}" ${v===value?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
   const fixed = (label,value,whose='official') => `<label class="nb-field ui-field-row"><span class="ui-field-copy">${esc(label)}</span><span class="nb-fixed">${esc(value)} (${whose})</span></label>`;
   const note = (title,text) => `<div class="nb-notice"><strong>${title}</strong>${text}</div>`;
@@ -1088,7 +1139,7 @@
       if(rec.modelFormat!=='provider-id'){for(const k of ['model','userModel','evalModel'])if(typeof rec[k]==='string')rec[k]=C.bareModel(rec[k]);rec.modelFormat='provider-id';}
       C.setModelOf(rec,key,value);saveDraft();   // the field's pin goes with its model
     }
-    const show=()=>{syncServed();refreshPlan();};      // asks nothing of a recipe already checked
+    const show=()=>{syncServed();syncReasoning();refreshPlan();};      // asks nothing of a recipe already checked
     if(pressing)afterPress=show;
     else queueMicrotask(show);
   }
@@ -1356,6 +1407,7 @@
     if(d.providerModel)commitModel(el);
     else if(d.custom?.endsWith(':type'))keepFocus($('#nb-parameters'),()=>{$('#nb-parameters').innerHTML=customRows(!['common','extra'].includes(tab)?tab:'');});
     else if(d.stdUnsandboxed!==undefined){r().unsandboxed=el.checked;refreshPlan();}
+    else if(d.reasoning!==undefined){C.setReasoning(r(),d.reasoning,el.value===(d.default||'')?'':el.value);refreshPlan();}   // the default is no level: the provider's
     else if(d.stdVersion!==undefined){   // keep the grid's filters while refreshing the version's origin and settings
       C.setStandardBenchmark(r(),el.value);inPlace(()=>render());}
     else if(d.stdTasksetSelect!==undefined){C.setTaskSet(r(),d.stdTasksetSelect,el.value);renderForm();refreshPlan();}

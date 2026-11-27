@@ -108,6 +108,41 @@ class TheRecipe(unittest.TestCase):
         self.assertIn(f"--served-by {sent}=openai", out["script"])
         self.assertEqual(recipe.compile(a_recipe(), defs())["served_models"]["model"], "openai/gpt-5-mini")
 
+    def test_a_level_compiles_for_each_job_whose_agent_sets_none_of_its_own(self):
+        d = defs(judged())
+        out = recipe.compile(a_recipe(others=["fake", "nop"], reasoning={"model": "high", "judge": "low"}), d)
+        self.assertEqual(out["errors"], [])
+        agent, control = (p["script"] for p in out["parts"])
+        self.assertIn("--reasoning openai/gpt-5-mini=high", agent)
+        self.assertIn("--reasoning openai/gpt-4o-mini=low", agent)
+        self.assertNotIn("gpt-5-mini=high", control)                          # a control calls no model of its own
+        self.assertIn("--reasoning openai/gpt-4o-mini=low", control)
+        self.assertIn("model reasoning high", next(r for r in out["review"] if r[1] == "Model")[2])
+        # an agent whose own option sets its reasoning keeps it, and the builder greys the field
+        fake = definitions.find(d["agent"], "fake")
+        d["agent"] = [dict(a, options={"reasoning_effort": {"values": ["default", "low", "high"], "default": "low"}}) if a is fake else a
+                      for a in d["agent"]]
+        out = recipe.compile(a_recipe(reasoning={"model": "high"}), d)
+        self.assertEqual((out["errors"], out["own_reasoning"]), ([], {"model": ["low"]}))
+        self.assertNotIn("--reasoning", out["script"])
+        self.assertIn("model reasoning low (the agent's)", next(r for r in out["review"] if r[1] == "Model")[2])
+        out = recipe.compile(a_recipe(options={"reasoning_effort": "default"}, reasoning={"model": "high"}), d)
+        self.assertEqual(out["own_reasoning"], {})
+        self.assertIn("--reasoning openai/gpt-5-mini=high", out["script"])
+        # the agent's model is also the judge's: a level for the judge would change the agent's calls too
+        out = recipe.compile(a_recipe(model="openai/gpt-4o-mini", reasoning={"judge": "high"}), d)
+        self.assertIn("reasons as", out["errors"][0]["message"])
+
+    def test_a_level_is_refused_as_the_option_is(self):
+        d = defs(judged())
+        for kw, said in (({"reasoning": {"model": "turbo"}}, "Reasoning is a level"), ({"reasoning": {"agent": "high"}}, "Reasoning is a level"),
+                         ({"reasoning": "high"}, "Reasoning is a level"),
+                         ({"model": "openai/gpt-4o-mini", "reasoning": {"model": "high", "judge": "low"}}, "sets openai/gpt-4o-mini twice")):
+            with self.subTest(kw=kw):
+                out = recipe.compile(a_recipe(**kw), d)
+                self.assertTrue(any(said in e["message"] and e["step"] == recipe.STEP["model"] for e in out["errors"]), out["errors"])
+                self.assertEqual(out["script"], "")
+
     def test_a_recipe_with_no_pin_compiles_to_the_command_it_did(self):
         plain = recipe.compile(a_recipe(), defs())
         self.assertEqual(plain["errors"], [])
@@ -168,6 +203,45 @@ class TheProviders(unittest.TestCase):
             with self.subTest(model=model), self.assertRaisesRegex(ValueError, "maker/model"):
                 providers.list_endpoints("openrouter", model, env={}, opener=opener)
         self.assertEqual(seen, [])
+
+
+class TheReasoningLevels(unittest.TestCase):
+    """``providers.list_reasoning``: OpenRouter's public model list, asked with no key, a fake opener in the place of the network."""
+
+    ROWS = [{"id": "openai/gpt-5", "canonical_slug": "openai/gpt-5-2025-08-07",
+             "reasoning": {"mandatory": True, "supported_efforts": ["high", "medium", "low", "minimal"], "default_effort": "medium"}},
+            {"id": "anthropic/claude-sonnet-4.5", "reasoning": {"mandatory": False}},
+            {"id": "z/off-by-default", "reasoning": {"mandatory": False, "default_enabled": False, "supported_efforts": ["none", "high", "max"]}},
+            {"id": "deepseek/r1", "reasoning": {"mandatory": True}}, {"id": "meta-llama/llama", "reasoning": None}]
+
+    def ask(self, provider, model, body=None, error=None):
+        seen = []
+
+        def opener(req, timeout=None):
+            seen.append(req)
+            if error:
+                raise error
+            return io.BytesIO(json.dumps(body or {"data": self.ROWS}).encode())
+        return providers.list_reasoning(provider, model, opener=opener), seen
+
+    def test_each_model_offers_its_own_levels_found_under_any_providers_name(self):
+        gpt5 = {"levels": ["minimal", "low", "medium", "high"], "default": "medium"}
+        for provider, model, want in (("openrouter", "openai/gpt-5", gpt5), ("openrouter", "gpt-5", gpt5), ("openai", "gpt-5", gpt5),
+                                      ("openai", "gpt-5-2025-08-07", gpt5),
+                                      ("anthropic", "claude-sonnet-4-5", {"levels": ["off", "on"], "default": "off"}),
+                                      ("openrouter", "z/off-by-default", {"levels": ["none", "high", "max"], "default": "none"}),
+                                      ("openrouter", "deepseek/r1", None), ("openrouter", "meta-llama/llama", None),
+                                      ("custom:local", "unknown-model", None)):
+            with self.subTest(provider=provider, model=model):
+                got, seen = self.ask(provider, model)
+                self.assertEqual(got, want)
+                self.assertEqual(seen[0].full_url, "https://openrouter.ai/api/v1/models?supported_parameters=reasoning")
+                self.assertIsNone(seen[0].get_header("Authorization"))
+
+    def test_what_cannot_be_read_is_said_in_fixed_words(self):
+        for kw in ({"error": urllib.error.URLError("refused")}, {"body": {"data": "none"}}):
+            with self.subTest(kw=kw), self.assertRaisesRegex(ValueError, r"^Reasoning levels unavailable\.$"):
+                self.ask("openrouter", "openai/gpt-5", **kw)
 
 
 if __name__ == "__main__":

@@ -226,8 +226,9 @@ def new_run_runner():
 def _standard_compile(recipe: dict) -> dict:
     out = standard_recipe.compile(recipe, docker_unusable=execute.docker_problem, boat_unusable=boat.unusable,
                                   boat_size_problem=execute.boat_size_problem, unpriced=execute.unpriced)
-    # served_models: each model field's model as the run sends it, which Served by lists the providers of
-    return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models")}
+    # served_models: each model field's model as the run sends it, which Served by lists the providers of;
+    # own_reasoning: by field, what sets its reasoning in every job, which greys its select
+    return {k: out[k] for k in ("errors", "notes", "review", "jobs", "confirm", "served_models", "own_reasoning")}
 
 
 @app.route("/new-run/prerequisites", methods=["POST"])
@@ -576,6 +577,25 @@ def new_run_endpoints():
         return jsonify(ok=True, endpoints=providers.list_endpoints(provider, model))
     except ValueError as error:
         return jsonify(ok=False, endpoints=[], message=str(error)), 502
+
+
+@app.route("/new-run/reasoning", methods=["POST"])
+def new_run_reasoning():
+    """The reasoning levels one model offers, for the Model step's select beside it: asked each time it is chosen,
+    never kept. ``levels`` empty: it has none to choose."""
+    shared._require_csrf()
+    if not shared._local_client():
+        abort(403)
+    body = request.get_json(silent=True)
+    provider = body.get("provider") if isinstance(body, dict) else None
+    model = body.get("model") if isinstance(body, dict) else None
+    if providers.split(provider)[0] not in providers.PROVIDERS or not isinstance(model, str) or not model.strip():
+        return jsonify(ok=False, levels=[], default=None, message="Choose a provider and a model."), 400
+    try:
+        found = providers.list_reasoning(provider, model) or {"levels": [], "default": None}
+    except ValueError as error:
+        return jsonify(ok=False, levels=[], default=None, message=str(error)), 502
+    return jsonify(ok=True, **found)
 
 
 @app.route("/new-run/models", methods=["POST"])

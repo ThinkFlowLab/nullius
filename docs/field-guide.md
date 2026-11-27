@@ -197,6 +197,7 @@ These fields are stored in the standard's job and trial files ([Run a benchmark]
 | `standard.task_set` | In the same config: the task set run, with its id, name, hash, ids and version. | measured | standard |
 | `standard.constraints` | In the same config: what the machine allowed the run, when set. Shards may have different machine constraints; merging keeps the first shard's config values. | measured | standard |
 | `standard.served_by` | In the same config: the allowed OpenRouter provider slugs by model, in the order tried. | measured | standard |
+| `standard.reasoning` | In the same config: the reasoning level set by model (`--reasoning`), in place of the caller's own. | measured | standard |
 | `served / standard.served` | In the job's `result.json` and each trial's `result.json`, respectively: answered calls by provider (`calls`), calls naming none (`unnamed`), and each pinned model's `held`. Counts cover every relay route; the job also includes the benchmark's own relay. Tokens and cost are the agent's own calls'. | measured | standard |
 | `held` | `true` when every answered call names an allowed provider, `unknown` for an absent or different name, and `null` for no answered calls. Names are lowercased with spaces as dashes and compared with the slug before `/`; endpoint variants cannot be verified. Merging different pins marks the affected models `unknown`. | inferred | standard |
 | `standard.cut` | The limit that cut a unit its benchmark still scored: `time`, `calls` or `end`. | measured | standard |
