@@ -1,4 +1,4 @@
-"""A recipe's plan begun on a part (``start_with``): all of it, or the tasks ticked (``[ID, ...]``, the builder's
+"""A recipe's plan started on some of it (``start_with``): all of it, or the tasks ticked (``[ID, ...]``, the builder's
 form), or from a recipe before, a number of its tasks or a task set of its dataset; compiled to ``--start-with``
 (``ids:A,B`` for the ticks), said in Review as what runs first and what stays for later, refused where the run
 would refuse it; the set it begins with carried to a host, and a run there begun on it. No key, no network: the
@@ -21,7 +21,7 @@ from tests.test_task_set_recipe import NOP, ROOT, Scratch
 
 
 class StartWith(Scratch):
-    def test_a_start_on_a_part_asks_nothing_at_run_and_review_counts_what_it_plans_and_begins(self):
+    def test_a_start_on_some_tasks_asks_nothing_at_run_and_review_counts_what_it_plans_and_begins(self):
         for datasets, limit, planned, begun in ((["all", "more"], None, 8, 5),
                                                (["all", "more"], 2, 4, 3),
                                                (["all"], 2, 2, 1)):

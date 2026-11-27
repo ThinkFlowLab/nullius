@@ -21,7 +21,7 @@
    (parse.tries): one tab each, the last the one that counts. `current` is the
    try on screen. A try a person asked for after the run ended says so, with
    the reason they gave (parse.Trial.rerun), on its tab and under the tabs; a task
-   of the plan a later part began says it was its first run. #}
+   of the plan a later run began says it was its first run. #}
 {% macro try_tabs(job, tries, current, workspace=none) -%}
 <nav class="try-tabs" aria-label="Tries of this attempt">
   {%- for n, t in tries %}

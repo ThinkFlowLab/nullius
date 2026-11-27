@@ -508,10 +508,10 @@ class Job:
     # The task set a Nullius standard job ran (config ``standard.task_set``): its name, its label (its name for a
     # job from before labels) and id, its benchmark, and ``units``, its number of ids. {} for every other job.
     task_set: dict = field(default_factory=dict)
-    # A Nullius standard job planned on a whole and begun on a part of it (config ``standard.start_with``): how the
-    # part was named, ``by`` count, file, set or ids (named one by one), and ``name`` (the file's, the set's label,
+    # A Nullius standard job planned on a whole and started on some of it (config ``standard.start_with``): how the
+    # start was named, ``by`` count, file, set or ids (named one by one), and ``name`` (the file's, the set's label,
     # "the tasks chosen" for ids; "" for a count),
-    # and ``units``, the part's number of units. {} for every other job: the plan is then the job's from the start.
+    # and ``units``, the start's number of units. {} for every other job: the plan is then the job's from the start.
     start_with: dict = field(default_factory=dict)
     # Each time chosen trials of a Nullius standard job were run again in it (``result.json`` ``reruns``,
     # ``standard/runner/rerun.py``): {at, reason, trials, replaced [{trial, unit, try, was, now}], begun [{trial, unit,

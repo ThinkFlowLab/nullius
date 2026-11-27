@@ -536,7 +536,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                            f"{', '.join(sets.datasets_of(entry))}, not {ds_id}.")
             continue
         set_of[ds_id] = {"name": set_name, "label": sets.label_of(entry), "units": len(part), "ids": set(part)}
-    # a chosen dataset's plan begun on a part (``start_with``: {dataset: [ID, ...], the tasks the page ticked, or
+    # a chosen dataset's plan started on some of it (``start_with``: {dataset: [ID, ...], the tasks the page ticked, or
     # from a recipe before it, N or set:NAME}): the rest run later
     start_of = {}                      # {dataset: {"value": the --start-with word, "units": N, "label": what Review says}}
     asked = recipe.get("start_with") or {}
@@ -966,7 +966,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     total = sum(each) if all(each) else None
     n = sum(min(limit, t) for t in each) if isinstance(limit, int) and total else (limit or total)
     of = len(targets)
-    # a plan begun on a part: what it plans and what it begins, by dataset
+    # a plan started on some of it: what it plans and what it starts with, by dataset
     planned_of = {x["id"]: min(limit, e) if isinstance(limit, int) and e else (limit if isinstance(limit, int) else e)
                   for x, e in zip(dss, each)}
     planned_of.update({ds_id: s["planned"] for ds_id, s in start_of.items() if "planned" in s})
@@ -1085,7 +1085,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         noun_one = picks[0]["o"]["units"]["noun"]
 
     def first_words(ds_id: str) -> str:
-        """What a part's start runs first and what it leaves for later, in a sentence of Review."""
+        """What a start runs first and what it leaves for later, in a sentence of Review."""
         m, whole = start_of[ds_id]["units"], planned_of.get(ds_id)
         rest = (whole - m) if whole else None
         ran = f"{m} {noun_one if m == 1 else nouns} {'runs' if m == 1 else 'run'} first ({start_of[ds_id]['label']})"
@@ -1110,7 +1110,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       ", ".join(f"{x.get('label') or x['id']}" + (f" · task set {set_of[x['id']]['label']}"
                                                                    + ("" if x["id"] in start_of else f" · {set_of[x['id']]['units']} {bench_nouns}")
                                                                    if x["id"] in set_of else f" · {x['units']} {bench_nouns}" if x.get("units") and x["id"] not in start_of else "")
-                                # begun on a part: what runs first, and what stays for later
+                                # started on some of the plan: what runs first, and what stays for later
                                 + (f" · {first_words(x['id'])}" if x["id"] in start_of else "") for x in dss)],
                      *[[STEP["limits" if (b.get("options") or {})[k].get("limit") else "dataset" if (b.get("options") or {})[k].get("step") else "agent"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
                         _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)")
@@ -1170,7 +1170,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if any(p["control"] for p in picks) and any(definitions.own_image(e) for e in (b.get("environments") or {}).values()):
         notes.append(f"Each {(b.get('units') or {}).get('noun', 'unit')} of {b['label']} is its own image: the control "
                      "runs in it, so docker is needed where it runs, whatever the backend.")
-    # Run asks first before every task of the datasets; a task set or a start on a part is a choice of tasks made already
+    # Run asks first before every task of the datasets; a task set or a start on some tasks is a choice of tasks made already
     if not isinstance(limit, int) and not set_of and not start_of:
         out["confirm"] = f"Run all {total or ''} {nouns} of {b['label']}{' (' + ', '.join(x.get('label') or x['id'] for x in dss) + ')' if many else ''} with {', '.join(p['o']['label'] for p in picks)}?".replace("  ", " ")
     return out

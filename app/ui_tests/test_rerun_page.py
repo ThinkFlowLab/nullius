@@ -331,7 +331,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         self.addCleanup(r.close)
         return r
 
-    def test_the_page_shows_the_job_s_one_cap_and_a_change_holds_from_the_next_part(self):
+    def test_the_page_shows_the_job_s_one_cap_and_a_change_holds_from_the_next_run(self):
         d = self.run_of()
         self.capped(d, {"max_usd": 4.0, "spent_usd": 0.31, "stopped": False, "cut_off": [], "not_run": []})
         self.open(d.parent)
@@ -344,13 +344,13 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         r = self.cap("r1", {"max_usd": "6"})
         self.assertEqual((r.status_code, r.json["left_usd"]), (200, 5.69), r.get_data(as_text=True))
         record = json.loads((self.tmp / "runs" / "r1" / "run.json").read_text())
-        self.assertEqual(record["plan"]["caps"], {"r1": 6.0})                     # kept with the run, for its next part
+        self.assertEqual(record["plan"]["caps"], {"r1": 6.0})                     # kept with the run, for the job's next run
         html = self.page("/job/r1?view=results")
         self.assertEqual(text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap $6.00")
         self.assertEqual(text(html, r'<p class="small" id="rerun-budget">.*?</p>'), "Budget for the whole run: $6.00, $5.69 left.")
         self.assertEqual(self.post("r1", {"trials": [trial_name(0)]}).status_code, 200)
         self.assertIn(f"--unit {trial_name(0)} --max-usd 6 --from-run", self.asked[-1][1]["script"])
-        # the part recorded it: the job's own cap now, and the page's is dropped
+        # the later run recorded it: the job's own cap now, and the page's is dropped
         self.capped(d, {"max_usd": 6.0, "spent_usd": 0.31, "spent_total_usd": 0.4, "closed": False,
                         "changes": [{"at": "2026-11-20T20:00:00+00:00", "max_usd": 6.0, "was": 4.0}]})
         self.assertEqual(self.post("r1", {"trials": [trial_name(1)]}).status_code, 200)
@@ -358,7 +358,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         self.assertEqual(json.loads((self.tmp / "runs" / "r1" / "run.json").read_text())["plan"]["caps"], {})
         self.assertEqual(text(self.page("/job/r1?view=results"), r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>'), "$0.40 spent · Change")
 
-    def test_a_change_is_refused_at_or_under_what_was_spent_and_while_a_part_runs(self):
+    def test_a_change_is_refused_at_or_under_what_was_spent_and_while_a_later_run_goes_on(self):
         d = self.run_of()
         self.capped(d, {"max_usd": 4.0, "spent_usd": 0.31, "stopped": False, "cut_off": [], "not_run": []})
         self.open(d.parent)
@@ -392,7 +392,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         self.assertEqual(self.post("r1", {"trials": [trial_name(0)]}).status_code, 200)
         self.assertIn("--max-usd 1 --from-run", self.asked[-1][1]["script"])
 
-    def test_a_job_whose_last_part_stopped_at_its_cap_is_refused_until_it_changes(self):
+    def test_a_job_whose_last_run_stopped_at_its_cap_is_refused_until_it_changes(self):
         d = self.run_of()
         self.capped(d, {"max_usd": 0.8, "spent_usd": 0.5445, "stopped": False, "cut_off": [], "not_run": [],
                         "spent_total_usd": 0.726, "closed": True})
@@ -404,7 +404,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
                                                                  "call did not fit what was left): change it to run more."))
         self.assertEqual(self.asked, [])
 
-    def test_an_older_job_with_caps_of_its_own_parts_shows_what_every_part_spent(self):
+    def test_an_older_job_with_caps_of_its_own_runs_shows_what_every_run_spent(self):
         d = self.run_of()
         self.capped(d, {"max_usd": 0.5, "spent_usd": 0.1, "stopped": False, "cut_off": [], "not_run": []},
                     reruns=[{"at": "2026-11-18T15:40:12+00:00", "trials": [trial_name(1)], "replaced": [],
@@ -415,16 +415,16 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         self.assertEqual(text(html, r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>'), "$0.1012 spent · Change")
         later = text(html, r'<details id="reruns" open>.*?</details>')
         self.assertIn("1 task · $0.0012 spent", later)
-        self.assertNotIn("$2.00", later)                                          # that part's own cap: the job has one now
+        self.assertNotIn("$2.00", later)                                          # that run's own cap: the job has one now
         self.assertTrue(later.endswith("Spending cap for the whole run $0.50 · $0.1012 spent"), later)
 
     def test_run_later_and_the_stop_notice_name_the_job_s_cap_and_spend_as_its_cap_line_does(self):
         d = self.run_of()
-        part = lambda k, spent, stopped: {"at": f"2026-11-20T20:3{k}:00+00:00", "trials": [trial_name(k)], "replaced": [],
+        later_run = lambda k, spent, stopped: {"at": f"2026-11-20T20:3{k}:00+00:00", "trials": [trial_name(k)], "replaced": [],
                                           "max_usd": 0.8, "left_usd": 0.2555, "spent_usd": spent, "stopped": stopped}
-        # the first run stopped at its cap; a later part, under the same cap, stopped at it too
+        # the first run stopped at its cap; a later run, under the same cap, stopped at it too
         self.capped(d, {"max_usd": 0.8, "spent_usd": 0.5445, "stopped": True, "cut_off": [], "not_run": [trial_name(2)],
-                        "spent_total_usd": 0.726, "closed": True}, reruns=[part(1, 0.1815, True)])
+                        "spent_total_usd": 0.726, "closed": True}, reruns=[later_run(1, 0.1815, True)])
         self.open(d.parent)
         html = self.page("/job/r1?view=results")
         line = text(html, r'<div class="kv" id="run-cap".*?</div>') + " · " + text(html, r'<div class="sp cap-spent small muted" id="cap-spent">.*?</div>')
@@ -442,7 +442,7 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
         self.assertEqual(text(html, r'<div class="kv" id="run-cap".*?</div>'), "Spending cap $2.00")
         self.assertTrue(text(html, r'<details id="reruns" open>.*?</details>').endswith("Spending cap for the whole run $2.00 · $0.726 spent"))
 
-    def test_a_first_run_stopped_at_its_cap_and_a_later_part_that_ended_within_it_show_no_stop(self):
+    def test_a_first_run_stopped_at_its_cap_and_a_later_run_that_ended_within_it_show_no_stop(self):
         d = self.run_of()
         self.capped(d, {"max_usd": 2.0, "spent_usd": 0.5445, "stopped": True, "cut_off": [], "not_run": [],
                         "spent_total_usd": 1.089, "closed": False,

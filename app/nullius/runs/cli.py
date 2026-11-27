@@ -84,7 +84,7 @@ def job_row(job: parse.Job) -> dict:
         "state": job.state,
         "n_trials": len(job.trials),
         "n_planned": job.n_planned,
-        # a job begun on a part of its plan: how the part was named, and how many of the planned tasks have run
+        # a job started on some of its plan: how the start was named, and how many of the planned tasks have run
         "start_with": job.start_with,
         "n_tasks": job.n_tasks,
         "n_tasks_run": job.n_tasks_run,

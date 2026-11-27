@@ -44,8 +44,8 @@ def _runtime(minutes):
 
 @app.template_filter("try_mark")
 def _try_mark(t, job) -> str:
-    """How a try a person asked for after the run ended is named: "first run, in a later part" for a task of the plan
-    a later part began (the job's run of that time lists it as begun), "run again by hand" otherwise."""
+    """How a try a person asked for after the run ended is named: "first run, in a later run of the job" for a task of the plan
+    a later run began (the job's run of that time lists it as begun), "run again by hand" otherwise."""
     base = re.sub(r"\.try-\d+$", "", t.trial_name)
     later = any(r["at"] == t.rerun.get("at") and base in {b["trial"] for b in r.get("begun") or []} for r in job.reruns)
     return "first run, in a later part" if later else "run again by hand"

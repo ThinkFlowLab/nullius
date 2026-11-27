@@ -9,7 +9,7 @@
  *
  * One board, top to bottom: a header line, one stats strip, the outcome bar
  * with its filter chips (and, for more than one agent, the lanes and a winner
- * per task), every trial as a tile, one table with a row per trial in flight, then, while a part of a job's plan
+ * per task), every trial as a tile, one table with a row per trial in flight, then, while a job started on some of its plan
  * runs, each of its trials not yet begun (Queued) and, below them, each that ended,
  * and a drawer for one trial, where its phases are drawn on its own clock.
  *
@@ -56,8 +56,8 @@
     return (t.n_input_tokens || 0) + (t.n_output_tokens || 0);
   }
   const pressure = t => (t.timeout_sec && t.elapsed_sec != null ? t.elapsed_sec / t.timeout_sec : 0);
-  // A planned trial outside the part of the plan now running (the snapshot's `part`): not run, not queued.
-  const outside = (s, t) => Array.isArray(s.part) && t.state === 'queued' && !s.part.includes(t.trial);
+  // A planned trial outside the run of the plan now under way (the snapshot's `this_run`): not run, not queued.
+  const outside = (s, t) => Array.isArray(s.this_run) && t.state === 'queued' && !s.this_run.includes(t.trial);
   // the steps of the limit where the benchmark counts them (a bar while the trial runs), else the bare count
   function stepsCell(t, bar) {
     if (t.step == null) return '<td class="num lb-stepcell na">—</td>';
@@ -121,8 +121,8 @@
   function renderStats(s, state, oc) {
     const C = s.counts || {};
     const later = (s.trials || []).filter(t => outside(s, t)).length;
-    // while a part runs, its trials not begun, as its table lists them: a task run again counts as done and as running
-    const queued = Array.isArray(s.part) ? (s.trials || []).filter(t => t.state === 'queued' && s.part.includes(t.trial)).length
+    // while such a run goes on, its trials not begun, as its table lists them: a task run again counts as done and as running
+    const queued = Array.isArray(s.this_run) ? (s.trials || []).filter(t => t.state === 'queued' && s.this_run.includes(t.trial)).length
       : C.total != null ? Math.max(0, C.total - C.completed - C.running - later) : null;
     const rate = s.elapsed_sec > 60 && C.completed ? C.completed / (s.elapsed_sec / 60) : null;
     const ran = C.completed - (oc.infra_error || 0) - (oc.budget || 0);
@@ -208,8 +208,8 @@
     }
     const ended = (t) => ((s.timeline || {})[t.trial] || {}).ended || '';
     const done = trials.filter(t => t.state === 'done').sort((a, b) => ended(a).localeCompare(ended(b)));
-    // the tasks of the part now running that have not begun: a row each, under the running ones
-    const queued = Array.isArray(s.part) ? trials.filter(t => t.state === 'queued' && s.part.includes(t.trial)) : [];
+    // the tasks of the run under way that have not begun: a row each, under the running ones
+    const queued = Array.isArray(s.this_run) ? trials.filter(t => t.state === 'queued' && s.this_run.includes(t.trial)) : [];
     if (!running.length && !done.length && !queued.length) return '<p class="lb-quiet">Nothing is running at this poll.</p>';
     const busy = running.length > FLIGHT_SHOWN, many = done.length > FLIGHT_SHOWN, waits = queued.length > FLIGHT_SHOWN;
     const order = busy ? running.slice().sort((a, b) => pressure(b) - pressure(a)) : running;

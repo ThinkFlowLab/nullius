@@ -1,4 +1,4 @@
-"""A job planned on a whole and begun on a part of it, on its page: how many of the plan have run, the tasks not
+"""A job planned on a whole and started on some of it, on its page: how many of the plan have run, the tasks not
 run as rows with no attempt under an outcome of their own, the rest and a set's tasks not run each one click from
 the question Run selected asks, and the runs list's count over the trials run."""
 from __future__ import annotations
@@ -22,14 +22,14 @@ from ui_tests.test_rerun_page import text, trial_name
 PLAN = [f"t-{k}" for k in range(6)]
 
 
-class PartRunPage(unittest.TestCase):
+class StartWithPage(unittest.TestCase):
     run_of, open, page, post, interrupted = (rerun_page.RerunPage.__dict__[k] for k in ("run_of", "open", "page", "post", "interrupted"))
 
     def setUp(self):
         rerun_page.RerunPage.setUp(self)
         self.stack.enter_context(patch.dict(os.environ, {"NULLIUS_CATALOGUE": str(self.tmp / "catalogue")}))
 
-    def begun_on_a_part(self, d: Path):
+    def started_on_some(self, d: Path):
         """The job as ``run --start-with 3`` leaves it: six tasks planned, as its feed and its config say, the first
         three run."""
         writer = feed.Writer(str(d / "events.jsonl"), "r1")
@@ -47,7 +47,7 @@ class PartRunPage(unittest.TestCase):
 
     def test_the_page_says_how_many_of_the_plan_ran_and_lists_the_rest_with_no_attempt(self):
         d = self.run_of()
-        self.begun_on_a_part(d)
+        self.started_on_some(d)
         self.open(d.parent)
         html = self.page("/job/r1?view=results")
         self.assertEqual(text(html, r'<span id="plan-run".*?</span>'), "3 of 6 planned tasks run")
@@ -73,7 +73,7 @@ class PartRunPage(unittest.TestCase):
 
     def test_a_set_s_tasks_not_run_and_the_rest_go_to_the_question_as_ticks(self):
         d = self.run_of()
-        self.begun_on_a_part(d)
+        self.started_on_some(d)
         both = dict(BENCH, datasets=[{"id": "all"}, {"id": "other"}], label="Fake bench")
         sets.create(both, "late", dataset="all", units=["t-4", "t-0"])
         sets.create(both, "done", dataset="all", units=["t-1"])                  # every task of it has run
@@ -92,9 +92,9 @@ class PartRunPage(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
         self.assertIn("--unit t-3__u0003 --unit t-4__u0004 --unit t-5__u0005 --from-run", self.asked[-1][1]["script"])
 
-    def test_on_a_host_the_later_parts_go_back_there(self):
+    def test_on_a_host_the_later_runs_go_back_there(self):
         d = self.run_of(host="bench")
-        self.begun_on_a_part(d)
+        self.started_on_some(d)
         self.open(d.parent)
         self.assertIn('data-first="On bench, in this job:', self.page("/job/r1?view=results"))
         r = self.post("r1", {"trials": ["t-5__u0005"]})
@@ -107,7 +107,7 @@ class PartRunPage(unittest.TestCase):
         if not node:
             self.skipTest("Node is required for the selection controls")
         d = self.run_of(repeat=2)
-        self.begun_on_a_part(d)
+        self.started_on_some(d)
         shutil.rmtree(d / trial_name(2))
         for k in range(2):
             for attempt in (1, 2):
@@ -182,7 +182,7 @@ new Function('$', '$$', 'rows', 'document', 'nulliusFetch', 'URL', 'location',
         if not node:
             self.skipTest("Node is required for the question")
         d = self.run_of()
-        self.begun_on_a_part(d)
+        self.started_on_some(d)
         top = json.loads((d / "result.json").read_text())
         top["budget"] = {"max_usd": 4.0, "spent_usd": 0.31, "stopped": False, "cut_off": [], "not_run": []}
         (d / "result.json").write_text(json.dumps(top))
@@ -230,13 +230,13 @@ process.stdout.write(JSON.stringify(out));
         self.assertEqual(got[2], dict(head="Run 2 tasks, 1 again", go="Run 2 tasks, 1 again", reason=True, names=2, where=True, typed=""))
         self.assertEqual(got[3], dict(head="Run 1 task again", go="Run 1 task again", reason=True, names=1, where=True, typed=""))
 
-    def test_while_a_part_runs_the_board_queues_its_tasks_and_says_not_run_for_the_rest(self):
+    def test_while_a_run_of_some_of_the_plan_goes_on_the_board_queues_its_tasks_and_says_not_run_for_the_rest(self):
         node = shutil.which("node")
         if not node:
             self.skipTest("Node is required for the board")
         d = self.tmp / "loose" / "r1"                                            # no run record: the feed alone says it runs
         rerun_page.standard_job(d, "r1")
-        self.begun_on_a_part(d)
+        self.started_on_some(d)
         board = Path(__file__).resolve().parents[1] / "static/runs/live-board.js"
         program = ("const L=require(" + json.dumps(str(board)) + ");const s=JSON.parse(process.argv[1]);"
                    "process.stdout.write(JSON.stringify(L.render(s,{selected:'t-5__u0005'})));")
@@ -244,7 +244,7 @@ process.stdout.write(JSON.stringify(out));
         first = [("job.start", None, dict(n_total=6, tasks=PLAN))] + [("trial.queued", name(k), dict(position=k)) for k in range(6)]
         later = [("trial.end", name(k), dict(outcome="resolved", reward=1.0)) for k in range(3)]
         later += [("job.end", None, {}), ("job.start", None, dict(n_total=6, tasks=["t-4"])), ("trial.queued", name(4), dict(position=0))]
-        for events, part, said in [(first + [("trial.phase", name(0), dict(task="t-0", phase="agent_run"))], [name(k) for k in range(3)],
+        for events, this_run, said in [(first + [("trial.phase", name(0), dict(task="t-0", phase="agent_run"))], [name(k) for k in range(3)],
                                     "Done 0 /6 Running 1 Queued 2 Not run 3"),
                                    (first + later, [name(4)], "Done 3 /6 Running 0 Queued 1 Not run 2")]:
             (d / "events.jsonl").unlink()
@@ -253,25 +253,25 @@ process.stdout.write(JSON.stringify(out));
                 writer.emit(event, trial, **data)
             self.open(d.parent)
             snap = json.loads(self.page("/job/r1/live"))
-            self.assertEqual((snap["state"], snap["part"]), ("running", part))
+            self.assertEqual((snap["state"], snap["this_run"]), ("running", this_run))
             out = json.loads(subprocess.run([node, "-e", program, json.dumps(snap)], capture_output=True, text=True,
                                             check=True, timeout=10).stdout)
             self.assertEqual(text(out["stats"], r".*").split(" Rate")[0], said)
             self.assertIn('u0005: not run"', out["tiles"])
-            self.assertIn('u0002: queued"' if len(part) == 3 else 'u0002: Resolved"', out["tiles"])
+            self.assertIn('u0002: queued"' if len(this_run) == 3 else 'u0002: Resolved"', out["tiles"])
             self.assertTrue(text(out["drawer"], r"<h3>.*?</h3>").endswith("Not run"), out["drawer"])
             initial = re.search(r'<script id="live-board-initial" type="application/json">(.*?)</script>', self.page("/job/r1?view=live"), re.S)[1]
-            self.assertEqual(json.loads(initial)["part"], part)                  # the page's first draw counts as its polls do
-        writer.emit("job.end")                                                   # ended: the board's own count, no part
-        self.assertNotIn("part", json.loads(self.page("/job/r1/live")))
+            self.assertEqual(json.loads(initial)["this_run"], this_run)                  # the page's first draw counts as its polls do
+        writer.emit("job.end")                                                   # ended: the board's own count, no run of the plan
+        self.assertNotIn("this_run", json.loads(self.page("/job/r1/live")))
 
-    def test_while_a_later_part_runs_each_of_its_tasks_not_begun_has_a_row_marked_queued(self):
+    def test_while_a_later_run_goes_on_each_of_its_tasks_not_begun_has_a_row_marked_queued(self):
         node = shutil.which("node")
         if not node:
             self.skipTest("Node is required for the board")
         d = self.tmp / "loose" / "r1"
         rerun_page.standard_job(d, "r1")
-        self.begun_on_a_part(d)
+        self.started_on_some(d)
         board = Path(__file__).resolve().parents[1] / "static/runs/live-board.js"
         program = ("const L=require(" + json.dumps(str(board)) + ");const s=JSON.parse(process.argv[1]);"
                    "process.stdout.write(JSON.stringify(L.render(s,{})));")
@@ -290,12 +290,12 @@ process.stdout.write(JSON.stringify(out));
                                         check=True, timeout=10).stdout)
         rows = {re.search(r'data-trial="([^"]+)"', row)[1]: text(row, r".*")
                 for row in re.findall(r'<tr class="lb-row.*?</tr>', out["flight"], re.S)}
-        self.assertEqual(sorted(rows), [name(k) for k in range(5)])               # t-5 is outside the part: no row
+        self.assertEqual(sorted(rows), [name(k) for k in range(5)])               # t-5 is outside the run: no row
         self.assertEqual(rows[name(4)], "t-4 Queued —")                          # its name, less the runner's tag
         self.assertIn('class="lb-row lb-queued"', out["flight"])
         self.assertTrue(rows[name(3)].startswith("t-3 agent run"), rows[name(3)])
         self.assertEqual(text(out["stats"], r".*").split(" Rate")[0], "Done 3 /6 Running 1 Queued 1 Not run 1")
-        # a part that runs a task again beside one never run: the one never run is counted queued, as its row says
+        # a later run that runs a task again beside one never run: the one never run is counted queued, as its row says
         events[-4:] = [("job.end", None, {}), ("job.start", None, dict(n_total=6, tasks=["t-2", "t-4"])),
                        ("trial.phase", name(2), dict(task="t-2", phase="agent_run"))]
         (d / "events.jsonl").unlink()
@@ -307,7 +307,7 @@ process.stdout.write(JSON.stringify(out));
         self.assertEqual(text(out["stats"], r".*").split(" Rate")[0], "Done 3 /6 Running 1 Queued 1 Not run 2")
         self.assertEqual(re.findall(r'<tr class="lb-row lb-queued" data-trial="([^"]+)"', out["flight"]), [name(4)])
 
-    def test_a_task_first_run_in_a_later_part_names_that_try_by_what_it_was(self):
+    def test_a_task_first_run_in_a_later_run_names_that_try_by_what_it_was(self):
         d = self.run_of()
         name, first, again = trial_name(1), "2026-11-18T15:40:12+00:00", "2026-11-18T15:50:00+00:00"
         (d / "retried").mkdir()
@@ -343,7 +343,7 @@ process.stdout.write(JSON.stringify(out));
                 self.assertEqual(mark(trial, job), expected)
         self.assertEqual(mark(SimpleNamespace(trial_name=name, rerun={"at": "again"}), job), "run again by hand")
 
-    def test_a_later_part_contains_only_the_selected_attempt(self):
+    def test_a_later_run_contains_only_the_selected_attempt(self):
         from nullius.runs import live, parse
         from nullius.standard.runner import rerun, run
         from tests import test_standard_rerun as fixtures
@@ -363,19 +363,19 @@ process.stdout.write(JSON.stringify(out));
             phase(runner, name, unit, stage, timeout)
             if name == selected:
                 job, snap = parse.parse_job(path), live.snapshot(path)
-                snapshots.append(rerun_page.web.runs._with_part(job, snap))
+                snapshots.append(rerun_page.web.runs._with_this_run(job, snap))
                 record = SimpleNamespace(again_of=lambda _: {"trials": [selected]})
                 with patch.object(rerun_page.web.runs.execution, "for_job", return_value=record):
-                    self.assertEqual(rerun_page.web.runs._with_part(job, snap)["part"], [selected])
+                    self.assertEqual(rerun_page.web.runs._with_this_run(job, snap)["this_run"], [selected])
 
         with patch.object(run.Run, "phase", observe):
             result = rerun.rerun(path, [selected], root=str(fixture.root), env={}, say=lambda _: None)
         self.assertEqual(result["trials"], [selected])
         self.assertTrue(snapshots)
         for snapshot in snapshots:          # no record of the choice: every attempt of the task the start names
-            self.assertEqual(snapshot["part"], [selected, "wrong__u0001r2"])
+            self.assertEqual(snapshot["this_run"], [selected, "wrong__u0001r2"])
 
-    def test_run_later_counts_the_tasks_of_a_part_not_their_attempts(self):
+    def test_run_later_counts_the_tasks_of_a_later_run_not_their_attempts(self):
         d = self.run_of()
         top = json.loads((d / "result.json").read_text())
         top["reruns"] = [{"at": "2026-11-18T15:40:12+00:00", "finished_at": "2026-11-18T15:42:00+00:00", "reason": "the rest of the plan",
@@ -387,7 +387,7 @@ process.stdout.write(JSON.stringify(out));
         html = self.page("/job/r1?view=results")
         self.assertTrue(text(html, r'<details id="reruns" open>.*?</details>').endswith("2 tasks · $0.0012 spent"))
 
-    def test_the_duration_adds_each_later_part_s_time_to_the_first_s(self):
+    def test_the_duration_adds_each_later_run_s_time_to_the_first_s(self):
         d = self.run_of()                                                        # its first run: one minute
         top = json.loads((d / "result.json").read_text())
         top["reruns"] = [{"at": "2026-11-18T15:40:00+00:00", "finished_at": "2026-11-18T15:46:00+00:00", "trials": ["t-3__u0003"],
@@ -502,9 +502,9 @@ class TheBuilder(task_set_pages.BuilderCase):
         dialog = re.search(r'<dialog id="nb-tasks".*?</dialog>', html, re.S).group(0)
         self.assertIn('id="nb-tasks-done"', dialog)
         template = re.search(r'<template id="nb-tasks-list">(.*?)</template>', html, re.S).group(1)
-        for part in ('data-manual="true"', 'id="tasks-q"', 'id="tasks-cats"', 'id="tasks-rows"', 'id="tasks-match"', 'id="tasks-show"',
+        for marker in ('data-manual="true"', 'id="tasks-q"', 'id="tasks-cats"', 'id="tasks-rows"', 'id="tasks-match"', 'id="tasks-show"',
                      'id="tasks-bar"', 'id="tasks-state-text"', 'id="tasks-state-link"', 'id="tasks-list-go"', 'id="tasks-paste-open"'):
-            self.assertIn(part, template)
+            self.assertIn(marker, template)
         self.assertIn("catalogue/tasks.js", html)
 
     def test_deselecting_a_dataset_removes_its_start_choice_before_review(self):

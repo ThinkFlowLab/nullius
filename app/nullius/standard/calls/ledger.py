@@ -122,8 +122,8 @@ class Ledger:
     def create(cls, path: str, max_usd: Optional[float] = None, unit_max_usd: Optional[float] = None,
                seen: Optional[dict] = None) -> "Ledger":
         """``max_usd``: the run's cap, or None for a run with a cap per unit alone. ``unit_max_usd``: each unit's.
-        ``seen``: the replies earlier parts of the job had from each model ([count, output tokens]), so that a later
-        part's first calls are booked at their average, not guessed."""
+        ``seen``: the replies earlier runs of the job had from each model ([count, output tokens]), so that a later
+        run's first calls are booked at their average, not guessed."""
         os.makedirs(os.path.dirname(path), exist_ok=True)
         led = cls(path)
         led._write({"max_usd": None if max_usd is None else float(max_usd),

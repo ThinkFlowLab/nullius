@@ -51,7 +51,7 @@ the machine the command runs on, ``--from-run`` or not; ``merge``
 puts a launch's shard jobs together into one job (``standard/runner/merge.py``); ``rerun`` runs
 chosen tasks of an ended job again in that job, with its settings, each earlier
 try kept (``standard/runner/rerun.py``). ``run --start-with`` plans the whole and
-begins a part of it; ``rerun --next``, ``--set`` or ``--unfinished`` runs the
+starts with some of it; ``rerun --next``, ``--set`` or ``--unfinished`` runs the
 rest in the job later. ``set``
 keeps a named list of a benchmark's units in the user catalogue, frozen once
 made (``standard/runner/sets.py``), and ``run --set NAME`` runs one: its dataset taken
@@ -611,7 +611,7 @@ def cmd_run(a):
         except ValueError as e:
             unreachable = str(e)
     try:
-        part = start_with(b, a.start_with, dataset) if a.start_with is not None else None
+        start = start_with(b, a.start_with, dataset) if a.start_with is not None else None
     except (run.Refused, sets.Refused) as e:
         print("refused:", e)
         return 2
@@ -628,7 +628,7 @@ def cmd_run(a):
                       exchanges=a.exchanges, exchanges_max_mb=a.exchanges_max_mb,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
                       **({"task_set": task_set} if task_set else {}),
-                      **({"start_with": part} if part else {}),
+                      **({"start_with": start} if start else {}),
                       **({"served_by": run.served_by(a.served_by, a.model or "")} if a.served_by else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
     except run.Refused as e:
@@ -645,7 +645,7 @@ def cmd_run(a):
 
 
 def start_with(bench: dict, value: str, dataset: str | None = None) -> dict:
-    """``run --start-with``: the part a run begins with (``run.Run``'s ``start_with``). A whole number is a count,
+    """``run --start-with``: the tasks a run starts with (``run.Run``'s ``start_with``). A whole number is a count,
     ``set:NAME`` a task set of the benchmark (of a set of several datasets, its list of the run's ``dataset``),
     ``ids:ID,ID,...`` the units named there (the run builder's form), anything else a file of ids
     (``run.units_file``)."""
@@ -671,7 +671,7 @@ def start_with(bench: dict, value: str, dataset: str | None = None) -> dict:
 
 
 def set_units(benchmark: str, ref: str, dataset: str | None, flag: str) -> dict:
-    """The task set ``ref`` as a part of a run of ``dataset``: {"task_set": its record, "dataset": its dataset}. Of
+    """The task set ``ref`` as the tasks of a run of ``dataset``: {"task_set": its record, "dataset": its dataset}. Of
     a set of several datasets, its list of ``dataset``, refused when it holds none; of a set of one, that one, for
     the run to check against its own."""
     name, rev = sets.split_ref(ref)
@@ -1107,13 +1107,13 @@ def cmd_rerun(a):
     held, spill = licences(bench, from_run=a.from_run) if bench else (None, None)
     provider = str(std.get("provider") or "openai") if isinstance(std, dict) else "openai"
     try:
-        part = None
+        chosen = None
         if a.task_set is not None:
             # a set of the job's benchmark: its tasks the job planned and has not run
-            part = set_units(str(std.get("benchmark") or "") if isinstance(std, dict) else "", a.task_set, ran or None, "--set ")
+            chosen = set_units(str(std.get("benchmark") or "") if isinstance(std, dict) else "", a.task_set, ran or None, "--set ")
         got = rerun.rerun(a.job, ids, reason=a.reason or "", concurrency=a.concurrency, retries=a.retries,
                           max_usd=a.max_usd, prices_unreachable=unreachable, licences=held, every_unfinished=a.unfinished,
-                          count=a.next, task_set=part, **({"env": run_env(provider)} if a.from_run else {}))
+                          count=a.next, task_set=chosen, **({"env": run_env(provider)} if a.from_run else {}))
     except sets.NotFound as e:
         print("refused:", e, file=sys.stderr)
         return 3

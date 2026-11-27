@@ -21,8 +21,8 @@ so: ``unfinished`` takes it too, since its run was interrupted, not judged.
 A job whose feed does not say what it planned (a merged job keeps none) has
 only its trials to run again.
 
-A job begun on a part of its plan (``run --start-with``) has the rest planned
-with no attempt: :func:`more` takes a further part of them, a number of them
+A job started on some of its plan (``run --start-with``) has the rest planned
+with no attempt: :func:`more` takes more of them, a number of them
 in the plan's order or those a task set of the job's dataset names, each with
 all its attempts, and ``every_unfinished`` takes all of them.
 
@@ -47,11 +47,11 @@ replaced, the tasks begun (``begun``), those that had no result
 (``no_result``), the cap, what it had left of it and its spend.
 
 A job has one spending cap (:func:`budget`): the first run's, or the one a
-later part is given (``max_usd``), which holds from then on. A later part's
-ledger opens with the cap less what the job has spent; a part is refused
-when nothing is left, or when the part before stopped at the cap and it has
+later run is given (``max_usd``), which holds from then on. A later run's
+ledger opens with the cap less what the job has spent; a run is refused
+when nothing is left, or when the run before stopped at the cap and it has
 not changed since. The job's ``budget`` keeps the cap, ``spent_total_usd``
-(every part) and ``changes``, each change of the cap. A job with no cap has
+(every run) and ``changes``, each change of the cap. A job with no cap has
 none until one is given. The live feed gets the re-run's
 ``job.start``, its trials' events and its ``job.end``, numbered on from the
 file's last line.
@@ -100,7 +100,7 @@ def _cost(res: dict) -> Optional[float]:
 
 
 def _ledger_spent(path: str, fallback: float) -> float:
-    """The unrounded cost and bookings of a part, or its recorded total when its ledger is unavailable."""
+    """The unrounded cost and bookings of a run of the job, or its recorded total when its ledger is unavailable."""
     try:
         state = ledgers.Ledger(path).state()
     except ledgers.Unavailable:
@@ -109,8 +109,8 @@ def _ledger_spent(path: str, fallback: float) -> float:
 
 
 def _spent(job_dir: str, res: dict) -> float:
-    """What the job has spent, every part counted, with what stayed booked for calls whose cost was never known: the
-    total its budget keeps; for a job recorded before it kept one, its first run's and each later part's added; for
+    """What the job has spent, every run counted, with what stayed booked for calls whose cost was never known: the
+    total its budget keeps; for a job recorded before it kept one, its first run's and each later run's added; for
     a job no cap counted, the cost its trials recorded, every try."""
     b = res.get("budget") if isinstance(res.get("budget"), dict) else {}
     if _number(b.get("spent_total_usd")):
@@ -127,8 +127,8 @@ def _spent(job_dir: str, res: dict) -> float:
 
 
 def budget(job_dir: str, res: Optional[dict] = None, cap: Optional[float] = None) -> Optional[dict]:
-    """The job's one spending cap as its next part has it: {"max_usd", "spent_usd" (every part), "left_usd",
-    "closed" (nothing left, or the last part stopped at the cap and it has not changed since), "changed", "was"}.
+    """The job's one spending cap as its next run has it: {"max_usd", "spent_usd" (every run), "left_usd",
+    "closed" (nothing left, or the last run stopped at the cap and it has not changed since), "changed", "was"}.
     ``cap``: the job's cap from now on, in place of its own. None for a job with no cap and none given."""
     res = merge._read(os.path.join(job_dir, "result.json")) if res is None else res
     b = res.get("budget") if isinstance(res.get("budget"), dict) else {}
@@ -147,7 +147,7 @@ def budget(job_dir: str, res: Optional[dict] = None, cap: Optional[float] = None
 
 
 def spent_out(b: dict, fix: str = "raise it with --max-usd USD") -> str:
-    """Why a later part is refused when the job's cap has nothing left (:func:`budget`), and what to do."""
+    """Why a later run is refused when the job's cap has nothing left (:func:`budget`), and what to do."""
     return (f"the job's spending cap of {ledgers.usd(b['max_usd'])} USD is spent ({ledgers.usd(b['spent_usd'])} spent"
             + ("" if b["left_usd"] <= 0 else ", and a call did not fit what was left") + f"): {fix}")
 
@@ -316,7 +316,7 @@ def _kept(job_dir: str, name: str) -> int:
 
 def more(job_dir: str, plan: List[tuple], empty: Dict[str, dict], *, count: Optional[int] = None,
          task_set: Optional[dict] = None, dataset: str = "", noun: tuple = ("task", "tasks")) -> List[str]:
-    """A further part of the planned tasks not yet run (``empty``, :func:`unfinished`): the first ``count`` of them
+    """More of the planned tasks not yet run (``empty``, :func:`unfinished`): the first ``count`` of them
     in the plan's order, or those the set ``task_set`` names ({"task_set": its record, "dataset": its dataset});
     each task with every attempt of it that has no result. Refused for a set of another dataset than the job's
     (``dataset``), a set naming a task the job did not plan, and a count above the tasks left."""
@@ -372,7 +372,7 @@ def rerun(job_dir: str, ids: List[str], *, reason: str = "", concurrency: Option
     the job's unless given. ``root``: a catalogue folder to resolve the definitions in (the user's and the
     bundled ones by default). ``every_unfinished``: in place of ``ids``, each trial the job planned that has no
     result, or whose run its cap or a Stop interrupted (:func:`interrupted`). ``count`` or ``task_set``: in
-    place of ``ids``, a further part of the planned tasks not yet run (:func:`more`). Returns the record added to the
+    place of ``ids``, more of the planned tasks not yet run (:func:`more`). Returns the record added to the
     job's ``reruns``, or {"job", "trials": []} with nothing written when there is no such trial; ``run.Refused``
     before anything moves."""
     job_dir = os.path.abspath(job_dir.rstrip("/"))
@@ -410,7 +410,7 @@ def rerun(job_dir: str, ids: List[str], *, reason: str = "", concurrency: Option
     picked = chosen(job_dir, ids, trials, empty)
     if max_usd is not None and not (isinstance(max_usd, (int, float)) and 0 < max_usd < float("inf")):
         raise run.Refused(f"--max-usd {max_usd!r}: the job's spending cap in USD, above zero")
-    capped = budget(job_dir, old, max_usd)       # one cap for the job: this part has what its earlier parts left
+    capped = budget(job_dir, old, max_usd)       # one cap for the job: this run has what the runs before it left
     if capped is not None and capped["closed"]:
         raise run.Refused(spent_out(capped))
     bench, other = resolve(cfg, list(trials.values()), root, say=say)
@@ -485,20 +485,20 @@ def _begin(r: "run.Run", name: str, iur: tuple, retry: int, work_unit) -> Option
 def _again(r: "run.Run", job_dir: str, old: dict, cfg: dict, trials: Dict[str, dict], picked: List[str], work: list,
            first_try: Dict[str, int], reason: str, t0: float, fresh: Optional[Dict[str, int]] = None,
            empty: Optional[Dict[str, dict]] = None, capped: Optional[dict] = None) -> dict:
-    """The re-run itself, the job held (:func:`rerun`). ``capped``: the job's cap as this part has it (:func:`budget`)."""
+    """The re-run itself, the job held (:func:`rerun`). ``capped``: the job's cap as this run has it (:func:`budget`)."""
     fresh, empty = fresh or {}, empty or {}
     killed = [name for name in picked if name in empty and name not in fresh]
     r._tries = dict(first_try, **fresh)
     n = len(old.get("reruns") or []) + 1
     if (r.max_usd is not None or r.unit_max_usd is not None) and r.base:
-        # a ledger of its own, opened with what the job's cap has left and the replies its earlier parts had: theirs stay
+        # a ledger of its own, opened with what the job's cap has left and the replies its earlier runs had: theirs stay
         seen: Dict[str, list] = {}
         for k, path in enumerate([os.path.join(job_dir, ".work", "ledger", "ledger.json")] + [
                 os.path.join(job_dir, ".work", f"rerun-{k}", "ledger", "ledger.json") for k in range(1, n)]):
             replies = ledgers.Ledger(path).replies() if os.path.isfile(path) else {}
-            part = old["reruns"][k - 1] if k else {}
-            # Earlier shared-cap records already inherited replies and identified the part by its remaining budget.
-            if replies and (part.get("cumulative_replies") or "left_usd" in part):
+            earlier = old["reruns"][k - 1] if k else {}
+            # Earlier shared-cap records already inherited replies and identified the run by its remaining budget.
+            if replies and (earlier.get("cumulative_replies") or "left_usd" in earlier):
                 seen = {}
             for model, (count, tokens) in replies.items():
                 seen[model] = [seen.get(model, [0, 0])[0] + count, seen.get(model, [0, 0])[1] + tokens]
@@ -514,7 +514,7 @@ def _again(r: "run.Run", job_dir: str, old: dict, cfg: dict, trials: Dict[str, d
               + f", {ledgers.usd(capped['spent_usd'])} spent, {ledgers.usd(capped['left_usd'])} left for this part")
     r.known_models()
     r.ready()                                # refused here, the job reads as it did: nothing has moved
-    p.emit("plan", stages="units")           # a further part of the job: its units said after the first's
+    p.emit("plan", stages="units")           # a later run of the job: its units said after the first's
     r.n_units = len(work)
     p.emit("units", "start", n=len(work), of=len(trials) + len(empty), noun=r.bench["units"]["nouns"])
     path = os.path.join(job_dir, live_feed.FEED)
@@ -581,7 +581,7 @@ def _again(r: "run.Run", job_dir: str, old: dict, cfg: dict, trials: Dict[str, d
                        **({"stopped": True} if r._stopped.is_set() or (budget or {}).get("stopped") else {})})
         out["reruns"] = list(old.get("reruns") or []) + [dict(record)]
         if capped:
-            # the job's one cap: what every part spent, each change of the cap, and whether this part stopped at it
+            # the job's one cap: what every run spent, each change of the cap, and whether this run stopped at it
             used = (budget["spent_usd"] or 0) + (budget.get("unsettled_usd") or 0) if budget else (spent or 0)
             if r.ledger is not None:
                 used = _ledger_spent(r.ledger.path, used)

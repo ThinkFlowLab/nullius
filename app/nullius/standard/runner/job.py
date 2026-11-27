@@ -619,8 +619,8 @@ def write_config(job_dir: str, *, job: str, bench: dict, other: dict, model: str
     sha256 and its units, said only for such a run. ``task_set``: the task
     set a run's units came from (``sets.record``): its id, name, revision,
     hash and units, and what ``set import`` rebuilds the entry from, said
-    only for such a run. ``start_with``: a run begun on a part of its plan
-    (``run.Run.part_record``): how the part was named and its units, said only
+    only for such a run. ``start_with``: a run started on some of its plan
+    (``run.Run.start_record``): how the start was named and its units, said only
     for such a run; ``units`` is then the whole plan's. ``repeat``: how
     many times each unit was run, each an attempt, said only when more than
     once; ``retries``: how many times an attempt could be tried again after a

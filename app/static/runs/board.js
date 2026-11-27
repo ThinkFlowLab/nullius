@@ -209,7 +209,7 @@
 
   apply();
 
-  // ---- the job's one spending cap: Change asks for the cap from the next part on ----
+  // ---- the job's one spending cap: Change asks for the cap from the job's next run on ----
   const capAsk = $('#cap-ask'), capOpen = $('#cap-change');
   if (capAsk && capOpen) {
     const capForm = $('form', capAsk), capErr = $('[data-error]', capAsk);

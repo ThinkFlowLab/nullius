@@ -1,4 +1,4 @@
-"""A run planned on a whole and begun on a part of it (``run --start-with``), the rest run later in the same job
+"""A run planned on a whole and started on some of it (``run --start-with``), the rest run later in the same job
 by ``rerun``, against a fake benchmark of six tasks and the fake agent. No key, no network: the provider is a
 local fake endpoint."""
 from __future__ import annotations
@@ -43,7 +43,7 @@ class RecordComparison(unittest.TestCase):
                             steady({"agent_result": {"cost_usd": 42}}))
 
 
-class PartTest(unittest.TestCase):
+class StartWithTest(unittest.TestCase):
     setUpClass, tearDownClass = base.RerunTest.__dict__["setUpClass"], base.RerunTest.__dict__["tearDownClass"]
     setUp, read = base.RerunTest.setUp, base.RerunTest.read
 
@@ -93,15 +93,15 @@ class PartTest(unittest.TestCase):
                 lines = []
                 job_dir = self.plan(name=f"job-{how}", start_with=given, lines=lines)
                 cfg, res = self.read(job_dir, "config.json"), self.read(job_dir, "result.json")
-                part = ["t0", "t1"] if how == "count" else ["t1", "t3"]                 # in the plan's order
+                start = ["t0", "t1"] if how == "count" else ["t1", "t3"]                 # in the plan's order
                 self.assertEqual(cfg["datasets"][0]["n_tasks"], 6)                     # the plan is the whole
-                self.assertEqual(cfg["standard"]["start_with"]["units"], part)
+                self.assertEqual(cfg["standard"]["start_with"]["units"], start)
                 self.assertEqual(set(cfg["standard"]["start_with"]) - {"units"}, {"count": {"count"}, "file": {"units_file"},
                                                                                    "set": {"task_set"}, "ids": set()}[how])
                 self.assertEqual(res["n_total_trials"], 6)
                 self.assertNotIn("budget", res)
                 self.assertEqual([n for n, _ in rerun.planned(job_dir)], [f"t{i}__u{i:04d}" for i in range(6)])
-                self.assertEqual(sorted(x["unit"] for x in rerun.unfinished(job_dir).values()), sorted(set(UNITS) - set(part)))
+                self.assertEqual(sorted(x["unit"] for x in rerun.unfinished(job_dir).values()), sorted(set(UNITS) - set(start)))
                 j = parse.parse_job(job_dir)
                 self.assertEqual((len(j.trials), j.n_planned, j.n_tasks, j.n_tasks_run, j.state), (2, 6, 6, 2, "finished"))
                 self.assertEqual(j.start_with, {"by": how, "units": 2,
@@ -120,30 +120,30 @@ class PartTest(unittest.TestCase):
                                   board["counts"].get("not_run")), ("finished", 6, 2, 4))
 
     def test_two_more_by_name_then_the_rest_read_as_a_job_run_whole(self):
-        part = self.plan(name="part", start_with={"count": 2})
-        got = self.again(part, ["t3", "t2"], reason="two more")
+        started = self.plan(name="started", start_with={"count": 2})
+        got = self.again(started, ["t3", "t2"], reason="two more")
         self.assertEqual([x["unit"] for x in got["begun"]], ["t3", "t2"])
-        self.assertEqual(parse.parse_job(part).n_tasks_run, 4)
-        got = self.again(part, [], every_unfinished=True)
+        self.assertEqual(parse.parse_job(started).n_tasks_run, 4)
+        got = self.again(started, [], every_unfinished=True)
         self.assertEqual([x["unit"] for x in got["begun"]], ["t4", "t5"])
         whole = self.plan(name="whole")
-        j, w = parse.parse_job(part), parse.parse_job(whole)
+        j, w = parse.parse_job(started), parse.parse_job(whole)
         self.assertEqual((len(j.trials), j.n_planned, j.n_tasks_run, j.n_resolved, j.state), (6, 6, 6, 6, "finished"))
         self.assertEqual({t.trial_name: t.outcome for t in j.trials}, {t.trial_name: t.outcome for t in w.trials})
-        self.assertEqual(self.read(part, "result.json")["stats"]["n_cancelled_trials"], 0)
-        # the records, but for the parts' own (start_with, the re-runs and their summary, each later trial's mark)
-        cfg = self.read(part, "config.json")
+        self.assertEqual(self.read(started, "result.json")["stats"]["n_cancelled_trials"], 0)
+        # the records, but for the start's and later runs' own (start_with, the re-runs and their summary, each later trial's mark)
+        cfg = self.read(started, "config.json")
         del cfg["standard"]["start_with"]
         self.assertEqual(steady(cfg), steady(self.read(whole, "config.json")))
-        res = self.read(part, "result.json")
+        res = self.read(started, "result.json")
         self.assertEqual([len(r["begun"]) for r in res.pop("reruns")], [2, 2])
         res.pop("standard")
         self.assertEqual(steady(res), steady(self.read(whole, "result.json")))
         for t in w.trials:
-            mine = self.read(part, t.trial_name, "result.json")
+            mine = self.read(started, t.trial_name, "result.json")
             self.assertEqual(mine["standard"].pop("rerun", {}).get("begun", True), True)
             self.assertEqual(steady(mine), steady(self.read(whole, t.trial_name, "result.json")), t.trial_name)
-        self.assertEqual(sorted(os.listdir(part)), sorted(os.listdir(whole)))
+        self.assertEqual(sorted(os.listdir(started)), sorted(os.listdir(whole)))
 
     def test_two_attempts_each_a_task_begun_gets_both(self):
         job_dir = self.plan(start_with={"count": 2}, repeat=2)
@@ -193,7 +193,7 @@ class PartTest(unittest.TestCase):
             self.again(limited, [], task_set=self.a_set("Beyond the plan", ["t2", "t4"]))
         self.assertIn("the task set Beyond the plan names 1 task limited did not plan: t4", str(e.exception))
 
-    def test_the_command_line_names_the_part_four_ways(self):
+    def test_the_command_line_names_the_start_four_ways(self):
         b = definitions.get("benchmark", "fakebench", self.catalogue())
         self.assertEqual(std_cli.start_with(b, "3"), {"count": 3})
         Path(self.tmp, "ids.txt").write_text("t2\n# a comment\nt0\n")
@@ -208,7 +208,7 @@ class PartTest(unittest.TestCase):
         self.assertEqual((got["dataset"], got["task_set"]["units"], got["task_set"]["id"]), ("all", ["t4"], entry["id"]))
         with self.assertRaises(sets.NotFound):
             std_cli.start_with(b, "set:nothing")
-        # a set of several datasets: its list of the run's dataset; the rest of a job begun on a part, by its name
+        # a set of several datasets: its list of the run's dataset; the rest of a job started on some of its plan, by its name
         both = sets.create(b, "both", parts={"all": ["t4", "t2"], "other": ["t5"]})
         got = std_cli.start_with(b, "set:both", "all")
         self.assertEqual((got["dataset"], got["task_set"]["units"], sorted(got["task_set"]["parts"])), ("all", ["t4", "t2"], ["all", "other"]))

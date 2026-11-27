@@ -587,7 +587,7 @@
     <div class="rerun-acts"><button type="submit" value="cancel" class="btn ghost" formnovalidate>Cancel</button><button type="submit" value="run" class="btn" data-go{% if job_cap and job_cap.closed %} data-spent{% endif %}>Run 0 tasks again</button></div>
   </form>
 </dialog>
-{#- the job's one spending cap, changed for its next part #}
+{#- the job's one spending cap, changed for its next run #}
 <dialog class="std-how rerun-ask" id="cap-ask" aria-labelledby="cap-ask-h" data-post="{{ url_for('job_cap_change', job_id=job.job_id) }}" data-csrf="{{ csrf }}">
   <form method="dialog">
     <div class="std-how-head"><h2 id="cap-ask-h">Spending cap for the whole run</h2></div>

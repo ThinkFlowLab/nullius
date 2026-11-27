@@ -758,14 +758,14 @@ class Run:
         ``task_set``: a task set's record (``sets.record``): its units run as
         a file's would, and the job's config keeps the record. Refused beside
         ``units_file``.
-        ``start_with``: the part of the plan the run begins with (``run --start-with``):
+        ``start_with``: the tasks of the plan the run starts with (``run --start-with``):
         ``{"count": N}``, the plan's first N units; ``{"units_file": ...}`` or
         ``{"task_set": ..., "dataset": D}``, the plan's units the file or the set
         lists. The plan is the whole (the dataset, the file, the set, the shard and
         the limit, as without it): the job records it, its feed queues each of its
-        trials, and only the part's begin, each with all its attempts; the rest
+        trials, and only the start's begin, each with all its attempts; the rest
         stand planned with no attempt, for ``rerun`` to run in the job later.
-        Refused before any unit starts for a part that names a unit outside the
+        Refused before any unit starts for a start that names a unit outside the
         plan, more units than it holds, or a set of another dataset.
         ``repeat``: each unit run that many times (a conformance check run for
         confidence, ``conform``), each run a trial of its own tagged
@@ -1206,9 +1206,9 @@ class Run:
             wanted = set(listed)
             mine = [(i, u) for i, u in mine if u in wanted]
         mine = mine[: self.limit] if self.limit else mine
-        part = None
+        start = None
         if not why and self.start_with is not None:
-            part, why = self.part_of([u for _, u in mine])
+            start, why = self.start_of_plan([u for _, u in mine])
         if why:
             # what the run holds is let go as when its driver cannot list the units: on the container
             # backend that includes the containers its driver or its doors started
@@ -1230,14 +1230,14 @@ class Run:
             p.emit("refused", detail=why)
             raise Refused(why)
         units = [u for _, u in mine]
-        begin = units if part is None else part
+        begin = units if start is None else start
         self.n_units = len(begin)
         if getattr(self, "boat", None) is not None:
             why = self.boat.starts(len(begin) * self.repeat)
             if why:
                 self.say(why)
         p.emit("units", "start", n=len(begin) * self.repeat, of=len(everything), noun=self.bench["units"]["nouns"],
-               **({"planned": len(units) * self.repeat} if part is not None else {}),
+               **({"planned": len(units) * self.repeat} if start is not None else {}),
                **({"detail": self.cap_dropped} if self.cap_dropped else {}))
         job.write_config(self.job_dir, job=self.name, bench=self.bench, other=self.other, model=self.model,
                          provider=self.provider, dataset=self.ds["id"], units=units, concurrency=self.concurrency,
@@ -1248,16 +1248,16 @@ class Run:
                          # a shard of a list splits the listed units: they are its whole
                          shard=shards.record(*self.shard, len(everything) if listed is None else len(listed), units, self.limit, by=self.shard_by)
                          if self.shard else None, units_file=self.units_file, task_set=self.task_set,
-                         start_with=self.part_record(part) if part is not None else None,
+                         start_with=self.start_record(start) if start is not None else None,
                          repeat=self.repeat, retries=self.retries, prices=self.prices_record(), constraints=self.constraints, served_by=self.serving,
                          timeouts=self.timeouts, max_turns=self.forced_turns, max_calls=self.max_calls,
                          exchanges=self.exchanges, exchanges_max_mb=self.exchanges_max_mb,
                          simulator=self.simulator_model if self.other["_kind"] in ("agent", "upstream") and self.simulator_model else "")
         # every unit once, then every unit again: a repeat cut short still has each unit's first run
         work = [(i, u, r) for r in range(1, self.repeat + 1) for i, u in mine]
-        # begun on a part: the plan's every trial queued, the part's begun; the rest stand planned for a re-run
-        begun = set(part or ())
-        first = work if part is None else [(i, u, r) for i, u, r in work if u in begun]
+        # started on some of the plan: the plan's every trial queued, the start's begun; the rest stand planned for a re-run
+        begun = set(start or ())
+        first = work if start is None else [(i, u, r) for i, u, r in work if u in begun]
         self.n_units = len(first)                # what the progress counts: every run of every unit
         self.feed = live_feed.Writer(os.path.join(self.job_dir, live_feed.FEED), self.name)
         self.feed.emit("job.start", n_total=len(work), n_concurrent=self.concurrency, agents=[job.agent_name(self.other)], tasks=units,
@@ -1299,14 +1299,14 @@ class Run:
                    seconds=round(time.time() - t0, 1))
             self.say(f"done: {self.counted(results)}, {len(scores)} scored"
                      + (f", mean {mean:.3f}" if mean is not None else ""))
-        if part is not None:
+        if start is not None:
             words, ran = self.bench["units"], len({(x.get("standard") or {}).get("unit") for x in results})
             self.say(f"{ran} of {len(units)} planned {words['noun'] if len(units) == 1 else words['nouns']} run"
                      + (f"; the rest in this job: nullius standard rerun {self.job_dir} --unfinished (or --next N, --set NAME)"
                         if len(begin) < len(units) else ""))
         return self.job_dir
 
-    def part_of(self, plan: List[str]) -> tuple:
+    def start_of_plan(self, plan: List[str]) -> tuple:
         """(the units of ``plan`` the run begins with, in the plan's order; why it is refused, or "")."""
         given, words = self.start_with or {}, self.bench["units"]
         many = lambda n: words["noun"] if n == 1 else words["nouns"]
@@ -1327,14 +1327,14 @@ class Run:
         wanted = set(source.get("units") or [])
         return [u for u in plan if u in wanted], ""
 
-    def part_record(self, part: List[str]) -> dict:
-        """What the job's config keeps of the part it began with (``standard.start_with``): how it was named -
+    def start_record(self, start: List[str]) -> dict:
+        """What the job's config keeps of the tasks it started with (``standard.start_with``): how it was named -
         a count, a file (its name, sha256 and units) or a task set (``sets.record``); ids named on the command
         line, nothing more - and its units, in the plan's order."""
         given = self.start_with or {}
         how = ({"count": given["count"]} if "count" in given else {"units_file": given["units_file"]} if given.get("units_file")
                else {"task_set": given["task_set"]} if given.get("task_set") else {})
-        return dict(how, units=list(part))
+        return dict(how, units=list(start))
 
     def run_units(self, work: list, write: Callable[[List[dict], Optional[dict]], None], first=None) -> tuple:
         """The units of ``work`` ((i, unit, r) each), as many at once as the

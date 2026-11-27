@@ -426,15 +426,15 @@ class RerunTest(unittest.TestCase):
 
 
 class OneBudget(unittest.TestCase):
-    """A job has one spending cap: each later part has what the parts before it left, a new cap holds from then on,
-    and a part is refused when nothing is left."""
+    """A job has one spending cap: each later run of the job has what the runs before it left, a new cap holds from
+    then on, and a run is refused when nothing is left."""
     setUpClass, tearDownClass = RerunTest.__dict__["setUpClass"], RerunTest.__dict__["tearDownClass"]
     setUp, job, again, read, trials = RerunTest.setUp, RerunTest.job, RerunTest.again, RerunTest.read, RerunTest.trials
 
     def ledger(self, job_dir, n):
         return self.read(job_dir, ".work", f"rerun-{n}", "ledger", "ledger.json")
 
-    def test_a_later_part_has_what_the_parts_before_it_left(self):
+    def test_a_later_run_has_what_the_runs_before_it_left(self):
         job_dir = self.job(concurrency=1, max_usd=0.0001)
         self.assertEqual(self.read(job_dir, "result.json")["budget"]["spent_usd"], CALL)
         self.assertEqual(rerun.budget(job_dir), {"max_usd": 0.0001, "spent_usd": CALL, "left_usd": 0.0001 - CALL,
@@ -448,7 +448,7 @@ class OneBudget(unittest.TestCase):
         self.assertNotIn("changes", b)
         self.assertIn(f"the job's spending cap: 0.0001 USD, {usd(CALL)} spent, {usd(0.0001 - CALL)} left for this part", lines)
         self.assertIn(f"spent {usd(CALL)} USD; the job has spent {usd(2 * CALL)} of its 0.0001 USD cap", lines)
-        # the third call does not fit what is left: that part stops at the cap, and the next is refused until it changes
+        # the third call does not fit what is left: that run stops at the cap, and the next is refused until it changes
         got = self.again(job_dir, ["model"])
         self.assertEqual(self.ledger(job_dir, 2)["seen"], self.ledger(job_dir, 1)["seen"])
         self.assertTrue(got["stopped"])
@@ -468,7 +468,7 @@ class OneBudget(unittest.TestCase):
         self.assertEqual(self.ledger(job_dir, 4)["max_usd"], 0.001 - 3 * CALL)
         self.assertEqual(len(self.read(job_dir, "result.json")["budget"]["changes"]), 1)     # the same cap is no change
 
-    def test_a_part_is_refused_when_the_cap_is_at_or_under_what_was_spent(self):
+    def test_a_run_is_refused_when_the_cap_is_at_or_under_what_was_spent(self):
         job_dir = self.job(concurrency=1, max_usd=0.0001)
         whole = digest(job_dir)
         for cap in (CALL, CALL / 2):
@@ -488,10 +488,10 @@ class OneBudget(unittest.TestCase):
         self.assertNotIn("budget", res)
         self.assertFalse(os.path.exists(os.path.join(job_dir, ".work", "rerun-1", "ledger")))
         self.assertIsNone(res["reruns"][0]["max_usd"])
-        # given one: what its uncapped parts' trials cost, every try, counts against it
+        # given one: what its uncapped runs' trials cost, every try, counts against it
         self.assertEqual(rerun.budget(job_dir, cap=0.001)["spent_usd"], 2 * CALL)
 
-    def test_a_job_recorded_before_one_budget_counts_each_part_s_spend(self):
+    def test_a_job_recorded_before_one_budget_counts_each_run_s_spend(self):
         job_dir = self.job(concurrency=1, max_usd=0.0001)
         res = self.read(job_dir, "result.json")
         res["reruns"] = [{"at": "2026-11-18T10:00:00+00:00", "trials": [], "replaced": [], "max_usd": 5.0, "spent_usd": 0.00002},
@@ -539,7 +539,7 @@ class BudgetAccounting(unittest.TestCase):
                                calls=[] if refused else [{"status": 200, "reply": {"usage": {"output": output}}, "cost_usd": cost}],
                                trajectory=None, retries=retry)
 
-    def part(self, path, cost, output, amount=None):
+    def later_run(self, path, cost, output, amount=None):
         admitted = []
 
         def simulate(r, index, task, attempt, retry=0):
@@ -555,13 +555,13 @@ class BudgetAccounting(unittest.TestCase):
                                  env={"MODEL_API_URL": "http://127.0.0.1:1/v1", "MODEL_API_KEY": "fake"})
         return record, admitted
 
-    def test_small_parts_keep_unrounded_spending_under_one_cap(self):
+    def test_small_runs_keep_unrounded_spending_under_one_cap(self):
         cost, cap = 0.0000004, 0.000001
         path = self.job(cap, cost, 1)
         calls = 1
         for _ in range(5):
             try:
-                _, admitted = self.part(path, cost, 1)
+                _, admitted = self.later_run(path, cost, 1)
             except run.Refused:
                 break
             calls += sum(sent for sent, _ in admitted)
@@ -576,7 +576,7 @@ class BudgetAccounting(unittest.TestCase):
         self.assertTrue(all(r["spent_usd"] == 0 for r in parsed.reruns))
 
     def test_a_spend_equal_to_the_cap_but_for_float_noise_closes_the_job(self):
-        # eight calls of 0.1 under a cap of 0.8 add up to 0.7999999999999999: nothing is left, and no part opens on it
+        # eight calls of 0.1 under a cap of 0.8 add up to 0.7999999999999999: nothing is left, and no run opens on it
         path = self.job(0.8, 0.1, 1)
         noisy = 0.0
         for _ in range(8):
@@ -588,25 +588,25 @@ class BudgetAccounting(unittest.TestCase):
         got = rerun.budget(str(path))
         self.assertEqual((got["closed"], got["left_usd"]), (True, 0.0))
         with self.assertRaises(run.Refused) as e:
-            self.part(path, 0.1, 1)
+            self.later_run(path, 0.1, 1)
         self.assertEqual(str(e.exception), "the job's spending cap of 0.80 USD is spent (0.80 spent): raise it with --max-usd USD")
 
-    def test_next_part_inherits_cumulative_replies_once(self):
+    def test_next_run_inherits_cumulative_replies_once(self):
         path = self.job(1.61, 1, 100)
         row = {"input": 0.0, "output": 10000.0}
-        self.part(path, 0.01, 1, amount=lambda usual: ledger.bound({"max_tokens": 1}, b"{}", row, seen=usual))
+        self.later_run(path, 0.01, 1, amount=lambda usual: ledger.bound({"max_tokens": 1}, b"{}", row, seen=usual))
         result = json.loads((path / "result.json").read_text())
         result["reruns"][0].pop("cumulative_replies", None)
         (path / "result.json").write_text(json.dumps(result))
-        record, admitted = self.part(path, 0.01, 1, amount=lambda usual: ledger.bound({}, b"{}", row, seen=usual))
+        record, admitted = self.later_run(path, 0.01, 1, amount=lambda usual: ledger.bound({}, b"{}", row, seen=usual))
         self.assertEqual(admitted, [(True, 0.51)])
         self.assertFalse(record.get("stopped", False))
         state = json.loads((path / ".work/rerun-2/ledger/ledger.json").read_text())
         self.assertEqual(state["seen"]["m-1"], [3, 102])
 
-    def test_older_per_part_replies_are_combined_before_inheritance(self):
+    def test_older_per_run_replies_are_combined_before_inheritance(self):
         path = self.job(1.61, 1, 100)
-        self.part(path, 0.01, 1)
+        self.later_run(path, 0.01, 1)
         result = json.loads((path / "result.json").read_text())
         result["budget"].pop("spent_total_usd")
         result["reruns"][0].pop("cumulative_replies", None)
@@ -618,10 +618,10 @@ class BudgetAccounting(unittest.TestCase):
         older.write_text(json.dumps(state))
         before = older.read_bytes()
         row = {"input": 0.0, "output": 10000.0}
-        for part, amount, seen in ((2, 0.51, [3, 102]), (3, 0.34, [4, 103])):
-            _, admitted = self.part(path, 0.01, 1, amount=lambda usual: ledger.bound({}, b"{}", row, seen=usual))
+        for n, amount, seen in ((2, 0.51, [3, 102]), (3, 0.34, [4, 103])):
+            _, admitted = self.later_run(path, 0.01, 1, amount=lambda usual: ledger.bound({}, b"{}", row, seen=usual))
             self.assertEqual(admitted, [(True, amount)])
-            state = json.loads((path / f".work/rerun-{part}/ledger/ledger.json").read_text())
+            state = json.loads((path / f".work/rerun-{n}/ledger/ledger.json").read_text())
             self.assertEqual(state["seen"]["m-1"], seen)
         self.assertEqual(older.read_bytes(), before)
 
@@ -665,7 +665,7 @@ class NoVersion(unittest.TestCase):
 
 
 class OwnAgent(unittest.TestCase):
-    """A later part of a job of one of a benchmark's own agents runs that agent again, named as its job names it."""
+    """A later run of a job of one of a benchmark's own agents runs that agent again, named as its job names it."""
 
     def test_the_agent_the_job_ran_is_the_one_resolved(self):
         bench = definitions.get("benchmark", "osworld1")
@@ -677,8 +677,8 @@ class OwnAgent(unittest.TestCase):
                 _, other = rerun.resolve({"standard": std}, [])
                 self.assertEqual((other["agent"], rerun.job.agent_name(other), other["asked"]), (key, key, model))
 
-    def test_a_trial_begun_in_a_later_part_is_queued_under_the_jobs_agent(self):
-        # the board names a queued trial by the job's agent, as the first part did, not by the setup it runs under
+    def test_a_trial_begun_in_a_later_run_is_queued_under_the_jobs_agent(self):
+        # the board names a queued trial by the job's agent, as the first run did, not by the setup it runs under
         got, tmp = [], tempfile.mkdtemp(prefix="nullius-own-agent-")
         self.addCleanup(shutil.rmtree, tmp, True)
 

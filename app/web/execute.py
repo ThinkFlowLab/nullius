@@ -269,7 +269,7 @@ def job_rerun(job_id):
     reason = " ".join(str(body.get("reason") or "").split())
     if len(reason) > REASON_MAX:
         return jsonify(ok=False, error=f"The reason is one line of at most {REASON_MAX} characters."), 400
-    budget = job_cap(j, ex, settle=True)        # one cap for the job: the part has what the parts before it left
+    budget = job_cap(j, ex, settle=True)        # one cap for the job: this run has what the runs before it left
     if budget and budget["closed"]:
         said = rerun.spent_out(budget, "change it to run more.")
         return jsonify(ok=False, error=said[0].upper() + said[1:]), 409
@@ -289,7 +289,7 @@ def job_rerun(job_id):
 
 
 def job_cap(job, ex, settle: bool = False) -> dict | None:
-    """The job's one spending cap as its page shows it and its next part runs under it (``rerun.budget``): the cap
+    """The job's one spending cap as its page shows it and its next run has it (``rerun.budget``): the cap
     set on the page (``Plan.caps``) where it differs from the job's own, else the job's. ``settle``: a cap set on the
     page that the job's record now holds is dropped from the run's record. None for a job with no cap."""
     if not job.standard:
@@ -308,9 +308,9 @@ def job_cap(job, ex, settle: bool = False) -> dict | None:
 
 @app.route("/job/<job_id>/cap", methods=["POST"])
 def job_cap_change(job_id):
-    """A new spending cap for the whole job, from its next part on: kept in its run's record (``Plan.caps``) and
-    handed to that part as ``rerun --max-usd``. Refused where the page offers no next part (``again_offer``: a part
-    running among them), and for a cap at or under what the job has spent."""
+    """A new spending cap for the whole job, from its next run on: kept in its run's record (``Plan.caps``) and
+    handed to that run as ``rerun --max-usd``. Refused where the page offers no next run (``again_offer``: a run
+    of the job under way), and for a cap at or under what the job has spent."""
     shared._require_csrf()
     if not shared._local_client():
         abort(403, description="Runs are started from a browser on the application host only.")

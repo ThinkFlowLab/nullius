@@ -885,7 +885,7 @@
     return `<div class="nb-sectionhead std-sethead"><h3>${head}</h3><a class="btn ghost sm" href="${page}${picked ? '?set=' + encodeURIComponent(picked.name) : ''}">${picked ? 'Open ' + esc(picked.label) : 'Choose its tasks'} <span aria-hidden="true">→</span></a></div>`
       + `<div class="nb-pick-grid std-optgrid">${own.join('')}</div>` + (yours.length ? `<div class="nb-pick-grid std-optgrid std-yoursets" aria-label="Your task sets">${yours.join('')}</div>` : '');
   }
-  // A chosen dataset's plan begun on a part: all of it, or specific tasks, ticked in the list of the plan's tasks (the
+  // A chosen dataset's plan started on some of it: all of it, or specific tasks, ticked in the list of the plan's tasks (the
   // dataset's, or the set's it runs; pickTasks), the rest planned and run later from the job's page. A recipe from
   // before holds a number or a task set: shown chosen, as it is, until another choice.
   function startChoice(rec, b, x, u) {

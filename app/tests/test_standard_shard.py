@@ -212,8 +212,8 @@ class Merge(unittest.TestCase):
         self.assertNotIn("budget", read(os.path.join(part["out"], "result.json")))
         self.assertEqual(parse.parse_job(part["out"]).budget, {})
 
-    def test_the_merged_budget_keeps_later_parts_and_accepts_older_shards(self):
-        # Each shard spent 1 initially and 7 in a later part.
+    def test_the_merged_budget_keeps_later_runs_and_accepts_older_shards(self):
+        # Each shard spent 1 initially and 7 in a later run.
         for totals, spent in (((8, 8), 16), ((8, None), 9.25), ((None, None), 2.5)):
             with self.subTest(totals=totals), tempfile.TemporaryDirectory(dir=self.tmp) as root:
                 dirs = []

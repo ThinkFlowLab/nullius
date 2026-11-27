@@ -260,7 +260,7 @@ class Plan:
     docker: bool = False                      # a runner that needs docker on its target though it is not Harbor (the standard's container backend)
     keyless: bool = False                     # nothing in it calls a model (the standard's controls): handed no key and no endpoint at all
     licences: dict = field(default_factory=dict)     # the standard's on a host: {"benchmark", "names", "providers"} - what it is sent of that benchmark's licences
-    caps: dict = field(default_factory=dict)         # a job's spending cap set on its page, {job: USD}: its next part runs under it
+    caps: dict = field(default_factory=dict)         # a job's spending cap set on its page, {job: USD}: it holds from the job's next run
 
     def steps(self) -> List[dict]:
         return [p for p in self.parts if p.get("script")] or [{"id": "run", "label": "the run", "script": self.script}]

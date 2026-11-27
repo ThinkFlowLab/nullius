@@ -236,7 +236,7 @@
     if (kept.length) r.task_sets = Object.fromEntries(kept); else delete r.task_sets;
     return r;
   }
-  // A chosen dataset's plan begun on a part (recipe.py: start_with, {dataset: [ID, ...]}): '' for all of it, the ids
+  // A chosen dataset's plan started on some of it (recipe.py: start_with, {dataset: [ID, ...]}): '' for all of it, the ids
   // of the tasks ticked (an empty list while none is), or from a recipe before, N or set:NAME; the rest run later in
   // the job. A dataset no longer chosen keeps none.
   function setStartWith(r, dataset, value) {

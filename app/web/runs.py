@@ -660,7 +660,7 @@ def waiting_of(j, running=()) -> list:
     running, outcome}: one row per unit, with its planned attempts in ``trials`` and its first in ``trial``.
     Never begun, or begun and ended with none (``folder``); ``running``, one of the trials
     ``running`` names, those a re-run under way runs. ``outcome``: ``not_run`` for a task never begun of a job
-    begun on a part of its plan (``start_with``), ``no_result`` otherwise. Its feed is read only for a job with
+    started on some of its plan (``start_with``), ``no_result`` otherwise. Its feed is read only for a job with
     fewer trials than it planned: [] for every other job."""
     if not j.standard or len(j.trials) >= j.n_planned:
         return []
@@ -1022,12 +1022,12 @@ def _live_board_state(j):
     # "running" here means "show the board and keep polling": the preparation
     # window and the starting state are on the board too, so it is every
     # state but finished — and unknown, an empty feed, which has nothing to show.
-    return {"running": snap["state"] in ("preparing", "starting", "running"), "initial": _with_part(j, snap)}
+    return {"running": snap["state"] in ("preparing", "starting", "running"), "initial": _with_this_run(j, snap)}
 
 
-def _with_part(j, snap: dict) -> dict:
-    """The board's snapshot, with ``part`` while a standard job's run goes on over a part of its plan: the trials
-    of that part, the units its config began with or those the latest later start names, or the trial IDs chosen
+def _with_this_run(j, snap: dict) -> dict:
+    """The board's snapshot, with ``this_run`` while a standard job started on some of its plan runs: the trials
+    of that run, the units its config began with or those the latest later start names, or the trial IDs chosen
     for that later start where this application started it. The board counts the planned trials outside it as not
     run, not queued. The snapshot as it was otherwise."""
     if not j.standard or snap.get("state") not in ("starting", "running"):
@@ -1046,9 +1046,9 @@ def _with_part(j, snap: dict) -> dict:
     ex = execution.for_job(j.job_id) if len(starts) > 1 else None
     chosen = ex.again_of(j.job_id) if ex is not None else None
     if chosen is not None:                   # the attempts chosen, not every attempt of their tasks
-        return dict(snap, part=list(dict.fromkeys(chosen["trials"])))
+        return dict(snap, this_run=list(dict.fromkeys(chosen["trials"])))
     wanted = set(units)
-    return dict(snap, part=[name for name, unit in plan if unit in wanted])
+    return dict(snap, this_run=[name for name, unit in plan if unit in wanted])
 
 
 @app.route("/job/<job_id>/live")
@@ -1078,6 +1078,6 @@ def job_live(job_id):
         response.status_code = 422
         response.headers["Cache-Control"] = "no-store"
         return response
-    response = jsonify(_with_part(j, snap))
+    response = jsonify(_with_this_run(j, snap))
     response.headers["Cache-Control"] = "no-store"
     return response
