@@ -190,6 +190,86 @@ class DraftBetweenPages(CompilerCase):
         # Start over asks, Keep it closes; Start over asks, Start over again closes; Start over asks, Yes resets; then untouched: at once
         self.assertEqual(out["got"], [asked, kept, asked, kept, asked, reset, reset])
 
+    def test_a_step_drawn_again_keeps_the_keyboard_on_its_control(self):
+        """The page's own redraws (renderForm's line, the parameter Type handler) and controls.js' scan, on stand-in elements that
+        match selectors and hold the focus: which control has it once its box is drawn again."""
+        page = PAGE.read_text(encoding="utf-8")
+        controls = (APP / "static/controls.js").read_text(encoding="utf-8")
+        # controls.js' own scan, kept reachable: the frames that call it are not there
+        controls = controls[:controls.index("\n// A .ui-range's filled part")].replace("  scan();\n})();", "  listeners.frame = scan; scan();\n})();")
+        form = re.search(r"^    keepFocus\(\$\('#nb-form'\),.*$", page, re.M)
+        family = re.search(r"^    else if\(d\.stdFamilySet!==undefined\).*$", page, re.M).group(0)
+        change = page[page.index("  root.addEventListener('change',async event=>{"):page.index("  { const dl=document.getElementById('nb-models')")]
+        program = r"""
+const body = {name: 'body', matches: () => false}, listeners = {};
+// elements that match the selectors the page uses, hold the focus, and lose it when hidden or taken out of the page
+const el = (name, tagName, data = {}, more = {}) => Object.assign({name, tagName, id: '', dataset: data, size: 0, hidden: false, labels: [],
+  attributes: [{name: 'class', value: 'x'}, ...Object.entries(data).map(([k, value]) => ({name: 'data-' + k, value}))],
+  matches(s) { return s === '.ui-select-trigger' ? this.className === 'ui-select-trigger' : s[0] === '#' ? s === '#' + this.id
+    : s.startsWith(this.tagName + '[') && s.slice(this.tagName.length + 1, -1).split('][').every(one => this.attributes.some(a => one === `${a.name}="${CSS.escape(a.value)}"`)); },
+  get isConnected() { return Object.values(boxes).some(b => b.contains(this)); }, remove() {},
+  focus() { if (!this.gone) document.activeElement = this; }, setSelectionRange(...a) { this.name += ' ' + a.join(' '); },
+  classList: {add() {}}, setAttribute() {}, getAttribute: () => null, removeAttribute() {}, addEventListener() {}, closest: () => null, replaceChildren() {},
+  after(b) { this.nextElementSibling = b; b.previousElementSibling = this; b.name = this.name + ' menu'; }, selectedOptions: [{textContent: 'a', dataset: {}}]}, more);
+const hides = select => { select.classList.add = () => { select.gone = true; if (document.activeElement === select) document.activeElement = body; }; return select; };
+const box = () => ({els: [], next: [], contains(e) { return this.els.includes(e) || this.els.some(x => x.nextElementSibling === e); },
+  querySelector(s) { return this.els.find(e => e.matches(s)) || null; },
+  set innerHTML(html) { if (this.contains(document.activeElement)) document.activeElement = body; this.els = this.next; }});
+const boxes = {'#nb-form': box(), '#nb-parameters': box()}, $ = s => boxes[s];
+globalThis.CSS = {escape: s => s.replace(/"/g, '\\$&')};
+globalThis.document = {body, activeElement: body, addEventListener() {}, createElement: tag => el('', tag.toUpperCase()),
+  querySelectorAll: s => s.startsWith('select') ? Object.values(boxes).flatMap(b => b.els).filter(e => e.tagName === 'SELECT') : []};
+globalThis.window = {addEventListener() {}}; globalThis.MutationObserver = class { observe() {} }; globalThis.requestAnimationFrame = () => {};
+const keepFocus = require(__PAGE__).keepFocus || ((box, draw) => draw());   // a page without it only draws
+const root = {addEventListener: (type, f) => { listeners[type] = f; }}, customRows = () => '', placeGrids = () => {}, html = '', tab = 'extra';
+__CONTROLS__
+const scan = () => listeners.frame();
+__CHANGE__
+const got = [], say = () => got.push(document.activeElement.name);
+(async () => {
+  // a choice: the step drawn again by renderForm's own line
+  const f = boxes['#nb-form'], oracle = el('old', 'BUTTON', {agent: 'oracle'});
+  f.els = [oracle]; f.next = [el('nop', 'BUTTON', {agent: 'nop'}), el('oracle', 'BUTTON', {agent: 'oracle'})]; oracle.focus();
+  __FORM__
+  say();
+  // the same id; a field on its selection; a choice whose other data changed with it; nothing to tell it by; outside the box
+  const redraw = (on, next, inside = true) => { f.els = inside ? [on] : []; f.next = next; document.activeElement = on; keepFocus(f, () => { f.innerHTML = ''; }); say(); };
+  redraw(el('old', 'BUTTON', {x: 'y'}, {id: 'nb-add'}), [el('other', 'BUTTON', {x: 'y'}), el('add', 'BUTTON', {x: 'z'}, {id: 'nb-add'})]);
+  redraw(el('old', 'INPUT', {field: 'a"b'}, {selectionStart: 2, selectionEnd: 5, selectionDirection: 'backward'}), [el('field', 'INPUT', {field: 'a"b'})]);
+  redraw(el('old', 'BUTTON', {family: 'small', was: 'all'}), [el('all', 'BUTTON', {family: 'all', was: 'small'}), el('small', 'BUTTON', {family: 'small', was: 'small'})]);
+  // a set of two lists chosen in its second, by the page's own line: both lists' groups are drawn, the set in each of them
+  const set = (was, to) => el('set ' + was + ' ' + to, 'BUTTON', {stdFamilySet: 'mine', was, in: to}), old = set('l3', 'l2');
+  { const d = old.dataset, C = {swapDataset() {}, setTaskSet() {}}, r = () => ({}); if (0) {}
+__FAMILY__
+    old.attributes.find(a => a.name === 'data-was').value = d.was; }
+  redraw(old, [set('l1', 'l1'), set('l1', 'l2'), set('l2', 'l1'), set('l2', 'l2')]);
+  redraw(el('old', 'BUTTON'), [el('plain', 'BUTTON')]);
+  redraw(el('outside', 'BUTTON', {agent: 'oracle'}), [el('oracle', 'BUTTON', {agent: 'oracle'})], false);
+  // the second parameter's Type, by the page's own change handler: its select is drawn again, then controls.js draws its menu button
+  const p = boxes['#nb-parameters'], type = hides(el('old type', 'SELECT', {custom: '1:type'}));
+  f.els = []; p.els = [type]; scan(); type.nextElementSibling.focus(); say();
+  p.next = [hides(el('type 0', 'SELECT', {custom: '0:type'})), hides(el('type 1', 'SELECT', {custom: '1:type'}))];
+  await listeners.change({target: type}); say(); scan(); say();
+  process.stdout.write(JSON.stringify(got));
+})();
+"""
+        program = (program.replace("__PAGE__", json.dumps(str(PAGE))).replace("__CONTROLS__", controls).replace("__CHANGE__", change).replace("__FAMILY__", family)
+                   .replace("__FORM__", form.group(0) if form else ""))
+        out = json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
+        self.assertEqual(out, ["oracle", "add", "field 2 5 backward", "small", "set l2 l2", "body", "outside",
+                               "old type menu", "type 1", "type 1 menu"])   # the Type's menu button, its new select, that one's button
+
+    def test_removing_a_row_puts_the_keyboard_on_add(self):
+        """The page's own click handler: the row after a removed one takes its number, so the focus leaves Remove for Add."""
+        page = PAGE.read_text(encoding="utf-8")
+        clicks = page[page.index("  root.addEventListener('click',async event=>{"):page.index("  // a benchmark chosen on the Benchmark step's grid")]
+        program = ('const got=[],rec={custom:[{key:"first"},{key:"second"}],customAgents:["a.A","b.B"],agents:["oracle","custom-0","custom-1"]};let click;'
+                   'const r=()=>rec,render=()=>{},renderForm=()=>{},refreshPlan=()=>{},$=s=>({focus(){got.push(s);}}),root={addEventListener:(type,f)=>{click=f;}};\n' + clicks + '\n'
+                   '(async()=>{await click({target:{closest:()=>({id:"",dataset:{remove:"0"}})}});await click({target:{closest:()=>({id:"",dataset:{removeCustomAgent:"0"}})}});'
+                   'process.stdout.write(JSON.stringify([got,rec.custom,rec.customAgents,rec.agents]));})();')
+        out = json.loads(subprocess.run([self.node, "-"], input=program, check=True, capture_output=True, text=True).stdout)
+        self.assertEqual(out, [["#nb-add", "#nb-add-custom-agent"], [{"key": "second"}], ["b.B"], ["oracle", "custom-0"]])
+
 
     def test_saving_closes_an_open_start_over_question(self):
         """Save swaps in its own copy of the draft, so a Yes left open would clear the saved recipe's successor."""
