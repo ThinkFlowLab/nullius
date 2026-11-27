@@ -111,13 +111,14 @@
         optionLabel(button, option);
         button.dataset.optionLabel = signature;
       }
+      if ('placeholder' in (option?.dataset || {})) button.setAttribute('data-placeholder', ''); else button.removeAttribute('data-placeholder');   // nothing chosen: a default, shown as a placeholder is
       if (button.disabled !== select.disabled) button.disabled = select.disabled;
       if (button.hidden !== select.hidden) button.hidden = select.hidden;
     });
     // Labels and help stay together on the left; compact fields sit on the right.
     // Benchmark option controls already sit below their section heading.
     document.querySelectorAll('label.nb-field:not(.ui-field-row):not(.std-optselect)').forEach(label => {
-      if (![...label.children].some(n => n.matches('select,input:not([type=checkbox]):not([type=radio]),textarea,.nb-model-control'))) return;
+      if (![...label.children].some(n => n.matches('select,input:not([type=checkbox]):not([type=radio]),textarea,.nb-model-control,.nb-model-line'))) return;
       const copy = document.createElement('span'); copy.className = 'ui-field-copy';
       [...label.childNodes].filter(n => n.nodeType === Node.TEXT_NODE || n.nodeType === Node.ELEMENT_NODE && n.matches('small')).forEach(n => copy.append(n));
       label.prepend(copy); label.classList.add('ui-field-row');

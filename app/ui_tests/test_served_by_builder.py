@@ -63,6 +63,33 @@ class ProviderList(unittest.TestCase):
         fetch.assert_not_called()
 
 
+class ReasoningLevels(unittest.TestCase):
+    """The Model step's reasoning select: the levels one model offers, asked of any provider, guarded as the providers are."""
+    setUp = ProviderList.setUp
+
+    def ask(self, body, **kw):
+        return self.client.post('/new-run/reasoning', json=body, headers=kw.pop('headers', self.headers), **kw)
+
+    def test_a_models_levels_and_none_for_a_model_without(self):
+        levels = {'levels': ['low', 'high'], 'default': 'low'}
+        with patch('web.builder.providers.list_reasoning', side_effect=[levels, None]) as fetch:
+            self.assertEqual(self.ask({'provider': 'openai', 'model': 'gpt-5'}).json, {'ok': True, **levels})
+            self.assertEqual(self.ask({'provider': 'custom:LAB', 'model': 'm'}).json, {'ok': True, 'levels': [], 'default': None})
+        self.assertEqual([c.args for c in fetch.call_args_list], [('openai', 'gpt-5'), ('custom:LAB', 'm')])
+        with patch('web.builder.providers.list_reasoning', side_effect=ValueError('Reasoning levels unavailable.')):
+            response = self.ask({'provider': 'openrouter', 'model': 'a/b'})
+        self.assertEqual((response.status_code, response.json['ok']), (502, False))
+
+    def test_guards_and_another_provider_do_not_fetch(self):
+        with patch('web.builder.providers.list_reasoning') as fetch:
+            self.assertEqual(self.ask({'provider': 'openai', 'model': 'gpt-5'}, headers={}).status_code, 403)
+            self.assertEqual(self.ask({'provider': 'openai', 'model': 'gpt-5'}, environ_overrides={'REMOTE_ADDR': '192.0.2.4'}).status_code, 403)
+            for body in ({'provider': 'nope', 'model': 'gpt-5'}, {'provider': 'openai'}, {'provider': 'openai', 'model': ' '}, []):
+                with self.subTest(body=body):
+                    self.assertEqual(self.ask(body).status_code, 400)
+        fetch.assert_not_called()
+
+
 class TheStep(unittest.TestCase):
     """What the Model step's script draws and what the compile route hands it."""
 

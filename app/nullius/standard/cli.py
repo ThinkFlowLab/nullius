@@ -55,7 +55,8 @@ sets one of the agent's or capability's options (``options`` in its definition);
 the rest keep the vendor's defaults, and the job's config records them all.
 ``--served-by [MODEL=]SLUG[,SLUG...]`` lets only those serving providers answer
 a model on OpenRouter, in that order (``run.served_by``); each call's record
-names the provider that served it. ``--exchanges`` says what each unit's relay
+names the provider that served it. ``--reasoning [MODEL=]LEVEL`` sets how much
+a model reasons on every call sent as it (``run.reasoning``). ``--exchanges`` says what each unit's relay
 keeps of its agent's calls (``standard/calls/exchanges.py``): ``whole`` by default,
 ``text`` without the pictures' bytes, or ``off``; ``--exchanges-max-mb`` bounds
 a unit's.
@@ -92,7 +93,7 @@ if __name__ == "__main__" and "--from-run" not in sys.argv[1:]:
     settings.load(paths.settings_file())
 
 from nullius.standard.backends import boat
-from nullius.standard.calls import exchanges
+from nullius.standard.calls import exchanges, relay
 from nullius.standard.contract import definitions, match, ports, proofs
 from nullius.standard.proofs import conform, fidelity, pins, prove
 from nullius.standard.runner import job, merge, run, sets, shard
@@ -619,6 +620,7 @@ def cmd_run(a):
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
                       **({"task_set": task_set} if task_set else {}),
                       **({"served_by": run.served_by(a.served_by, a.model or "")} if a.served_by else {}),
+                      **({"reasoning": run.reasoning(a.reasoning, a.model or "")} if a.reasoning else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
     except run.Refused as e:
         print("refused:", e)
@@ -681,7 +683,7 @@ def _boat_units(a, b, other) -> int:
         value = getattr(a, field)
         if value is not None:
             words += ["--" + field.replace("_", "-"), str(value)]
-    for field in ("bench_option", "option", "timeout", "constraint", "served_by", "price"):
+    for field in ("bench_option", "option", "timeout", "constraint", "served_by", "reasoning", "price"):
         for value in getattr(a, field) or []:
             words += ["--" + field.replace("_", "-"), value]
     # Saved price overrides belong to the launching profile, not the fresh VM.
@@ -1146,6 +1148,9 @@ def main(argv=None):
             p.add_argument("--served-by", action="append", metavar="[MODEL=]SLUG[,SLUG...]",
                            help="on OpenRouter, the serving providers that may answer a model, tried in this order and no "
                                 "other (repeatable; without MODEL=, the run's model); each call records which one did")
+            p.add_argument("--reasoning", action="append", metavar="[MODEL=]LEVEL",
+                           help="how much a model reasons on every call sent as it, in place of the caller's own (repeatable; "
+                                "without MODEL=, the run's model): " + ", ".join(relay.LEVELS))
             p.add_argument("--max-usd-per-unit", type=float, metavar="USD",
                            help="each unit's own spending cap: a unit that reaches it is cut off there, and the run goes on")
             p.add_argument("--timeout", action="append", metavar="PHASE=SECONDS",

@@ -82,7 +82,7 @@ Long-term chat memory: questions over timestamped chat histories.
 - A reader you choose must take about 126,200 tokens. The history is not cut to fit, so a longer recall fails at the model.
 - Original memory defaults to 800 reader output tokens. Larger limits reduce history space and differ from the paper.
 - Empty answers fail, including when reasoning consumes the reader's output budget.
-- Choose a judge that can return yes/no text within 10 output tokens.
+- Choose a judge that takes max_tokens and can return yes/no text within 10 output tokens: OpenAI's GPT-5 models refuse max_tokens, so they fail as judge.
 - Three combinations fail as published: merge expansion with a full-history retriever, user-only with flat-bm25-turn, and separate notes with chain-of-note reading and nl history.
 - The judge, a model, rejects about one right answer in twenty, and passes an empty answer now and then.
 - Time-aware query expansion fails as published.

@@ -39,6 +39,10 @@ A run may pin, for a model, the serving providers that may answer it
 that model, in place of the caller's own, and records both, cleaned of
 credentials. Without a pin a request's body goes on as it did.
 
+A run may also set, for a model, how much it reasons (``reasoning``, one of
+``LEVELS``): the relay puts it on every request sent as that model, in place
+of the caller's own, in the field the request's API reads (:func:`think`).
+
 A run may also keep each call of an agent's route whole (``exchanges``):
 the request as sent, by part, and the reply as it arrived, beside the call
 record, which then numbers those calls (``n``). It is written before the
@@ -359,6 +363,62 @@ def serving_problems(serving) -> List[str]:
         elif len(set(slugs)) != len(slugs):
             bad.append(f"{model}: a serving provider is named twice")
     return bad
+
+
+# -- reasoning: the level a run sets for a model, as OpenRouter's model list names its levels --
+LEVELS = ("none", "minimal", "low", "medium", "high", "xhigh", "max", "off", "on")
+
+
+def parse_reasoning(given, model: str) -> tuple:
+    """``--reasoning [MODEL=]LEVEL``, repeatable, as ``({model: level}, problems)``. Without ``MODEL=`` it is
+    ``model``, the run's. A model named twice is a problem, and so is a level not in ``LEVELS``."""
+    out: Dict[str, str] = {}
+    bad = []
+    for g in given or []:
+        name, eq, level = str(g).rpartition("=")
+        name, level = (name.strip() if eq else (model or "")), level.strip()
+        if not name:
+            bad.append(f"--reasoning {g!r}: MODEL=LEVEL, or LEVEL for the run's model")
+        elif name in out:
+            bad.append(f"--reasoning names {name} twice")
+        elif level not in LEVELS:
+            bad.append(f"--reasoning {g!r}: the level is one of {', '.join(LEVELS)}")
+        else:
+            out[name] = level
+    return out, bad
+
+
+def think(req: dict, path: str, level: str, routed: bool) -> None:
+    """Sets ``req``'s reasoning to ``level``, in place of the caller's own, in the field its API reads: Messages'
+    ``output_config.effort`` and ``thinking`` (``on`` adaptive, ``off`` and ``none`` disabled); on an endpoint that
+    routes (``routed``, OpenRouter's) Chat Completions' and Responses' ``reasoning`` (``effort``, or ``enabled`` for
+    ``on`` and ``off``); elsewhere their ``reasoning_effort`` and ``reasoning.effort``, ``off`` sent as ``none``
+    and ``on`` left as the caller asked. A level the model does not offer is the provider's to refuse."""
+    off, on = level in ("none", "off"), level == "on"
+    route = path.split("?")[0]
+    if route.endswith("/messages"):
+        config = {k: v for k, v in (req.get("output_config") or {}).items() if k != "effort"}
+        if off or on:
+            req["thinking"] = {"type": "adaptive" if on else "disabled"}
+        else:
+            config["effort"] = level
+        if config:
+            req["output_config"] = config
+        else:
+            req.pop("output_config", None)
+        return
+    if not (route.endswith("/chat/completions") or route.endswith("/responses")) or (on and not routed):
+        return
+    kept = req.get("reasoning") if isinstance(req.get("reasoning"), dict) else {}
+    if routed:                                   # one field for both APIs, OpenRouter's
+        req.pop("reasoning_effort", None)
+        req["reasoning"] = {**{k: v for k, v in kept.items() if k in ("exclude", "summary")},
+                            **({"enabled": on} if level in ("on", "off") else {"effort": level})}
+    elif route.endswith("/responses"):
+        req["reasoning"] = {**{k: v for k, v in kept.items() if k == "summary"}, "effort": "none" if off else level}
+    else:
+        req.pop("reasoning", None)
+        req["reasoning_effort"] = "none" if off else level
 
 
 def parse_served_by(given, model: str) -> tuple:
@@ -702,7 +762,8 @@ class Relay:
                  model: Optional[str] = None, side_models=(), key_header: str = "authorization", fields: bool = False,
                  ledger: Optional[str] = None, unit_caps: bool = True, serving: Optional[Dict[str, List[str]]] = None,
                  facts: Optional[bool] = None, timeout: float = TIMEOUT, max_calls: Optional[int] = None,
-                 exchanges: str = "off", exchanges_max_mb: int = exchange_store.MAX_MB):
+                 exchanges: str = "off", exchanges_max_mb: int = exchange_store.MAX_MB,
+                 reasoning: Optional[Dict[str, str]] = None, routed: Optional[bool] = None):
         """``base``: the provider's endpoint (``https://api.openai.com/v1``).
         ``model``: when given, every call is sent as this model, whatever the
         caller named - the run's model is the recipe's, not the agent's. A
@@ -729,7 +790,9 @@ class Relay:
         ``exchanges``: ``whole`` or ``text`` keeps each call of an agent's
         route whole in ``<record_dir>/exchanges`` (``exchanges``), bounded at
         ``exchanges_max_mb``, and numbers its calls in the record (``n``);
-        ``off``, the default, keeps the call record alone."""
+        ``off``, the default, keeps the call record alone. ``reasoning``: by
+        model, the level put on every request sent as that model (:func:`think`);
+        ``routed``: ``base`` routes a model to several serving providers, by default when it is OpenRouter's."""
         self.fields = fields
         self.max_calls = max_calls
         if exchanges not in exchange_store.MODES:
@@ -739,8 +802,11 @@ class Relay:
         self.numbered: Dict[str, int] = {}       # the calls each agent route was sent, for the record's n
         self.answered: Dict[str, int] = {}       # the calls each agent route had answered, for max_calls
         self.serving = {m: list(s) for m, s in (serving or {}).items()}
+        self.reasoning = dict(reasoning or {})
         host = (urllib.parse.urlsplit(base).hostname or "").lower()
-        self.facts = (host == "openrouter.ai" or host.endswith(".openrouter.ai")) if facts is None else bool(facts)
+        openrouter = host == "openrouter.ai" or host.endswith(".openrouter.ai")
+        self.routed = openrouter if routed is None else bool(routed)
+        self.facts = openrouter if facts is None else bool(facts)
         self.ledger = ledgers.Ledger(ledger) if ledger else None
         # False for the benchmark's own relay: its calls (an option's embeddings) are no one unit's, so only the run's cap holds them
         self.unit_caps = unit_caps
@@ -867,6 +933,8 @@ class Relay:
             if pinned:
                 routing_asked = req.get("provider")
                 req["provider"] = routing(pinned)
+            if isinstance(req.get("model"), str) and self.reasoning.get(req["model"]):
+                think(req, rest, self.reasoning[req["model"]], self.routed)
             raw, dumped = json.dumps(req).encode(), True
         if not side and not self.models.get(tag) and self._asked():
             h.send_error(400, "the unit was asked to stop")
@@ -1230,7 +1298,7 @@ def overflowed(call: dict) -> bool:
 def serve(argv=None) -> int:
     """``python3 -m nullius.standard.calls.relay serve --listen HOST:PORT --base URL
     --record DIR --key-file PATH [--model M] [--route TAG=MODEL ...] [--side-model M ...] [--key-header NAME]
-    [--public URL] [--prices JSON] [--ledger FILE] [--served-by MODEL=SLUG[,SLUG...] ...]
+    [--public URL] [--prices JSON] [--ledger FILE] [--served-by MODEL=SLUG[,SLUG...] ...] [--reasoning MODEL=LEVEL ...]
     [--exchanges whole|text|off] [--exchanges-max-mb N]``.
 
     ``--base``: provider endpoint. ``--route``: send a tag as another model. ``--public``: address returned by ``url``.
@@ -1257,6 +1325,8 @@ def serve(argv=None) -> int:
                     help="the serving providers that may answer a request sent as MODEL, in order, and no other; "
                          "MODEL one this relay sends (--model, a --route's, a --side-model's), and --base OpenRouter's "
                          "or --routing given")
+    ap.add_argument("--reasoning", action="append", default=[], metavar="MODEL=LEVEL",
+                    help=f"the reasoning put on every request sent as MODEL: one of {', '.join(LEVELS)}")
     ap.add_argument("--routing", action="store_true",
                     help="the endpoint at --base routes a model to several serving providers, as OpenRouter does")
     ap.add_argument("--timeout", type=float, default=TIMEOUT, help="seconds one call may wait for the provider's reply")
@@ -1281,6 +1351,10 @@ def serve(argv=None) -> int:
     if bad:
         print(json.dumps({"error": "--served-by: " + "; ".join(bad)}), flush=True)
         return 2
+    reasoning, bad = parse_reasoning(a.reasoning, "")
+    if bad:
+        print(json.dumps({"error": "; ".join(bad)}), flush=True)
+        return 2
     try:
         with open(a.key_file) as f:
             key = f.read().strip()
@@ -1292,8 +1366,8 @@ def serve(argv=None) -> int:
         return 2
     host, _, port = a.listen.rpartition(":")
     r = Relay(a.base, key, a.record, prices=json.loads(a.prices) if a.prices else None, model=a.model,
-              side_models=a.side_model, key_header=a.key_header, ledger=a.ledger, serving=serving,
-              timeout=a.timeout, max_calls=a.max_calls, exchanges=a.exchanges, exchanges_max_mb=a.exchanges_max_mb)
+              side_models=a.side_model, key_header=a.key_header, ledger=a.ledger, serving=serving, reasoning=reasoning,
+              routed=True if a.routing else None, timeout=a.timeout, max_calls=a.max_calls, exchanges=a.exchanges, exchanges_max_mb=a.exchanges_max_mb)
     for route in a.route:
         tag, _, model = route.partition("=")
         if not _TAG.match(tag) or not model:

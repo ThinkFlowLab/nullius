@@ -492,6 +492,54 @@ def list_endpoints(provider: str, model: str, env=None, *, opener=None) -> list[
         raise ValueError("Provider list unavailable. Enter a provider's slug by hand.") from None
 
 
+# The reasoning levels OpenRouter's model list names, least first (``standard.calls.relay.LEVELS``).
+EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+
+
+def _levels(row: dict) -> Optional[dict]:
+    """A model row's ``reasoning`` as the builder offers it, ``{levels, default}``: its efforts, least first, or
+    ``off`` and ``on`` when it names none but may be turned off; ``default`` the one a call that sets none gets,
+    None when unsaid. None when the model has no reasoning to choose: none at all, or one that cannot change."""
+    r = row.get("reasoning")
+    if not isinstance(r, dict):
+        return None
+    listed = r.get("supported_efforts") if isinstance(r.get("supported_efforts"), list) else []
+    efforts = [e for e in EFFORTS if e in listed]
+    if efforts:
+        default = "none" if r.get("default_enabled") is False and "none" in efforts else r.get("default_effort")
+        return {"levels": efforts, "default": default if default in efforts else None}
+    if r.get("mandatory") is not False:
+        return None
+    return {"levels": ["off", "on"], "default": "on" if r.get("default_enabled") else "off"}
+
+
+def _same(name: str) -> str:
+    """A model's name compared across providers: lowercased, its version's dots as dashes (claude-sonnet-4.5 is
+    Anthropic's claude-sonnet-4-5)."""
+    return name.strip().lower().replace(".", "-")
+
+
+def list_reasoning(provider: str, model: str, *, opener=None) -> Optional[dict]:
+    """The reasoning levels of ``model`` as ``provider`` names it (:func:`_levels`), asked each time from
+    OpenRouter's public model list, with no key: the only list that says them. OpenAI's and Anthropic's models are
+    found there under their maker's prefix, by name or dated name; a model it does not list has none to choose
+    (None). ValueError when the list cannot be read."""
+    kind = split(provider)[0]
+    model = str(model or "").strip()
+    if not model:
+        return None
+    wanted = _same(served_as(model, kind) if "/" in model or kind not in ("openai", "anthropic") else f"{kind}/{model}")
+    try:
+        rows = json.loads(_get(PRESETS["openrouter"]["base"] + "/models?supported_parameters=reasoning", {}, opener))["data"]
+        if not isinstance(rows, list):
+            raise ValueError("missing model list")
+        found = next((row for row in rows if isinstance(row, dict) and wanted in
+                      {_same(str(row.get(k) or "")) for k in ("id", "canonical_slug")}), None)
+    except (OSError, ValueError, TypeError, KeyError, http.client.HTTPException):
+        raise ValueError("Reasoning levels unavailable.") from None
+    return _levels(found) if found else None
+
+
 # Settings' Test, for each run provider (TypeSafe has no free request): only requests that cost nothing. A
 # model list everywhere; OpenRouter's is public, so its key is asked at its own key-information endpoint.
 _TESTS_LOCK = threading.Lock()
