@@ -44,9 +44,9 @@ TOOLS = {
                      {"job_ids": {"type": "array", "items": _S, "minItems": 2},
                       "matched": dict(_B, description="only the tasks every job ran")}, ["job_ids"],
                      lambda nx, a: nx.compare(*a["job_ids"], matched=a.get("matched") is True)),
-    "get_leaderboard": ("The open workspace's agents ranked by composite score: each one's overall score, rank and "
-                        "score by axis, with the runs each score reads. A score is partial when `reasons` says so.", {}, [],
-                        lambda nx, a: nx.leaderboard()),
+    "get_leaderboard": ("The open workspace's agents that have a scored run, ranked by composite score: each one's overall "
+                        "score, rank and score by axis, with the runs each score reads. A score is partial when `reasons` "
+                        "says so.", {}, [], lambda nx, a: _ranked(nx.leaderboard())),
     "get_judgements": ("A judge model's stored answers about a job's trials (lane: decision or llm). Free to read.",
                        {**_JOB, "lane": _S}, ["job_id"], lambda nx, a: nx.judgements(a["job_id"], a.get("lane") or "decision")),
     "judge_trial": ("Ask a judge model about one trial. A paid model call: ask only when the person wants it.",
@@ -65,8 +65,14 @@ TOOLS = {
 }
 
 
+def _ranked(board: dict) -> dict:
+    """The leaderboard without the catalogue's agents that have no run here: most of the document, and nothing to rank."""
+    return {**board, "rows": [r for r in board.get("rows") or [] if r.get("has_runs")]}
+
+
 def listed() -> list:
-    return [{"name": name, "description": text, "inputSchema": {"type": "object", "properties": props, "required": need}}
+    return [{"name": name, "description": text,
+             "inputSchema": {"type": "object", "properties": props, "required": need, "additionalProperties": False}}
             for name, (text, props, need, _) in TOOLS.items()]
 
 
@@ -105,6 +111,9 @@ def handle(m, nx):
         if not isinstance(args, dict):
             return _error(rid, -32602, "arguments is an object")
         args = {k: v for k, v in args.items() if v is not None}
+        unknown = sorted(set(args) - set(TOOLS[name][1]))
+        if unknown:                             # dropped, it would answer about something else than was asked
+            return _error(rid, -32602, f"{name} takes no {', '.join(unknown)}")
         wrong = [f"{k}: {p['type']}" for k, p in TOOLS[name][1].items() if k in args and "type" in p and not _is(args[k], p)]
         if wrong:
             return _error(rid, -32602, f"{name} takes {', '.join(wrong)}")

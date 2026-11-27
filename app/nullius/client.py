@@ -122,9 +122,9 @@ class Client:
     def trial(self, job_id: str, trial: str, workspace: Optional[str] = None) -> dict:
         return self.request("GET", self._q("jobs", job_id, "trials", trial), workspace=workspace)
 
-    def conversation(self, job_id: str, trial: str, **query) -> dict:
-        """The trial's conversation, paged: ``q``, ``kind``, ``page``, ``step``; ``workspace`` as the other reads."""
-        return self.request("GET", self._q("jobs", job_id, "trials", trial, "conversation"), **query)
+    def conversation(self, job_id: str, trial: str, workspace: Optional[str] = None, **query) -> dict:
+        """The trial's conversation, paged: ``q``, ``kind``, ``page``, ``step``."""
+        return self.request("GET", self._q("jobs", job_id, "trials", trial, "conversation"), workspace=workspace, **query)
 
     def trace(self, job_id: str, trial: str, workspace: Optional[str] = None) -> dict:
         return self.request("GET", self._q("jobs", job_id, "trials", trial, "trace"), workspace=workspace)
@@ -139,7 +139,8 @@ class Client:
         return self.request("GET", "/compare", job=list(job_ids), matched=matched, workspace=workspace)
 
     def leaderboard(self, workspace: Optional[str] = None) -> dict:
-        """The workspace's agents ranked by their composite score, under the server's Scoring settings."""
+        """The workspace's agents ranked by their composite score, under the server's Scoring settings; ``steps`` and
+        ``calls`` stay uncounted."""
         return self.request("GET", "/leaderboard", workspace=workspace)
 
     # judgements: reading one is free, asking is a paid model call for each trial

@@ -122,7 +122,7 @@ class Calls(Case):
                 (lambda: self.nx.job("j", "w"), "GET", "/jobs/j", "workspace=w", None),
                 (lambda: self.nx.live("j", "w"), "GET", "/jobs/j/live", "workspace=w", None),
                 (lambda: self.nx.trial("j", "t", "w"), "GET", "/jobs/j/trials/t", "workspace=w", None),
-                (lambda: self.nx.conversation("j", "t", page=2, workspace="w"), "GET", "/jobs/j/trials/t/conversation", "page=2&workspace=w", None),
+                (lambda: self.nx.conversation("j", "t", "w", page=2), "GET", "/jobs/j/trials/t/conversation", "workspace=w&page=2", None),
                 (lambda: self.nx.trace("j", "t", "w"), "GET", "/jobs/j/trials/t/trace", "workspace=w", None),
                 (lambda: self.nx.artifacts("j", "t", "w"), "GET", "/jobs/j/trials/t/artifacts", "workspace=w", None),
                 (lambda: self.nx.artifact("j", "t", "result", "w"), "GET", "/jobs/j/trials/t/artifacts/result", "workspace=w", None),
@@ -332,7 +332,7 @@ class McpTools(Case):
         tools = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, self.nx)["result"]["tools"]
         self.assertEqual({t["name"] for t in tools}, set(mcp_server.TOOLS))
         for t in tools:
-            self.assertEqual(t["inputSchema"]["type"], "object", t["name"])
+            self.assertEqual((t["inputSchema"]["type"], t["inputSchema"]["additionalProperties"]), ("object", False), t["name"])
             self.assertLessEqual(set(t["inputSchema"]["required"]), set(t["inputSchema"]["properties"]), t["name"])
         self.assertEqual(mcp_server.handle({"jsonrpc": "2.0", "id": 2, "method": "nope"}, self.nx)["error"]["code"], -32601)
 
@@ -346,9 +346,21 @@ class McpTools(Case):
         self.answer("POST", "/runs/check", {"ready": True, "confirm": "Run all?"})
         self.call("check_run", {"recipe": "nightly", "where": "bench"})
         self.assertEqual(self.last()["body"], {"recipe": "nightly", "where": "bench"})
-        self.answer("GET", "/leaderboard", {"rows": [{"name": "Codex", "rank": 1}]})
+        # the leaderboard: the agents that have a run here, not the whole catalogue
+        self.answer("GET", "/leaderboard", {"empty": "", "rows": [{"name": "Codex", "rank": 1, "has_runs": True}, {"name": "Goose", "rank": None, "has_runs": False}]})
         got = self.call("get_leaderboard")["result"]
-        self.assertEqual((got["isError"], json.loads(got["content"][0]["text"])), (False, {"rows": [{"name": "Codex", "rank": 1}]}))
+        self.assertEqual((got["isError"], json.loads(got["content"][0]["text"])), (False, {"empty": "", "rows": [{"name": "Codex", "rank": 1, "has_runs": True}]}))
+
+    def test_an_argument_a_tool_does_not_take_is_refused_and_nothing_is_asked(self):
+        self.answer("GET", "/leaderboard", {"rows": []})
+        self.answer("GET", "/jobs", [])
+        asked = len(self.server.asked)
+        for name, arguments, says in (("get_leaderboard", {"workspace": "other"}, "get_leaderboard takes no workspace"),
+                                      ("list_jobs", {"workspace": "other", "all": True}, "list_jobs takes no all, workspace")):
+            error = self.call(name, arguments)["error"]                          # answered for the open workspace, it would mislead
+            self.assertEqual((error["code"], error["message"]), (-32602, says))
+        self.assertEqual(len(self.server.asked), asked)
+        self.assertFalse(self.call("list_jobs", {"workspace": None})["result"]["isError"])    # a null is no argument
 
     def test_start_run_says_yes_only_when_told(self):
         self.answer("POST", "/runs", {"runs": []})

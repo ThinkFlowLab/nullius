@@ -39,7 +39,7 @@ nullius access revoke ID
 - Shown once, at creation. The server keeps its hash.
 - Expires after its days, or never. Revoked or expired: refused at once.
 - No token created: the API answers nothing.
-- No scope reads or changes Settings, keys or licences. Model keys stay on the server.
+- No scope changes Settings or reads a key or a licence. Model keys stay on the server. The leaderboard says the Scoring weights it used.
 
 ## Python
 
@@ -65,7 +65,7 @@ job["adjusted_solve_rate"], job["counts"]
 | `jobs()`, `job(id)`, `live(id)` | As `nullius runs list` and `show --json`; the live board |
 | `trial(job, trial)`, `conversation(...)`, `trace(...)`, `artifacts(...)`, `artifact(..., key)` | One trial and its evidence, redacted as on the pages |
 | `compare(a, b, ..., matched=False)` | As `nullius compare --json` |
-| `leaderboard()` | As `nullius leaderboard --json`, under the server's Scoring settings |
+| `leaderboard()` | The [Leaderboard](field-guide.md#leaderboard)'s scores and ranks, under the server's Scoring settings; `steps` and `calls` uncounted |
 | `judgements(job)`, `judgement(job, trial)` | A judge's stored answers; `lane="llm"` for the LLM judge |
 | `judge(job, trial)`, `judge_job(job, confirm=False)` | Ask a judge: [below](#asking-a-judge) |
 | `recipes()`, `recipe(id_or_name)`, `save_recipe(recipe)` | The builder's saved recipes |
@@ -74,7 +74,7 @@ job["adjusted_solve_rate"], job["counts"]
 | `runs()`, `run(id, since=0)`, `follow(id)`, `wait(id)` | State, stages, log |
 | `stop(id)`, `continue_(id)` | Stop; answer a paused run |
 
-Jobs are the open workspace's; `workspace="NAME"` on a read or a judge call names another.
+Jobs are the open workspace's; `workspace="NAME"` on a call that reads or judges jobs names another.
 
 A refusal raises `ApiError`: the server's sentence, `status`, `document`. A redirect is refused: give the final address.
 
@@ -111,6 +111,7 @@ Records belong to the job, as the [pages](judgement.md) keep them.
 
 ```bash title="On the other machine"
 export NULLIUS_SERVER=http://bench.internal:5057 NULLIUS_TOKEN=...
+nullius remote workspaces
 nullius remote jobs
 nullius remote job JOB [TRIAL]
 nullius remote compare JOB JOB [--matched]
@@ -123,7 +124,7 @@ nullius remote status RUN
 nullius remote stop RUN
 ```
 
-`RECIPE`: a recipe file, or a saved recipe's name or id. `--workspace NAME` on a read or `judge` names another workspace. One JSON document on stdout. Exit 3 not found, 4 refused or unreachable; `run --follow` exits 4 unless the run ends `done`.
+`RECIPE`: a recipe file, or a saved recipe's name or id. `--workspace NAME` on `jobs`, `job`, `compare`, `leaderboard`, `judgements` and `judge` names another workspace. One JSON document on stdout. Exit 3 not found, 4 refused or unreachable; `run --follow` exits 4 unless the run ends `done`.
 
 ## Assistants
 

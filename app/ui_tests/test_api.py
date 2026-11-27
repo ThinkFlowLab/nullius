@@ -30,6 +30,7 @@ from nullius.judge import client as judge_client, questions as Q, store as judge
 from nullius.leaderboard import service as leaderboard_service
 from nullius.recipes import store
 from nullius.runs import cli as runs_cli
+from nullius.standard import cli as standard_cli
 from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe as standard_recipe
 from nullius.standard.runner import sets as task_sets
@@ -220,7 +221,12 @@ class Reads(Case):
         self.assertEqual((r.status_code, r.json["state"], sorted(r.json)), (page.status_code, page.json["state"], sorted(page.json)))
         self.assertEqual(len(r.json["trials"]), len(self.job.trials))
         r = self.get("/jobs/nope/live")
-        self.assertEqual((r.status_code, sorted(r.json)), (404, ["error"]))
+        self.assertEqual((r.status_code, r.json), (404, {"error": "no job 'nope' in this workspace"}))
+        shutil.copytree(JOB, self.tmp / "jobs" / "no-feed", ignore=shutil.ignore_patterns("events.jsonl"))
+        r = self.get("/jobs/no-feed/live")                                       # the job is there: what it lacks is said
+        self.assertEqual((r.status_code, r.json), (404, {"error": "job 'no-feed' kept no feed for a live board"}))
+        r = self.get("/jobs/oracle-a/trials/nope/conversation")
+        self.assertEqual((r.status_code, r.json), (404, {"error": "no trial 'nope' in job 'oracle-a'"}))
 
     def test_a_comparison_is_what_the_command_prints(self):
         selected = comparison.resolve([":oracle-a", ":oracle-b"], {"": self.jobs})
@@ -230,29 +236,40 @@ class Reads(Case):
         r = self.get("/compare?job=oracle-a&job=nope")
         self.assertEqual((r.status_code, r.json), (404, {"error": "Run nope is unavailable in the active source."}))
 
-    def test_the_leaderboard_is_what_the_command_prints(self):
-        jobs, recorded = list(self.jobs), str(FIXTURES / "native" / "parts-arm" / "t1")     # a trial that kept its trajectory: two steps
-        for folder, benchmark, dataset in (("/one", "gaia", "gaia/gaia-validation"), ("/two", "tau3-bench", "tau3-bench/banking_knowledge")):
-            run = replace(scored_job([scored_trial("a", dir=recorded), scored_trial("b", "agent_error")], dataset=dataset, agent="codex", job_id="same"),
-                          dir=folder + "/same")
+    def test_the_leaderboard_is_the_one_its_page_reads_of_the_workspace_asked(self):
+        recorded = str(FIXTURES / "native" / "parts-arm" / "t1")                # a trial that kept its trajectory
+
+        def scored(name, folder, second, benchmark="gaia", dataset="gaia/gaia-validation"):
+            """A run by Codex, half passed or all, in ``folder``."""
+            run = replace(scored_job([scored_trial("a", dir=recorded), scored_trial("b", second)], dataset=dataset, agent="codex", job_id=name),
+                          dir=f"{folder}/{name}")
             run.identity = {"agent": "codex", "agent_version": "2.2.2", "benchmark": benchmark,
                             "benchmark_version": definitions.version_identity(definitions.get("benchmark", benchmark))}
-            jobs.append(run)
-        self.stack.enter_context(patch.object(web.shared, "_load_jobs", lambda: jobs))
-        name = web.shared.STATE["workspace"].name
-        got = self.get("/leaderboard").json
-        self.assertEqual(got, doc(leaderboard_service.document(leaderboard_service.qualified(jobs), workspace=name, workspace_open=True, deferred=True)))
-        row = next(r for r in got["rows"] if r["has_runs"])
-        self.assertEqual((row["name"], row["axes"]["Retrieval"]["score"], row["rank"], got["empty"]), ("Codex", .5, 1, ""))
-        read = sorted({i for axis in row["axes"].values() for e in axis["entries"] for i in e["runs"]})
-        self.assertEqual(read, ["/one/same", "/two/same"])                                           # two runs of one name, told apart by folder
-        self.assertEqual(row["metrics"]["steps"], {"value": 2.0, "count": 1})                        # the trajectory counts too, as --json
-        # another workspace's jobs are read for it, without opening it
+            return run
         other = workspace.create(web.shared.WS_HOME, [str(self.tmp / "jobs" / "oracle-b")], "only-b")
         workspace.save(other)
+        held = {web.shared.STATE["workspace"].name: [*self.jobs, scored("same", "/one", "agent_error"),
+                                                     scored("same", "/two", "agent_error", "tau3-bench", "tau3-bench/banking_knowledge")],
+                other.name: [scored("solo", "/three", "resolved")]}
+        self.stack.enter_context(patch.object(workspace, "load_jobs", lambda ws, roots, ends=None: held[ws.name]))
+        read = self.stack.enter_context(patch("nullius.leaderboard.metrics.Cache.read"))
+        got = self.get("/leaderboard").json
+        page = self.client.get("/api/leaderboard"); self.addCleanup(page.close)
+        self.assertEqual(got, page.json)                                         # the document its page reads, of the open workspace
+        row = next(r for r in got["rows"] if r["has_runs"])
+        self.assertEqual((row["name"], row["axes"]["Retrieval"]["score"], row["rank"], got["empty"]), ("Codex", .5, 1, ""))
+        runs = sorted({i for axis in row["axes"].values() for e in axis["entries"] for i in e["runs"]})
+        self.assertEqual(runs, ["/one/same", "/two/same"])                       # two runs of one name, told apart by folder
+        # another workspace's runs, read for it without opening it, each linked there
         there = self.get(f"/leaderboard?workspace={other.name}").json
-        self.assertEqual((there["empty"], [r["name"] for r in there["rows"] if r["has_runs"]]), ("No scored runs in this workspace", []))
-        self.assertNotEqual(there["context"], got["context"])
+        row = next(r for r in there["rows"] if r["has_runs"])
+        links = sorted({x["url"] for axis in row["axes"].values() for e in axis["entries"] for x in e["links"]})
+        self.assertEqual((row["axes"]["Retrieval"]["score"], links), (1.0, [f"/job/solo?workspace={other.name}"]))
+        # no file of a trial is opened: an agent wrote them, and the counts read from them stay uncounted
+        read.assert_not_called()
+        self.assertEqual(row["metrics"]["steps"], {"value": None, "count": 0})
+        with patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "job_roots": []}):
+            self.assertEqual(self.get("/leaderboard").json["empty"], "No workspace open")
         self.assertEqual(self.get("/leaderboard", token=None).status_code, 401)
 
     def test_another_workspace_by_name_and_one_that_is_not_there(self):
@@ -290,13 +307,28 @@ class Reads(Case):
         self.assertTrue(all(sorted(c) == ["key", "label", "offers", "ref", "summary"] for c in got["capabilities"]))
         self.assertTrue(all(sorted(c) == ["key", "label", "offers", "origin", "ref", "summary"] for c in got["agents"]))
         self.assertLessEqual({x["origin"] for x in got["benchmarks"] + got["agents"]}, set(catalog.ORIGINS))
-        # a task set kept on the server is listed under its benchmark, as its page lists it: what a recipe's task_sets names
+        self.assertEqual(g["fits"][0], "original")                                 # its own procedure, the builder's first choice
+        self.assertEqual(standard_recipe.compile(gsm8k(others=g["fits"][:1], limit=1))["errors"], [])
+        gaia = next(b for b in got["benchmarks"] if b["key"] == "gaia")            # lists cut from one list: a recipe takes one of them
+        self.assertEqual({d["id"]: d["subset_of"] for d in gaia["datasets"]},
+                         {x["id"]: x.get("subset_of") for x in definitions.get("benchmark", "gaia")["datasets"]})
+        self.assertIn("gaia-validation", {d["subset_of"] for d in gaia["datasets"]})
+        # a task set kept on the server is listed under its benchmark, as its command lists it: what a recipe's task_sets names
         self.assertEqual(g["task_sets"], [])
         entry = task_sets.create(definitions.get("benchmark", "gsm8k"), "First two", dataset="test", units=["0001", "0002"])
         g = next(b for b in self.get("/catalogue").json["benchmarks"] if b["key"] == "gsm8k")
-        self.assertEqual(g["task_sets"], task_sets.rows("gsm8k"))
-        self.assertEqual([(s["name"], s["label"], s["parts"]) for s in g["task_sets"]], [(entry["name"], "First two", {"test": 2})])
+        self.assertEqual(g["task_sets"], [standard_cli._set_rows(e) for e in task_sets.entries("gsm8k")[0]])
+        self.assertEqual([(s["name"], s["label"], s["parts"], s["id"]) for s in g["task_sets"]], [(entry["name"], "First two", {"test": 2}, entry["id"])])
         self.assertEqual([b["key"] for b in self.get("/catalogue").json["benchmarks"] if b.get("task_sets")], ["gsm8k"])
+        task_sets.rename("gsm8k", entry["name"], "Smoke pair")                     # renamed, it is the same set: the id a job records
+        g = next(b for b in self.get("/catalogue").json["benchmarks"] if b["key"] == "gsm8k")
+        self.assertEqual([(s["name"], s["id"]) for s in g["task_sets"]], [("smoke-pair", entry["id"])])
+        # sets that cannot be read cost the catalogue nothing else
+        folder = Path(task_sets.root_dir()) / task_sets.FOLDER
+        folder.rename(folder.with_name("aside"))
+        folder.symlink_to(folder.with_name("aside"))
+        r = self.get("/catalogue")
+        self.assertEqual((r.status_code, [b["key"] for b in r.json["benchmarks"] if b.get("task_sets")], len(r.json["benchmarks"])), (200, [], len(got["benchmarks"])))
 
 
 class Judgements(Case):

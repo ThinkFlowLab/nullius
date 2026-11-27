@@ -10,9 +10,10 @@ has one, and the SHA-256 of its secret, never the secret: a token is shown when
 it is created and cannot be read back. With no token in the file the API
 answers nothing; an expired token is refused as a revoked one is.
 
-``read`` reads what the pages show: the catalogue, jobs, trials, comparisons,
-saved recipes, runs. ``run`` also checks, starts, continues and stops runs,
-asks a judge and saves recipes. No scope reads or writes Settings, keys or licences.
+``read`` reads what the pages show: the catalogue, jobs, trials, judgements,
+comparisons, the leaderboard, saved recipes, runs. ``run`` also checks, starts,
+continues and stops runs, asks a judge and saves recipes. No scope writes Settings
+or reads a key or a licence.
 Standard library only.
 """
 from __future__ import annotations

@@ -6,10 +6,12 @@ never a cookie or a query argument: a page in a browser cannot send one, so
 these routes take neither the form token nor the loopback rule, and the
 served-name rule (``shared._served_name``) leaves them to their token.
 ``read`` reads; ``run`` also checks, starts, continues and stops runs, saves
-recipes and asks a judge. Nothing here reads or writes Settings, a key or a licence.
+recipes and asks a judge. Nothing here writes Settings or reads a key or a licence;
+the leaderboard says the Scoring weights it used.
 
 A read answers the document its command prints with ``--json``
-(``nullius.runs.cli``, ``nullius.compare.cli``, ``nullius.leaderboard.cli``, ``nullius.workspace_cli``).
+(``nullius.runs.cli``, ``nullius.compare.cli``, ``nullius.standard.cli``, ``nullius.workspace_cli``);
+the leaderboard, the one its page reads first.
 A run is a recipe of the Nullius standard, started as Review starts it:
 compiled on the server, its prerequisites asked first, the question Review
 asks answered by ``confirm``. A Harbor recipe is started from the builder.
@@ -24,7 +26,7 @@ import os
 import time
 
 from flask import Response, g, request
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, NotFound
 
 from nullius import access, execution, providers
 from nullius.catalogue import catalog
@@ -33,6 +35,7 @@ from nullius.judge import client as judge_client, store as judge_store
 from nullius.leaderboard import service as leaderboard_service
 from nullius.recipes import store as recipe_store
 from nullius.redact import redact
+from nullius.standard import cli as standard_cli
 from nullius.runs import artifacts, cli as runs_cli
 from nullius.standard.contract import definitions, match
 from nullius.standard.pages import recipe as standard_recipe
@@ -123,12 +126,22 @@ def api_info():
                   "where": ["local", *(h.entry for h in execute._hosts())]})
 
 
+def _task_sets(key: str) -> list:
+    """A benchmark's task sets as ``nullius standard set list --json`` prints them, each with the id a job records;
+    none when the user's sets cannot be read, which a check that names one says."""
+    try:
+        return [standard_cli._set_rows(e) for e in task_sets.entries(key)[0]]
+    except (task_sets.Refused, OSError):
+        return []
+
+
 @app.route(PREFIX + "/catalogue")
 @api("read")
 def api_catalogue():
     """The benchmarks with the runners that can run each, the agents and the capabilities; a standard benchmark with
-    its datasets, its task sets as its page lists them (a recipe's ``task_sets`` names one for a dataset) and what fits
-    it, by the reference a recipe names it with. A benchmark and an agent say their origin."""
+    its datasets (``subset_of``: the list one is cut from, and a recipe takes one of the lists cut from a list), its
+    task sets (a recipe's ``task_sets`` names one for a dataset) and what fits it, its own procedure first, by the
+    reference a recipe names it with. A benchmark and an agent say their origin."""
     defs = {kind: definitions.load(kind)[0] for kind in definitions.KINDS}
     fits = match.table(defs["benchmark"], defs["agent"], defs["capability"])
     standard = {b["key"]: b for b in defs["benchmark"]}
@@ -138,9 +151,11 @@ def api_catalogue():
         s = standard.get(b.key)
         if s:
             row.update(family=s["family"], needs=s.get("needs") or [],
-                       datasets=[{"id": d["id"], "label": d.get("label"), "units": d.get("units")} for d in s["datasets"]],
-                       task_sets=task_sets.rows(b.key),
-                       fits=[ref for ref, why in fits.get(b.key, {}).items() if not why])
+                       datasets=[{"id": d["id"], "label": d.get("label"), "units": d.get("units"), "subset_of": d.get("subset_of")}
+                                 for d in s["datasets"]],
+                       task_sets=_task_sets(b.key),
+                       fits=[*(k for k in s.get("setups") or {} if k == "original"),
+                             *(ref for ref, why in fits.get(b.key, {}).items() if not why)])
         benchmarks.append(row)
     others = {kind: [{"key": d["key"], "ref": d.get("_ref") or d["key"], "label": d.get("label"), "summary": d.get("summary"),
                       "offers": d.get("offers") or [], **({"origin": definitions.origin_of(d)} if kind == "agent" else {})}
@@ -179,7 +194,11 @@ def api_job(job_id):
 @api("read")
 def api_job_live(job_id):
     """The live board's snapshot, as the job page polls it."""
-    return runs.job_live(job_id)
+    _job(job_id)
+    try:
+        return runs.job_live(job_id)
+    except NotFound:
+        raise _Refused(404, f"job {job_id!r} kept no feed for a live board") from None
 
 
 def _trial(job_id, trial_name, tries=True):
@@ -201,6 +220,7 @@ def api_trial(job_id, trial_name):
 @api("read")
 def api_conversation(job_id, trial_name):
     """The trial page's conversation browser: paged, with its ``q``, ``kind``, ``page`` and ``step``."""
+    _trial(job_id, trial_name)
     return traces.conversation_data(job_id, trial_name)
 
 
@@ -274,12 +294,13 @@ def api_compare():
 @app.route(PREFIX + "/leaderboard")
 @api("read")
 def api_leaderboard():
-    """The workspace's composite agent scores, by the server's Scoring settings: the document
-    ``nullius leaderboard --json`` prints, its trajectory counts included."""
+    """The workspace's composite agent scores, by the server's Scoring settings: the document the Leaderboard page
+    reads first. Its trajectory counts (``steps``, ``calls``) stay uncounted: they are read from each trial's own
+    files, which are the agent's, and whole."""
     ws = shared.STATE["workspace"]
     name = request.args.get("workspace") or (ws.name if ws else "")
     jobs = leaderboard_service.qualified(shared._jobs_for_request())
-    return _json(leaderboard_service.document(jobs, workspace=name, workspace_open=bool(name or shared.STATE["roots"]), deferred=True))
+    return _json(leaderboard_service.document(jobs, workspace=name, workspace_open=bool(name or shared.STATE["roots"])))
 
 
 # Judgements: a judge model's answers about a trial, kept by the job they judge (web/judge.py). Reading one is
