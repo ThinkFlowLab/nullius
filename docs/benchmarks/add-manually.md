@@ -82,3 +82,13 @@ By hand: the [worked Harbor entry](../examples/new-benchmark/README.md).
 - [Add with an assistant](add-with-assistant.md)
 
 </div>
+
+## Task-name parts
+
+A benchmark can declare `task_parts` for scoring a subset across its datasets.
+Each part has a unique `id`, a display `label`, and nonempty `prefixes` matching
+the task names its driver records. Part IDs must differ from dataset IDs.
+Versions may override the parts. OSWorld uses `os__` for OS tasks and the
+`libreoffice_calc__`, `libreoffice_impress__`, and `libreoffice_writer__` prefixes
+for office tasks. A part does not establish full task coverage without a task
+manifest.

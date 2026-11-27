@@ -118,6 +118,19 @@ class Problems(unittest.TestCase):
         self.bad(BENCH, "benchmark", lambda d: d.update(example=True), "example: true or false")
         self.assertIs(definitions.get("agent", "reference", definitions.CATALOGUE).get("example"), True)
 
+    def test_task_parts_require_distinct_names_and_task_prefixes(self):
+        part = {"id": "office", "label": "Office tasks", "prefixes": ["writer__"]}
+        self.assertEqual(definitions.problems(dict(BENCH, task_parts=[part]), "benchmark"), [])
+        for parts in (None, {}, [dict(part, id="all")], [part, part],
+                      [dict(part, prefixes=[])], [dict(part, prefixes=[""])],
+                      [dict(part, prefixes="writer__")], [dict(part, label=" ")]):
+            self.bad(BENCH, "benchmark", lambda d: d.update(task_parts=parts), "task_parts:")
+
+    def test_agent_company_is_optional_nonempty_text(self):
+        self.assertEqual(definitions.problems(dict(AGENT, company="Maker"), "agent"), [])
+        for value in (None, "", "   ", 7):
+            self.bad(AGENT, "agent", lambda d: d.update(company=value), "company:")
+
     def test_unknown_port_is_named_and_one_of_the_other_family_refused(self):
         self.bad(BENCH, "benchmark", lambda d: d["needs"].append("agent.telepathy/v1"), "'agent.telepathy/v1' is not a port")
         self.bad(BENCH, "benchmark", lambda d: d["needs"].append("cap.memory/v1"), "not the agent")

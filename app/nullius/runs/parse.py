@@ -32,7 +32,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "21"
+SCHEMA = "22"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness, so a limit the run survived leaves nothing in result.json —
@@ -1103,7 +1103,7 @@ def identity_of(cfg: dict, res: dict, agent_version: str = "") -> dict:
     """What tells a Nullius standard run from another, from its ``config.json``
     (``cfg``) and its ``result.json`` (``res``): the benchmark, its version and
     options; the agent as the run named it, the version its trials report
-    (``agent_version``) and its options, defaults included; the model; the
+    (``agent_version``) and its options, defaults included; the backend its units ran on; the model; the
     provider; the serving providers pinned by model (``served_by``) and who
     served (``served``); and the limits in force: time limits by phase, turns,
     model calls, attempts of each unit, retries, units at a time, and the
@@ -1120,7 +1120,7 @@ def identity_of(cfg: dict, res: dict, agent_version: str = "") -> dict:
     out = {"benchmark": word(std.get("benchmark")), "benchmark_version": word(std.get("benchmark_version")),
            "benchmark_options": _options(std.get("benchmark_options")),
            "agent": word(std.get("plugged")), "agent_version": word(agent_version),
-           "agent_options": _options(std.get("options")), "model": word(first.get("model_name"))}
+           "agent_options": _options(std.get("options")), "backend": word(std.get("backend")), "model": word(first.get("model_name"))}
     # a control asks no model unless it has a judge or a simulated user; the provider it records is then a default
     asks = out["model"] or std.get("judge") or std.get("simulator") or std.get("kind") != "control"
     out["provider"] = word(std.get("provider")) if asks else ""

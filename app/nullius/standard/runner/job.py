@@ -32,6 +32,7 @@ from typing import Dict, List, Optional
 
 from nullius import ondisk
 from nullius.standard.calls import ledger
+from nullius.standard.contract import definitions
 from nullius.traces import otel
 from nullius.traces.breakdown import breakdown
 
@@ -225,9 +226,8 @@ def agent_name(other: dict) -> str:
 
 
 def _version(bench: dict) -> dict:
-    """A benchmark with versions says which one ran (``benchmark_version``), and the
-    ``key@version`` that names it; one without says nothing more than its key."""
-    v = bench.get("_version") if "@" in str(bench.get("_ref") or "") else None
+    """Record the explicit benchmark release or source pin, never an inferred current default."""
+    v = definitions.version_identity(bench)
     return {"benchmark_version": v, "benchmark_ref": bench["_ref"]} if v else {}
 
 
