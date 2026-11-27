@@ -505,6 +505,17 @@ class Locomo(unittest.TestCase):
         self.assertEqual({(s["model"], s["temperature"], s["max_tokens"], s["n"]) for s in seen}, {("gpt-4o-mini", 0, 32, 1)})
         self.assertEqual(seen[0]["messages"][0]["role"], "user")
 
+    def test_the_experiment_judge_is_asked_through_the_openai_client_the_reader_uses(self):
+        """Mem0's request, sent by the driver's own openai 0.28 to the run's judge route, never to the reader's."""
+        seen, base = _fake_model(self, '{"label": "CORRECT"}')
+        p = _driver(self, self.b, self.up, self.data)
+        got = p.request("score", unit="s", dir=self.tmp, transcript=[], answer=json.dumps({"s:2": "Paris"}),
+                        judge={"model": "gpt-4o-mini", "base_url": base, "key": "k"})
+        self.assertEqual({k: v for k, v in got.get("complement", {}).items() if k != "why"}, {"label": "Judge", "score": 1.0, "n": len(self.QA)}, got["detail"]["per_question"][0])
+        self.assertEqual({(s["model"], s["temperature"], json.dumps(s["response_format"])) for s in seen},
+                         {("gpt-4o-mini", 0.0, '{"type": "json_object"}')})
+        self.assertIn("Gold answer: Paris; the capital\nGenerated answer: Paris\n", seen[2]["messages"][0]["content"])
+
     def test_the_reader_is_run_chatgpt_as_published(self):
         """Its role follows the model's name, a name it does not know fails
         the question, and an API error is retried (here, once)."""

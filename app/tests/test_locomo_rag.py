@@ -68,6 +68,21 @@ EVALUATION = '''
 def eval_question_answering(qas, key):
     return [float(q[key] == q.get("answer", "Not mentioned")) for q in qas], 0, []
 '''
+# The stand-in client: the judge's requests, each kept beside the database; its reply says CORRECT for "hi",
+# fenced as some models fence it, WRONG for anything else, and fails on "boom".
+OPENAI = '''
+import json, os
+class ChatCompletion:
+    @staticmethod
+    def create(**kw):
+        with open(os.environ["JUDGE_LOG"], "a") as f:
+            f.write(json.dumps(kw) + "\\n")
+        said = kw["messages"][0]["content"].split("Generated answer: ")[1].split("\\n")[0]
+        if said == "boom":
+            raise RuntimeError("the judge failed")
+        label = "```json\\n" + json.dumps({"label": "CORRECT"}) + "\\n```" if said == "hi" else json.dumps({"label": "WRONG"})
+        return {"choices": [{"message": {"content": label}}]}
+'''
 GPT_UTILS = '''
 QA_PROMPT = "{}"
 def get_gpt_answers(in_data, out_data, prediction_key, args):
@@ -101,14 +116,15 @@ class Driver:
         os.makedirs(os.path.join(up, "prompt_examples"))
         files = {"task_eval/__init__.py": "", "task_eval/evaluation.py": EVALUATION,
                  "task_eval/gpt_utils.py": GPT_UTILS, "task_eval/evaluate_qa.py": EVALUATE_QA,
-                 "task_eval/get_facts.py": BUILD, "task_eval/get_session_summaries.py": BUILD, "openai.py": ""}
+                 "task_eval/get_facts.py": BUILD, "task_eval/get_session_summaries.py": BUILD, "openai.py": OPENAI}
         for name, text in files.items():
             with open(os.path.join(up, name), "w") as f:
                 f.write(textwrap.dedent(text))
         data = os.path.join(root, "locomo10.json")
         with open(data, "w") as f:
             json.dump([CONV], f)
-        env = dict(os.environ, NULLIUS_UPSTREAM=up, NULLIUS_DATASET=data, PYTHONPATH=up, NULLIUS_VERSION=version,
+        self.judged = os.path.join(root, "judge.jsonl")
+        env = dict(os.environ, NULLIUS_UPSTREAM=up, NULLIUS_DATASET=data, PYTHONPATH=up, NULLIUS_VERSION=version, JUDGE_LOG=self.judged,
                    **{"NULLIUS_OPTION_" + k.upper(): v for k, v in options.items()})
         self.p = subprocess.Popen([sys.executable, DRIVER], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
 
@@ -159,6 +175,53 @@ class Memory(unittest.TestCase):
                 self.assertIn("answered none of the 1 questions", failed["error"])
             finally:
                 d.close()
+
+
+class Judge(unittest.TestCase):
+    JUDGE = {"model": "gpt-4o-mini", "base_url": "http://relay/judge/v1", "key": "placeholder"}
+
+    def test_the_experiment_judge_marks_each_answer_beside_the_f1_and_skips_category_five(self):
+        with tempfile.TemporaryDirectory() as root:
+            d = Driver(root, {}, "full")
+            try:
+                plain = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=json.dumps({"conv-1:0": "hi"}))
+                self.assertFalse(os.path.exists(d.judged))                       # no judge named: none asked
+                self.assertNotIn("complement", plain)
+                got = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=json.dumps({"conv-1:0": "hi", "conv-1:1": "x"}),
+                            judge=self.JUDGE)
+                wrong = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=json.dumps({"conv-1:0": "bye"}), judge=self.JUDGE)
+                failed = d.ask(op="score", unit="conv-1", dir=root, transcript=[], answer=json.dumps({"conv-1:0": "boom"}), judge=self.JUDGE)
+            finally:
+                d.close()
+            with open(d.judged) as f:
+                asked = [json.loads(x) for x in f]
+        self.assertIn("words shared with the reference", got["complement"].pop("why"))              # what the page's tooltip opens with
+        self.assertEqual(got["complement"], {"label": "Judge", "score": 1.0, "n": 1})       # category 5 is not judged
+        self.assertEqual(got["reward"], plain["reward"])                                           # the F1 stays the score
+        self.assertEqual([q.get("judge") for q in got["detail"]["per_question"]], ["CORRECT", None])
+        self.assertEqual(wrong["complement"]["score"], 0.0)
+        self.assertNotIn("complement", failed)
+        self.assertEqual(failed["detail"]["per_question"][0]["judge_error"], "RuntimeError: the judge failed")
+        # Mem0's request: its prompt with the whole reference, JSON asked for, temperature 0, the run's judge route
+        self.assertEqual(len(asked), 3)
+        self.assertEqual({k: asked[0][k] for k in ("model", "api_base", "api_key", "temperature", "response_format")},
+                         {"model": "gpt-4o-mini", "api_base": "http://relay/judge/v1", "api_key": "placeholder", "temperature": 0.0,
+                          "response_format": {"type": "json_object"}})
+        self.assertIn("Question: What did A say?\nGold answer: hi\nGenerated answer: hi\n", asked[0]["messages"][0]["content"])
+
+    def test_the_original_setup_is_judged_too(self):
+        with tempfile.TemporaryDirectory() as root:
+            d = Driver(root, {})
+            try:
+                unit = os.path.join(root, "unit")
+                os.makedirs(unit)
+                got = d.ask(op="answer", unit="conv-1", dir=unit, setup="original", model="gpt-4-turbo", base_url="", key="", judge=self.JUDGE)
+                score = d.ask(op="score", unit="conv-1", dir=unit, transcript=[{"asked": "gpt-4-turbo"}], answer=got["answer"],
+                              setup="original", judge=self.JUDGE)
+            finally:
+                d.close()
+        self.assertEqual((score["reward"], score["complement"]), (1.0, {"label": "Judge", "score": 1.0, "n": 1, "why": score["complement"].get("why")}))
+        self.assertTrue(score["complement"]["why"])
 
 
 class Retrieval(unittest.TestCase):

@@ -59,6 +59,14 @@ answer   - a setup's (original, model): LoCoMo's own task_eval/evaluate_qa.py,
            scripts/generate_observations.sh and generate_session_summaries.sh
            pass (the latter's "---data-file" read as the --data-file it
            means). Its encoders run on a CUDA GPU, as published
+judge    - the experiment judge, only when the run names its model, whichever
+           memory runs: the LLM judge Mem0 published for LoCoMo (evaluation/metrics/llm_judge.py
+           at mem0ai/mem0 aae5989, Apache-2.0; its prompt and call copied
+           below, as that repository no longer holds them), asked of each
+           answer of categories 1 to 4 against the whole reference, as Mem0's
+           script reads it; the share it marks CORRECT is the score's
+           complement, beside the F1 and never in its place. A question whose
+           judge call failed is left unjudged, with its error
 oracle   - the reference control: each question's own "answer" field as that
            scorer reads it - for category 3, its first part (``gold``): there
            the field can carry the authors' reasoning after a ";", which
@@ -72,6 +80,7 @@ import inspect
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import textwrap
@@ -247,7 +256,7 @@ def upstream(script, argv, dir, env):
         raise RuntimeError(f"{script} exited {rc}: " + " | ".join(tail))
 
 
-def answer(unit, dir, setup, model, base_url, key):
+def answer(unit, dir, setup, model, base_url, key, **_):
     conv = load()[unit]
     fed = dict(conv, qa=[q for q in conv["qa"] if q.get("category") in CATEGORIES])
     asked = os.path.join(dir, ASKED)
@@ -274,7 +283,63 @@ def answer(unit, dir, setup, model, base_url, key):
     return {"answer": json.dumps({str(i): q.get(f"{k}_prediction", "") for i, q in enumerate(qa)}), "model": model}
 
 
-def score(unit, dir, transcript, answer, setup=None, **_):
+# The judge prompt Mem0 published for LoCoMo, mem0ai/mem0 evaluation/metrics/llm_judge.py at aae5989e78a6188b3b047c104d960c9ad0927e75, word for word.
+JUDGE_PROMPT = """
+Your task is to label an answer to a question as ’CORRECT’ or ’WRONG’. You will be given the following data:
+    (1) a question (posed by one user to another user), 
+    (2) a ’gold’ (ground truth) answer, 
+    (3) a generated answer
+which you will score as CORRECT/WRONG.
+
+The point of the question is to ask about something one user should know about the other user based on their prior conversations.
+The gold answer will usually be a concise and short answer that includes the referenced topic, for example:
+Question: Do you remember what I got the last time I went to Hawaii?
+Gold answer: A shell necklace
+The generated answer might be much longer, but you should be generous with your grading - as long as it touches on the same topic as the gold answer, it should be counted as CORRECT. 
+
+For time related questions, the gold answer will be a specific date, month, year, etc. The generated answer might be much longer or use relative time references (like "last Tuesday" or "next month"), but you should be generous with your grading - as long as it refers to the same date or time period as the gold answer, it should be counted as CORRECT. Even if the format differs (e.g., "May 7th" vs "7 May"), consider it CORRECT if it's the same date.
+
+Now it's time for the real question:
+Question: {question}
+Gold answer: {gold_answer}
+Generated answer: {generated_answer}
+
+First, provide a short (one sentence) explanation of your reasoning, then finish with CORRECT or WRONG. 
+Do NOT include both CORRECT and WRONG in your response, or it will break the evaluation script.
+
+Just return the label CORRECT or WRONG in a json format with the key as "label".
+"""
+JUDGE_LABEL = "Judge"
+JUDGE_WHY = ("The mean score counts words shared with the reference, so a right answer in other words scores low. "
+             "A judge model reads the meaning instead")
+
+
+def judge_says(q, answer, judge):
+    """Mem0's evaluate_llm_judge on one answer: its request, its reading of the reply (extract_json, then "label")."""
+    reply = openai.ChatCompletion.create(
+        model=judge["model"], api_base=judge["base_url"], api_key=judge["key"],
+        messages=[{"role": "user", "content": JUDGE_PROMPT.format(question=q["question"], gold_answer=q["answer"], generated_answer=answer)}],
+        response_format={"type": "json_object"}, temperature=0.0)
+    text = reply["choices"][0]["message"]["content"].strip()
+    found = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+    return "CORRECT" if json.loads(found.group(1) if found else text)["label"] == "CORRECT" else "WRONG"
+
+
+def judged(rows, judge):
+    """Each row (its question, answer and record) given the judge's label, or its error; the complement over them."""
+    said = []
+    for q, answer, row in rows:
+        if q["category"] == 5:                   # Mem0's script skips them
+            continue
+        try:
+            row["judge"] = judge_says(q, answer, judge)
+            said.append(row["judge"] == "CORRECT")
+        except Exception as e:
+            row["judge_error"] = f"{type(e).__name__}: {e}"
+    return {"label": JUDGE_LABEL, "score": sum(said) / len(said), "n": len(said), "why": JUDGE_WHY} if said else None
+
+
+def score(unit, dir, transcript, answer, setup=None, judge=None, **_):
     if setup:                                    # the upstream's own F1 per question, as evaluate_qa.py wrote it
         with open(os.path.join(dir, ANSWERS)) as f:
             qa = json.load(f)[0]["qa"]
@@ -290,12 +355,13 @@ def score(unit, dir, transcript, answer, setup=None, **_):
         parts = {"n": len(got), "by": "category",
                  "parts": [{"n": i + 1, "text": q["question"], "group": q["category"], "score": q.get(f"{k}_f1")}
                            for i, q in enumerate(qa) if isinstance(q.get(f"{k}_f1"), (int, float))]}
-        return {"reward": sum(got) / len(got) if got else 0.0, **({"parts": parts} if got else {}),
-                "detail": dict({"questions": len(qa), "scored": len(got), "model": model,
-                                "per_question": [dict({"question": q["question"], "reference": reference(q), "category": q["category"],
-                                                       "answer": q.get(f"{k}_prediction"), "f1": q.get(f"{k}_f1")},
-                                                      **({"retrieved": q.get(f"{k}_prediction_context"), "recall": q.get(f"{k}_recall")} if rag else {}))
-                                                 for q in qa]}, **rag)}
+        per = [dict({"question": q["question"], "reference": reference(q), "category": q["category"],
+                     "answer": q.get(f"{k}_prediction"), "f1": q.get(f"{k}_f1")},
+                    **({"retrieved": q.get(f"{k}_prediction_context"), "recall": q.get(f"{k}_recall")} if rag else {}))
+               for q in qa]
+        also = judged([(q, row["answer"] or "", row) for q, row in zip(qa, per) if isinstance(row["f1"], (int, float))], judge) if judge else None
+        return {"reward": sum(got) / len(got) if got else 0.0, **({"parts": parts} if got else {}), **({"complement": also} if also else {}),
+                "detail": dict({"questions": len(qa), "scored": len(got), "model": model, "per_question": per}, **rag)}
     asked = questions(unit)
     given = json.loads(answer) if answer else {}                 # nop: nothing, so every answer empty
     got = {i: given.get(i, "") for i in asked if not isinstance(given.get(i), dict)}
@@ -306,12 +372,13 @@ def score(unit, dir, transcript, answer, setup=None, **_):
     f1 = dict(zip(got, (float(v) for v in values)))
     parts = [{"n": n + 1, "text": q["question"], "group": q["category"], "score": f1[i]}
              for n, (i, q) in enumerate(asked.items()) if i in f1]
+    per = [dict({"id": i, "question": q["question"], "reference": reference(q), "category": q["category"], "evidence": q.get("evidence")},
+                **({"answer": got[i], "f1": f1[i]} if i in f1 else {"error": given[i]["error"]}))
+           for i, q in asked.items()]
+    also = judged([(q, got[i], row) for (i, q), row in zip(asked.items(), per) if i in f1], judge) if judge else None
     return {"reward": sum(f1.values()) / len(f1) if f1 else 0.0, **({"parts": {"n": len(f1), "by": "category", "parts": parts}} if f1 else {}),
-            "detail": {"questions": len(asked), "scored": len(f1),
-                       "per_question": [dict({"id": i, "question": q["question"], "reference": reference(q), "category": q["category"],
-                                              "evidence": q.get("evidence")},
-                                             **({"answer": got[i], "f1": f1[i]} if i in f1 else {"error": given[i]["error"]}))
-                                        for i, q in asked.items()]}}
+            **({"complement": also} if also else {}),
+            "detail": {"questions": len(asked), "scored": len(f1), "per_question": per}}
 
 
 def oracle(unit, dir):
