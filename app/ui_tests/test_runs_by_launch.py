@@ -174,7 +174,7 @@ class RunsByLaunch(unittest.TestCase):
         group = SimpleNamespace(job_ids=[], pending=["first", "second"], source="record", dataset="")
         first = SimpleNamespace(state="done", plan=SimpleNamespace(recipe={}, jobs=[]), refused=lambda _: None, never_ran=lambda _: False)
         second = SimpleNamespace(state="paused", plan=SimpleNamespace(recipe={}, jobs=[]), live_state=lambda _: "paused")
-        with patch("web.shared.run_for", side_effect=lambda key: {"first": first, "second": second}[key]), \
+        with patch("web.shared.run_for", side_effect=lambda key, job=None: {"first": first, "second": second}[key]), \
              patch("web.runs._control_planned", return_value=""):
             self.assertEqual(_launch_view(group, {}, {}, {})["paused"], "second")
 
@@ -182,7 +182,7 @@ class RunsByLaunch(unittest.TestCase):
         plan = SimpleNamespace(name="sweep-0919", recipe={"agents": ["my-agent", "opencode", "claude-code"]}, runner="harbor",
                                jobs=[{"name": "sweep-0919-strong"}, {"name": "sweep-0919-weak"}, {"name": "sweep-0919-claude-code"}])
         ex = SimpleNamespace(id="r1", plan=plan, state="paused", started=1.0, finished=None, job_state=lambda job_id: None, live_state=lambda job_id: "paused",
-                             summary=lambda: {"job_ids": [j["name"] for j in plan.jobs], "state": "paused"})
+                             jobs=self.temp.name, summary=lambda: {"job_ids": [j["name"] for j in plan.jobs], "state": "paused"})
         with patch.dict(execution.EXECUTIONS, {"r1": ex}, clear=True):
             html = self.get("/runs")
         rec = next(b for b in blocks(html) if 'data-launch="run:r1"' in b)
