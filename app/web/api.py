@@ -7,7 +7,8 @@ these routes take neither the form token nor the loopback rule, and the
 served-name rule (``shared._served_name``) leaves them to their token.
 ``read`` reads; ``run`` also checks, starts, continues and stops runs, saves
 recipes and asks a judge. Nothing here writes Settings or reads a key or a licence;
-the leaderboard says the Scoring weights it used.
+the leaderboard says the Scoring weights it used. A request that needs ``run``
+leaves a line in the server's log, with its token's name and id.
 
 A read answers the document its command prints with ``--json``
 (``nullius.runs.cli``, ``nullius.compare.cli``, ``nullius.standard.cli``, ``nullius.workspace_cli``);
@@ -22,10 +23,12 @@ from __future__ import annotations
 import functools
 import importlib.metadata
 import json
+import logging
 import os
 import time
+from urllib.parse import quote
 
-from flask import Response, g, request
+from flask import Response, after_this_request, g, request
 from werkzeug.exceptions import HTTPException, NotFound
 
 from nullius import access, execution, providers
@@ -46,6 +49,7 @@ from .core import app
 from . import builder, execute, judge, runs, shared, traces
 
 PREFIX = "/api/v1"
+app.logger.setLevel(logging.INFO)           # else the log drops what a token did (_logged)
 STANDARD_ONLY = "Only a recipe of the Nullius standard runs over the API: start a Harbor recipe from the builder."
 
 
@@ -60,8 +64,17 @@ def _error(status: int, message: str, **more) -> Response:
     return _json({"error": message, **more}, status)
 
 
+def _logged(record: dict, response: Response) -> Response:
+    """Who did what, in the server's log: the token's name and id, never its value, the address that sent it,
+    the request, its status and what a view says it made (``g.api_made``)."""
+    made = " ".join(quote(str(x)) for x in g.get("api_made", ()))
+    app.logger.info("token %r (%s) from %s: %s %s %s%s", record.get("name"), record["id"], request.remote_addr,
+                    request.method, quote(request.path), response.status_code, made and ": " + made)
+    return response
+
+
 def api(scope: str):
-    """A route of the API: its token checked for ``scope``, its refusals in JSON."""
+    """A route of the API: its token checked for ``scope``, its refusals in JSON, and logged when it needs more than ``read``."""
     def wrap(view):
         @functools.wraps(view)
         def guarded(*args, **kwargs):
@@ -71,6 +84,8 @@ def api(scope: str):
                 response = _error(401, "This API takes a token: Authorization: Bearer <token> (nullius access create NAME, on the server).")
                 response.headers["WWW-Authenticate"] = "Bearer"
                 return response
+            if scope != access.SCOPES[0]:
+                after_this_request(functools.partial(_logged, record))
             if not access.allows(record, scope):
                 return _error(403, f"This token's scope is {record['scope']}: this needs {scope}.")
             g.api_token = record
@@ -397,9 +412,11 @@ def api_recipe(recipe_id):
 def api_recipe_save():
     body = _body()
     try:
-        return _json(recipe_store.save(body.get("recipe"), body.get("id") or None))
+        saved = recipe_store.save(body.get("recipe"), body.get("id") or None)
     except ValueError as e:
         return _error(400, str(e))
+    g.api_made = [saved["id"]]
+    return _json(saved)
 
 
 # Runs: checked and started as Review does it.
@@ -475,6 +492,7 @@ def api_run_start():
         return _error(status, out.get("error") or "The run did not start.")
     out.pop("open", None)                   # a page's address
     out.setdefault("runs", [{k: v for k, v in out.items() if k != "ok"}])
+    g.api_made = [run["id"] for run in out["runs"]]
     return _json(out)
 
 

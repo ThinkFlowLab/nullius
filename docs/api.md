@@ -13,13 +13,21 @@ Nullius serves on one machine; a script, a pipeline or an assistant on another r
 ## Serve
 
 ```bash title="On the server"
-nullius serve --host 0.0.0.0
+nullius serve
 ```
 
 Then create a token: **Settings → API access**, or `nullius access create`.
 
+| The other machine reaches it | With |
+| --- | --- |
+| Over SSH | [A tunnel](getting-started.md#if-the-app-is-on-another-machine): the server is `http://127.0.0.1:5057` there |
+| Over HTTPS | A TLS proxy on the server that forwards `/api/v1` only |
+| On a trusted network | `nullius serve --host 0.0.0.0` |
+
 !!! warning "The network"
-    The pages have no login: `--host` on a shared network shows them to it. Tokens travel in clear over `http`. Put the server behind a tunnel or a TLS proxy.
+    The pages have no login: with `--host`, every machine that reaches the port reads the results and changes the workspaces. Tokens and results travel in clear over `http`.
+
+    A proxy that forwards the pages too must send `X-Forwarded-For`: a request without it is taken for a browser on the server.
 
 ## Tokens
 
@@ -40,6 +48,7 @@ nullius access revoke ID
 - Expires after its days, or never. Revoked or expired: refused at once.
 - No token created: the API answers nothing.
 - No scope changes Settings or reads a key or a licence. Model keys stay on the server. The leaderboard says the Scoring weights it used.
+- The server prints a line for each request that needs `run`: the token's name and id, the address, the request, its status.
 
 ## Python
 
@@ -48,7 +57,7 @@ One file, standard library only: installed with Nullius, or `nullius/client.py` 
 ```python title="Run a saved recipe, read the result"
 from nullius.client import Client
 
-nx = Client("http://bench.internal:5057", token)   # or NULLIUS_SERVER and NULLIUS_TOKEN
+nx = Client("http://127.0.0.1:5057", token)        # or NULLIUS_SERVER and NULLIUS_TOKEN
 
 check = nx.check("nightly")                        # a saved recipe's name or id, or a recipe dict
 run = nx.start("nightly", confirm=True)["runs"][0]
@@ -110,7 +119,7 @@ Records belong to the job, as the [pages](judgement.md) keep them.
 ## Shell
 
 ```bash title="On the other machine"
-export NULLIUS_SERVER=http://bench.internal:5057 NULLIUS_TOKEN=...
+export NULLIUS_SERVER=http://127.0.0.1:5057 NULLIUS_TOKEN=...
 nullius remote workspaces
 nullius remote jobs
 nullius remote job JOB [TRIAL]
@@ -129,7 +138,7 @@ nullius remote stop RUN
 ## Assistants
 
 ```bash title="An MCP server over stdio"
-NULLIUS_SERVER=http://bench.internal:5057 NULLIUS_TOKEN=... nullius mcp
+NULLIUS_SERVER=http://127.0.0.1:5057 NULLIUS_TOKEN=... nullius mcp
 ```
 
 Tools: read jobs, trials, judgements, comparisons and the leaderboard; check, start, follow and stop runs; ask a judge about one trial. A `read` token makes it read-only. `start_run` starts only with `confirm` when the recipe asks a question.

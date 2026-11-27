@@ -21,6 +21,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
+from flask.logging import default_handler
 from werkzeug.serving import make_server
 
 from nullius import access, cli, client, execution, mcp_server, workspace
@@ -63,6 +64,7 @@ class Case(unittest.TestCase):
         self.stack.enter_context(patch.object(web.shared, "WS_HOME", str(self.tmp / "workspaces")))
         self.stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}, clear=True))
         self.stack.enter_context(patch.dict(web.app.config, TESTING=True))
+        self.stack.enter_context(patch.object(default_handler, "level", logging.WARNING))     # one line a write otherwise
         self.stack.enter_context(patch.dict(execution.EXECUTIONS, clear=True))
         self.stack.enter_context(patch.object(execution, "SYNC_EVERY", 0.05))
         ws = workspace.create(web.shared.WS_HOME, [str(self.tmp / "jobs")], "api")
@@ -653,6 +655,29 @@ class Runs(Case):
         self.assertIn(s.json["state"], ("stopping", "stopped"))
         self.wait()
         self.assertEqual(self.get(f"/runs/{run_id}").json["state"], "stopped")
+
+    def test_a_write_leaves_its_token_s_name_in_the_server_s_log(self):
+        """Who started, saved or stopped what: the token's name and id, the address that sent it, the request, its
+        status and what it made. A read leaves no line, nor does a token the server does not know."""
+        self.assertTrue(web.app.logger.isEnabledFor(logging.INFO))              # else a served application prints none of them
+        self.stack.enter_context(patch.object(execution.Execution, "_main", lambda ex: None))
+        with self.assertLogs(web.app.logger, "INFO") as logs:
+            run = self.post("/runs", {"recipe": gsm8k(), "confirm": True}, environ_base={"REMOTE_ADDR": "10.0.0.7"}).json
+            saved = self.post("/recipes", {"recipe": gsm8k(title="Nightly")}).json
+            self.post("/runs", {"recipe": gsm8k()})                                 # the whole dataset: asked first
+            self.post("/runs", token="reader")
+            self.post("/runs/a%0Ab/stop")                                           # a line break in a name stays out of the log
+            self.get("/runs"); self.get("/jobs", token="runner"); self.post("/runs", token="nls_000000000000_" + "x" * 43)
+        runner, reader = self.runner_record["id"], self.reader.split("_")[1]
+        self.assertEqual([r.getMessage() for r in logs.records], [
+            f"token 'runner' ({runner}) from 10.0.0.7: POST /api/v1/runs 200: {run['id']}",
+            f"token 'runner' ({runner}) from 127.0.0.1: POST /api/v1/recipes 200: {saved['id']}",
+            f"token 'runner' ({runner}) from 127.0.0.1: POST /api/v1/runs 409",
+            f"token 'reader' ({reader}) from 127.0.0.1: POST /api/v1/runs 403",
+            f"token 'runner' ({runner}) from 127.0.0.1: POST /api/v1/runs/a%0Ab/stop 404",
+        ])
+        for token in (self.runner, self.reader):
+            self.assertNotIn(token.split("_", 2)[2], "\n".join(logs.output))
 
     def test_a_harbor_recipe_is_started_from_the_builder(self):
         """Its compiler is the builder's page: over the API it is refused with where to start it, checked or started."""
