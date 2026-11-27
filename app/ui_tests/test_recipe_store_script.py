@@ -1,7 +1,7 @@
 """The builder's saved-recipe code in command-builder.js under Node, with a
 stand-in fetch and storage: recipeStore (the list through the API, and the
 one-time move of the list an earlier version kept in the browser) and
-savedList (the dialog's rows, Delete greyed for a browser on another machine)."""
+savedList (the dialog's rows, Delete asking first, greyed for a browser on another machine)."""
 from __future__ import annotations
 
 import json
@@ -80,9 +80,10 @@ class RecipeStoreScript(unittest.TestCase):
                               "const row=local=>savedList({saved,local,why:'Only here.',esc,button,state});"
                               "process.stdout.write(JSON.stringify([row(true),row(false),savedList({saved:[],local:false,why:'',esc,button,state})]));")
         here, there, empty = out
-        self.assertIn('<button data-delete="0123456789abcdef">Delete</button>', here)
+        self.assertIn('<button data-ask="0123456789abcdef">Delete</button>', here)   # it asks first: the question's button deletes
+        self.assertNotIn("data-delete", here)
         self.assertIn('<button aria-disabled="true" title="Only here.">Delete</button>', there)
-        self.assertNotIn("data-delete", there)
+        self.assertNotIn("data-ask", there)
         self.assertIn('data-load="0123456789abcdef"', there)       # Load still works there
         self.assertEqual(empty, '<p class="nb-note">No saved recipes.</p>')
 

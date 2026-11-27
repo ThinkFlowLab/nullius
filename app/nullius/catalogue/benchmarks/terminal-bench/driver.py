@@ -8,6 +8,8 @@ authors' reference solution).
 
 units  - the dataset's tasks: a few that build fast (``small``), or every
          task whose reference solution downloads nothing (``offline``), or all 89 (``full``)
+describe - the task's id as its title, its instruction as its text, and its
+         task.toml's metadata difficulty and category as categories
 setup  - the task's instruction as the prompt; its own image (``image``:
          by the run's image option, the prebuilt image its task.toml names,
          pulled by digest, or its environment folder built as published - a
@@ -210,6 +212,18 @@ def units(dataset):
     return {"units": list(DATASETS[dataset])}
 
 
+def describe(dataset, **_):
+    out = {}
+    for unit in DATASETS[dataset]:
+        here, t = task(unit)
+        with open(os.path.join(here, "instruction.md")) as f:
+            text = f.read().strip()
+        meta = t.get("metadata") or {}
+        out[unit] = {"title": unit, "text": text,
+                     "categories": {"difficulty": meta.get("difficulty"), "category": meta.get("category")}}
+    return {"units": out}
+
+
 def setup(unit, dir):
     here, t = task(unit)
     with open(os.path.join(here, "instruction.md")) as f:
@@ -256,7 +270,7 @@ def oracle(unit, dir):
                                     "seconds": (t.get("agent") or {}).get("timeout_sec") or 900}}
 
 
-HANDLERS = {"units": units, "setup": setup, "score": score, "oracle": oracle}
+HANDLERS = {"units": units, "describe": describe, "setup": setup, "score": score, "oracle": oracle}
 for line in sys.stdin:
     try:
         req = json.loads(line)

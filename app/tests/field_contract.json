@@ -144,6 +144,7 @@
   "Mark": [
    "cls",
    "h",
+   "key",
    "r",
    "shape",
    "title",
@@ -177,6 +178,7 @@
   "Text": [
    "anchor",
    "cls",
+   "key",
    "leading",
    "lines",
    "x",
@@ -185,6 +187,7 @@
   "Value": [
    "baseline",
    "check",
+   "key",
    "label",
    "name",
    "note",
@@ -417,6 +420,7 @@
    "standard",
    "started_at",
    "state",
+   "task_set",
    "total_cache_tokens",
    "total_cost_usd",
    "total_input_tokens",

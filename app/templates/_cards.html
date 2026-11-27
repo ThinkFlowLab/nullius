@@ -29,7 +29,7 @@
 {# A collection of cards (NulliusTable.cards): its controls row, its cards, the note when none passes. `id` names it;
    `search`, `choices`, `only`, `layout` and each field's `filter` as the table's controls; `sort` the Sort by menu, over
    the fields that are not blank, or a list of their keys; `noun` what the live region counts.
-   The call block, when given, writes the cards instead (grid for each group, such as the Benchmarks' shelves); a
+   The call block, when given, writes the cards instead (grid for each group); a
    section in it marked data-group hides when none of its cards shows, and its data-group-n counts them.
    `layout` 'table' shows the same items as a table instead (rows), `default` the page's view without ?view=. #}
 {% macro cards(id, cols, items, search='', choices={}, only={}, empty='No items match.', noun='items', sort=false, layout=none, default='table') %}

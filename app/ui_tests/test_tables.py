@@ -206,6 +206,19 @@ process.stdout.write(JSON.stringify(out));
         self.assertEqual(got["back"], ["1–10 of 10", False])
         self.assertEqual(got["words"], ["L12", "L15", "L18"])                                       # the failed ones, still filtered
 
+    def test_a_row_asked_for_brings_its_page(self):
+        got = node(LAUNCHES + r'''
+const trs = t.table.tBodies[0].rows, out = {};
+t.per.value = '10'; t.per.dispatch('change');
+t.table.dispatch('table:show', {detail: {row: trs[23]}}); out.third = [t.note(), t.shown().includes('L23')];
+t.table.dispatch('table:show', {detail: {row: trs[25]}}); out.same = t.note();           // already on its page
+t.type('gamma');                                                                          // the odd rows: L24 does not pass
+t.table.dispatch('table:show', {detail: {row: trs[24]}}); out.filtered = t.note();
+t.table.dispatch('table:show', {detail: {row: trs[27]}}); out.among = [t.note(), t.shown().includes('L27')];    // the 14th of 15
+process.stdout.write(JSON.stringify(out));
+''')
+        self.assertEqual(got, {"third": ["21–30 of 30", True], "same": "21–30 of 30", "filtered": "1–10 of 15", "among": ["11–15 of 15", True]})
+
     def test_a_screen_reader_hears_a_change_once_typing_pauses(self):
         got = node(LAUNCHES + r'''
 const out = [];
@@ -388,6 +401,25 @@ process.stdout.write(JSON.stringify(out));
 
 
 class Menus(unittest.TestCase):
+    def test_leaderboard_sort_keeps_rank_groups_and_refreshes_changed_values(self):
+        got = node(r'''
+const rows = [
+  {search:'partial', 'sort-group':1, 'sort-tie':'partial', cells:['partial',100]},
+  {search:'B', 'sort-group':0, 'sort-tie':'B', cells:['B',60]},
+  {search:'A', 'sort-group':0, 'sort-tie':'A', cells:['A',60]},
+  {search:'absent', 'sort-group':2, 'sort-tie':'absent', cells:['absent','']}
+];
+const t=build({id:'leaderboard', cols:[['agent','text'],['overall','num']],rows,filter:null});
+t.tools.querySelector('[data-sort-col][value="overall"]').click();
+const before=t.shown();
+const b=t.table.tBodies[0].rows.find(r=>r.cells[0].textContent==='B');b.cells[1].textContent='80';
+t.table.dispatch('table:update');const updated=t.shown();
+t.type('partial');const filtered=t.shown();
+t.type('');process.stdout.write(JSON.stringify({before,updated,filtered,restored:t.shown()}));
+''')
+        self.assertEqual(got, {"before": ["A", "B", "partial", "absent"], "updated": ["B", "A", "partial", "absent"],
+                               "filtered": ["partial"], "restored": ["B", "A", "partial", "absent"]})
+
     def test_a_label_click_toggles_and_keeps_its_menu_open(self):
         got = node(LAUNCHES + r'''
 const cols = el('div', {'data-tools': 'columns', hidden: true}, el('label', {}, el('input', {type: 'checkbox', 'data-col': 'launch', checked: true}), ' Launch'));

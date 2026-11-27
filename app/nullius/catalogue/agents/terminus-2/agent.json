@@ -2,6 +2,7 @@
   "schema": "nullius.agent/v1",
   "key": "terminus-2",
   "label": "Terminus 2",
+  "company": "Harbor",
   "summary": "Harbor's terminal agent, used by Terminal-Bench.",
   "upstream": {
     "package": "harbor",

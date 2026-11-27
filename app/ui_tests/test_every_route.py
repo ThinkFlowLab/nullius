@@ -193,12 +193,15 @@ class EveryRoute(unittest.TestCase):
                     url = f"{url}?span={self.values['span']}"
                 if raw in HARBOR_QUERY:
                     url = f"{url}?{HARBOR_QUERY[raw]}"
+                if raw == "/api/leaderboard/metrics":
+                    context = self.get("/api/leaderboard").get_json()["context"]
+                    url = f"{url}?context={context}"
                 resp = self.get(url)
                 attempted += 1
                 self.assert_page_head(resp)
                 if raw in ("/", "/compare/pick"):              # the old picker opens Compare
                     self.assertEqual(resp.status_code, 302, url)
-                    self.assertEqual(resp.location, "/runs" if raw == "/" else "/compare?cohort=whole")
+                    self.assertEqual(resp.location, {"/": "/runs", "/compare/pick": "/compare?cohort=whole"}[raw])
                 else:
                     self.assertEqual(resp.status_code, 200, url)
         self.assertGreater(attempted, 0)

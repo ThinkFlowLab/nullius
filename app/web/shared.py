@@ -428,11 +428,9 @@ def _jobs_for_request():
 
 @app.url_defaults
 def _preserve_record_workspace(endpoint, values):
-    """Carry evidence provenance through links, forms, and lazy detail requests."""
-    record_endpoints = {"job", "trial", "save_trace", "artifact_page", "conversation_data",
-                        "trace_span_data", "reconcile_page", "feasibility_page", "judge_trial_route",
-                        "judge_job_route", "judge_tasks_route", "judge_feasibility_route"}
-    if has_request_context() and endpoint in record_endpoints and "workspace" not in values:
+    """Carry evidence provenance through links, forms, and lazy detail requests:
+    every route of a job's record takes its `job_id`."""
+    if has_request_context() and "job_id" in values and "workspace" not in values:
         name = request.args.get("workspace")
         if name:
             values["workspace"] = name

@@ -255,6 +255,17 @@ class BenchmarkVersions(unittest.TestCase):
         self.assertEqual([b["_ref"] for b in definitions.load("benchmark", self.root, every=True)[0]], ["toy@2", "toy@1"])
         self.assertEqual(definitions.load("benchmark", self.root)[1], [])
 
+    def test_a_version_is_named_by_its_branch_too_when_no_other_has_it(self):
+        d = copy.deepcopy(TOY)
+        d["versions"]["1"]["upstream"] = {"branch": "main", "tested": "a" * 40}
+        d["versions"]["2"]["upstream"] = {"branch": "dev", "tested": "b" * 40}
+        self.assertEqual(definitions.resolve(d, "main")["_ref"], "toy@1")                 # as pages name it
+        self.assertEqual(definitions.find([definitions.resolve(d, v) for v in ("1", "2")], "toy@dev")["_ref"], "toy@2")
+        d["versions"]["2"]["upstream"]["branch"] = "main"                                  # two of one branch: neither
+        self.assertIsNone(definitions.resolve(d, "main"))
+        self.assertIsNone(definitions.find([definitions.resolve(d, v) for v in ("1", "2")], "toy@main"))
+        self.assertEqual(definitions.resolve(d, "2")["_ref"], "toy@2")                    # its key still names it
+
     def test_problems_of_a_version_name_it(self):
         bad = definitions.problems(dict(TOY, versions=dict(TOY["versions"], **{"3": {"needs": []}})), "benchmark")
         self.assertTrue(any("versions.3: needs cannot differ between versions" in p for p in bad), bad)

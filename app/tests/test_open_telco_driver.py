@@ -33,8 +33,9 @@ DATA = {
     "teletables": [sample("t1", "C", ["a", "b", "c"], id="t_7_abc123"), sample("t2", "A", ["a", "b", "c"], id="t_9_def456")],
     "telemath": [sample("m1", "0.5"), sample("m2", "12.0")],
     "telelogs": [sample("l1", "C3")],
-    "3gpp_tsg": [sample("d1", "SA5")],
+    "3gpp_tsg": [sample("Classify the text. ###TEXT:\n{d1}", "SA5")],
 }
+ROWS = {"telemath": [{"question": "m1", "category": "Signal Processing"}, {"question": "m2", "category": ""}]}
 FILES = {"teleqna": "test_teleqna.json", "teletables": "test_teletables.json", "telemath": "test_telemath.json",
          "telelogs": "test_telelogs.json", "3gpp_tsg": "test_3gpp_tsg.json"}
 
@@ -89,12 +90,15 @@ class Upstream:
         model = ModuleType("inspect_ai.model")
         model.get_model = self.get_model
         model.ModelOutput = SimpleNamespace(from_content=lambda model, content: SimpleNamespace(content=content))
+        dataset = ModuleType("inspect_ai.dataset")
+        dataset.Sample = lambda input, metadata: SimpleNamespace(input=input, metadata=metadata)
+        dataset.hf_dataset = lambda path, name, split, sample_fields: [sample_fields(dict(r)) for r in ROWS[name]]
         scorer = ModuleType("inspect_ai.scorer")
         scorer.value_to_float = lambda: (lambda v: 1.0 if v == "C" else 0.0)
         registry = ModuleType("evals._registry")
         evals = ModuleType("evals")
         evals._registry = registry
-        mods = {"inspect_ai": inspect_ai, "inspect_ai.model": model, "inspect_ai.scorer": scorer,
+        mods = {"inspect_ai": inspect_ai, "inspect_ai.model": model, "inspect_ai.scorer": scorer, "inspect_ai.dataset": dataset,
                 "evals": evals, "evals._registry": registry}
         registry.__all__ = []
         for name, (fn, module) in self.tasks().items():
@@ -159,6 +163,18 @@ class OpenTelcoDriver(unittest.TestCase):
         self.assertIn(("teleqna", str(self.snap), {"subject": "Research overview"}), self.up.built)   # as the data write it
         everything = self.load("teleqna-lite", subject="all")
         self.assertEqual(len(everything.units("teleqna-lite")["units"]), 12)
+        # describe: the units' questions and, for a task that filters by one, the sample's value as its category
+        said = driver.describe("teleqna-lite")["units"]
+        self.assertEqual(list(said), driver.units("teleqna-lite")["units"])
+        self.assertEqual(said["04"], {"title": "q4", "text": "q4", "categories": {"subject": "Research overview"}})
+        self.assertEqual(everything.describe("teleqna-lite")["units"]["01"]["categories"], {"subject": "Lexicon"})
+        self.assertEqual(self.load("teletables-lite").describe("teletables-lite")["units"]["t_9_def456"],
+                         {"title": "t2", "text": "t2", "categories": {}})
+        # TeleMath's category from the row the task reads; 3GPP TSG's title the document past the prompt
+        self.assertEqual([u["categories"] for u in self.load("telemath-lite").describe("telemath-lite")["units"].values()],
+                         [{"category": "Signal Processing"}, {}])
+        self.assertEqual(self.load("3gpp_tsg-lite").describe("3gpp_tsg-lite")["units"]["1"]["title"], "d1")
+        self.assertIs(json.loads((FOLDER / "standard.json").read_text())["driver"]["describe"], True)
 
     def test_the_prompt_is_what_the_task_asks_its_model_and_nothing_is_written(self):
         driver = self.load("telemath-lite")

@@ -59,6 +59,8 @@ before = digest()
 web.app.config.update(TESTING=True)
 client = web.app.test_client()
 pages = ['/', '/benchmarks', '/agents', '/capabilities', '/settings',
+         '/leaderboard', '/scoring', '/api/leaderboard', '/api/scoring',
+         '/static/catalogue/agents/swe-agent.ico', '/static/catalogue/agents/digitalmate.svg',
          '/static/style.css', '/static/fonts/DMSans-Regular.woff2',
          '/static/fonts/dmsans-OFL.txt', '/static/brand/favicon.svg',
          '/static/brand/typesafe.png']

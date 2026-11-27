@@ -15,6 +15,7 @@ COMMANDS = {
     "serve": "open the web application",
     "runs": "inspect run output",
     "compare": "compare runs",
+    "leaderboard": "workspace composite agent scores",
     "flags": "write a run's task flags",
     "import": "import ATIF or OpenTelemetry output",
     "standard": "inspect and run standard definitions",
@@ -29,6 +30,7 @@ COMMANDS = {
 MODULES = {
     "runs": "nullius.runs.cli",
     "compare": "nullius.compare.cli",
+    "leaderboard": "nullius.leaderboard.cli",
     "flags": "nullius.runs.flags_cli",
     "import": "nullius.importers.cli",
     "standard": "nullius.standard.cli",

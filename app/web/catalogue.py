@@ -7,6 +7,7 @@ import html
 import json
 import os
 import re
+import threading
 import time
 
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
@@ -16,6 +17,7 @@ from nullius.standard.contract import definitions as standard_definitions
 from nullius.standard.pages import howto
 from nullius.standard.proofs import prove
 from nullius.standard.pages import recipe as standard_recipe
+from nullius.standard.runner import sets, units
 
 from .core import app
 from . import execute
@@ -45,25 +47,32 @@ def benchmark_cards(cat) -> list:
             for row in standard_recipe.benchmarks(cat)]
 
 
+NEEDS_NOTHING = ("none", "Nothing")   # the Needs filter's value for a benchmark that needs nothing of a machine
+
+
 def benchmark_choices(cat) -> dict:
-    """The values the benchmarks' cards are filtered by: their category, what runs them, their origin, what they run."""
+    """The values the benchmarks' cards are filtered by: their category, what runs them, their origin, what they run,
+    what they need of a machine (each requirement once, by its shortest label; nothing first)."""
+    needs = {}
+    for row in standard_recipe.benchmarks(cat):
+        for n, label in (row["host"] or {}).items():
+            needs[n] = min(needs.get(n, label), label, key=len)
     return {"category": [(c, c) for c in cat.categories], "runs": [(way, label) for way, (label, _) in RUNS_WITH.items()],
-            "origin": [(o, o.capitalize()) for o in catalog.ORIGINS], "evaluates": list(FAMILIES.items())}
+            "origin": [(o, o.capitalize()) for o in catalog.ORIGINS], "evaluates": list(FAMILIES.items()),
+            "needs": [NEEDS_NOTHING, *sorted(needs.items(), key=lambda x: x[1])]}
 
 
 def _card(row, sheet) -> dict:
     """A benchmark's card on the list (templates/_cards.html), from a row of ``recipe.benchmarks``: ``sheet`` the
     sprite holding its own mark, none when it has none."""
     b, ds, tasks, unit, needs = row["b"], row["datasets"], row["tasks"], row["unit"], row["host"]
-    return {"key": b.key, "href": url_for("benchmark_page", key=b.key), "shelf": b.origin, "keys": " ".join([b.key, *b.datasets]),
+    return {"key": b.key, "href": url_for("benchmark_page", key=b.key), "keys": " ".join([b.key, *b.datasets]),
             "search": " ".join([b.title, b.category, b.key, *(d.title for d in ds), *b.datasets]),
             "category": b.category, "origin": [{"text": o.capitalize(), "class": o, "value": o} for o in row["origins"]],
-            "default_origin": {"text": b.label, "class": b.origin, "value": b.origin},
             "icon": sheet and f"{sheet}#bm-{b.key}", "title": b.title, "domain": b.domain,
             "runs": [{"text": label, "class": "rt-" + way, "title": "Runs with " + name, "value": way}
                      for way, (label, name) in RUNS_WITH.items() if way in b.harness],
-            "needs": needs and {"text": "needs " + ", ".join(needs),
-                                "title": f"Some of its options need {', '.join(needs)} installed on the machine it runs on: see its page"},
+            "needs": [{"text": label, "value": n} for n, label in needs.items()] if needs else [dict(zip(("value", "text"), NEEDS_NOTHING))],
             "tasks": {"text": tasks, "label": unit.capitalize(), "value": tasks.replace(",", "").split("–")[-1]},
             "versions": {v: {"text": n, "label": u.capitalize()} for v, (n, u) in row["versions"].items()},
             "datasets": {"text": len(ds), "label": "Datasets" if len(ds) != 1 else "Dataset"},
@@ -107,15 +116,289 @@ def benchmark_page(key):
                           data={d.key: sources.of(d, b.harness, std_def, only=len(vds) == 1) for d in vds},
                           current=(x["version"] == v) if v else x["default"], **(_proven(page) if page else {})))
     shown = next(x for x in views if x["current"])
-    std, ds, data = shown["std"], cat.datasets_of(b), shown["data"]
+    std, data = shown["std"], shown["data"]
     versions = views if len(views) > 1 else []
     jobs = {j.job_id for j in shared._jobs_for_request()} if std else set()
+    # the user's sets, each with the version it was made at as this benchmark's definition names it
+    named = standard_definitions.get("benchmark", b.key) if std else None
+    task_sets = [dict(s, version_label=sets.version_label(named, s["version"]) if s["version"] else "") for s in sets.rows(b.key)] if std else []
     return render_template("catalogue/benchmark.html", cat=cat, b=b, csrf=shared._csrf_token(), papers=citation.parse(b.citation), data=data,
+                           task_sets=task_sets,
                            editable=entry is not None and not harbor_entry.not_editable(entry), std=std, std_jobs=jobs, versions=versions, views=views,
                            deletable=os.path.isfile(os.path.join(paths.catalogue_dir(), catalog.BENCHMARKS, key, catalog.ENTRY)),
                            restore_bundle=storage.can_restore("benchmarks", key, catalog.ROOT),
                            local=shared._local_client(),
                            providers=[(p, providers.label(p)) for p in providers.available(os.environ)])
+
+
+# --- a dataset's tasks: browsed, chosen and kept as a task set ---------------------------------
+
+# The listings being prepared, keyed by benchmark, resolved version and dataset.
+_PREPARING: dict = {}
+_PREPARING_LOCK = threading.Lock()
+
+
+def _std_dataset(key: str, dataset: str, version: str = ""):
+    """(the standard's definition of ``key``, at ``version`` or its default, and its dataset) or a 404. The definition
+    goes to the listing as the command line gives it, so both read the same cached listing."""
+    if version and not standard_definitions._VERSION.match(version):
+        abort(404)
+    bench = standard_definitions.get("benchmark", f"{key}@{version}" if version else key)
+    ds = next((d for d in (bench or {}).get("datasets") or [] if d["id"] == dataset), None)
+    if bench is None or ds is None:
+        abort(404)
+    return bench, ds
+
+
+def _listing_key(bench: dict, dataset: str):
+    return bench["key"], standard_definitions.version_of(bench), dataset
+
+
+def _listing_state(bench: dict, dataset: str) -> dict:
+    """The state function's answer; whether a listing is being made here now, and why the last one failed; and
+    ``say``, the line the page shows while the listing is not there; ``about``, what a listing the page starts on a
+    click does first; ``link``, where a licence it needs is set."""
+    got = units.state(bench, dataset)
+    with _PREPARING_LOCK:
+        job = _PREPARING.get(_listing_key(bench, dataset)) or {}
+    alive = bool(job.get("thread") and job["thread"].is_alive())
+    got = dict(got, preparing=alive and got["state"] != "cached", error="" if alive else job.get("error", ""))
+    nouns = (bench.get("units") or {}).get("nouns", "tasks")
+    fetched = ", then ".join(f["text"] for f in got["fetch"])
+    about, link = "", None
+    if got["state"] == "cached":
+        say = ""
+    elif got["error"]:
+        say = f"The list of {nouns} could not be made: {got['error']}. Ids can still be pasted."
+    elif got.get("needs"):
+        say = f"The list of {nouns} needs {' and '.join(units.needed(n) for n in got['needs'])}. Ids can still be pasted."
+        own = any(not n["provider"] for n in got["needs"])
+        link = {"href": url_for("settings_page") + (f"#access-{bench['key']}" if own else "#data-providers"),
+                "text": "Add it in Settings → " + ("Custom keys" if own else "Data providers")}
+    elif got["state"] == "refused":
+        say = f"The list of {nouns} cannot be made here: {got['reason']}. Ids can still be pasted."
+    elif got["state"] == "full" and not got["preparing"]:
+        say = f"List the {nouns} to choose from, or paste their ids."
+        about = f"Listing fetches {fetched}." if fetched else ""
+    else:
+        say = f"Preparing the list of {nouns}" + (f": fetching {fetched}." if fetched else ".") + " Ids can be pasted meanwhile."
+    return dict(got, say=say, about=about, link=link)
+
+
+@app.route("/benchmarks/<key>/tasks/<dataset>")
+def benchmark_tasks(key, dataset):
+    """A dataset's tasks, at the benchmark's default version or ``?version=``: searched, counted by category, ticked
+    and kept as a task set; opened from a set (``?set=NAME``), its tasks ticked, at the version it was made at, and
+    saved as another set when they change. The page asks for the listing once loaded; this request reads none."""
+    version = request.args.get("version", "")
+    entry, problem, broken = None, "", ""
+    if request.args.get("set"):
+        name = request.args["set"]
+        try:
+            entry = sets.load(key, name)
+        except sets.Refused as e:
+            # said without the file's path; a file there that cannot be read can still be deleted from the page
+            problem, broken = sets.plain(e, key, name), "" if isinstance(e, sets.NotFound) else name
+        if entry is not None and dataset not in sets.datasets_of(entry):
+            return redirect(url_for("benchmark_tasks", key=key, dataset=sets.datasets_of(entry)[0], set=entry["name"]))
+        if entry is not None and entry.get("version") and not version and standard_definitions.get("benchmark", f"{key}@{entry['version']}"):
+            version = entry["version"]            # its tasks as listed at the version it was made at
+    bench, ds = _std_dataset(key, dataset, version)
+    rev = sets.latest(entry) if entry else None
+    # each dataset's page, for the chosen of each (a set's own, or a new one's): the set's at each of its datasets
+    pages = {d["id"]: {"label": d.get("label") or d["id"],
+                       "href": url_for("benchmark_tasks", key=key, dataset=d["id"], set=entry["name"] if entry else None,
+                                       version=None if entry else (version or None))} for d in bench["datasets"]}
+    return render_template("catalogue/tasks.html", bench=bench, title=standard_definitions.title(bench),
+                           ds=ds, entry=entry, rev=rev, problem=problem, parts=sets.parts(entry, rev) if entry else {},
+                           total=sets.size(entry, rev) if entry else 0, pages=pages,
+                           label=sets.label_of(entry) if entry else "", version=standard_definitions.version_of(bench) or "",
+                           made_at=sets.version_label(bench, entry["version"]) if entry and entry.get("version") else "",
+                           broken=broken, nouns=(bench.get("units") or {}).get("nouns", "units"),
+                           noun=(bench.get("units") or {}).get("noun", "unit"), csrf=shared._csrf_token(),
+                           writable=shared._local_client())
+
+
+@app.route("/benchmarks/<key>/tasks/<dataset>/listing")
+def benchmark_tasks_listing(key, dataset):
+    """One page of the dataset's tasks for a search and category values, once the listing is in the cache; before
+    that, the state function's answer alone: this request never makes a listing."""
+    bench, _ = _std_dataset(key, dataset, request.args.get("version", ""))
+    st = _listing_state(bench, dataset)
+    if st["state"] != "cached":
+        return jsonify(ok=True, ready=False, **st)
+    cats: dict = {}
+    for word in request.args.getlist("cat"):
+        field_, eq, value = word.partition("=")
+        if eq and field_ and value:
+            cats.setdefault(field_, []).append(value)
+    page = request.args.get("page", "1")
+    try:
+        if request.args.get("ids"):           # every match's id, for "select the N that match"
+            got = units.find(bench, dataset, search=request.args.get("q", ""), categories=cats, size=None)
+            ids = [t["id"] for t in got["tasks"]]
+            if "sample" not in request.args:
+                return jsonify(ok=True, ready=True, total=got["total"], ids=ids)
+            # Pick N at random: N of the matches, drawn as set create --sample draws them, its seed in the note
+            n, seed = (_whole(request.args.get(k)) for k in ("sample", "seed"))
+            try:
+                ids, seed = units.draw(ids, n, seed)
+            except units.Refused as e:       # said in the page's words, not the command's flags
+                return jsonify(ok=False, error=_page_words(e)), 400
+            return jsonify(ok=True, ready=True, total=got["total"], ids=ids, seed=seed,
+                           note=units.sample_note(n, seed, request.args.get("q", ""), cats))
+        size = request.args.get("size", "")       # the page's Show: 10, 25 or 100 a page, or 0 for all
+        got = units.find(bench, dataset, search=request.args.get("q", ""), categories=cats,
+                         page=int(page) if page.isdigit() and int(page) >= 1 else 1,
+                         size=(int(size) or None) if size in ("10", "25", "100", "0") else units.PAGE)
+    except units.Refused as e:
+        return jsonify(ok=False, error=_page_words(e)), 400
+    return jsonify(ok=True, ready=True, **got)
+
+
+def _page_words(e: Exception) -> str:
+    """A refusal of ``units`` as the page says it, its flag the page's word: ``--sample 900: the list holds 165`` as
+    ``900 at random: the list holds 165.``, ``--seed 7`` as ``Seed 7``, ``--category kind`` as ``Category kind``."""
+    said = str(e)
+    for flag, word in (("--sample ", "{} at random"), ("--seed ", "Seed {}"), ("--category ", "Category {}")):
+        if said.startswith(flag):
+            value, _, rest = said[len(flag):].partition(":")
+            said = word.format(value) + ":" + rest
+    return said.rstrip(".") + "."
+
+
+def _whole(word):
+    """A number the page sent as a whole number, else the text itself, for ``units.draw`` to refuse; None for none."""
+    if word is None or word == "":
+        return None
+    try:
+        return int(word) if word.isdigit() else word
+    except ValueError:
+        return word
+
+
+@app.route("/benchmarks/<key>/tasks/<dataset>/prepare", methods=["POST"])
+def benchmark_tasks_prepare(key, dataset):
+    """Make a listing, out of this request: it fetches what the state named, then starts the light listing
+    command, or the driver from its own environment, installed first (``List questions``). One the state refuses, a
+    licence not set among the reasons, is never started."""
+    shared._require_csrf()
+    if not shared._local_client():
+        abort(403, description="Listings are prepared from a browser on the application host only.")
+    bench, _ = _std_dataset(key, dataset, request.args.get("version", ""))
+    identity = _listing_key(bench, dataset)
+    st = units.state(bench, dataset)
+    if st["state"] not in ("light", "full"):
+        return jsonify(ok=st["state"] == "cached", **_listing_state(bench, dataset))
+
+    def make():
+        try:
+            units.listing(bench, dataset)
+        except (units.Refused, OSError) as e:
+            with _PREPARING_LOCK:
+                _PREPARING[identity]["error"] = str(e)
+    with _PREPARING_LOCK:
+        job = _PREPARING.get(identity)
+        if not (job and job["thread"].is_alive()):
+            job = _PREPARING[identity] = {"thread": threading.Thread(target=make, daemon=True), "error": ""}
+            job["thread"].start()
+    return jsonify(ok=True, **_listing_state(bench, dataset))
+
+
+@app.route("/benchmarks/<key>/tasks/<dataset>/rows", methods=["POST"])
+def benchmark_tasks_rows(key, dataset):
+    """The chosen ids as rows (show selected, ids pasted): each with its title and categories when the listing is in
+    the cache, and ``unknown``, the ids it does not list; without the listing, the ids alone."""
+    bench, _ = _std_dataset(key, dataset, request.args.get("version", ""))
+    ids = [str(u) for u in (request.get_json(silent=True) or {}).get("units") or [] if isinstance(u, str)]
+    if units.state(bench, dataset)["state"] != "cached":
+        return jsonify(ok=True, ready=False, tasks=[{"id": u, "title": "", "text": "", "categories": {}} for u in ids], unknown=[])
+    have = {t["id"]: t for t in units.listing(bench, dataset)["tasks"]}
+    return jsonify(ok=True, ready=True, tasks=[have[u] for u in ids if u in have], unknown=[u for u in ids if u not in have])
+
+
+def _set_problem(key: str, name: str) -> str:
+    """Why ``name`` cannot name a task set, in a line for the page, or "". Any words do: the name commands take is
+    made from them."""
+    if not name.strip():
+        return "Give the task set a name."
+    try:
+        sets.check_label(name)
+    except sets.Refused as e:
+        return str(e)[0].upper() + str(e)[1:] + "."
+    return ""
+
+
+@app.route("/benchmarks/<key>/tasks/<dataset>/save", methods=["POST"])
+def benchmark_tasks_save(key, dataset):
+    """Keep the ticked ids as a new task set ({name, description, parts: {dataset: ids}, version}), at the version
+    the page listed: the name typed is its label, and the name commands take is made from it. Ids of several
+    datasets make a set of each, one of them its list. A set is never changed: the page of one saves another."""
+    shared._require_csrf()
+    if not shared._local_client():
+        abort(403, description="Task sets are saved from a browser on the application host only.")
+    body = request.get_json(silent=True) or {}
+    bench, _ = _std_dataset(key, dataset, str(body.get("version") or ""))
+    given = body.get("parts") if isinstance(body.get("parts"), dict) else {dataset: body.get("units")}
+    parts = {str(d): [u for u in ids if isinstance(u, str)] for d, ids in given.items() if isinstance(ids, list)}
+    parts = {d: ids for d, ids in parts.items() if ids}
+    if not parts:
+        return jsonify(ok=False, error="Tick at least one task."), 400
+    label = str(body.get("name") or "").strip()
+    problem = _set_problem(key, label)
+    if problem:
+        return jsonify(ok=False, error=problem), 400
+    try:
+        entry = sets.create(bench, label, parts=parts, description=str(body.get("description") or "").strip(),
+                            note=str(body.get("note") or ""))
+    except sets.Refused as e:
+        return jsonify(ok=False, error=str(e)), 400
+    shown = dataset if dataset in parts else next(iter(parts))
+    return jsonify(ok=True, name=entry["name"], open=url_for("benchmark_tasks", key=key, dataset=shown, set=entry["name"]))
+
+
+def _set_guard(key: str, dataset: str) -> str:
+    """Every change to a set from its page: the form token and a browser on this machine; the set's name."""
+    shared._require_csrf()
+    if not shared._local_client():
+        abort(403, description="Task sets are changed from a browser on the application host only.")
+    _std_dataset(key, dataset)
+    return (request.form.get("set") or "").strip()
+
+
+@app.route("/benchmarks/<key>/tasks/<dataset>/rename", methods=["POST"])
+def benchmark_tasks_rename(key, dataset):
+    """Give the set another name, its id and tasks kept (a job that ran it finds it by its id); the name commands
+    take is made from it again. Then its page under the new name. An empty name, one not allowed or its own is
+    refused."""
+    name = _set_guard(key, dataset)
+    new = (request.form.get("name") or "").strip()
+    try:
+        was = sets.label_of(sets.load(key, name))
+        problem = f"The task set is named {was} already." if new and new == was else _set_problem(key, new)
+        if problem:
+            flash(problem, "error")
+            return redirect(url_for("benchmark_tasks", key=key, dataset=dataset, set=name))
+        entry = sets.rename(key, name, new)
+    except sets.Refused as e:
+        flash(sets.plain(e, key, name), "error")
+        return redirect(url_for("benchmark_tasks", key=key, dataset=dataset, set=name))
+    flash(f"Renamed {was} to {entry['label']}. Runs made from it follow the new name.", "ok")
+    return redirect(url_for("benchmark_tasks", key=key, dataset=dataset, set=entry["name"]))
+
+
+@app.route("/benchmarks/<key>/tasks/<dataset>/delete", methods=["POST"])
+def benchmark_tasks_delete(key, dataset):
+    """Remove the set from the catalogue; then the benchmark's task sets. A job that ran it keeps its record and names
+    it without a link."""
+    name = _set_guard(key, dataset)
+    try:
+        gone = sets.delete(key, name)
+    except sets.Refused as e:
+        flash(sets.plain(e, key, name), "error")
+        return redirect(url_for("benchmark_tasks", key=key, dataset=dataset, set=name))
+    flash(f"Deleted the task set {sets.label_of(gone) if gone else name}. Runs made from it stay.", "ok")
+    return redirect(url_for("benchmark_page", key=key, _anchor="task-sets"))
 
 
 @app.route("/catalogue/<group>/<key>/use-bundled", methods=["POST"])

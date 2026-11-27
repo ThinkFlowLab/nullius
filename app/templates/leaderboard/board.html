@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% from '_page.html' import page_head %}
+{% import '_tables.html' as tables %}
+{% block title %}{{ 'Scoring settings' if view == 'scoring' else 'Leaderboard' }} · Nullius{% endblock %}
+{% block head %}<script src="{{ url_for('static', filename='tables.js') }}"></script><link rel="stylesheet" href="{{ url_for('static', filename='leaderboard/leaderboard.css') }}">{% endblock %}
+{% macro picks() %}<span class="lb-picks"><span class="lb-pick"><svg class="lb-swatch" viewBox="0 0 22 14" aria-hidden="true" data-swatch="0"></svg><select data-agent-select aria-label="Agent"></select></span><span class="muted">vs</span><span class="lb-pick"><svg class="lb-swatch" viewBox="0 0 22 14" aria-hidden="true" data-swatch="1"></svg><select data-vs-select aria-label="Compared with"><option value="average">Average</option></select></span></span>{% endmacro %}
+{% block body %}
+{% set actions %}<a class="btn ghost lb-head-link" id="lb-switch" href="{{ url_for('leaderboard') if view == 'scoring' else url_for('scoring_page') }}">{{ 'Leaderboard' if view == 'scoring' else 'Scoring settings' }}</a>{% endset %}
+{{ page_head('Scoring settings' if view == 'scoring' else 'Leaderboard', actions=actions, id='lb-title') }}
+{% if board.warning %}<p role="alert" id="lb-warning">{{ board.warning }}</p>{% endif %}
+<div id="lb-board-view"{{ ' hidden' if view == 'scoring' }}>
+{% if board.empty %}<p id="lb-empty">{{ board.empty }}</p>{% endif %}
+<section class="lb-panel" id="leaderboard-board">
+<div class="lb-head">
+  <div class="seg-toggle" aria-label="Axes"><button type="button" data-family="capabilities" aria-pressed="true">Capabilities</button><button type="button" data-family="domains" aria-pressed="false">Domains</button></div>
+</div>
+{% set cols = [dict(key='rank', label='#', type='num', fixed=true, sticky=true), dict(key='agent', label='Agent', fixed=true, sticky=true), dict(key='overall', label='Overall', type='num', fixed=true)] %}
+{% for name in board.axes %}{% set _ = cols.append(dict(key=name, label=name, type='num', off=board.averages[name].score is none)) %}{% endfor %}
+{% for key, label in [('steps','Steps'),('time','Time'),('calls','Tool calls'),('cost','Cost')] %}{% set _ = cols.append(dict(key=key, label=label, type='num')) %}{% endfor %}
+{# Company and Status are filters, never columns: Columns and Sort by leave them out #}
+{% set sortable = cols|map(attribute='key')|list %}
+{% set _ = cols.append(dict(key='company', label='Company', table=false, menu=false)) %}
+{% set _ = cols.append(dict(key='status', label='Status', table=false, menu=false)) %}
+{% set filters = dict(agent=[],company=[],status=[('ranked','Ranked'),('not-ranked','Not ranked'),('no-run','No run')]) %}
+{% for r in board.rows %}{% if (r.agent,r.name) not in filters.agent %}{% set _=filters.agent.append((r.agent,r.name)) %}{% endif %}{% if r.company and (r.company,r.company) not in filters.company %}{% set _=filters.company.append((r.company,r.company)) %}{% endif %}{% endfor %}
+{{ tables.controls('leaderboard-table', cols, search='Search by agent or company', columns=true, choices=filters, sort=sortable) }}
+<div class="table-wrap"><table class="grid sortable tools lb-table" id="leaderboard-table" data-table>
+<thead><tr>{{ tables.heads(cols|rejectattr('table','sameas',false)|list) }}</tr></thead>
+<tbody>{% for r in board.rows %}
+<tr data-key="{{ r.key }}" data-search="{{ r.name }} {{ r.company }} {{ r.version_label }}" data-sort-group="{{ 0 if r.rank else 1 if r.overall is not none else 2 }}" data-f-agent="{{ r.agent }}" data-f-company="{{ r.company }}" data-f-status="{{ 'ranked' if r.rank else 'not-ranked' }}{{ '\nno-run' if not r.has_runs }}">
+<td data-col="rank" class="sticky-col" data-sort="{{ r.rank or '' }}"></td>
+<td data-col="agent" class="sticky-col sticky-edge" data-sort="{{ r.name }}"><button type="button" class="lb-agent" data-select="{{ r.key }}"><span class="lb-mark">{{ agent_mark('agent',r.agent,r.name) }}</span><span class="lb-who"><b data-name>{{ r.name }}</b><small><span class="lb-company">{{ r.company }}{{ ' · ' if r.company }}</span>{{ r.version_label }}</small></span></button></td>
+<td data-col="overall" data-sort="{{ r.overall if r.overall is not none else '' }}"></td>
+{% for name in board.axes %}<td data-col="{{ name }}" data-sort="{{ r.axes[name].score if r.axes[name].score is not none else '' }}"></td>{% endfor %}
+{% for key in ['steps','time','calls','cost'] %}<td data-col="{{ key }}">–</td>{% endfor %}
+</tr>{% endfor %}</tbody></table></div>
+{{ tables.pager('leaderboard-table', 'No matching agents.', 'agents', sizes=(5, 10, 25, 50)) }}
+</section>
+<section id="leaderboard-efficiency" class="lb-two">
+  <div class="lb-panel"><div class="lb-head"><h2>Efficiency and cost</h2><div class="seg-toggle" id="lb-metric" aria-label="Measure"><button type="button" data-metric="time" aria-pressed="true">Time</button><button type="button" data-metric="cost" aria-pressed="false">Cost</button></div></div><div class="lb-scroll"><svg id="lb-scatter" class="lb-scatter" viewBox="0 0 640 426" role="group" aria-label="Overall against time or cost per task"></svg></div></div>
+  <article id="lb-card" class="lb-panel lb-card"></article>
+</section>
+<section id="leaderboard-strips" class="lb-panel"><div class="lb-head"><h2>Resolved rate by domain and capability</h2>{{ picks() }}</div><div class="lb-chart-pair"><div><h3>By domain</h3><div data-chart="strips-domains"></div></div><div><h3>By capability</h3><div data-chart="strips-capabilities"></div></div></div></section>
+<section id="leaderboard-radars" class="lb-panel"><div class="lb-head"><h2>Resolved rate profiles</h2>{{ picks() }}</div><div class="lb-chart-pair"><div><h3>By domain</h3><div data-chart="radars-domains"></div></div><div><h3>By capability</h3><div data-chart="radars-capabilities"></div></div></div></section>
+</div>
+{% include 'leaderboard/_scoring.html' %}
+<div id="lb-evidence" class="lb-evidence" role="dialog" aria-label="Score evidence" hidden></div>
+<script type="application/json" id="lb-data">{{ board|tojson }}</script>
+<script type="application/json" id="lb-marks">{% set marks={} %}{% for r in board.rows %}{% set _=marks.update({r.key: agent_mark_url(r.agent)}) %}{% endfor %}{{ marks|tojson }}</script>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='leaderboard/motion.js') }}"></script><script src="{{ url_for('static', filename='leaderboard/board.js') }}"></script><script src="{{ url_for('static', filename='leaderboard/scoring.js') }}"></script>{% endblock %}

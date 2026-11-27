@@ -15,6 +15,7 @@
     "license": "MIT"
   },
   "driver": {
+    "describe": true,
     "command": [
       "{install}/.venv/bin/python",
       "{here}/driver.py"
@@ -38,7 +39,15 @@
   ],
   "units": {
     "noun": "instance",
-    "nouns": "instances"
+    "nouns": "instances",
+    "categories": {
+      "repo": {
+        "label": "Repository"
+      },
+      "difficulty": {
+        "label": "Difficulty"
+      }
+    }
   },
   "environments": {
     "task": {

@@ -7,6 +7,8 @@ standard library only, so the driver runs on the machine's python3.
 
 units  - the problems' task ids, in the file's order (human_eval/data.py,
          read_problems)
+describe - the entry point as its title, its function's docstring as its
+         text (the prompt when it has none)
 setup  - writes solution.py (the problem's prompt: imports, signature,
          docstring) into the workspace and asks for the body
 score  - the upstream's own check_correctness (human_eval/execution.py) with
@@ -92,6 +94,22 @@ FENCE = re.compile(r"```[A-Za-z0-9_+-]*\n(.*?)```", re.S)
 
 def units(dataset, setup=None):
     return {"units": list(load())}
+
+
+def docstring(p):
+    """The docstring of the problem's function, read from its prompt's syntax; none when it does not parse."""
+    try:
+        tree = ast.parse(p["prompt"])
+    except (SyntaxError, ValueError):
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == p["entry_point"]:
+            return ast.get_docstring(node)
+    return None
+
+
+def describe(dataset=None, **_):
+    return {"units": {u: {"title": p["entry_point"], "text": docstring(p) or p["prompt"]} for u, p in load().items()}}
 
 
 def code_of(text):
@@ -230,7 +248,7 @@ def oracle(unit, dir):
     return {"answer": ""}
 
 
-HANDLERS = {"units": units, "setup": setup, "answer": answer, "score": score, "oracle": oracle}
+HANDLERS = {"units": units, "describe": describe, "setup": setup, "answer": answer, "score": score, "oracle": oracle}
 
 if __name__ == "__main__":        # check_correctness starts a process: where it re-imports this module, nothing is served
     for line in sys.stdin:

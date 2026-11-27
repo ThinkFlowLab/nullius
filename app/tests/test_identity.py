@@ -31,6 +31,6 @@ class Identity(unittest.TestCase):
         css = (APP / 'static/fonts.css').read_text()
         for source in re.findall(r'url\(([^)]+)\)', css):
             self.assertTrue((APP / 'static' / source).is_file(), source)
-        for family in ('dmsans', 'ibmplexmono', 'instrumentserif'):
+        for family in ('dmsans', 'ibmplexmono', 'ibmplexsans', 'instrumentserif'):
             license = APP / f'static/fonts/{family}-OFL.txt'
             self.assertIn('SIL OPEN FONT LICENSE', license.read_text())

@@ -59,6 +59,7 @@ is: `grep -m1 '"""' app/nullius/*.py app/nullius/runs/*.py`.
 | --- | --- |
 | `app/nullius/` itself | What all share: settings, paths, providers, hosts, running a recipe |
 | `app/nullius/runs/`, `traces/`, `compare/` | Reading one job tree, a trial's trace, several runs |
+| `app/nullius/leaderboard/` | Composite scoring, selected task evidence and profile scoring documents |
 | `app/nullius/catalogue/` | A folder per entry under `benchmarks/`, `agents/`, `capabilities/`: its definition and code |
 | `app/nullius/recipes/`, `harbor/` | What the builder offers and saves; the Harbor a recipe pins |
 | `app/nullius/importers/`, `judge/` | Foreign results in; questions to a judge model |

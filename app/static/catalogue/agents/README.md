@@ -7,6 +7,8 @@ rendering a logo makes no request to its upstream website.
 
 | Agent | Asset source |
 | --- | --- |
+| DigitalMate | ThinkFlowLab supplied ThinkFlow Orbit artwork: cream rounded tile, charcoal orb and ring, orange satellite (`digitalmate.svg`) |
+| SWE-agent | [Official repository favicon](https://github.com/SWE-agent/SWE-agent/blob/3ea751c087f32b16e039a2233dd6eefecef325d5/docs/assets/favicon.ico), copied unchanged (`swe-agent.ico`) |
 | Codex | OpenAI's mark in `../../brand/marks.svg`, identifying its maker |
 | Goose | [Official repository logo](https://github.com/block/goose/blob/775b3958c394ae2747cfb01791d3a45ac579139a/documentation/static/img/logo.svg) |
 | JiuwenSwarm | [Official application logo](https://github.com/openJiuwen-ai/jiuwenswarm/blob/ffc539d74ba6fe034c60b6eac5ae3ea1da04b7dc/jiuwenswarm/channels/web/frontend/public/logo.svg) |
@@ -14,5 +16,5 @@ rendering a logo makes no request to its upstream website.
 | OpenCode | [Official favicon](https://github.com/anomalyco/opencode/blob/66f1fa816d583fdfa0f52eff1c7d56c8458b1c4e/packages/ui/src/assets/favicon/favicon.svg) |
 | Terminus 2 | Harbor's mark in `../../brand/marks.svg`, identifying its maker |
 
-The four SVG files are copied unchanged from these pinned sources. These marks
+Upstream assets are copied unchanged from these pinned sources. These marks
 belong to their respective owners; inclusion does not imply endorsement.
