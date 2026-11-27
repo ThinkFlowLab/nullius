@@ -50,8 +50,8 @@ class StartWithPage(unittest.TestCase):
         self.started_on_some(d)
         self.open(d.parent)
         html = self.page("/job/r1?view=results")
-        self.assertEqual(text(html, r'<span id="plan-run".*?</span>'), "3 of 6 planned tasks run")
-        self.assertEqual(text(html, r'<span class="k">Trials</span>.*?</div>'), "Trials 3 of 6 planned tasks run")   # the head's Trials cell
+        self.assertEqual(text(html, r'<span id="plan-run".*?</span>'), "3 of 6 tasks run")
+        self.assertEqual(text(html, r'<span class="k">Trials</span>.*?</div>'), "Trials 3 of 6 tasks run")   # the head's Trials cell
         self.assertEqual(text(html, r'<dt>tasks run</dt><dd id="tasks-run".*?</dd>'), "tasks run 3 of 6")
         self.assertIn('id="tasks-run" class="warn"', html)
         self.assertEqual(text(html, r'<div class="row tot">.*?</div>'), "3 Trials of 6 planned")
@@ -133,7 +133,7 @@ class StartWithPage(unittest.TestCase):
         sets.create(dict(BENCH, datasets=[{"id": "all"}]), "late", dataset="all", units=["t-4", "t-0"])
         self.open(d.parent)
         html = self.page("/job/r1?view=results")
-        self.assertEqual(text(html, r'<span id="plan-run".*?</span>'), "2 of 6 planned tasks run")
+        self.assertEqual(text(html, r'<span id="plan-run".*?</span>'), "2 of 6 tasks run")
         rows = re.findall(r'<tr data-outcome="not_run".*?</tr>', html, re.S)
         self.assertEqual(len(rows), 4)
         self.assertEqual([text(row, r".*") for row in rows], [f"t-{k} — Not run" for k in range(2, 6)])
