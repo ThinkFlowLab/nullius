@@ -227,6 +227,13 @@
 
 #nullius-builder .nb-model-control input { padding: 6px 36px 6px 11px; min-height: 34px; font-size: 13px; }
 @media (max-width: 650px) { #nullius-builder .nb-model-control input { font-size: 16px; } }
+/* A model and its reasoning on one line; the provider, model and Served by rows widen alike so a name is not cut. */
+#nullius-builder .nb-model-line { display: flex; gap: 8px; min-width: 0; }
+#nullius-builder .nb-model-line > .nb-model-control { flex: 1 1 auto; }
+#nullius-builder .nb-reasoning { flex: 0 0 12rem; }
+#nullius-builder .nb-reasoning:empty { display: none; }
+@media (max-width: 650px) { #nullius-builder .nb-model-line { flex-wrap: wrap; } #nullius-builder .nb-model-line > .nb-model-control { flex-basis: 100%; } }
+@media (min-width: 651px) { #nullius-builder label.nb-field.ui-field-row:has(.nb-model-line), #nullius-builder label.nb-field.ui-field-row.std-served, #nullius-builder #nb-form:has(.nb-model-line) label.nb-field.ui-field-row:has([data-field="provider"]) { grid-template-columns: minmax(0, 1fr) minmax(180px, 56%); } }
 
 /* Compact settings rows use one shared control column, including paired fields. */
 #nullius-builder .nb-two:has(> .ui-field-row) { grid-template-columns: minmax(0, 1fr); gap: 0; }

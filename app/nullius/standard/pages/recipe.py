@@ -467,7 +467,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     ``served_by``: on OpenRouter, the serving providers each model field
     pins, ``{model|simulator|judge: [slug, ...]}``, checked as ``--served-by``
     is and compiled into it for each job that calls that model, by the name
-    the run sends it as."""
+    the run sends it as. ``reasoning``: each model field's level
+    (``{model|simulator|judge: level}``), compiled into ``--reasoning`` the
+    same way, for each job whose agent or benchmark sets none of its own;
+    ``own_reasoning`` says, by field, what does when every job's does."""
     d = defs or _all()
     errors, notes = [], []
     # each problem once; shown: the step already says it elsewhere, so only Review lists it; field: the input it is about; unset: nothing is
@@ -476,7 +479,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         if not any(e["step"] == STEP[step] and e["message"] == message for e in errors):
             errors.append({"step": STEP[step], "message": message, **({"shown": True} if shown else {}), **({"field": field} if field else {}), **({"unset": True} if unset else {})})
     out = {"errors": errors, "notes": notes, "review": [], "jobs": [], "confirm": "", "script": "", "parts": [], "model": "",
-           "served_models": {}}
+           "served_models": {}, "own_reasoning": {}}
     name = str(recipe.get("name") or "")
     if not _NAME.match(name):
         add("limits", "The recipe's name may hold letters, digits, dots, dashes and underscores.")
@@ -780,6 +783,14 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                 add("model", "Served by " + problem + ".")
             if served and provider_ != "openrouter":
                 add("model", "Served by needs OpenRouter, the provider that routes a model to several: choose it, or leave Served by empty.")
+    # reasoning is {model|simulator|judge: level}, one of the levels the builder asked the model for (relay.LEVELS)
+    asked_levels = recipe.get("reasoning")
+    levels: Dict[str, str] = {}
+    if asked_levels not in (None, {}):
+        if not isinstance(asked_levels, dict) or any(k not in roles or v not in (None, "", *relay.LEVELS) for k, v in asked_levels.items()):
+            add("model", f"Reasoning is a level for the model, the user simulator's or the judge's: {', '.join(relay.LEVELS)}.")
+        else:
+            levels = {k: v for k, v in asked_levels.items() if v}
     cap = recipe.get("max_usd")
     if cap in ("", None):
         cap = None
@@ -947,6 +958,41 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["served_models"] = {role: next((sent_of(p)[role] for p in sorted(picks, key=lambda q: q["control"]) if _MODEL.match(sent_of(p)[role] or "")), None)
                             for role in roles}
 
+    def options_for_pick(d: dict, p: dict) -> dict:
+        """The benchmark's options for this dataset and this pick: a setup's own, or those of the port."""
+        return definitions.bench_options_of(b, d["id"], dict(chosen_opts, **agent_of(p)), p["o"]["key"] if p.get("setup") else "yours",
+                                            kind=None if p.get("setup") else p["o"].get("_kind"))[0]
+
+    def own_reasoning(d: dict, p: dict) -> Dict[str, str]:
+        """The fields whose reasoning job (d, p) leaves to its agent or its benchmark, and what they set: an agent's
+        ``reasoning_effort``, a setup's ``agent_reasoning_effort`` and the simulator's ``user_reasoning_effort``."""
+        bench = options_for_pick(d, p)
+        own = {"model": bench.get("agent_reasoning_effort") if p.get("setup") else p["opts"].get("reasoning_effort"),
+               "simulator": bench.get("user_reasoning_effort")}
+        return {r: v for r, v in own.items() if v and v != "default" and sent_of(p).get(r)}
+
+    def reasoned(d: dict, p: dict) -> Dict[str, str]:
+        """The --reasoning of one job: each field's level, by the model it sends, where no one sets its own."""
+        own = own_reasoning(d, p)
+        return {sent_of(p)[r]: v for r, v in levels.items() if sent_of(p).get(r) and r not in own}
+    for ds_ in dss:
+        for pick_ in picks:
+            mine_, set_ = own_reasoning(ds_, pick_), {}
+            for role_, level_ in levels.items():
+                model_ = sent_of(pick_).get(role_)
+                if not model_ or role_ in mine_:
+                    continue
+                if set_.get(model_, level_) != level_:
+                    add("model", f"Reasoning sets {model_} twice, at different levels: give its fields the same one.")
+                if any(sent_of(pick_)[o] == model_ for o in mine_):
+                    add("model", f"{model_} reasons as {pick_['o']['label']} sets it: give the {SERVED_LABEL[role_]} another model, or leave its reasoning at the default.")
+                set_[model_] = level_
+    # by field, what sets its reasoning in place of the recipe when every job that calls it does: the builder greys its select
+    for role_ in roles:
+        owned_ = [own_reasoning(ds_, pick_).get(role_) for ds_ in dss for pick_ in picks if sent_of(pick_).get(role_)]
+        if owned_ and all(owned_):
+            out["own_reasoning"][role_] = sorted(set(owned_))
+
     def pinned(p: dict) -> Dict[str, List[str]]:
         """The --served-by of one job: the pins of the models it calls."""
         called = called_of(p)
@@ -990,11 +1036,6 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     def job_of(d: dict, p: dict, index: int) -> str:
         return f"{launch_of(d, p)}-shard-{index}of{of}" if of > 1 else launch_of(d, p)
 
-    def options_for_pick(d: dict, p: dict) -> dict:
-        """The benchmark's options for this dataset and this pick: a setup's own, or those of the port."""
-        return definitions.bench_options_of(b, d["id"], dict(chosen_opts, **agent_of(p)), p["o"]["key"] if p.get("setup") else "yours",
-                                            kind=None if p.get("setup") else p["o"].get("_kind"))[0]
-
     def command_for(d: dict, p: dict, index: int) -> str:
         o, control, given = p["o"], p["control"], p["given"]
         m = p["model"] if p.get("setup") else model
@@ -1020,7 +1061,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *(["--unsandboxed"] if side == "agent" and not control and not p.get("setup") and backend == "local" else []),
                  *(["--shard", f"{index}/{of}", "--launch", launch_of(d, p)] if of > 1 else []),
                  *limits.cli_words(limits.of(targets[index - 1])),
-                 *[w for m_, slugs in pinned(p).items() for w in ("--served-by", f"{m_}={','.join(slugs)}")], "--from-run"]
+                 *[w for m_, slugs in pinned(p).items() for w in ("--served-by", f"{m_}={','.join(slugs)}")],
+                 *[w for m_, v in reasoned(d, p).items() for w in ("--reasoning", f"{m_}={v}")], "--from-run"]
         return " ".join(shlex.quote(w) for w in words) + ' --jobs "${NULLIUS_JOBS:-jobs_standard}"'
 
     def script_for(d: dict, p: dict, command: str, index: int) -> str:
@@ -1128,7 +1170,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       else f"{providers.label(providers.choice(provider, str(recipe.get('endpoint') or '')))} · " + (model if needs_model else ", ".join(p["o"]["sent"] for p in picks if p.get("setup")) or "the judge only")
                       + (f" · user simulator {sim_model or (b.get('simulator') or {}).get('model')}" + (" (leaderboard)" if lb.get("simulator") else "" if sim_model else " (official)") if b.get("simulator") else "")
                       + (f" · judge {judge_model or b['score']['judge']['model']}" + ("" if judge_model else " (official)") if (b.get("score") or {}).get("judge") else "")
-                      + "".join(f" · {SERVED_LABEL[r_]} served by {', '.join(s)}" for r_, s in served.items())],
+                      + "".join(f" · {SERVED_LABEL[r_]} served by {', '.join(s)}" for r_, s in served.items())
+                      + "".join(f" · {SERVED_LABEL[r_]} reasoning {', '.join(out['own_reasoning'][r_])} ({'the agent' if r_ == 'model' else 'the benchmark'}'s)"
+                                if r_ in out["own_reasoning"] else f" · {SERVED_LABEL[r_]} reasoning {levels[r_]}"
+                                for r_ in roles if r_ in levels or r_ in out["own_reasoning"])],
                      [STEP["limits"], "Scope", (f"{begin} first, {planned - begin if planned else 'the rest'} later" if start_of and begin
                       else f"{planned or 'all'} planned, {begin or 'all'} to begin" if set_of or start_of
                       else f"{'first ' + str(n) if isinstance(limit, int) else 'all ' + str(total or '')} {nouns}")

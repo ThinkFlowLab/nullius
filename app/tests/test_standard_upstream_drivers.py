@@ -586,7 +586,7 @@ class LongMemEval(unittest.TestCase):
 
     def test_the_reader_prompt_is_the_upstreams_template(self):
         seen, base = _fake_model(self, " 18 days ")
-        p = _driver(self, self.b, self.up, self.data)
+        p = _driver(self, self.b, self.up, self.data, NULLIUS_OPTION_READING="direct")
         said = p.request("produce", unit="q1", dir=self.tmp, recalled=[{"id": "q1", "memory": "MEM"}], model="m", base_url=base, key="k")
         self.assertEqual(said["answer"], "18 days")
         prompt = seen[0]["messages"][0]["content"]
@@ -594,6 +594,17 @@ class LongMemEval(unittest.TestCase):
         self.assertTrue(prompt.endswith("History Chats:\n\nMEM\n\nCurrent Date: 2023/05/30\nQuestion: How many days?\nAnswer:"), prompt)
         # run_generation's main asks with these, gen_length 500 without chain of thought
         self.assertEqual({(s["model"], s["n"], s["temperature"], s["max_tokens"]) for s in seen}, {("m", 1, 0, 500)})
+
+    def test_recalled_as_picks_the_upstreams_template_for_it(self):
+        starts = {"chats-and-facts": "I will give you several history chats between you and a user, as well as the relevant user facts",
+                  "facts": "I will give you several facts extracted from history chats between you and a user."}
+        for value, start in starts.items():
+            seen, base = _fake_model(self, "18 days")
+            p = _driver(self, self.b, self.up, self.data, NULLIUS_OPTION_RECALLED_AS=value)
+            p.request("produce", unit="q1", dir=self.tmp, recalled=[{"id": "q1", "memory": "MEM"}], model="m", base_url=base, key="k")
+            prompt = seen[0]["messages"][0]["content"]
+            self.assertTrue(prompt.startswith(start), prompt)
+            self.assertIn("\n\nMEM\n\nCurrent Date: 2023/05/30\nQuestion: How many days?\n", prompt)
 
 
 if __name__ == "__main__":

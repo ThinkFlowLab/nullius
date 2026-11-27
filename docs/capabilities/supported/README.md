@@ -16,7 +16,7 @@ Every capability in the catalogue, the port each has proven, and the benchmarks 
 
 | Port | Label | What it proves |
 |---|---|---|
-| `cap.memory/v1` | Memory | add {session} then recall {question} -> {memory}: what it kept that bears on the question. |
+| `cap.memory/v1` | Memory | add {session} then recall {question, date} -> {memory}: what it kept that bears on the question, asked on date when the benchmark gives one. |
 
 <table>
 <thead><tr><th rowspan="2">Capability</th><th colspan="1" class="group">Ports</th></tr><tr><th>Memory</th></tr></thead>

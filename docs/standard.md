@@ -32,7 +32,7 @@ A pair is an **agent benchmark** × an **agent**, or a **capability benchmark** 
 | `agent.search/v1` | Search an HTTP collection with the agent's own tools, retrieve a source and answer with evidence | Find a source, choose the current one, follow a reference (3 checks) |
 | `agent.browser/v1` | A browser, through an MCP server Nullius starts | Defined; its kit comes with the first browser benchmark |
 | `agent.computer/v1` | A desktop seen in screenshots and driven by mouse and keyboard actions, through [the tools of an MCP server the benchmark's runner serves](ports/agent-computer-v1.md) | Four basic checks, five skills on a small desktop in a container ([the kit](ports/agent-computer-v1.md#the-kit)) |
-| `cap.memory/v1` | `add {session}` then `recall {question}` → `{memory}`; a session is `{id, date, turns: [{role, text}], text}` | Recall a place and an exact name among distractors (2 checks); nothing it stores is a credential |
+| `cap.memory/v1` | `add {session}` then `recall {question, date}` → `{memory}`; a session is `{id, date, turns: [{role, text}], text}`; `date`, when the question is asked, only when the benchmark has one | Recall a place and an exact name among distractors (2 checks); nothing it stores is a credential |
 
 - **The last message** follows ACP `messageId` boundaries and other events (a tool call, a notice). Without IDs, session metadata parts messages but never erases the final answer.
 - **Notices** (`session.notices`): an adapter sends its warnings as a `notice`, a system step of the trajectory, never as text in front of the answer.
