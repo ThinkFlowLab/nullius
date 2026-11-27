@@ -54,11 +54,11 @@ class Parts(unittest.TestCase):
             self.assertNotIn("parts", json.load(f))      # the parts live in parts.json, said once
 
     def test_a_complement_is_weighed_by_its_own_count_and_kept_apart_from_the_mean(self):
-        self.trial("conv-a", [1.0] * 4, complement={"label": "Mem0 judge", "score": 1.0, "n": 2})
-        self.trial("conv-b", [0.0] * 12, complement={"label": "Mem0 judge", "score": 0.25, "n": 8})
-        self.trial("conv-c", [0.5] * 2, complement={"label": "Mem0 judge", "score": 0.5, "n": 0})   # over nothing: none
+        self.trial("conv-a", [1.0] * 4, complement={"label": "Judge", "score": 1.0, "n": 2})
+        self.trial("conv-b", [0.0] * 12, complement={"label": "Judge", "score": 0.25, "n": 8})
+        self.trial("conv-c", [0.5] * 2, complement={"label": "Judge", "score": 0.5, "n": 0})   # over nothing: none
         j = parse.parse_job(self.job)
-        self.assertEqual(j.complement, {"label": "Mem0 judge", "score": (2 * 1.0 + 8 * 0.25) / 10, "n": 10})
+        self.assertEqual(j.complement, {"label": "Judge", "score": (2 * 1.0 + 8 * 0.25) / 10, "n": 10})
         self.assertAlmostEqual(j.mean_score, 5 / 18)                                         # the F1, unchanged
         self.trial("conv-d", [1.0], complement={"label": "another judge", "score": 1.0, "n": 1})
         self.assertEqual(parse.parse_job(self.job).complement, {})                           # two judges: no one number

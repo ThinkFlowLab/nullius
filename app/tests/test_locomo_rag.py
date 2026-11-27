@@ -195,7 +195,7 @@ class Judge(unittest.TestCase):
                 d.close()
             with open(d.judged) as f:
                 asked = [json.loads(x) for x in f]
-        self.assertEqual(got["complement"], {"label": "Mem0 judge", "score": 1.0, "n": 1})       # category 5 is not judged
+        self.assertEqual(got["complement"], {"label": "Judge", "score": 1.0, "n": 1})       # category 5 is not judged
         self.assertEqual(got["reward"], plain["reward"])                                           # the F1 stays the score
         self.assertEqual([q.get("judge") for q in got["detail"]["per_question"]], ["CORRECT", None])
         self.assertEqual(wrong["complement"]["score"], 0.0)
@@ -219,7 +219,7 @@ class Judge(unittest.TestCase):
                               setup="original", judge=self.JUDGE)
             finally:
                 d.close()
-        self.assertEqual((score["reward"], score["complement"]), (1.0, {"label": "Mem0 judge", "score": 1.0, "n": 1}))
+        self.assertEqual((score["reward"], score["complement"]), (1.0, {"label": "Judge", "score": 1.0, "n": 1}))
 
 
 class Retrieval(unittest.TestCase):

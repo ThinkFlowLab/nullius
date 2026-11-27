@@ -336,10 +336,10 @@ class Recipe(unittest.TestCase):
         self.assertNotIn("--judge-model", plain["script"])
         self.assertNotIn("judge", rows(plain)["Model"])
         self.assertIn("--judge-model gpt-4o-mini", judged["script"])
-        self.assertTrue(rows(judged)["Model"].endswith(" · Mem0 judge gpt-4o-mini (experiment)"))
+        self.assertTrue(rows(judged)["Model"].endswith(" · Judge gpt-4o-mini (experiment)"))
         self.assertEqual((self.compiled(others=["nop"])["keyless"], self.compiled(others=["nop"], judge_model="gpt-4o-mini")["keyless"]),
                          (True, False))                          # a control judged needs the key its judge asks with
-        self.assertEqual(recipe.page_of("locomo")["experiment_judge"], {"label": "Mem0 judge", "model": "gpt-4o-mini"})
+        self.assertEqual(recipe.page_of("locomo")["experiment_judge"], {"label": "Judge", "model": "gpt-4o-mini"})
 
     def test_paper_filter_also_applies_to_a_memory_capability(self):
         longmem = dict(benchmark="longmemeval", datasets=["longmemeval_s"], others=["mem0"], model_choice="paper")

@@ -145,7 +145,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `n_infra` | Trials removed from the adjusted denominator as infrastructure failures or run-imposed interruptions. | derived | any |
 | `mean_score` | The mean graded score, weighted by each trial's number of scored parts when present. When no trial passes or fails, it is the headline and the rates read —. | derived | mixed |
 | `mean_score_planned` | Each trial's score, averaged over every planned trial; unscored: 0. Whole runs only. | derived | mixed |
-| `complement` | An experiment judge's share of answers right (LoCoMo's Mem0 judge), weighted by how many it judged; beside `mean_score`, never in its place. Only when the run named a judge model. | derived | mixed |
+| `complement` | An experiment judge's share of answers right (LoCoMo's judge), weighted by how many it judged; beside `mean_score`, never in its place. Only when the run named a judge model. | derived | mixed |
 | `score_by_group · parts_by` | The mean score per value of the field the benchmark breaks it down by (a question's category), from `verifier/parts.json`. | derived | mixed |
 | `n_regressions` | Trials whose patch broke a previously passing test. | derived | swe-bench |
 | `counts` | Trials per outcome. | derived | any |

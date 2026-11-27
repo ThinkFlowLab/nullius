@@ -1122,7 +1122,7 @@ def main(argv=None):
             p.add_argument("--limit", type=int)
             p.add_argument("-j", "--concurrency", type=int, default=4)
             p.add_argument("--judge-model", help="a benchmark scored by a model: this judge instead of its official one; "
-                                                 "one with an experiment judge (LoCoMo's Mem0 judge): run it, as this model")
+                                                 "one with an experiment judge (LoCoMo's): run it, as this model")
             p.add_argument("--simulator-model", help="a benchmark whose user a model plays: this model instead of its official one")
             p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",
                            help="run each unit K times, each an attempt counted whatever its result "

@@ -59,8 +59,8 @@ answer   - a setup's (original, model): LoCoMo's own task_eval/evaluate_qa.py,
            scripts/generate_observations.sh and generate_session_summaries.sh
            pass (the latter's "---data-file" read as the --data-file it
            means). Its encoders run on a CUDA GPU, as published
-judge    - the experiment judge, only when the run names its model: Mem0's
-           LLM judge as Mem0 scored LoCoMo (evaluation/metrics/llm_judge.py
+judge    - the experiment judge, only when the run names its model, whichever
+           memory runs: the LLM judge Mem0 published for LoCoMo (evaluation/metrics/llm_judge.py
            at mem0ai/mem0 aae5989, Apache-2.0; its prompt and call copied
            below, as that repository no longer holds them), asked of each
            answer of categories 1 to 4 against the whole reference, as Mem0's
@@ -283,7 +283,7 @@ def answer(unit, dir, setup, model, base_url, key, **_):
     return {"answer": json.dumps({str(i): q.get(f"{k}_prediction", "") for i, q in enumerate(qa)}), "model": model}
 
 
-# Mem0's judge, mem0ai/mem0 evaluation/metrics/llm_judge.py at aae5989e78a6188b3b047c104d960c9ad0927e75, word for word.
+# The judge prompt Mem0 published for LoCoMo, mem0ai/mem0 evaluation/metrics/llm_judge.py at aae5989e78a6188b3b047c104d960c9ad0927e75, word for word.
 JUDGE_PROMPT = """
 Your task is to label an answer to a question as ’CORRECT’ or ’WRONG’. You will be given the following data:
     (1) a question (posed by one user to another user), 
@@ -309,7 +309,7 @@ Do NOT include both CORRECT and WRONG in your response, or it will break the eva
 
 Just return the label CORRECT or WRONG in a json format with the key as "label".
 """
-JUDGE_LABEL = "Mem0 judge"
+JUDGE_LABEL = "Judge"
 
 
 def judge_says(q, answer, judge):

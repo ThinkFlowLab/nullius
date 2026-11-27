@@ -511,7 +511,7 @@ class Locomo(unittest.TestCase):
         p = _driver(self, self.b, self.up, self.data)
         got = p.request("score", unit="s", dir=self.tmp, transcript=[], answer=json.dumps({"s:2": "Paris"}),
                         judge={"model": "gpt-4o-mini", "base_url": base, "key": "k"})
-        self.assertEqual(got.get("complement"), {"label": "Mem0 judge", "score": 1.0, "n": len(self.QA)}, got["detail"]["per_question"][0])
+        self.assertEqual(got.get("complement"), {"label": "Judge", "score": 1.0, "n": len(self.QA)}, got["detail"]["per_question"][0])
         self.assertEqual({(s["model"], s["temperature"], json.dumps(s["response_format"])) for s in seen},
                          {("gpt-4o-mini", 0.0, '{"type": "json_object"}')})
         self.assertIn("Gold answer: Paris; the capital\nGenerated answer: Paris\n", seen[2]["messages"][0]["content"])
