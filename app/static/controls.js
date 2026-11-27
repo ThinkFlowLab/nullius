@@ -90,6 +90,7 @@
       if (select.size > 1 || select.closest('[inert]')) return;   // an inert copy (a sticky row's placeholder) needs no menu
       let button = controls.get(select);
       if (!button) {
+        const held = document.activeElement === select;   // a select drawn under the keyboard: hidden below, it hands it to its button
         button = document.createElement('button'); button.type = 'button'; button.className = 'ui-select-trigger';
         button.setAttribute('role', 'combobox'); button.setAttribute('aria-haspopup', 'listbox'); button.setAttribute('aria-expanded', 'false');
         button.setAttribute('aria-controls', 'ui-options-' + (++serial));
@@ -98,6 +99,7 @@
         button.setAttribute('aria-label', select.getAttribute('aria-label') || label?.textContent.trim() || select.name || 'Choose an option');
         select.classList.add('ui-select-native'); select.setAttribute('aria-hidden', 'true'); select.tabIndex = -1;
         select.after(button); controls.set(select, button);
+        if (held) button.focus({preventScroll: true});
         button.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (active?.button === button) close(); else open(select, button); });
         button.addEventListener('keydown', e => keydown(e, select, button));
         select.addEventListener('invalid', e => { e.preventDefault(); button.focus(); button.setAttribute('aria-invalid', 'true'); });
@@ -109,13 +111,14 @@
         optionLabel(button, option);
         button.dataset.optionLabel = signature;
       }
+      if ('placeholder' in (option?.dataset || {})) button.setAttribute('data-placeholder', ''); else button.removeAttribute('data-placeholder');   // nothing chosen: a default, shown as a placeholder is
       if (button.disabled !== select.disabled) button.disabled = select.disabled;
       if (button.hidden !== select.hidden) button.hidden = select.hidden;
     });
     // Labels and help stay together on the left; compact fields sit on the right.
     // Benchmark option controls already sit below their section heading.
     document.querySelectorAll('label.nb-field:not(.ui-field-row):not(.std-optselect)').forEach(label => {
-      if (![...label.children].some(n => n.matches('select,input:not([type=checkbox]):not([type=radio]),textarea,.nb-model-control'))) return;
+      if (![...label.children].some(n => n.matches('select,input:not([type=checkbox]):not([type=radio]),textarea,.nb-model-control,.nb-model-line'))) return;
       const copy = document.createElement('span'); copy.className = 'ui-field-copy';
       [...label.childNodes].filter(n => n.nodeType === Node.TEXT_NODE || n.nodeType === Node.ELEMENT_NODE && n.matches('small')).forEach(n => copy.append(n));
       label.prepend(copy); label.classList.add('ui-field-row');

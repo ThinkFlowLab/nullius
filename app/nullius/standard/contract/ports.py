@@ -61,7 +61,8 @@ PORTS = {
     "cap.memory/v1": {
         "label": "Memory",
         "family": "capability",
-        "summary": "add {session} then recall {question} -> {memory}: what it kept that bears on the question.",
+        "summary": "add {session} then recall {question, date} -> {memory}: what it kept that bears on the question, "
+                   "asked on date when the benchmark gives one.",
         "kit": "cap-memory-v1",
     },
 }

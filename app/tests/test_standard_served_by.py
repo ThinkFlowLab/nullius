@@ -178,6 +178,25 @@ class TheRelay(WithUpstream):
         self.assertEqual([c["request"].get("routing") for c in r.calls("u0")], [PIN, PIN])
         self.assertNotIn("routing", r.calls("u0-judge")[0]["request"])
 
+    def test_a_level_goes_on_every_request_sent_as_its_model_in_the_field_its_api_reads(self):
+        r = self.relay(model="m-run", reasoning={"m-run": "high"})
+        post(r.url("u0") + "/chat/completions", dict(body_for("/chat/completions", False), reasoning={"effort": "low"}))
+        post(r.url("u0") + "/messages", dict(body_for("/messages", False), output_config={"effort": "low", "format": {"type": "json"}}))
+        post(r.url("u0-judge", model="m-judge") + "/chat/completions", dict(body_for("/chat/completions", False), reasoning_effort="low"))
+        chat, messages, judge = (json.loads(raw) for _, _, raw in Upstream.seen)
+        self.assertEqual((chat["reasoning_effort"], chat.get("reasoning")), ("high", None))
+        self.assertEqual(messages["output_config"], {"format": {"type": "json"}, "effort": "high"})
+        self.assertEqual(judge["reasoning_effort"], "low")                    # another model: as its caller sent it
+        # OpenRouter's one field for both of its APIs; on and off where a model has no levels
+        for path, level, want in (("/chat/completions", "high", {"effort": "high"}), ("/responses", "off", {"enabled": False}),
+                                  ("/chat/completions", "on", {"enabled": True})):
+            req = {"model": "m", "reasoning_effort": "low", "reasoning": {"exclude": True, "max_tokens": 9}}
+            relay.think(req, path, level, routed=True)
+            self.assertEqual(req, {"model": "m", "reasoning": {"exclude": True, **want}})
+        req = {"model": "m", "thinking": {"type": "enabled", "budget_tokens": 2048}}
+        relay.think(req, "/messages", "off", routed=False)
+        self.assertEqual(req, {"model": "m", "thinking": {"type": "disabled"}})
+
     def test_a_callers_own_routing_is_replaced_and_both_are_recorded(self):
         r = self.relay(model="m-run", serving={"m-run": ["prov-a", "prov-b/fp8"]})
         post(r.url("u0") + "/chat/completions", dict(body_for("/chat/completions", False), provider={"sort": "price"}))
@@ -357,6 +376,9 @@ class TheSidecar(WithUpstream):
         self.assertEqual(got, ["m-judge=prov-c", "m-run=prov-a,prov-b/fp8"])
         self.assertNotIn("--served-by", container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k",
                                                              base="http://x/v1", model="m-run", routes={}))
+        argv = container.relay_argv("img", name="r", job="j", app="/app", record="/rec", key_file="/k", base="http://x/v1",
+                                    model="m-run", routes={}, reasoning={"m-run": "high", "m-embed": "low"})
+        self.assertEqual([argv[i + 1] for i, a in enumerate(argv) if a == "--reasoning"], ["m-run=high"])
 
     def test_the_unit_hands_its_pin_to_the_sidecars_command(self):
         unit = container.Unit("job", "u0", os.path.join(self.tmp, "rec"), image="img", app=APP, base=self.base, key="or-test",
@@ -379,7 +401,7 @@ class TheSidecar(WithUpstream):
             f.write("or-test")
         p = subprocess.Popen([sys.executable, "-m", "nullius.standard.calls.relay", "serve", "--listen", "127.0.0.1:0", "--base", self.base,
                               "--record", os.path.join(self.tmp, "rec"), "--key-file", key, "--model", "m-run",
-                              "--served-by", "m-run=prov-a,prov-b/fp8", "--routing"],
+                              "--served-by", "m-run=prov-a,prov-b/fp8", "--routing", "--reasoning", "m-run=minimal"],
                              cwd=APP, env=dict(os.environ, PYTHONPATH=APP), stdout=subprocess.PIPE, text=True)
         try:
             ready, _, _ = select.select([p.stdout], [], [], 20)
@@ -387,6 +409,7 @@ class TheSidecar(WithUpstream):
             url = json.loads(p.stdout.readline())["listening"]
             post(url + "/u0/v1/chat/completions", body_for("/chat/completions", False))
             self.assertEqual(self.sent()["provider"], PIN)
+            self.assertEqual(self.sent()["reasoning"], {"effort": "minimal"})     # --routing: OpenRouter's field
         finally:
             p.terminate()
             try:
@@ -430,6 +453,15 @@ class TheRun(WithUpstream):
         for pin in ({"m-1": []}, {"m-1": ["bad slug"]}, {"m-1": ["prov-a", "prov-a"]}, {"": ["prov-a"]}, {"m-1": "prov-a"}):
             with self.subTest(pin=pin), self.assertRaisesRegex(run.Refused, "--served-by"):
                 self.make(served_by=pin)
+
+    def test_a_level_is_read_by_model_and_refused_for_a_model_the_run_does_not_call(self):
+        self.assertEqual(run.reasoning(["high", "m-judge=off"], "m-run"), {"m-run": "high", "m-judge": "off"})
+        for given, said in ((["turbo"], "the level is one of"), (["high", "m-run=low"], "m-run twice")):
+            with self.subTest(given=given), self.assertRaisesRegex(run.Refused, said):
+                run.reasoning(given, "m-run")
+        with self.assertRaisesRegex(run.Refused, "names m-other, which this run does not call"):
+            self.make(reasoning={"m-1": "high", "m-other": "low"})
+        self.assertEqual(self.make(provider="openai", env={"OPENAI_API_KEY": "sk-x"}, reasoning={"m-1": "high"}).reasoning, {"m-1": "high"})
 
     def test_a_provider_that_routes_no_model_to_several_is_refused_before_any_unit(self):
         for provider, env in (("openai", {"OPENAI_API_KEY": "sk-x"}), ("anthropic", {"ANTHROPIC_API_KEY": "x"}),

@@ -162,12 +162,30 @@
       ],
       "default": "con",
       "about": {
-        "con": "Chain-of-note in one call: prepare_prompt's history-chats template with cot, gen_length 800. The upstream's default.",
+        "con": "Chain-of-note in one call: prepare_prompt's template with cot, gen_length 800. The upstream's default.",
         "direct": "The template without cot, gen_length 500: the answer at once."
       },
       "setups": [
         "original",
         "model",
+        "yours"
+      ]
+    },
+    "recalled_as": {
+      "label": "Recalled memory shown as",
+      "summary": "What the reader's prompt says the recalled memory is, in one of LongMemEval's three prompts.",
+      "values": [
+        "history-chats",
+        "chats-and-facts",
+        "facts"
+      ],
+      "default": "history-chats",
+      "about": {
+        "history-chats": "\"Several history chats between you and a user\". prepare_prompt's template for merge_key_expansion none.",
+        "chats-and-facts": "\"Several history chats ..., as well as the relevant user facts extracted from the chat history\". Its template for merge.",
+        "facts": "\"Several facts extracted from history chats\". Its template for replace."
+      },
+      "setups": [
         "yours"
       ]
     },
