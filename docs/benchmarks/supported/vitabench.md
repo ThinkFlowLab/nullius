@@ -51,6 +51,7 @@ Food delivery, in-store and travel requests from a simulated user, with up to 66
 
 - Scores depend on the judge's and the simulated user's models: keep both fixed when comparing.
 - The leaderboard's main result is Cross-scenario (Chinese), with 4 attempts per task.
+- Cross-scenario (Chinese)'s first request is about 37,000 tokens, its 66 tools' descriptions included: a model served with a 32k context fails every task (Qwen2.5-72B on OpenRouter).
 - A task passes only when every rubric is met.
 
 ## Upstream limitations
