@@ -1,0 +1,289 @@
+{
+  "schema": "nullius.benchmark/v1",
+  "key": "vitabench",
+  "label": "VitaBench",
+  "summary": "Each task is a user's request to a life-service agent (food delivery, in-store services, travel), held by the upstream's own runner: a simulated user talks, the agent answers through the domain's tools, and a judge checks the conversation against the task's rubrics.",
+  "family": "agent",
+  "needs": [
+    "agent.tools/v1",
+    "agent.conversation/v1"
+  ],
+  "upstream": {
+    "repository": "https://github.com/meituan-longcat/vitabench",
+    "tested": "742e240855bf8686a0842360749d5ea970ea3987",
+    "tested_date": "2026-11-25",
+    "license": "MIT"
+  },
+  "driver": {
+    "describe": true,
+    "command": [
+      "{install}/.venv/bin/python",
+      "{here}/driver.py"
+    ],
+    "install": {
+      "python": "3.12",
+      "project": ".",
+      "pip": [
+        "mcp==1.30.0"
+      ]
+    }
+  },
+  "mcp_servers": {
+    "vita": {
+      "command": [
+        "{install}/.venv/bin/python",
+        "{here}/mcp_server.py"
+      ],
+      "summary": "The task's tools: the upstream's own schemas; each call is executed by the upstream's Orchestrator."
+    }
+  },
+  "datasets": [
+    {
+      "id": "cross",
+      "label": "Cross-scenario (Chinese)",
+      "path": "data/vita/domains/cross_domain/tasks.json",
+      "sha256": "a7e782785f40667511a54562d613e2122de645a36b8661a5658c1740d34a5815",
+      "units": 100
+    },
+    {
+      "id": "delivery",
+      "label": "Delivery (Chinese)",
+      "path": "data/vita/domains/delivery/tasks.json",
+      "sha256": "22746ae23eb6dbed2ee6a5e3a0f476af60e8a43bab0ea2d3ead54f0ef3829f94",
+      "units": 100
+    },
+    {
+      "id": "instore",
+      "label": "In-store (Chinese)",
+      "path": "data/vita/domains/instore/tasks.json",
+      "sha256": "f92b9313e5476499d51b73a929cc901b7d87cd7c3315df56942d62c83aa34407",
+      "units": 100
+    },
+    {
+      "id": "ota",
+      "label": "OTA (Chinese)",
+      "path": "data/vita/domains/ota/tasks.json",
+      "sha256": "c9208c25accef24f4798bbd3f38403da081fdf48f3c7100dfc702aa7b379559e",
+      "units": 100
+    },
+    {
+      "id": "cross-en",
+      "label": "Cross-scenario (English)",
+      "path": "data/vita/domains/cross_domain/tasks_en.json",
+      "sha256": "54a396cd2e5de2a26da29b954341ad190806ed7f2e870dd96511e81a947c2865",
+      "units": 100
+    },
+    {
+      "id": "delivery-en",
+      "label": "Delivery (English)",
+      "path": "data/vita/domains/delivery/tasks_en.json",
+      "sha256": "4906517e50ad578cdfd52426b76e4604bfd207db4254643bbc150891240f5500",
+      "units": 100
+    },
+    {
+      "id": "instore-en",
+      "label": "In-store (English)",
+      "path": "data/vita/domains/instore/tasks_en.json",
+      "sha256": "8e3ac7b53501d211a5261ef4e8ad9eb46bd304bd6a77794dea860f107aebaa95",
+      "units": 100
+    },
+    {
+      "id": "ota-en",
+      "label": "OTA (English)",
+      "path": "data/vita/domains/ota/tasks_en.json",
+      "sha256": "f04ac51d84452557f4a68b6cc25f854edc88b0a501c85e48943859be7ab203b9",
+      "units": 100
+    }
+  ],
+  "units": {
+    "noun": "task",
+    "nouns": "tasks"
+  },
+  "simulator": {
+    "model": "gpt-4.1-2025-04-14",
+    "served_as": {"openrouter": "openai/gpt-4.1"},
+    "says": "the user: the upstream's own user simulator, with the paper's model, at temperature 0"
+  },
+  "controls": {
+    "nop": {
+      "source": "nullius",
+      "from": "Nullius: no agent runs; the upstream's evaluator scores a run ended by an invalid agent message, without asking the judge."
+    }
+  },
+  "score": {
+    "kind": "pass",
+    "says": "the upstream's evaluator: the judge reads the conversation in sliding windows of 10 messages, 2 of them overlapping, and marks each rubric; the task passes when every rubric is met. A conversation that reaches the step or error limit, or ends on an empty agent message, scores 0 without the judge.",
+    "judge": {
+      "model": "claude-3.7-sonnet",
+      "retired": true,
+      "says": "the paper's evaluator, at temperature 0 and without thinking; the updated leaderboard does not name its evaluator"
+    }
+  },
+  "limits": {
+    "turn_seconds": 7200,
+    "turns": 160,
+    "retries": 3,
+    "score_seconds": 3600,
+    "attempts": "Attempt N is the upstream's trial N-1: its recorded seed is the one run_tasks draws for it from 300. The upstream sends no seed to a model."
+  },
+  "setups": {
+    "original": {
+      "summary": "The upstream's own agent (LLMAgent) as the run's model, in the upstream's own runner, user simulator and evaluator.",
+      "providers": {
+        "openrouter": "",
+        "custom": ""
+      },
+      "comparable": [],
+      "turn_seconds": 7200,
+      "paper": "the VitaBench paper (arXiv 2509.26490)",
+      "reference_agent": "VitaBench LLM agent"
+    }
+  },
+  "options": {
+    "evaluation": {
+      "summary": "How the judge reads the conversation.",
+      "setups": [
+        "original",
+        "yours"
+      ],
+      "default": "trajectory",
+      "values": [
+        "trajectory",
+        "trajectory_full_traj_rubric",
+        "trajectory_sliding_wo_rubric",
+        "trajectory_full_traj_wo_rubric"
+      ],
+      "names": {
+        "trajectory": "Sliding window, rubrics",
+        "trajectory_full_traj_rubric": "Whole conversation, rubrics",
+        "trajectory_sliding_wo_rubric": "Sliding window, no rubrics",
+        "trajectory_full_traj_wo_rubric": "Whole conversation, no rubrics"
+      },
+      "about": {
+        "trajectory": "The upstream's default, the leaderboard's.",
+        "trajectory_full_traj_rubric": "The paper's ablation: every rubric in one judge call.",
+        "trajectory_sliding_wo_rubric": "The paper's ablation: the judge sees no rubrics.",
+        "trajectory_full_traj_wo_rubric": "The paper's ablation: one judge call without rubrics."
+      }
+    },
+    "user": {
+      "label": "Simulated user",
+      "summary": "How the simulated user tells what it wants.",
+      "setups": [
+        "original",
+        "yours"
+      ],
+      "default": "user_simulator",
+      "values": [
+        "user_simulator",
+        "dummy_user"
+      ],
+      "names": {
+        "user_simulator": "Step by step",
+        "dummy_user": "All at once"
+      },
+      "about": {
+        "user_simulator": "The upstream's default: reveals its requests over the conversation.",
+        "dummy_user": "The upstream's dummy_user: states every request in its first message, for the solo agent."
+      }
+    },
+    "max_steps": {
+      "label": "Steps per conversation",
+      "summary": "The most messages and tool rounds of a conversation.",
+      "setups": [
+        "original",
+        "yours"
+      ],
+      "default": "300",
+      "pattern": "[1-9][0-9]?|[12][0-9]{2}|300",
+      "limit": true
+    },
+    "max_errors": {
+      "label": "Tool errors per conversation",
+      "summary": "The most tool calls that fail before a conversation ends.",
+      "setups": [
+        "original",
+        "yours"
+      ],
+      "default": "10",
+      "pattern": "[1-9][0-9]{0,3}",
+      "limit": true
+    },
+    "upstream_agent": {
+      "label": "Agent variant",
+      "summary": "Whether the benchmark's own agent talks with the user or works alone.",
+      "setups": [
+        "original"
+      ],
+      "default": "llm_agent",
+      "values": [
+        "llm_agent",
+        "llm_solo_agent"
+      ],
+      "names": {
+        "llm_agent": "Conversation",
+        "llm_solo_agent": "Solo"
+      },
+      "about": {
+        "llm_agent": "The upstream's LLMAgent, the leaderboard's.",
+        "llm_solo_agent": "The paper's solo ablation: use it with the simulated user All at once. Its prompt is Chinese on every dataset."
+      }
+    },
+    "enable_think": {
+      "label": "Thinking",
+      "summary": "Whether the benchmark's own agent model thinks (the upstream's --enable-think).",
+      "names": {
+        "off": "Off",
+        "on": "On"
+      },
+      "setups": [
+        "original"
+      ],
+      "default": "off",
+      "values": [
+        "off",
+        "on"
+      ]
+    },
+    "agent_reasoning_effort": {
+      "summary": "How much reasoning the benchmark's own agent model uses.",
+      "setups": [
+        "original"
+      ],
+      "default": "default",
+      "values": [
+        "default",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "when": {
+        "enable_think": [
+          "on"
+        ]
+      },
+      "about": {
+        "default": "None sent: the model's own default."
+      }
+    },
+    "agent_temperature": {
+      "summary": "The temperature of the benchmark's own agent model, the paper's 0 by default.",
+      "setups": [
+        "original"
+      ],
+      "default": "0.0",
+      "pattern": "[0-9]+(\\.[0-9]+)?"
+    },
+    "agent_max_tokens": {
+      "summary": "The longest reply of the benchmark's own agent model. The default sends no limit.",
+      "setups": [
+        "original"
+      ],
+      "default": "default",
+      "pattern": "default|[1-9][0-9]{0,6}",
+      "example": "8192"
+    }
+  }
+}

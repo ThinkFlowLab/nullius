@@ -1280,6 +1280,9 @@ class RunTest(unittest.TestCase):
                       " ".join(definitions.problems(dict(b, simulator={"model": "u", "says": "x"}), "benchmark")))
         self.assertIn("simulator: {model",
                       " ".join(definitions.problems(dict(b, simulator={"model": "a user"}), "benchmark")))
+        for bad in ({"nowhere": "x/y"}, {"openrouter": "a user"}, {}):
+            self.assertIn("score.judge.served_as: {provider",
+                          " ".join(definitions.problems(dict(b, score=dict(b["score"], judge={"model": "j", "says": "x", "served_as": bad})), "benchmark")))
 
     def test_the_container_backend_needs_no_yes_but_a_usable_engine(self):
         from unittest import mock

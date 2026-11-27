@@ -255,7 +255,6 @@
       "label": "Pause after each action (seconds)",
       "summary": "Seconds to wait after each action before taking the next screenshot.",
       "pattern": "[0-9]{1,2}(\\.[0-9]{1,2})?",
-      "example": "5.0",
       "default": "3.0",
       "setups": [
         "agent"

@@ -1,0 +1,75 @@
+{
+  "key": "vitabench",
+  "title": "VitaBench",
+  "category": "Life services",
+  "domain": "Food delivery, in-store and travel requests from a simulated user, with up to 66 tools.",
+  "scoring": "Rubric judge",
+  "harness": [
+    "standard"
+  ],
+  "origin": "official",
+  "good_to_know": [
+    "Scores depend on the judge's and the simulated user's models: keep both fixed when comparing.",
+    "The leaderboard's main result is Cross-scenario (Chinese), with 4 attempts per task.",
+    "Cross-scenario (Chinese)'s first request is about 37,000 tokens, its 66 tools' descriptions included: a model served with a 32k context fails every task (Qwen2.5-72B on OpenRouter).",
+    "A task passes only when every rubric is met."
+  ],
+  "upstream_limitations": [
+    "The paper's judge, Claude 3.7 Sonnet, is retired, so Like the paper cannot run: every agent's run names its judge model. Scores compare only between runs with the same judge, never with the paper's.",
+    "In 15 of the 100 Cross-scenario (English) tasks, the shops, orders or bookings the task relies on are missing, though the Chinese version has them: an agent may fail them through no fault of its own. Score with the Chinese datasets.",
+    "Its model calls carry configuration fields (base_url, headers, name, max_input_tokens) that OpenAI's API refuses with HTTP 400: run every model of a VitaBench run on OpenRouter (OpenAI's models are there as openai/...) or a custom endpoint.",
+    "A failed model call makes the upstream start the conversation again, up to 3 times, and each costs its calls.",
+    "The updated leaderboard does not name its judge model.",
+    "Its dependencies are not locked to versions.",
+    "It publishes no reference conversations, so there is no reference control."
+  ],
+  "limitations": [
+    "Another agent gets the upstream's prompt plus two lines from Nullius: where its tools are, and that its last message in a turn goes to the user."
+  ],
+  "datasets": [
+    {
+      "key": "vitabench",
+      "title": "VitaBench",
+      "tasks": 400,
+      "official": "https://github.com/meituan-longcat/vitabench",
+      "verifier": "VitaBench's evaluator: a judge model marks each task's rubrics.",
+      "source": "GitHub"
+    }
+  ],
+  "timeouts": {
+    "env_setup": 600,
+    "agent_setup": 1200,
+    "agent_run": 7200,
+    "verify": 3600
+  },
+  "citation": "@article{he2025vitabench,\n      title={VitaBench: Benchmarking LLM Agents with Versatile Interactive Tasks in Real-world Applications}, \n      author={He, Wei and Sun, Yueqing and Hao, Hongyan and Hao, Xueyuan and Xia, Zhikang and Gu, Qi and Han, Chengcheng and Zhao, Dengchang and Su, Hui and Zhang, Kefeng and Gao, Man and Su, Xi and Cai, Xiaodong and Cai, Xunliang and Yang, Yu and Zhao, Yunke},\n      journal={arXiv preprint arXiv:2509.26490},\n      year={2025}\n}",
+  "citation_source": "https://github.com/meituan-longcat/vitabench",
+  "evidence": [
+    {
+      "label": "Rubrics met",
+      "path": "rubrics"
+    },
+    {
+      "label": "Rubric missed",
+      "path": "rubrics_missed"
+    },
+    {
+      "label": "Ended by",
+      "path": "termination",
+      "values": {
+        "user_stop": "User",
+        "agent_stop": "Agent",
+        "max_steps": "Step limit",
+        "too_many_errors": "Too many errors",
+        "invalid_agent_message": "Empty agent message"
+      }
+    },
+    {
+      "label": "Tool errors",
+      "path": "tool_errors",
+      "unless": [
+        "0"
+      ]
+    }
+  ]
+}

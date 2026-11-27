@@ -99,6 +99,7 @@
   },
   "simulator": {
     "model": "gpt-4.1-2025-04-14",
+    "served_as": {"openrouter": "openai/gpt-4.1"},
     "says": "the customer: the upstream's own user simulator, built by its build_text_orchestrator (its guidelines and the task's scenario), its default model at its default arguments (temperature 0)"
   },
   "leaderboard": {
@@ -124,6 +125,7 @@
     "says": "the upstream's own batch runner, run_tasks, on the task: its Orchestrator holds the conversation by its rules (max steps 200 and max errors 10 unless the run sets lower or other ones, the user's stop) at the trial's seed run_tasks draws, an attempt that raises is made again (3 retries) and the last recorded INFRASTRUCTURE_ERROR, which is the unit's error, never a score; its evaluator (evaluate_simulation, ALL) scores the SimulationRun the Orchestrator returns: 0 unless the user ended it (the upstream's agent never does); else the product of the task's reward_basis - the database after the agent's calls, replayed by the upstream's environment, hashes as after the gold actions (DB), each required fact is in one of the agent's messages (COMMUNICATE), the judge finds each NL assertion met (NL_ASSERTION)",
     "judge": {
       "model": "gpt-4.1-2025-04-14",
+      "served_as": {"openrouter": "openai/gpt-4.1"},
       "says": "the upstream's NL-assertion evaluator (evaluator_nl_assertions.py, its prompt, its call and its own model name), reached through the judge's route, at temperature 0, asked only for a task whose reward_basis names NL_ASSERTION and that has assertions"
     }
   },
@@ -335,7 +337,6 @@
       ],
       "default": "200",
       "pattern": "[1-9][0-9]?|1[0-9]{2}|200",
-      "example": "100",
       "limit": true
     },
     "max_errors": {
@@ -347,7 +348,6 @@
       ],
       "default": "10",
       "pattern": "[1-9][0-9]{0,3}",
-      "example": "5",
       "limit": true
     },
     "upstream_agent": {

@@ -813,8 +813,8 @@
         // unless named; like the paper, the official one; like the leaderboard, its own and the options it fixes
         + (b.simulator ? (paper ? fixed('Model for the user simulator', lb && lb.simulator || b.simulator, lb && lb.simulator ? 'leaderboard' : 'official') : field('Model for the user simulator', 'simulator_model', rec.simulator_model || '', {list: 'nb-models', placeholder: b.simulator + ' (official)',
             hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator') : '')
-        + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)',
-            hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
+        + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge_retired ? 'Search or enter a model ID' : b.judge + ' (official)',
+            hint: b.judge_retired ? 'Grades the answers.' : 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
         + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, ((b.options[k] || {}).names || {})[v] || v, 'leaderboard')).join('') : '')
         + keyLine(rec);
     }
@@ -830,7 +830,7 @@
         + field('Concurrent ' + u.nouns, 'concurrency', rec.concurrency, {type: 'number', min: 1, max: 32, placeholder: rec.backend === 'boat' ? String((schema.standardHere || {}).boatSlots || 'Boat\'s limit') : '1'}) + '</div>'
         + '<div class="nb-two">' + field('Attempts per ' + u.noun, 'repeat', rec.repeat || '', {type: 'number', min: 1, max: 32, placeholder: '1',
             hint: 'Each ' + esc(u.noun) + ' is run and scored this many times.'})
-        + field('Retries after an error', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: '0',
+        + field('Retries after an error', 'retries', rec.retries ?? '', {type: 'number', min: 0, max: 9, placeholder: String(b.retries || 0),
             hint: 'Retry errors such as rate limits or crashes, but not failed ' + esc(u.nouns) + '.'}) + '</div>'
         // a conversation's most agent turns (recipe.py: run --max-turns): only a benchmark that holds conversations has turns
         + ((b.needs || []).includes('agent.conversation/v1')

@@ -1,0 +1,275 @@
+[
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--domain delivery,instore,ota",
+    "values": "domains, joined by commas to merge them",
+    "default": "delivery,instore,ota",
+    "nullius": "dataset:cross"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--domain delivery",
+    "values": "a registered domain",
+    "default": "delivery,instore,ota",
+    "nullius": "dataset:delivery"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--domain instore",
+    "values": "a registered domain",
+    "default": "delivery,instore,ota",
+    "nullius": "dataset:instore"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--domain ota",
+    "values": "a registered domain",
+    "default": "delivery,instore,ota",
+    "nullius": "dataset:ota"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--language english, domain cross",
+    "values": "chinese, english",
+    "default": "chinese",
+    "nullius": "dataset:cross-en"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--language english, domain delivery",
+    "values": "chinese, english",
+    "default": "chinese",
+    "nullius": "dataset:delivery-en"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--language english, domain instore",
+    "values": "chinese, english",
+    "default": "chinese",
+    "nullius": "dataset:instore-en"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--language english, domain ota",
+    "values": "chinese, english",
+    "default": "chinese",
+    "nullius": "dataset:ota-en"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--domain, another combination of domains",
+    "values": "any two domains",
+    "default": "delivery,instore,ota",
+    "nullius": "not offered - the cross-scenario tasks are written for all three domains, which the paper runs"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--task-set-name",
+    "values": "a registered task set",
+    "default": "the domain's",
+    "nullius": "fixed:the domain's - the upstream's default"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--task-ids, --num-tasks",
+    "values": "ids, a number",
+    "default": "every task",
+    "nullius": "fixed:every task - a run's units and limit choose fewer"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--num-trials",
+    "values": "an integer from 1",
+    "default": "1",
+    "nullius": "fixed:1 trial per attempt - a run's --attempts K runs each task K times"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--agent",
+    "values": "llm_agent, llm_solo_agent",
+    "default": "llm_agent",
+    "nullius": "option:upstream_agent"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--agent-llm",
+    "values": "a model of models.yaml",
+    "default": "gpt-4.1",
+    "nullius": "setup:original"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--agent-llm-args, --user-llm-args, --evaluator-llm-args",
+    "values": "a dict",
+    "default": "the model's entry of models.yaml",
+    "nullius": "not offered - the CLI cannot parse a dict, and models.yaml's entry overrides them in generate"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--user",
+    "values": "user_simulator, dummy_user",
+    "default": "user_simulator",
+    "nullius": "option:user"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--user-llm",
+    "values": "a model of models.yaml",
+    "default": "gpt-4.1",
+    "nullius": "fixed:gpt-4.1-2025-04-14 - the paper's; a run's simulator model replaces it"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--evaluator-llm",
+    "values": "a model of models.yaml",
+    "default": "anthropic.claude-3.7-sonnet",
+    "nullius": "fixed:claude-3.7-sonnet - the upstream's default; a run's judge model replaces it"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--evaluation-type",
+    "values": "trajectory, trajectory_full_traj_rubric, trajectory_sliding_wo_rubric, trajectory_full_traj_wo_rubric",
+    "default": "trajectory",
+    "nullius": "option:evaluation"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--enable-think",
+    "values": "a flag",
+    "default": "off",
+    "nullius": "option:enable_think"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--max-steps",
+    "values": "an integer",
+    "default": "300",
+    "nullius": "option:max_steps"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--max-errors",
+    "values": "an integer",
+    "default": "10",
+    "nullius": "option:max_errors"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--seed",
+    "values": "an integer",
+    "default": "300",
+    "nullius": "fixed:300 - the upstream's default; it is recorded and sent to no model"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--max-concurrency",
+    "values": "an integer",
+    "default": "1",
+    "nullius": "fixed:1 - each task is a run of its own; the run's concurrency runs several"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--save-to, --csv-output, --log-level",
+    "values": "paths, a level",
+    "default": "a file per run, none, DEBUG",
+    "nullius": "fixed:the trial's verifier/simulation.json, none, INFO - output only"
+  },
+  {
+    "entry": "vita run (src/vita/cli.py)",
+    "setting": "--re-evaluate-file, --re-run",
+    "values": "a results file, a flag",
+    "default": "none",
+    "nullius": "not offered - re-scores a saved run; changes no run"
+  },
+  {
+    "entry": "environment",
+    "setting": "VITA_MODEL_CONFIG_PATH",
+    "values": "a path",
+    "default": "src/vita/models.yaml",
+    "nullius": "fixed:the package's models.yaml - the run's three models are added to its entries, over its default one"
+  },
+  {
+    "entry": "models.yaml",
+    "setting": "base_url, headers",
+    "values": "an address, headers",
+    "default": "none",
+    "nullius": "fixed:the run's relay - every model call goes through it"
+  },
+  {
+    "entry": "models.yaml",
+    "setting": "temperature",
+    "values": "a number",
+    "default": "0.0",
+    "nullius": "option:agent_temperature"
+  },
+  {
+    "entry": "models.yaml",
+    "setting": "temperature of the user and the evaluator",
+    "values": "a number",
+    "default": "0.0",
+    "nullius": "fixed:0.0 - the upstream's default entry, the paper's"
+  },
+  {
+    "entry": "models.yaml",
+    "setting": "max_tokens, max_completion_tokens",
+    "values": "an integer",
+    "default": "8192 to 32768 per model, none in the default entry",
+    "nullius": "option:agent_max_tokens"
+  },
+  {
+    "entry": "models.yaml",
+    "setting": "max_tokens of the user and the evaluator",
+    "values": "an integer",
+    "default": "8192 to 32768 per model, none in the default entry",
+    "nullius": "fixed:none sent - the upstream's default entry"
+  },
+  {
+    "entry": "models.yaml",
+    "setting": "max_input_tokens",
+    "values": "an integer",
+    "default": "32768",
+    "nullius": "fixed:32768 - the upstream's default; it is sent and read by no code"
+  },
+  {
+    "entry": "models.yaml",
+    "setting": "reasoning_effort",
+    "values": "a level",
+    "default": "none",
+    "nullius": "option:agent_reasoning_effort"
+  },
+  {
+    "entry": "models.yaml",
+    "setting": "thinking.budget_tokens",
+    "values": "an integer",
+    "default": "16384 for claude-3.7-sonnet",
+    "nullius": "not offered - a Claude field the OpenAI-compatible route does not take"
+  },
+  {
+    "entry": "models.yaml",
+    "setting": "cost_1m_token_dollar",
+    "values": "prices",
+    "default": "2.00 and 8.00 for gpt-4.1",
+    "nullius": "fixed:none - the relay counts the cost"
+  },
+  {
+    "entry": "hard-coded",
+    "setting": "run_task max_retries",
+    "values": "an integer",
+    "default": "3",
+    "nullius": "fixed:3 - the upstream's"
+  },
+  {
+    "entry": "hard-coded",
+    "setting": "evaluator window_size, overlap",
+    "values": "integers",
+    "default": "10, 2",
+    "nullius": "fixed:10 and 2 - the upstream's, no flag sets them"
+  },
+  {
+    "entry": "hard-coded",
+    "setting": "neutral user (the paper's ablation)",
+    "values": "a user without behavioral attributes",
+    "default": "none",
+    "nullius": "not offered - its code is not published"
+  }
+]

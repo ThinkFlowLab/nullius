@@ -350,6 +350,26 @@ class Recipe(unittest.TestCase):
         gsm = self.compiled(benchmark="gsm8k", datasets=["test"], others=["original"], provider="openai", model="m", model_choice="paper")
         self.assertTrue(gsm["errors"])
 
+    def test_a_retired_judge_refuses_like_the_paper_and_leaves_any_model(self):
+        vita = dict(benchmark="vitabench", datasets=["cross"], others=["original"], provider="openrouter", model="vendor/m")
+        said = " ".join(e["message"] for e in self.compiled(**vita, model_choice="paper")["errors"])
+        self.assertIn("Paper models unavailable", said)
+        said = " ".join(e["message"] for e in self.compiled(**vita, model_choice="any")["errors"])
+        self.assertIn("claude-3.7-sonnet, is retired: enter a model for the judge", said)
+        out = self.compiled(**vita, model_choice="any", judge_model="vendor/judge")
+        self.assertEqual(out["errors"], [])
+        self.assertIn("run vitabench original --model vendor/m", out["script"])
+        o, _ = definitions.setup(definitions.get("benchmark", "vitabench"), "original", "vendor/m", "openrouter")
+        self.assertEqual((o["sent"], o["comparable"]), ("vendor/m", False))
+
+    def test_a_benchmarks_own_retries_are_the_default_and_the_command_names_another(self):
+        vita = dict(benchmark="vitabench", datasets=["cross"], others=["original"], provider="openrouter", model="vendor/m",
+                    judge_model="vendor/judge")
+        out = self.compiled(**vita)
+        self.assertNotIn("--retries", out["script"])                     # the run takes limits.retries itself
+        self.assertIn("up to 3 retries an attempt", json.dumps(out))
+        self.assertIn("--retries 0", self.compiled(**vita, retries=0)["script"])
+
     def test_like_the_leaderboard_runs_its_user_simulator_options_and_attempts(self):
         tau = dict(benchmark="tau3-bench", datasets=["airline"], others=["original"], provider="openai", model="their-model",
                    model_choice="leaderboard")

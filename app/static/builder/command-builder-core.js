@@ -89,7 +89,9 @@
   }
   // Like the paper keeps what the paper fixed: its models when it lists them, its judge and its user simulator.
   const paperListed = r => !!(paperModels(r).models || []).length;
-  const paperOffered = r => { const b = standardBench(r) || {}; return paperListed(r) || !!(b.judge || b.simulator); };
+  // none of what the paper ran can run any more (comparable: []): a retired model, judge or user simulator
+  const paperGone = r => !!(((standardBench(r) || {}).setups || []).find(x => x.key === 'original') || {}).gone;
+  const paperOffered = r => { const b = standardBench(r) || {}; return !paperGone(r) && (paperListed(r) || !!(b.judge || b.simulator)); };
   // Like the leaderboard: what the upstream's leaderboard fixes besides the ranked model, when the benchmark declares it.
   const leaderboard = r => (standardBench(r) || {}).leaderboard || null;
   // Choose how the model is chosen: paper or leaderboard keep their fixed models (the leaderboard also its options and

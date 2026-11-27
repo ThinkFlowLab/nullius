@@ -200,7 +200,7 @@ def _bench_page(b: dict) -> dict:
             "controls": controls,
             # One Original procedure, with separate reference-participant and paper-model metadata.
             "setups": [{"key": k, "label": definitions.setup_label(b, k), "summary": x["summary"],
-                        "reference_agent": x.get("reference_agent", ""), "turn_seconds": x.get("turn_seconds"),
+                        "reference_agent": x.get("reference_agent", ""), "turn_seconds": x.get("turn_seconds"), "gone": x.get("comparable") == [],
                         "comparable": k == "original" and b["setups"]["original"].get("comparable", True) not in (False, []), "units": (b["setups"]["original"].get("units") or b.get("units") or {}),
                         **({"models": definitions.paper_models(x), "default": x["default"], "providers": list(x["providers"]),
                             "sent": {p: {m: pre + (x.get("served_as") or {}).get(m, m) for m in definitions.paper_models(x)}
@@ -209,9 +209,11 @@ def _bench_page(b: dict) -> dict:
                        for k, x in (b.get("setups") or {}).items() if k == "original"],
             # its own options (a search, a mode): each value with its line and what it needs; and the host requirements
             "simulator": (b.get("simulator") or {}).get("model", ""), "judge": ((b.get("score") or {}).get("judge") or {}).get("model", ""),
+            "judge_retired": bool(((b.get("score") or {}).get("judge") or {}).get("retired")),
             # what the upstream's leaderboard fixes besides the ranked model (Like the leaderboard)
             "leaderboard": b.get("leaderboard") or None,
             "attempts": (b.get("limits") or {}).get("attempts", ""),
+            "retries": (b.get("limits") or {}).get("retries", 0),
             # what a unit's time limits and a conversation's length are when the recipe forces none
             "timeouts": {"setup": run.DRIVER_SECONDS, "setup_agent": (b.get("limits") or {}).get("setup_seconds") or run.DRIVER_SECONDS, "image": run.IMAGE_SECONDS, "score": (b.get("limits") or {}).get("score_seconds") or run.DRIVER_SECONDS,
                          "agent": (b.get("limits") or {}).get("turn_seconds") or run.TURN_SECONDS,
@@ -656,7 +658,9 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     orig = (b.get("setups") or {}).get("original") or {}
     official = {"judge": ((b.get("score") or {}).get("judge") or {}).get("model", ""), "simulator": (b.get("simulator") or {}).get("model", "")}
     fixed = {**official, **{k: lb[k] for k in ("judge", "simulator") if lb.get(k)}}
-    if model_choice == "paper" and needs_model and not orig.get("models") and not any(official.values()):
+    if model_choice == "paper" and needs_model and orig.get("comparable") == []:
+        add("model", "Paper models unavailable; choose Any of your choice.")
+    elif model_choice == "paper" and needs_model and not orig.get("models") and not any(official.values()):
         add("model", "No paper models are listed for this benchmark; choose Any of your choice.")
     elif model_choice == "paper" and needs_model and orig.get("models"):
         if recipe.get("model") not in definitions.paper_models(orig):
@@ -687,18 +691,24 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if lb and repeat < lb.get("repeat", 1):
         add("limits", f"Like the leaderboard runs each {(b.get('units') or {}).get('noun', 'unit')} at least {lb['repeat']} times.")
     # each attempt run again up to N times when it ends in a failure a further try may mend (runner.retries)
-    retries = 0 if recipe.get("retries") in (None, "") else _int(recipe.get("retries"), 0, MAX_RETRIES)
+    # empty: the upstream's own retries (limits.retries), as the run takes them without --retries
+    own_retries = (b.get("limits") or {}).get("retries", 0)
+    retries = own_retries if recipe.get("retries") in (None, "") else _int(recipe.get("retries"), 0, MAX_RETRIES)
     if retries is None:
         add("limits", f"Retries after an error: a whole number from 0 to {MAX_RETRIES}.")
-        retries = 0
+        retries = own_retries
     sim_model = str(recipe.get("simulator_model") or "").strip()
     judge_model = str(recipe.get("judge_model") or "").strip()
     like = {"paper": "Like the paper", "leaderboard": "Like the leaderboard"}.get(model_choice)
+    spec = {"judge": (b.get("score") or {}).get("judge"), "simulator": b.get("simulator")}
     for what, role, m in (("the user simulator's", "simulator", sim_model), ("the judge's", "judge", judge_model)):
         if m and not _MODEL.match(m):
             add("model", f"Enter {what} model as the provider lists it, or leave it empty for its official one.")
-        elif m and like and m not in (fixed[role], providers.served_as(fixed[role], provider_)):
+        elif m and like and m not in (fixed[role], providers.served_as(fixed[role], provider_),
+                                      providers.official_as({"model": fixed[role], **({} if lb.get(role) else spec[role] or {})}, provider_)):
             add("model", f"{like} uses {what} model {fixed[role]}: choose Any of your choice for {m}.")
+    if ((b.get("score") or {}).get("judge") or {}).get("retired") and not judge_model and not like:
+        add("model", f"{b['label']}'s official judge, {official['judge']}, is retired: enter a model for the judge.")
     # the leaderboard's own models, as the run's provider spells them; the official ones stay the run's default
     sim_model = providers.served_as(lb["simulator"], provider_) if lb.get("simulator") else sim_model
     judge_model = providers.served_as(lb["judge"], provider_) if lb.get("judge") else judge_model
@@ -827,8 +837,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         judge, sim = (b.get("score") or {}).get("judge"), b.get("simulator")
         called = [m for x in dss for p in picks for m in ledger.models(
             p["o"], None if p["control"] else (p["o"].get("sent") or p.get("model")) if p.get("setup") else model,
-            (judge_model or providers.served_as(judge["model"], provider)) if judge else None,
-            (sim_model or providers.served_as(sim["model"], provider)) if sim else None,
+            (judge_model or providers.official_as(judge, provider)) if judge else None,
+            (sim_model or providers.official_as(sim, provider)) if sim else None,
             providers.served_as((definitions.option_needs(b, per_ds[x["id"]])["embeddings"] or [""])[0], provider), control=p["control"])]
         called += [providers.served_as(m, provider) for m in needs["reranker"]]
         missing = unpriced([m for m in dict.fromkeys(called) if isinstance(m, str) and m])
@@ -844,8 +854,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     def sent_of(p: dict) -> Dict[str, Optional[str]]:
         """Each model field's model as job ``p`` sends it; None where it has none (a control has no model of its own)."""
         return {"model": None if p["control"] else (p["o"].get("sent") or p.get("model")) if p.get("setup") else model,
-                "judge": (judge_model or providers.served_as(judge_def["model"], provider)) if judge_def else None,
-                "simulator": (sim_model or providers.served_as(sim_def["model"], provider)) if sim_def else None}
+                "judge": (judge_model or providers.official_as(judge_def, provider)) if judge_def else None,
+                "simulator": (sim_model or providers.official_as(sim_def, provider)) if sim_def else None}
 
     def called_of(p: dict) -> List[str]:
         s = sent_of(p)
@@ -910,7 +920,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                  *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
                  *[w for k, v in options_for_pick(d, p).items() for w in ("--bench-option", f"{k}={v}")],
                  *(["--attempts", str(repeat)] if repeat > 1 else []),
-                 *(["--retries", str(retries)] if retries else []),
+                 *(["--retries", str(retries)] if retries != own_retries else []),
                  *(["--max-usd", f"{share:.6f}".rstrip("0").rstrip(".")] if share and spends(p) else []),
                  *(["--max-usd-per-unit", f"{per_unit:.6f}".rstrip("0").rstrip(".")] if per_unit and spends(p) else []),
                  *[w for k, v in forced.items() for w in ("--timeout", f"{k}={v:g}")],

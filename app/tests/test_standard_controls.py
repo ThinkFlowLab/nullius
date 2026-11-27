@@ -169,6 +169,26 @@ class ControlRun(unittest.TestCase):
         with self.assertRaises(run.Refused):
             run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env={})
 
+    def test_a_retired_judge_is_never_the_default(self):
+        b = kit("agent-task-v1", os.path.join(self.tmp, "kits"))
+        b["score"] = dict(b["score"], judge={"model": "judge-1", "says": "x", "retired": True})
+        env = {"OPENAI_API_KEY": "k"}
+        with self.assertRaises(run.Refused) as e:
+            run.Run(b, {"_kind": "agent", "key": "a", "label": "A"}, model="m", provider="openai", env=env, unsandboxed=True, proving=True)
+        self.assertIn("judge-1, is retired: name another with --judge-model", str(e.exception))
+        self.assertIsNone(run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env={}).judge_model)
+        self.assertEqual(run.Run(b, definitions.control(b, "nop"), model="", provider="openai", env=env,
+                                 judge_model="judge-2").judge_model, "judge-2")
+
+    def test_a_runs_retries_default_to_the_benchmarks_own(self):
+        b = kit("agent-task-v1", os.path.join(self.tmp, "kits"))
+        nop = definitions.control(b, "nop")
+        self.assertEqual(run.Run(b, nop, model="", provider="openai", env={}).retries, 0)
+        b["limits"] = dict(b.get("limits") or {}, retries=3)
+        self.assertEqual([run.Run(b, nop, model="", provider="openai", env={}, retries=r).retries for r in (None, 0, 1)], [3, 0, 1])
+        self.assertIn("limits.retries: the upstream's own retries of a failed unit, a whole number from 0 to 9",
+                      definitions.problems(dict(b, limits={"retries": 10}), "benchmark"))
+
     def test_a_standard_job_named_oracle_without_the_record_is_no_control(self):
         j = parse.parse_job(self.go("agent-task-v1", "oracle"))
         with open(os.path.join(j.dir, "config.json")) as f:
@@ -334,6 +354,13 @@ class Prove(unittest.TestCase):
         self.assertNotIn("ok", proven["oracle"])
         self.assertNotIn("limit", proven["oracle"])
         self.assertEqual(definitions.problems(written, "benchmark"), [])
+
+    def test_a_proof_names_the_judge_its_job_ran_with_and_none_without_one(self):
+        b = kit("agent-task-v1", os.path.join(self.tmp, "kits"))
+        b["score"] = dict(b["score"], judge={"model": "judge-1", "says": "x", "retired": True})
+        got = self.prove(b, write=False)["kit"]
+        self.assertTrue(got["nop"]["ok"], got)
+        self.assertNotIn("judge", got["nop"])                              # never the retired one it did not ask
 
     def test_a_shard_s_proof_runs_its_controls_on_its_units_and_says_which(self):
         from nullius.standard.runner import shard

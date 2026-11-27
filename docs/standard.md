@@ -443,8 +443,8 @@ An `answer` or `score` error that begins `EnvironmentSetupError: `, `VerifierErr
 | Field in `standard.json` | Meaning |
 | --- | --- |
 | `gated` | `true` for a benchmark whose tasks are gated: a unit's failing model endpoint (the agent's, the judge's, the simulated user's) is kept as its status and class, never the provider's words |
-| `score.judge` | `{model, says}`: the official judge. Its route (`<unit>-judge`) is asked as that model, recorded beside the unit's calls, never as the agent's. `cli run --judge-model` asks another |
-| `simulator` | `{model, says}`, only with `agent.conversation/v1`: the user's model, on `<unit>-simulator`. The conversation opens with a `turn` on an empty transcript, its message after `setup`'s prompt and a blank line. A control never asks it. `cli run --simulator-model` asks another |
+| `score.judge` | `{model, says, retired?, served_as?}`: the official judge. Its route (`<unit>-judge`) is asked as that model, recorded beside the unit's calls, never as the agent's. `cli run --judge-model` asks another. `retired: true`: no default; an agent's run without `--judge-model` is refused, a control's gets no judge. `served_as`: `{provider: name}` where a provider lists the model under another name |
+| `simulator` | `{model, says, served_as?}`, only with `agent.conversation/v1`: the user's model, on `<unit>-simulator`. The conversation opens with a `turn` on an empty transcript, its message after `setup`'s prompt and a blank line. A control never asks it. `cli run --simulator-model` asks another |
 | `leaderboard` | `{says, simulator?, judge?, bench_options?, repeat?}`: what the upstream's leaderboard fixes besides the ranked model, from its own submission rules - the user simulator's and judge's models, the benchmark's options it sets and the fewest attempts per unit. The builder then offers **Like the leaderboard** |
 | `limits.turns` | At most this many agent turns in a conversation (default 20; `cli run --max-turns` forces another) |
 | `limits.turn_seconds` | The agent's whole work on a unit, every turn of a conversation included (default 900; a task's `agent_seconds`, a setup's own `turn_seconds` or `cli run --timeout agent=` before it) |
@@ -457,6 +457,7 @@ An `answer` or `score` error that begins `EnvironmentSetupError: `, `VerifierErr
 | `driver.list_command` | A start of the driver for listings alone, needing only the standard library and the dataset's files; `{here}` its one slot |
 | `driver.task_given` | `true`: the driver is sent `task_given` before each agent is given its task, and the task waits for its answer: [the computer port](ports/agent-computer-v1.md#the-window-before-the-task) closes its window before the task there. A control's or a setup's unit gets none |
 | `limits.attempts` | How the upstream tells attempts apart; the driver is then sent `attempt` with `setup`, `turn` and `answer` |
+| `limits.retries` | The upstream's own retries of a failed unit (0 to 9): a run's `--retries` when none is given |
 | `limits.scored_cuts` | The cuts after which an agent's unit is still scored: `time`, `calls`, `end` ([a unit cut at a limit](cli/run.md#a-unit-cut-at-a-limit)) |
 | `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |
 | `units.categories` | `{FIELD: {label, names: {VALUE: name}}}`: how `describe`'s categories read on a listing; `--category` still takes the value |
@@ -491,7 +492,7 @@ The upstream's dependencies go in `driver.install` (a capability's `install` is 
 
 | Key of an option | Meaning |
 | --- | --- |
-| `summary`, `values` or `pattern`, `example`, `default` | What it changes, its allowed choices or input pattern, and its value when unset. `example`, optional and checked when given, is a value the pattern allows besides the default |
+| `summary`, `values` or `pattern`, `example`, `default` | What it changes, its allowed choices or input pattern, and its value when unset. `example`, only beside a default that is a word, is a value the pattern allows besides it |
 | `datasets` | The datasets it applies to |
 | `about` | A line about each value |
 | `names` | A name for some values, shown in their place; a recipe and the CLI keep the value |
@@ -638,7 +639,7 @@ already accepts arbitrary models needs only the `original` method.
 | `model` driver method | The upstream is told `runs_as` (its window, batching and token budget) while the relay sends the model chosen. A model that reasons by default can spend that budget thinking: a last reply with neither text nor a tool call is `OutputLengthExceededError`. A last Responses reply that `failed` is an API error. A runner that fails after the unit is asked to stop is `CancelledError` |
 | `units` | A setup may count its own units; `units` is sent `setup` |
 | `answer` | Runs the upstream's answerer through the unit's relay; `score` is sent `setup` too. Local processes or the Original setup driver container |
-| `comparable` | `false` when no model of `models` is the paper's, so its runs compare with each other only; or the list of those models whose runs compare with the paper's (`paper`), when the setup runs several agents and only some are the paper's: the builder offers those alone as Like the paper, the others as Any of your choice; or `[]` when none can be run any more: Like the paper is greyed out, and `run BENCHMARK original` refused |
+| `comparable` | `false` when no model of `models` is the paper's, so its runs compare with each other only; or the list of those models whose runs compare with the paper's (`paper`), when the setup runs several agents and only some are the paper's: the builder offers those alone as Like the paper, the others as Any of your choice; or `[]` when none can be run any more: Like the paper is greyed out, and `run BENCHMARK original` refused. Without `models`, `[]` says the paper's judge or user simulator is retired: Original still takes any model |
 | Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper`, and the benchmark's own agent that ran (`agent`), whose key is also the job's agent (`agent_info.name`) |
 | Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries [`pass_hat_k`](field-guide.md#attempts) |
 | Retries | `cli run --retries N` runs a failed attempt again: [which failures](cli/run.md#retries) |

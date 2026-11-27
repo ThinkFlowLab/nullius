@@ -23,6 +23,7 @@ Every benchmark in the catalogue: where it runs, what it needs, the ways it runs
 <tr><td><a href="swe-bench-verified.md">SWE-bench Verified</a><br><code>swe-bench-verified</code></td><td><span class="what">Software engineering: fix a real GitHub issue so the failing tests pass.</span></td><td>Coding</td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td>500</td><td><a href="https://github.com/SWE-bench/SWE-bench">Official</a></td></tr>
 <tr><td><a href="tau3-bench.md">τ³-bench</a><br><code>tau3-bench</code></td><td><span class="what">Customer service with domain tools and a simulated user: airline, retail, telecom, banking.</span></td><td>Customer service</td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td>375</td><td><a href="https://github.com/sierra-research/tau2-bench">Official</a></td></tr>
 <tr><td><a href="terminal-bench.md">Terminal-Bench 2.0</a><br><code>terminal-bench</code></td><td><span class="what">Real terminal tasks in a container: build, configure, debug.</span></td><td>Terminal</td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td>89</td><td><a href="https://github.com/laude-institute/terminal-bench">Official</a></td></tr>
+<tr><td><a href="vitabench.md">VitaBench</a><br><code>vitabench</code></td><td><span class="what">Food delivery, in-store and travel requests from a simulated user, with up to 66 tools.</span></td><td>Life services</td><td><span class="mark">✓</span></td><td><span class="mark none">–</span></td><td>400</td><td><a href="https://github.com/meituan-longcat/vitabench">Official</a></td></tr>
 </tbody></table>
 
 ### How each runs
@@ -41,6 +42,7 @@ Every benchmark in the catalogue: where it runs, what it needs, the ways it runs
 <tr><td><a href="swe-bench-verified.md">SWE-bench Verified</a></td><td><code>agent.<wbr>workspace/<wbr>v1</code></td><td>Nullius</td><td>the authors</td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 <tr><td><a href="tau3-bench.md">τ³-bench</a></td><td><code>agent.<wbr>tools/<wbr>v1</code>, <code>agent.<wbr>conversation/<wbr>v1</code></td><td>Nullius</td><td>Nullius</td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 <tr><td><a href="terminal-bench.md">Terminal-Bench 2.0</a></td><td><code>agent.<wbr>workspace/<wbr>v1</code></td><td>Nullius</td><td>the authors</td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
+<tr><td><a href="vitabench.md">VitaBench</a></td><td><code>agent.<wbr>tools/<wbr>v1</code>, <code>agent.<wbr>conversation/<wbr>v1</code></td><td>Nullius</td><td><span class="mark none">–</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td><td><span class="mark">✓</span></td></tr>
 </tbody></table>
 
 - Nullius wrote a control where the upstream published none.

@@ -723,7 +723,7 @@ class Run:
                  turn_seconds: Optional[int] = None, say: Callable[[str], None] = print, env=os.environ,
                  proving: bool = False, unsandboxed: bool = False, judge_model: Optional[str] = None,
                  backend: str = "local", options: Optional[dict] = None, shard: Optional[tuple] = None, shard_by: str = "id",
-                 launch: Optional[str] = None, repeat: int = 1, retries: int = RETRIES,
+                 launch: Optional[str] = None, repeat: int = 1, retries: Optional[int] = None,
                  retry_if: Optional[Callable[[dict], bool]] = None, simulator_model: Optional[str] = None,
                  licences: Optional[Licences] = None, bench_options: Optional[dict] = None, which=shutil.which,
                  remove_images: bool = False, prices: Optional[dict] = None, max_usd: Optional[float] = None,
@@ -880,11 +880,16 @@ class Run:
         # on a route of their own (<tag>-judge), recorded beside the unit's and never counted as the agent's.
         # The official one is written as its maker spells it; the run's provider may spell it otherwise.
         j = (bench.get("score") or {}).get("judge")
-        self.judge_model = (judge_model or providers.served_as(j["model"], provider)) if j else None
+        # A retired one is never the default: an agent's run names another; a control's run without one sends none.
+        if j and j.get("retired") and not judge_model:
+            if other.get("_kind") != "control":
+                raise Refused(f"{bench.get('label') or bench['key']}'s official judge, {j['model']}, is retired: name another with --judge-model")
+            j = None
+        self.judge_model = (judge_model or providers.official_as(j, provider)) if j else None
         # A benchmark whose user a model plays: its driver's turns ask that model the same way, on <tag>-simulator.
         # A control holds no conversation, so it never asks it.
         sim = bench.get("simulator")
-        self.simulator_model = (simulator_model or providers.served_as(sim["model"], provider)) if sim else None
+        self.simulator_model = (simulator_model or providers.official_as(sim, provider)) if sim else None
         # A control (definitions.control) calls no model: its run needs a key only for the benchmark's judge.
         ds = [d for d in bench["datasets"] if dataset in (None, d["id"])]
         if not ds:
@@ -990,7 +995,8 @@ class Run:
         self.units_file = units_file
         self.task_set = task_set
         self.repeat = max(1, int(repeat or 1))
-        self.retries = max(0, int(retries or 0))
+        # not given: the upstream's own retries (limits.retries), else none
+        self.retries = max(0, int((bench.get("limits") or {}).get("retries", RETRIES) if retries is None else retries))
         self.retry_if = retry_if or retryable
         # an attempt a try may follow keeps what that try needs: its own image (removed when no try follows,
         # ``release_image``), its unit's count of what it spent (``ledger.forget``), and a rate limit's end

@@ -676,7 +676,7 @@ def _boat_units(a, b, other) -> int:
         print("refused:", "; ".join(bad))
         return 2
     words = [b["key"] if "_version" not in b else definitions.ref_of(b), a.other, "--provider", a.provider,
-             "--dataset", ds, "--attempts", str(a.repeat), "--retries", str(a.retries)]
+             "--dataset", ds, "--attempts", str(a.repeat), *(["--retries", str(a.retries)] if a.retries is not None else [])]
     for field in ("model", "judge_model", "simulator_model", "max_usd_per_unit", "max_turns", "max_calls"):
         value = getattr(a, field)
         if value is not None:
@@ -686,8 +686,8 @@ def _boat_units(a, b, other) -> int:
             words += ["--" + field.replace("_", "-"), value]
     # Saved price overrides belong to the launching profile, not the fresh VM.
     needs = definitions.option_needs(b, vals)
-    models = [a.model, other.get("sent"), a.judge_model or providers.served_as((b.get("score", {}).get("judge") or {}).get("model", ""), a.provider),
-              a.simulator_model or providers.served_as((b.get("simulator") or {}).get("model", ""), a.provider),
+    models = [a.model, other.get("sent"), a.judge_model or providers.official_as((b.get("score", {}).get("judge") or {"model": ""}), a.provider),
+              a.simulator_model or providers.official_as((b.get("simulator") or {"model": ""}), a.provider),
               *[providers.served_as(m, a.provider) for m in needs["embeddings"] + needs["reranker"]]]
     explicit = prices(a.price)
     for model, row in price_list.given(models, price_list.table()).items():
@@ -1123,9 +1123,9 @@ def main(argv=None):
             p.add_argument("--attempts", "--repeat", dest="repeat", type=int, default=1, metavar="K",
                            help="run each unit K times, each an attempt counted whatever its result "
                                 "(the upstream's --num-trials, pass^k); default 1")
-            p.add_argument("--retries", type=_retries, default=RETRIES, metavar="N",
+            p.add_argument("--retries", type=_retries, metavar="N",
                            help="run a failed attempt again, up to N times, after the other units: never after a timeout, "
-                                f"a wrong key or model, spent credit or a cap; 0 to {MAX_RETRIES}, default {RETRIES}")
+                                f"a wrong key or model, spent credit or a cap; 0 to {MAX_RETRIES}, default the benchmark's limits.retries, else {RETRIES}")
             p.add_argument("--remove-images", action="store_true",
                            help="remove each image this run pulls or builds when its last unit ends (default: kept for the next run)")
             p.add_argument("--name")

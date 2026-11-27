@@ -128,6 +128,7 @@ _KEY = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _TAG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+/-]{0,127}$")
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
+_NUMBER = re.compile(r"^-?[0-9]+(?:\.[0-9]+)?$")       # a default that shows the form of its own input
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _HTTPS = re.compile(r"^https://[A-Za-z0-9.-]+(?:/[A-Za-z0-9_.%@+-]+)+$")
 _RELATIVE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$")
@@ -168,6 +169,7 @@ _TEMPLATE = re.compile(r"^(?:[A-Za-z0-9_./:=@+ -]|\{[a-z_]+\})*$")
 _VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,39}$")
 # What a version may say for itself; the rest of the file is shared.
 VERSIONED = ("upstream", "install", "start", "model", "env", "options", "caches", "fidelity", "proven")
+MAX_RETRIES = 9                        # the most retries of a failed attempt (runner.retries, cli run --retries)
 # What a benchmark's version may say for itself: its data, its driver, how it scores, who plays its user, its environments.
 BENCH_VERSIONED = ("upstream", "datasets", "task_parts", "files", "driver", "mcp_servers", "score", "simulator", "limits", "controls", "environments",
                    "options", "host", "setups", "proven", "leaderboard")
@@ -540,7 +542,9 @@ def _options(d: dict) -> List[str]:
             except re.error:
                 bad.append(f"{w}.pattern: a regular expression")
                 continue
-            if "example" in o and (option_problem(o, o["example"]) or o["example"] == o.get("default")):
+            if "example" in o and _NUMBER.match(str(o.get("default"))):
+                bad.append(f"{w}.example: only when its default is a word, not a number")
+            elif "example" in o and (option_problem(o, o["example"]) or o["example"] == o.get("default")):
                 bad.append(f"{w}.example: a value its pattern allows besides its default, shown in its place")
         if option_problem(o, o.get("default")):
             bad.append(f"{w}.default: the vendor's own default, a value it allows")
@@ -1698,6 +1702,9 @@ def problems(d: dict, kind: str) -> List[str]:
                     v = lim.get(f)
                     if v is not None and (isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 100000):
                         bad.append(f"limits.{f}: a whole number from 1")
+                r = lim.get("retries")
+                if r is not None and (isinstance(r, bool) or not isinstance(r, int) or not 0 <= r <= MAX_RETRIES):
+                    bad.append(f"limits.retries: the upstream's own retries of a failed unit, a whole number from 0 to {MAX_RETRIES}")
                 cuts = lim.get("scored_cuts")
                 if cuts is not None and (not isinstance(cuts, list) or not cuts or len(set(map(str, cuts))) != len(cuts)
                                          or any(c not in CUTS for c in cuts)):
@@ -1719,12 +1726,16 @@ def problems(d: dict, kind: str) -> List[str]:
         j = s.get("judge")
         if j is not None and (not isinstance(j, dict) or not _MODEL_NAME.match(str(j.get("model", ""))) or not j.get("says")):
             bad.append("score.judge: {model: the official judge, as the provider names it; says: what it is asked}")
+        elif j is not None and not isinstance(j.get("retired", False), bool):
+            bad.append("score.judge.retired: true when the official judge can no longer be called")
+        bad += _served_as("score.judge", j)
         sim = d.get("simulator")
         if sim is not None:
             if not isinstance(sim, dict) or not _MODEL_NAME.match(str(sim.get("model", ""))) or not sim.get("says"):
                 bad.append("simulator: {model: the official simulated user's model, as the provider names it; says: whom it plays}")
             elif "agent.conversation/v1" not in (needs if isinstance(needs, list) else []):
                 bad.append("simulator: only a benchmark that needs agent.conversation/v1 has a user to simulate")
+            bad += _served_as("simulator", sim)
         bad += _controls(d.get("controls"))
         bad += _leaderboard(d)
         bad += _setups(d.get("setups"))
@@ -1961,6 +1972,18 @@ def skills_shown(port: str, record: Optional[dict]) -> List[str]:
         return [s for s, r in record["skills"].items() if isinstance(r, dict) and r.get("ok")]
     return list(port_skills(port)) if on_current_kit(port, record) else []
 
+
+
+def _served_as(w: str, spec) -> List[str]:
+    """An official judge's or simulated user's ``served_as``: {provider: the name that provider serves it as}."""
+    sa = spec.get("served_as") if isinstance(spec, dict) else None
+    if sa is None:
+        return []
+    from nullius.providers import PROVIDERS
+    if not isinstance(sa, dict) or not sa or any(p not in PROVIDERS or not _MODEL_NAME.match(str(m))
+                                                  for p, m in sa.items()):
+        return [f"{w}.served_as: {{provider: the name it serves the model as}}"]
+    return []
 
 def _skills(d: dict) -> List[str]:
     """A kit's ``basic`` and ``skills``, a benchmark's ``needs_skills``."""
