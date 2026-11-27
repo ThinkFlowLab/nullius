@@ -864,6 +864,9 @@
             hint: 'Plays the user in every conversation. Empty: ' + esc(b.label) + "'s official one; another compares only with runs that used it."})) + servedField(rec, 'simulator') : '')
         + (b.judge ? (paper ? fixed('Model for the judge', lb && lb.judge || b.judge, lb && lb.judge ? 'leaderboard' : 'official') : field('Model for the judge', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: b.judge + ' (official)', after: reasoningLine(rec, 'judge'),
             hint: 'Grades the answers. Empty: ' + esc(b.label) + "'s official judge; another compares only with runs that used it."})) + servedField(rec, 'judge') : '')
+        // a judge beside the benchmark's score, never its own: run only when a model is named
+        + (b.experiment_judge && !paper ? field(esc(b.experiment_judge.label) + ' (experiment)', 'judge_model', rec.judge_model || '', {list: 'nb-models', placeholder: 'None',
+            hint: 'A second score beside ' + esc(b.label) + "'s, never in its place. Empty: none. Its source used " + esc(b.experiment_judge.model) + '.'}) + servedField(rec, 'judge') : '')
         + (lb ? Object.entries(lb.bench_options || {}).map(([k, v]) => fixed((b.options[k] || {}).label || k, ((b.options[k] || {}).names || {})[v] || v, 'leaderboard')).join('') : '')
         + keyLine(rec);
     }

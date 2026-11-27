@@ -318,16 +318,28 @@ class Recipe(unittest.TestCase):
         self.assertIn("run locomo model --model vendor/their-model", custom["script"])
         self.assertTrue(self.compiled(others=["original"], model="")["errors"])
 
-    def test_locomo_dataset_counts_questions_when_only_its_original_runs(self):
+    def test_locomo_dataset_counts_conversations_when_only_its_original_runs(self):
         out = recipe.compile({"version": 1, "harness": "standard", "name": "locomo-experiment", "title": "LoCoMo",
                               "benchmark": "locomo", "datasets": ["locomo10"], "others": ["original"],
                               "model_choice": "any", "provider": "openai", "model": "gpt-4-turbo", "limit": "",
                               "concurrency": "", "unsandboxed": False, "where": "local", "backend": "local", "options": {}})
         self.assertEqual(out["errors"], [])
         rows = {r[1]: r[2] for r in out["review"]}
-        self.assertNotIn("1540 conversations", rows["Dataset"])
-        self.assertEqual(rows["Dataset"], "LoCoMo-10 · 1540 questions")
+        self.assertEqual(rows["Dataset"], "LoCoMo-10 · 10 conversations")
         self.assertEqual(rows["Scope"].split()[:2], ["all", "conversations"])   # the setup's own unit, with no count of its own
+
+    def test_locomos_experiment_judge_runs_only_when_its_model_is_named(self):
+        rows = lambda out: {r[1]: r[2] for r in out["review"]}
+        plain = self.compiled(others=["mem0", "nop"], model="m")
+        judged = self.compiled(others=["mem0", "nop"], model="m", judge_model="gpt-4o-mini")
+        self.assertEqual((plain["errors"], judged["errors"]), ([], []))
+        self.assertNotIn("--judge-model", plain["script"])
+        self.assertNotIn("judge", rows(plain)["Model"])
+        self.assertIn("--judge-model gpt-4o-mini", judged["script"])
+        self.assertTrue(rows(judged)["Model"].endswith(" · Judge gpt-4o-mini (experiment)"))
+        self.assertEqual((self.compiled(others=["nop"])["keyless"], self.compiled(others=["nop"], judge_model="gpt-4o-mini")["keyless"]),
+                         (True, False))                          # a control judged needs the key its judge asks with
+        self.assertEqual(recipe.page_of("locomo")["experiment_judge"], {"label": "Judge", "model": "gpt-4o-mini"})
 
     def test_paper_filter_also_applies_to_a_memory_capability(self):
         longmem = dict(benchmark="longmemeval", datasets=["longmemeval_s"], others=["mem0"], model_choice="paper")

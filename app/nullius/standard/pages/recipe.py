@@ -210,6 +210,8 @@ def _bench_page(b: dict) -> dict:
                        for k, x in (b.get("setups") or {}).items() if k == "original"],
             # its own options (a search, a mode): each value with its line and what it needs; and the host requirements
             "simulator": (b.get("simulator") or {}).get("model", ""), "judge": ((b.get("score") or {}).get("judge") or {}).get("model", ""),
+            # a judge beside the score, run only when the recipe names its model
+            "experiment_judge": {k: v for k, v in ((b.get("score") or {}).get("experiment_judge") or {}).items() if k in ("label", "model")} or None,
             # what the upstream's leaderboard fixes besides the ranked model (Like the leaderboard)
             "leaderboard": b.get("leaderboard") or None,
             "attempts": (b.get("limits") or {}).get("attempts", ""),
@@ -740,7 +742,10 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         apis = None if pk["control"] else (pk["o"].get("model") or {}).get("apis") or ["chat"]
         if apis and provider not in providers.offered(apis):
             add("model", f"{providers.label(provider)} does not serve what {pk['o']['label']} speaks: choose another provider.")
-    if provider in PROVIDERS and (b.get("score") or {}).get("judge") and provider not in providers.offered(["chat"]):
+    judge_model = str(recipe.get("judge_model") or "").strip()
+    # the judge the run asks: the official one, or an experiment judge whose model the recipe names
+    judges = bool((b.get("score") or {}).get("judge") or (judge_model and (b.get("score") or {}).get("experiment_judge")))
+    if provider in PROVIDERS and judges and provider not in providers.offered(["chat"]):
         add("model", f"{providers.label(provider)} does not serve what {b['label']}'s judge speaks: choose another provider.")
     model = str(recipe.get("model") or "").strip()
     if not _MODEL.match(model) and (needs_model or model):
@@ -760,7 +765,6 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         add("limits", f"Retries after an error: a whole number from 0 to {MAX_RETRIES}.")
         retries = 0
     sim_model = str(recipe.get("simulator_model") or "").strip()
-    judge_model = str(recipe.get("judge_model") or "").strip()
     like = {"paper": "Like the paper", "leaderboard": "Like the leaderboard"}.get(model_choice)
     for what, role, m in (("the user simulator's", "simulator", sim_model), ("the judge's", "judge", judge_model)):
         if m and not _MODEL.match(m):
@@ -904,7 +908,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if backend == "boat" and elsewhere:
         add("where", f"{', '.join(elsewhere)} cannot run in a Boat VM: choose Hosts.")
     # a job that calls no model (a control of a benchmark with no judge) spends nothing and takes no share
-    spends = lambda p: not (p["control"] and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"])
+    spends = lambda p: not (p["control"] and not judges and not needs["embeddings"] and not needs["reranker"])
     paying = len(dss) * sum(1 for p in picks if spends(p)) * len(targets or [None])
     share = None
     if cap is not None and paying:
@@ -919,7 +923,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         judge, sim = (b.get("score") or {}).get("judge"), b.get("simulator")
         called = [m for x in dss for p in picks for m in ledger.models(
             p["o"], None if p["control"] else (p["o"].get("sent") or p.get("model")) if p.get("setup") else model,
-            (judge_model or providers.served_as(judge["model"], provider)) if judge else None,
+            (judge_model or providers.served_as(judge["model"], provider)) if judge else judge_model if judges else None,
             (sim_model or providers.served_as(sim["model"], provider)) if sim else None,
             providers.served_as((definitions.option_needs(b, per_ds[x["id"]])["embeddings"] or [""])[0], provider), control=p["control"])]
         called += [providers.served_as(m, provider) for m in needs["reranker"]]
@@ -936,7 +940,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     def sent_of(p: dict) -> Dict[str, Optional[str]]:
         """Each model field's model as job ``p`` sends it; None where it has none (a control has no model of its own)."""
         return {"model": None if p["control"] else (p["o"].get("sent") or p.get("model")) if p.get("setup") else model,
-                "judge": (judge_model or providers.served_as(judge_def["model"], provider)) if judge_def else None,
+                "judge": (judge_model or providers.served_as(judge_def["model"], provider)) if judge_def else judge_model if judges else None,
                 "simulator": (sim_model or providers.served_as(sim_def["model"], provider)) if sim_def else None}
 
     def called_of(p: dict) -> List[str]:
@@ -1099,7 +1103,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["docker"] = backend == "container" or (own and any(p["control"] for p in picks)) or bool(checked)
     out["model"] = model
     # Nothing in the run asks a model: no key is handed to it, and none need be set.
-    out["keyless"] = only_controls and not (b.get("score") or {}).get("judge") and not needs["embeddings"] and not needs["reranker"]
+    out["keyless"] = only_controls and not judges and not needs["embeddings"] and not needs["reranker"]
     # what the machines must have for the chosen options (``host``)
     on_host = [] if backend == "boat" and whole else needs["host"]     # each VM installs them (boat_units.prepare)
     if backend == "container" and any(p.get("setup") for p in picks):
@@ -1170,6 +1174,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       else f"{providers.label(providers.choice(provider, str(recipe.get('endpoint') or '')))} · " + (model if needs_model else ", ".join(p["o"]["sent"] for p in picks if p.get("setup")) or "the judge only")
                       + (f" · user simulator {sim_model or (b.get('simulator') or {}).get('model')}" + (" (leaderboard)" if lb.get("simulator") else "" if sim_model else " (official)") if b.get("simulator") else "")
                       + (f" · judge {judge_model or b['score']['judge']['model']}" + ("" if judge_model else " (official)") if (b.get("score") or {}).get("judge") else "")
+                      + (f" · {b['score']['experiment_judge']['label']} {judge_model} (experiment)" if judges and not (b.get("score") or {}).get("judge") else "")
                       + "".join(f" · {SERVED_LABEL[r_]} served by {', '.join(s)}" for r_, s in served.items())
                       + "".join(f" · {SERVED_LABEL[r_]} reasoning {', '.join(out['own_reasoning'][r_])} ({'the agent' if r_ == 'model' else 'the benchmark'}'s)"
                                 if r_ in out["own_reasoning"] else f" · {SERVED_LABEL[r_]} reasoning {levels[r_]}"

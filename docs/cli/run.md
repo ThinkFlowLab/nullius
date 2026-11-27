@@ -47,7 +47,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--attempts K` | Each unit K times; `result.json` carries `pass_hat_k` |
 | `--retries N` | Run a failed attempt again, up to N times: [below](#retries) |
 | `--remove-images` | Remove each image the run pulls or builds when its last unit ends (never with `--attempts`); by default they stay for the next run |
-| `--judge-model` | Instead of the official judge |
+| `--judge-model` | Instead of the official judge; on a benchmark with an experiment judge, runs it as this model |
 | `--simulator-model` | Instead of the official simulated user |
 | `--name` | The job's name |
 | `--jobs` | Where jobs are written (default `jobs_standard/` relative to the current directory) |

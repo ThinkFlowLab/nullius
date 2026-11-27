@@ -2,7 +2,7 @@
   "schema": "nullius.benchmark/v1",
   "key": "locomo",
   "label": "LoCoMo",
-  "summary": "Each question is a unit: its conversation's sessions go into the memory under test, the question is recalled against it, and LoCoMo's reader prompt answers from what came back; the answer is scored by token F1.",
+  "summary": "Each conversation is a unit: its sessions go into the memory under test once, each of its questions is recalled against it, and LoCoMo's reader prompt answers from what came back; each answer is scored by token F1.",
   "family": "capability",
   "needs": [
     "cap.memory/v1"
@@ -50,12 +50,15 @@
       "label": "LoCoMo-10",
       "path": "data/locomo10.json",
       "sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
-      "units": 1540
+      "units": 10
     }
   ],
   "units": {
-    "noun": "question",
-    "nouns": "questions"
+    "noun": "conversation",
+    "nouns": "conversations"
+  },
+  "limits": {
+    "turn_seconds": 3600
   },
   "controls": {
     "nop": {
@@ -70,7 +73,12 @@
   },
   "score": {
     "kind": "score",
-    "says": "token F1 of the answer against the reference, by LoCoMo's own eval_question_answering (task_eval/evaluation.py): its normalisation and Porter stemming, category 1 by comma-separated parts, category 3 against the reference's part before the first ';' (categories 1 to 4)"
+    "says": "token F1 of the answer against the reference, by LoCoMo's own eval_question_answering (task_eval/evaluation.py): its normalisation and Porter stemming, category 1 by comma-separated parts, category 3 against the reference's part before the first ';' (categories 1 to 4); a conversation's score is the mean over its questions",
+    "experiment_judge": {
+      "label": "Judge",
+      "model": "gpt-4o-mini",
+      "says": "An LLM judge, with the prompt Mem0 published for LoCoMo (mem0ai/mem0 evaluation/metrics/llm_judge.py at aae5989), whichever memory runs: each answer of categories 1 to 4 against the whole reference, CORRECT or WRONG; the share marked CORRECT. Beside the F1, never LoCoMo's score."
+    }
   },
   "options": {
     "rag_mode": {
@@ -204,10 +212,6 @@
         "openai": "",
         "openrouter": "openai/"
       },
-      "units": {
-        "noun": "conversation",
-        "nouns": "conversations"
-      },
       "turn_seconds": 3600,
       "side_models": [
         "gpt-3.5-turbo"
@@ -242,7 +246,7 @@
           "label": "LoCoMo-10",
           "path": "data/locomo10.json",
           "sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
-          "units": 1986
+          "units": 10
         }
       ],
       "controls": {
@@ -258,7 +262,12 @@
       },
       "score": {
         "kind": "score",
-        "says": "token F1 of the answer against the reference, by LoCoMo's own eval_question_answering (task_eval/evaluation.py), category 5 scored 1 when the answer says it is not mentioned, else 0: its normalisation and Porter stemming, category 1 by comma-separated parts, category 3 against the reference's part before the first ';' (categories 1 to 5)"
+        "says": "token F1 of the answer against the reference, by LoCoMo's own eval_question_answering (task_eval/evaluation.py), category 5 scored 1 when the answer says it is not mentioned, else 0: its normalisation and Porter stemming, category 1 by comma-separated parts, category 3 against the reference's part before the first ';' (categories 1 to 5); a conversation's score is the mean over its questions",
+        "experiment_judge": {
+          "label": "Judge",
+          "model": "gpt-4o-mini",
+          "says": "An LLM judge, with the prompt Mem0 published for LoCoMo (mem0ai/mem0 evaluation/metrics/llm_judge.py at aae5989), whichever memory runs: each answer of categories 1 to 4 against the whole reference, CORRECT or WRONG; the share marked CORRECT. Beside the F1, never LoCoMo's score."
+        }
       }
     }
   }

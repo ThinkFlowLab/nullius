@@ -211,6 +211,7 @@
       <dl>
         <dt>raw rate</dt><dd id="raw-rate" class="em" data-tip="No pass or fail in this benchmark: no rate">—</dd>
         {% if job.mean_score_planned is not none %}<dt>planned</dt><dd id="planned-mean" data-tip="The mean over all {{ [job.n_planned, job.trials|length]|max }} planned, a trial with no score counting 0">{{ '%.2f'|format(job.mean_score_planned) }}</dd>{% endif %}
+        {% set also = job.complement %}{% if also %}<dt><span id="complement-help" class="def" tabindex="0" data-tip="{{ also.why or 'A judge model read each answer against its reference' }}: {{ (also.score * 100)|round|int }}% of the {{ also.n }} answers right. Experiment, not the benchmark's official score.">{{ also.label }}</span></dt><dd id="complement-score">{{ '%.2f'|format(also.score) }}</dd>{% endif %}
         {% if job.start_with %}<dt>tasks run</dt><dd id="tasks-run"{% if job.n_tasks_run < job.n_tasks %} class="warn"{% endif %} data-tip="Started on some of its plan: the mean is over the tasks run so far">{{ job.n_tasks_run }} of {{ job.n_tasks }}</dd>{% endif %}
         <dt>infra</dt><dd{% if job.n_infra %} class="warn"{% endif %} data-tip="Trials that never got a fair attempt — rate limits, API errors, setup failures and spending caps">{{ job.n_infra }}</dd>
       </dl>
