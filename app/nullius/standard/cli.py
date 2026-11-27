@@ -611,7 +611,7 @@ def cmd_run(a):
         except ValueError as e:
             unreachable = str(e)
     try:
-        part = start_with(b, a.start_with) if a.start_with is not None else None
+        part = start_with(b, a.start_with, dataset) if a.start_with is not None else None
     except (run.Refused, sets.Refused) as e:
         print("refused:", e)
         return 2
@@ -644,10 +644,11 @@ def cmd_run(a):
     return 3 if failed else 0
 
 
-def start_with(bench: dict, value: str) -> dict:
+def start_with(bench: dict, value: str, dataset: str | None = None) -> dict:
     """``run --start-with``: the part a run begins with (``run.Run``'s ``start_with``). A whole number is a count,
-    ``set:NAME`` a task set of the benchmark, ``ids:ID,ID,...`` the units named there (the run builder's form),
-    anything else a file of ids (``run.units_file``)."""
+    ``set:NAME`` a task set of the benchmark (of a set of several datasets, its list of the run's ``dataset``),
+    ``ids:ID,ID,...`` the units named there (the run builder's form), anything else a file of ids
+    (``run.units_file``)."""
     value = value.strip()
     if value.isdigit():
         if int(value) < 1:
@@ -662,13 +663,26 @@ def start_with(bench: dict, value: str) -> dict:
             raise run.Refused(f"--start-with ids: {', '.join(twice)} given more than once")
         return {"ids": ids}
     if value.startswith("set:"):
-        name, rev = sets.split_ref(value[4:])
-        entry = sets.load(bench["key"], name)
-        return {"task_set": sets.record(entry, sets.latest(entry, rev)), "dataset": entry["dataset"]}
+        return set_part(bench["key"], value[4:], dataset, "--start-with set:")
     try:
         return {"units_file": run.units_file(value)}
     except run.Refused as e:
         raise run.Refused(str(e).replace("--units", "--start-with", 1))
+
+
+def set_part(benchmark: str, ref: str, dataset: str | None, flag: str) -> dict:
+    """The task set ``ref`` as a part of a run of ``dataset``: {"task_set": its record, "dataset": its dataset}. Of
+    a set of several datasets, its list of ``dataset``, refused when it holds none; of a set of one, that one, for
+    the run to check against its own."""
+    name, rev = sets.split_ref(ref)
+    entry = sets.load(benchmark, name)
+    got = sets.latest(entry, rev)
+    if "datasets" not in entry:
+        return {"task_set": sets.record(entry, got), "dataset": entry["dataset"]}
+    if dataset not in entry["datasets"]:
+        raise sets.Refused(f"{flag}{ref}: the task set {name} mixes the datasets {', '.join(entry['datasets'])}"
+                           + (f", not {dataset}" if dataset else "; give --dataset, one of them"))
+    return {"task_set": sets.record(entry, got, dataset), "dataset": dataset}
 
 
 def boat_credentials(a, bench, other, vals) -> dict:
@@ -1067,13 +1081,15 @@ def cmd_rerun(a):
     try:
         ids = list(a.unit or []) + (run.units_file(a.units)["units"] if a.units is not None else [])
         with open(os.path.join(a.job, "config.json"), encoding="utf-8") as f:
-            std = json.load(f).get("standard") or {}
+            cfg = json.load(f)
+        std = cfg.get("standard") or {}
         given = std.get("constraints") or {}
+        ran = str(((cfg.get("datasets") or [{}])[0] or {}).get("name") or "").partition("/")[2]
     except run.Refused as e:
         print("refused:", e, file=sys.stderr)
         return 2
     except (OSError, ValueError, AttributeError):
-        std, given = {}, {}
+        std, given, ran = {}, {}, ""
     if isinstance(given, dict) and given.get("cpu_set") is not None:
         try:
             limits.confine(given)                # before any thread, as for its run
@@ -1094,9 +1110,7 @@ def cmd_rerun(a):
         part = None
         if a.task_set is not None:
             # a set of the job's benchmark: its tasks the job planned and has not run
-            name, rev = sets.split_ref(a.task_set)
-            entry = sets.load(str(std.get("benchmark") or "") if isinstance(std, dict) else "", name)
-            part = {"task_set": sets.record(entry, sets.latest(entry, rev)), "dataset": entry["dataset"]}
+            part = set_part(str(std.get("benchmark") or "") if isinstance(std, dict) else "", a.task_set, ran or None, "--set ")
         got = rerun.rerun(a.job, ids, reason=a.reason or "", concurrency=a.concurrency, retries=a.retries,
                           max_usd=a.max_usd, prices_unreachable=unreachable, licences=held, every_unfinished=a.unfinished,
                           count=a.next, task_set=part, **({"env": run_env(provider)} if a.from_run else {}))

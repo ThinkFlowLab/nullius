@@ -588,15 +588,17 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         except sets.Refused as e:
             add("dataset", f"Start with {given[4:]}: {e}.")
             continue
-        if entry["dataset"] != ds_id:
-            add("dataset", f"Start with: the task set {sets.label_of(entry)} is cut from the dataset {entry['dataset']}, not {ds_id}.")
+        part = sets.parts(entry, got).get(ds_id)
+        if part is None:
+            add("dataset", f"Start with: the task set {sets.label_of(entry)} is cut from the dataset{'s' if len(sets.datasets_of(entry)) > 1 else ''} "
+                           f"{', '.join(sets.datasets_of(entry))}, not {ds_id}.")
             continue
-        outside = set(got["units"]) - set_of[ds_id]["ids"] if ds_id in set_of else set()
+        outside = set(part) - set_of[ds_id]["ids"] if ds_id in set_of else set()
         if outside:
             add("dataset", f"Start with: the task set {sets.label_of(entry)} names {len(outside)} of {ds_id}'s tasks outside "
                            f"the task set {set_of[ds_id]['label']}.")
             continue
-        start_of[ds_id] = {"value": f"set:{set_name}", "units": len(got["units"]),
+        start_of[ds_id] = {"value": f"set:{set_name}", "units": len(part),
                            "label": f"task set {sets.label_of(entry)}"}
     side = "agent" if b["family"] == "agent" else "capability"
     # A control the benchmark declares (nop, oracle) is a choice beside the agents or capabilities: it runs

@@ -46,6 +46,12 @@ class StartWith(Scratch):
                 self.assertEqual(next(r for r in out["review"] if r[1] == "Dataset")[2], said)
                 self.assertTrue(next(r[2] for r in out["review"] if r[1] == "Scope").startswith("2 first, 2 later"))
                 self.assertEqual(out["confirm"], "")
+        # of a set of several datasets, its list of the dataset begun with it
+        sets.create(self.b, "both", parts={"all": ["slow"], "more": ["good"]})
+        out = self.compile(start_with={"all": "set:both"})
+        self.assertEqual(out["errors"], [])
+        self.assertIn("--dataset all --start-with set:both -j 1", out["shards"][0]["command"])
+        self.assertTrue(next(r[2] for r in out["review"] if r[1] == "Scope").startswith("1 first, 3 later"))
         # the plan a set or a limit cuts is what is planned
         sets.create(self.b, "dev", dataset="all", units=["good", "wrong", "slow"])
         out = self.compile(task_sets={"all": "dev"}, start_with={"all": ["wrong"]})

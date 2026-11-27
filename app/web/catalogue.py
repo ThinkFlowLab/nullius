@@ -257,14 +257,15 @@ def benchmark_tasks_listing(key, dataset):
     if limit and (not limit.isdigit() or int(limit) < 1):
         return jsonify(ok=False, error="The task limit must be a whole number above zero."), 400
     limit = int(limit) if limit else None
-    # ``within=NAME``: the tasks of that set alone, as the run builder's start on specific tasks lists them
+    # ``within=NAME``: the tasks of that set alone (of a set of several datasets, its list of this one), as the run
+    # builder's start on specific tasks lists them
     within = None
     if request.args.get("within"):
         try:
             entry = sets.load(key, request.args["within"])
         except sets.Refused as e:
             return jsonify(ok=False, error=sets.plain(e, key, request.args["within"])), 400
-        within = sets.latest(entry)["units"]
+        within = sets.parts(entry).get(dataset) or []
     try:
         if request.args.get("ids"):           # every match's id, for "select the N that match"
             got = units.find(bench, dataset, options, search=request.args.get("q", ""), categories=cats, size=None, within=within, limit=limit)

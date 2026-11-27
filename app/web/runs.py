@@ -677,9 +677,10 @@ def waiting_of(j, running=()) -> list:
 
 
 def plan_sets(j, waiting: list) -> list:
-    """The task sets of the job's benchmark and dataset that name planned tasks with no result: [{name, trials,
-    tasks}], ``name`` the set's label, ``trials`` those of ``waiting`` (:func:`waiting_of`) the set names and no
-    re-run is running. What the job page's "Run a set" offers; [] when no set names one."""
+    """The task sets of the job's benchmark and dataset (of a set of several, its list of that dataset) that name
+    planned tasks with no result: [{name, trials, tasks}], ``name`` the set's label, ``trials`` those of ``waiting``
+    (:func:`waiting_of`) the set names and no re-run is running. What the job page's "Run a set" offers; [] when
+    no set names one."""
     if not waiting:
         return []
     try:
@@ -697,10 +698,9 @@ def plan_sets(j, waiting: list) -> list:
         return []
     out = []
     for e in entries:
-        if e.get("dataset") != dataset:
+        if dataset not in task_sets.datasets_of(e):
             continue
-        last = task_sets.latest(e)
-        wanted = set(last["units"])
+        wanted = set(task_sets.parts(e)[dataset])
         trials = [w["trial"] for w in waiting if w["unit"] in wanted and not w["running"]]
         if trials:
             out.append({"name": task_sets.label_of(e), "trials": trials,
