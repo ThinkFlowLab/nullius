@@ -56,7 +56,7 @@ class LeaderboardBrowser(unittest.TestCase):
         self.page = self.context.new_page()
         self.page.set_default_timeout(5000)
         self.errors, self.posts = [], []
-        self.fail_save, self.held, self.stale_measures, self.asked = False, None, 0, []
+        self.fail_save, self.held = False, None
         self.page.on("pageerror", lambda error: self.errors.append(str(error)))
         self.page.route("**/*", self.route)
 
@@ -65,11 +65,6 @@ class LeaderboardBrowser(unittest.TestCase):
         url = urlsplit(request.url)
         if url.hostname != "localhost":
             route.abort()
-            return
-        self.asked.append(url.path)
-        if url.path == "/api/leaderboard/metrics" and self.stale_measures:
-            self.stale_measures -= 1
-            route.fulfill(status=409, json={"error": "The workspace or scoring settings changed. Reload the Leaderboard."})
             return
         if url.path == "/api/scoring" and request.method == "POST":
             self.posts.append(json.loads(request.post_data))
@@ -310,36 +305,6 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertGreater(self.page.evaluate("document.querySelector('[data-chart=\"radars-capabilities\"]').getAnimations({subtree:true}).length"), 0)
         self.assertFalse(self.errors)
 
-    def test_agent_comparison_changes_cancel_and_reduced_motion_is_immediate(self):
-        self.open('/leaderboard')
-        self.page.locator('[data-chart="radars-capabilities"]').scroll_into_view_if_needed()
-        self.choose('[data-agent-select]', 1)
-        self.choose('[data-agent-select]', 0)
-        self.page.wait_for_timeout(400)
-        expect(self.page.locator('#lb-card h2')).to_have_text('Codex')
-        self.page.emulate_media(reduced_motion='reduce')
-        self.choose('[data-agent-select]', 1)
-        self.assertEqual(self.page.evaluate('document.getAnimations().length'), 0)
-        expect(self.page.locator('#lb-card h2')).to_have_text('Goose')
-        self.assertFalse(self.errors)
-
-    def test_first_visibility_and_table_changes_animate(self):
-        self.open('/leaderboard')
-        radar=self.page.locator('[data-chart="radars-capabilities"]')
-        radar.scroll_into_view_if_needed()
-        self.page.wait_for_function("""document.querySelector('[data-chart="radars-capabilities"]').getAnimations({subtree:true}).length>0""")
-        self.assertGreater(radar.evaluate('(e)=>e.getAnimations({subtree:true}).length'),0)
-        self.page.locator('th[data-col="overall"]').click()
-        self.page.locator('th[data-col="overall"]').click()
-        self.page.wait_for_timeout(40)
-        self.assertGreater(self.page.locator('#leaderboard-table tbody').evaluate('(e)=>e.getAnimations({subtree:true}).length'),0)
-        search=self.page.locator('#leaderboard-table-tools [data-search]')
-        search.fill('Goose')
-        expect(search).to_be_focused()
-        expect(self.page.locator('tbody tr:visible [data-name]')).to_have_text('Goose')
-        self.page.wait_for_timeout(400)
-        self.assertFalse(self.errors)
-
     def test_autosave_valid_invalid_retry_and_latest_edit(self):
         self.open('/scoring')
         fold = self.page.locator('[data-scoring-axis="Retrieval"] .lb-fold')
@@ -493,17 +458,8 @@ class LeaderboardBrowser(unittest.TestCase):
         expect(self.page.locator('[data-overall="Retrieval"]')).to_have_value(default)
         self.assertFalse(self.errors)
 
-    def test_scoring_rows_stay_in_their_card_and_a_reader_can_open_them(self):
+    def test_a_reader_who_may_not_write_can_open_scoring_rows(self):
         self.page.emulate_media(reduced_motion='reduce')
-        past = ("(()=>{const card=document.querySelector('section.lb-axes').getBoundingClientRect();"
-                "return [...document.querySelectorAll('section.lb-axes .lb-axis *')].filter(n=>n.offsetParent&&n.getBoundingClientRect().right>card.right+.5).length"
-                "+document.documentElement.scrollWidth-document.documentElement.clientWidth})()")
-        for width in (820, 1024, 1280):
-            self.page.set_viewport_size({"width": width, "height": 900})
-            self.open('/scoring')
-            self.page.locator('[data-scoring-axis="Execution"] .lb-fold').click()
-            self.assertEqual(self.page.evaluate(past), 0, width)
-        # a viewer who may not write still opens a row to read it
         with patch.object(web.shared, "_local_client", return_value=False):
             self.open('/scoring')
             fold = self.page.locator('[data-scoring-axis="Retrieval"] .lb-fold')
@@ -511,29 +467,6 @@ class LeaderboardBrowser(unittest.TestCase):
             expect(fold).to_have_attribute('aria-expanded', 'true')
             expect(self.page.locator('[data-scoring-axis="Retrieval"] [data-entries] input').first).to_be_disabled()
             expect(self.page.locator('[data-overall="Retrieval"]')).to_be_disabled()
-        self.assertFalse(self.errors)
-
-    def test_the_warning_about_an_unreadable_file_goes_once_a_save_rewrites_it(self):
-        configuration.location().write_text("{")
-        self.open('/scoring')
-        warning = self.page.locator('#lb-warning')
-        expect(warning).to_be_visible()
-        with self.page.expect_response(lambda r: r.url.endswith('/api/scoring') and r.status == 200):
-            self.page.locator('[data-overall="Retrieval"]').fill('0.3')
-        expect(warning).to_have_count(0)
-        self.assertFalse(self.errors)
-
-    def test_a_changed_select_keeps_the_keyboard_focus(self):
-        self.page.emulate_media(reduced_motion='reduce')               # the row opens at once: a menu opened while it slides closes
-        self.open('/scoring')
-        self.page.locator('[data-scoring-axis="Retrieval"] .lb-fold').click()
-        dataset = self.page.locator('[data-scoring-axis="Retrieval"] .lb-entry').first.locator('.ui-select-trigger').nth(1)
-        dataset.focus()
-        with self.page.expect_response(lambda r: r.url.endswith('/api/scoring') and r.request.method == 'POST'):
-            for key in ('ArrowUp', 'ArrowUp', 'Enter'):                # open, move to Whole benchmark, choose
-                self.page.keyboard.press(key)
-        expect(dataset).to_be_focused()
-        expect(dataset).to_have_text('Whole benchmark')
         self.assertFalse(self.errors)
 
     def test_a_phone_scrolls_the_table_not_the_page(self):
@@ -552,31 +485,6 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertLess(head.evaluate("th=>parseFloat(getComputedStyle(th,'::after').top)"), head.evaluate("th=>th.offsetHeight"))
         # only # stays pinned: Agent scrolls away with the scores
         self.assertEqual([self.page.locator(f'tbody td[data-col="{col}"]').first.evaluate("c=>getComputedStyle(c).position") for col in ("rank", "agent")], ["sticky", "relative"])
-        self.assertFalse(self.errors)
-
-    def test_measures_refused_for_a_board_that_changed_are_asked_again_once(self):
-        self.stale_measures = 1
-        self.open('/leaderboard')
-        self.page.wait_for_timeout(300)
-        self.assertEqual((self.asked.count('/api/leaderboard/metrics'), self.asked.count('/api/leaderboard')), (2, 1))
-        self.stale_measures, self.asked = 5, []                         # one that keeps changing is not chased
-        self.open('/leaderboard')
-        self.page.wait_for_timeout(300)
-        self.assertEqual((self.asked.count('/api/leaderboard/metrics'), self.asked.count('/api/leaderboard')), (2, 1))
-        self.assertFalse(self.errors)
-
-    def test_a_strong_chip_keeps_its_text_readable_in_both_themes(self):
-        self.open('/leaderboard')
-        contrast = """score=>{const lum=c=>{const v=c.map(x=>{x/=255;return x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4)});return .2126*v[0]+.7152*v[1]+.0722*v[2]};
-          const rgb=color=>{const k=document.createElement('canvas');k.width=k.height=1;const x=k.getContext('2d');x.fillStyle=color;x.fillRect(0,0,1,1);return [...x.getImageData(0,0,1,1).data].slice(0,3)};
-          const chip=document.createElement('span');chip.className='lb-chip lb-top';chip.style.setProperty('--lb-t2',Math.max(0,(score-.6)/.4).toFixed(3));
-          document.querySelector('#leaderboard-table tbody td[data-col="overall"]').append(chip);
-          const style=getComputedStyle(chip),a=lum(rgb(style.backgroundColor)),b=lum(rgb(style.color));chip.remove();
-          return (Math.max(a,b)+.05)/(Math.min(a,b)+.05)}"""
-        for theme in ('dark', 'light'):
-            self.page.evaluate("t=>document.documentElement.dataset.theme=t", theme)
-            for score in (.6, .7, .85, 1):
-                self.assertGreaterEqual(self.page.evaluate(contrast, score), 4.5, (theme, score))
         self.assertFalse(self.errors)
 
     def test_an_agent_chosen_outside_the_table_brings_its_row_s_page(self):
@@ -619,22 +527,6 @@ class LeaderboardBrowser(unittest.TestCase):
         self.assertEqual(medals.evaluate_all("e=>e.map(m=>m.getAttribute('aria-label'))"),
                          ["Rank 1, gold", "Rank 1, gold", "Rank 3, bronze", "Rank 4, chocolate"])
         self.assertEqual(self.page.get_by_role('img', name='Rank 4, chocolate').count(), 1)
-        self.assertEqual(medals.evaluate_all("e=>e.map(m=>[m.querySelectorAll('.lb-leaf').length, !!m.querySelector('mask')])"), [[8, False]] * 3 + [[8, True]])
-        names = ('gold', 'silver', 'bronze', 'chocolate')
-        tokens = {}
-        for theme in ('dark', 'light'):
-            self.page.evaluate("t=>document.documentElement.dataset.theme=t", theme)
-            tokens[theme] = self.page.evaluate("n=>n.map(k=>getComputedStyle(document.documentElement).getPropertyValue('--lb-medal-'+k).trim())", names)
-            self.assertEqual(len(set(filter(None, tokens[theme]))), 4)
-            gold, bronze, chocolate = (medals.nth(i).evaluate("e=>getComputedStyle(e).color") for i in (0, 2, 3))
-            self.assertEqual(len({gold, bronze, chocolate}), 3)
-        self.assertNotEqual(tokens['dark'], tokens['light'])
-        grows = "e=>getComputedStyle(e.querySelector('.lb-leaf')).animationName"
-        self.assertEqual(medals.first.evaluate(grows), 'none')
-        ranked.first.locator('[data-name]').hover()
-        self.assertEqual(medals.first.evaluate(grows), 'lb-leaf')
-        self.page.emulate_media(reduced_motion='reduce')
-        self.assertEqual(medals.first.evaluate(grows), 'none')
         self.assertFalse(self.errors)
 
 

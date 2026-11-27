@@ -81,7 +81,7 @@ Supply the result roots of one workspace. This reads completed jobs; it never
 launches work. Without roots, catalogue rows have no recorded-run measurements. Exit 0 means
 the document was read; an invalid root exits 3, invalid arguments 2.
 
-The page and command use the same profile's [Scoring settings](../settings/README.md#scoring-settings).
+The page and command use the same profile's [Scoring settings](../field-guide.md#leaderboard).
 JSON includes agent/company/version and execution identity, benchmark entry
 versions, all capability and domain weights, effective shares, ranks and
 coverage notes, task evidence and selected run IDs. Scores are fractions;

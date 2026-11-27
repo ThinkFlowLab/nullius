@@ -1,7 +1,7 @@
 """Workspace Leaderboard and local, atomic Scoring settings endpoints."""
 from __future__ import annotations
 
-from flask import abort, jsonify, redirect, render_template, request, url_for
+from flask import abort, jsonify, render_template, request
 from nullius import ondisk
 from nullius.leaderboard import board, configuration, service, weights
 from .core import app
@@ -55,11 +55,6 @@ def leaderboard_metrics():
     if completed["context"] != initial["context"]:
         return jsonify(error="The workspace or scoring settings changed. Reload the Leaderboard."), 409
     return jsonify(context=completed["context"], rows=[{"key": r["key"], "metrics": r["metrics"]} for r in completed["rows"]])
-
-
-@app.get("/settings/scoring")
-def scoring_alias():
-    return redirect(url_for("scoring_page"))
 
 
 @app.get("/scoring")

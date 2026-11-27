@@ -13,7 +13,6 @@ Existing results open without credentials.
 | [Hosts](run-hosts.md) | SSH machines |
 | [Data providers](data-providers.md) | Hugging Face and Docker Hub connections |
 | [Sandbox](sandbox.md) | Docker on this machine, the Boat key |
-| [Scoring settings](#scoring-settings) | Leaderboard mappings and weights |
 | [General](other.md) | Tour and checklist |
 
 ## Variables
@@ -132,33 +131,3 @@ Set `NULLIUS_HOME` before both commands to migrate into a separate profile.
     Start-up options.
 
 </div>
-
-## Scoring settings
-
-**Scoring settings** in the Leaderboard head switches the page in place (`/scoring`);
-**Leaderboard** switches back, with saved changes applied. Order: Capabilities, Domains,
-each with an overview of every benchmark's share. Read-only clients can inspect it; only local clients can write.
-
-Each entry chooses a benchmark, dataset or declared task-name part, pinned version, supported metric and
-independent weight in that axis. Score is always offered; pass^3 is offered for
-pass/fail benchmarks. Zero weight disables an entry without removing it.
-Each family has its own Overall: the Capabilities view ranks by the capabilities'
-weights, the Domains view by the domains'. An empty axis weighs 0. The Leaderboard
-evidence shows effective shares among the sources actually measured for that row.
-
-Valid complete documents autosave, followed by **Scoring saved**. There is no
-Save button. Invalid inputs stay in the draft and do not change active scoring.
-A failed write keeps the draft and shows Retry. A conflicting edit from another
-page requires reloading before editing again.
-
-Scoring is profile-wide in `scoring.json`, beside `settings.json` in the directory
-shown by `nullius paths`. Writes replace the complete validated document
-atomically. Malformed content uses defaults with a warning and is left intact.
-Removed catalogue references remain unavailable and can be removed without
-blocking unrelated edits. New mappings must name a catalogue version, and a declared
-dataset or part unless they read the whole benchmark. Legacy entries with an empty version remain unavailable until a pinned
-version is selected; runs also need that recorded identity. Negative or nonfinite weights, duplicate identical
-entries and a family with no weighted row among those that have a benchmark are refused.
-
-**Reset to defaults** asks in place before resetting mappings and weights. Cancel and failed writes preserve the
-previous document.

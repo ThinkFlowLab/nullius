@@ -191,9 +191,9 @@ class EveryRoute(unittest.TestCase):
                 resp = self.get(url)
                 attempted += 1
                 self.assert_page_head(resp)
-                if raw in ("/", "/compare/pick", "/settings/scoring"):              # the old picker opens Compare
+                if raw in ("/", "/compare/pick"):              # the old picker opens Compare
                     self.assertEqual(resp.status_code, 302, url)
-                    self.assertEqual(resp.location, {"/": "/runs", "/compare/pick": "/compare?cohort=whole", "/settings/scoring": "/scoring"}[raw])
+                    self.assertEqual(resp.location, {"/": "/runs", "/compare/pick": "/compare?cohort=whole"}[raw])
                 else:
                     self.assertEqual(resp.status_code, 200, url)
         self.assertGreater(attempted, 0)

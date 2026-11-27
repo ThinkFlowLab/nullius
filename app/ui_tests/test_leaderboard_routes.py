@@ -44,7 +44,7 @@ class LeaderboardRoutes(unittest.TestCase):
             self.assertEqual(sizes(str(web.app.jinja_env.get_template("_tables.html").module.pager("any"))), ["10", "25", "100", "All"])
         self.assertIn("OpenAI", html)
         self.assertIn("2.2.2", html)
-        for route in ("/scoring", "/settings/scoring"):
+        for route in ("/scoring",):
             response = self.client.get(route, follow_redirects=True)
             self.assertEqual(response.status_code, 200)
             self.assertIn("Scoring settings", response.get_data(as_text=True))

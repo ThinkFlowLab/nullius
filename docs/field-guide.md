@@ -328,6 +328,10 @@ zero. Evidence gives effective shares, configured weights, benchmark versions,
 task coverage and links to each selected run. An all-zero entry column is
 unavailable. Each family needs a positive weight on a row that has a benchmark.
 
+Scoring settings, the Leaderboard's other view, autosave to `scoring.json` beside
+`settings.json` (`nullius paths`). A file that cannot be read gives defaults with a warning
+and is left intact.
+
 Every row with an Overall is ranked by it; ties, compared to twelve decimals, share
 competition rank.
 Incomplete or unknown coverage of the required verified entries across counted
