@@ -224,8 +224,9 @@ REASON_MAX = 200
 
 def again_offer(job, ex) -> dict | None:
     """What the job's page offers to run its tasks again: {"where": the machine it ran on} when the server can,
-    {"why": one line} when it cannot - no record of where it ran, still running, merged from its shards' jobs, its
-    host gone from Settings, a copy that is not its run's own - and None for a job that is not the standard's."""
+    {"why": one line} when it cannot - no record of where it ran (``ex``: the run that writes this very folder,
+    ``shared.run_for``), still running, merged from its shards' jobs, its host gone from Settings - and None for a
+    job that is not the standard's."""
     if not job.standard:
         return None
     if job.merged_from:
@@ -234,8 +235,6 @@ def again_offer(job, ex) -> dict | None:
         return {"why": "Not started from here: no record of where it ran."}
     if ex.state in execution.ALIVE or job.is_running or job.is_preparing:
         return {"why": "Still running: more tasks can be started once it has ended."}
-    if os.path.realpath(job.dir) != os.path.realpath(os.path.join(ex.jobs, job.job_id)):
-        return {"why": "This copy is not its run's own: open the job its run wrote."}
     if ex.plan.host is not None and ex.plan.host.entry not in {h.entry for h in _hosts()}:
         return {"why": f"Its host, {ex.plan.host.label}, is no longer in Settings."}
     return {"where": ex.plan.host.label if ex.plan.host else "this machine"}
@@ -253,7 +252,7 @@ def job_rerun(job_id):
     j = shared._find_job(shared._jobs_for_request(), job_id)
     if j is None:
         abort(404)
-    ex = execution.for_job(job_id)
+    ex = shared.run_for(job_id, j)
     offer = again_offer(j, ex)
     if offer is None or offer.get("why"):
         return jsonify(ok=False, error=(offer or {}).get("why") or "Only a job of the Nullius standard is run again."), 409
@@ -317,7 +316,7 @@ def job_cap_change(job_id):
     j = shared._find_job(shared._jobs_for_request(), job_id)
     if j is None:
         abort(404)
-    ex = execution.for_job(job_id)
+    ex = shared.run_for(job_id, j)
     offer = again_offer(j, ex)
     if offer is None or offer.get("why"):
         return jsonify(ok=False, error=(offer or {}).get("why") or "Only a job of the Nullius standard has a cap to change."), 409

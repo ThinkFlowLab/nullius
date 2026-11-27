@@ -93,9 +93,9 @@ class RerunPage(unittest.TestCase):
         self.assertEqual(r.status_code, 200, path)
         return r.get_data(as_text=True)
 
-    def post(self, name, body, csrf=None):
-        r = self.client.post(f"/job/{name}/rerun", json=body, headers={"X-CSRF-Token": self.csrf if csrf is None else csrf,
-                                                                        "Origin": "http://localhost"})
+    def post(self, name, body, csrf=None, query=""):
+        r = self.client.post(f"/job/{name}/rerun{query}", json=body, headers={"X-CSRF-Token": self.csrf if csrf is None else csrf,
+                                                                               "Origin": "http://localhost"})
         self.addCleanup(r.close)
         return r
 
@@ -160,16 +160,22 @@ class RerunPage(unittest.TestCase):
         merged = self.run_of("r3", merged_from=[{"job": "a"}, {"job": "b"}])
         loose = self.tmp / "loose"
         standard_job(loose / "cli-job", "cli-job")                               # started outside: no run record
-        self.open(here.parent, gone.parent, merged.parent, loose)
+        ended = self.run_of("r4")
+        shutil.copytree(ended, self.tmp / "copy" / "r4")                        # its job copied: no run writes the copy
+        self.open(here.parent, gone.parent, merged.parent, loose, ended.parent)
+        copy = workspace.create(str(self.tmp / "ws"), [str(self.tmp / "copy")], label="copy").name
         execution.EXECUTIONS["r1-1"].state = "running"
-        for name, said in [("r1", "Still running: more tasks can be started once it has ended."),
-                           ("r2", "Its host, ubuntu@10.0.0.9, is no longer in Settings."),
-                           ("r3", "Merged from its shards' jobs: run a task again in its shard's job."),
-                           ("cli-job", "Not started from here: no record of where it ran.")]:
-            html = self.page(f"/job/{name}?view=results")
+        self.assertIn("Run selected again", self.page("/job/r4?view=results"))
+        for name, said, ws in [("r1", "Still running: more tasks can be started once it has ended.", ""),   # "": the open one
+                               ("r2", "Its host, ubuntu@10.0.0.9, is no longer in Settings.", ""),
+                               ("r3", "Merged from its shards' jobs: run a task again in its shard's job.", ""),
+                               ("cli-job", "Not started from here: no record of where it ran.", ""),
+                               ("r4", "Not started from here: no record of where it ran.", copy)]:
+            html = self.page(f"/job/{name}?view=results&workspace={ws}")
             self.assertNotIn('class="pick-row"', html, name); self.assertNotIn("Run selected again", html, name)
             self.assertEqual(text(html, r'<span class="pick-why[^>]*>.*?</span>'), said, name)
-            self.assertEqual((self.post(name, {"trials": [trial_name(0)]}).status_code), 409, name)
+            self.assertEqual((self.post(name, {"trials": [trial_name(0)]}, query=f"?workspace={ws}").status_code), 409, name)
+            self.assertEqual(self.cap(name, {"max_usd": 9.0}, query=f"?workspace={ws}").status_code, 409, name)
         self.assertEqual(self.asked, [])
 
     def test_while_a_task_runs_again_its_earlier_result_stands_with_a_mark(self):
@@ -326,8 +332,8 @@ tick().then(() => process.stdout.write(JSON.stringify(destination)));
             top["reruns"] = reruns
         (d / "result.json").write_text(json.dumps(top))
 
-    def cap(self, name, body):
-        r = self.client.post(f"/job/{name}/cap", json=body, headers={"X-CSRF-Token": self.csrf, "Origin": "http://localhost"})
+    def cap(self, name, body, query=""):
+        r = self.client.post(f"/job/{name}/cap{query}", json=body, headers={"X-CSRF-Token": self.csrf, "Origin": "http://localhost"})
         self.addCleanup(r.close)
         return r
 

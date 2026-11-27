@@ -1044,7 +1044,7 @@ def _with_this_run(j, snap: dict) -> dict:
     plan = rerun.planned(j.dir) if isinstance(units, list) else None
     if not plan:
         return snap
-    ex = execution.for_job(j.job_id) if len(starts) > 1 else None
+    ex = shared.run_for(j.job_id, j) if len(starts) > 1 else None
     chosen = ex.again_of(j.job_id) if ex is not None else None
     if chosen is not None:                   # the attempts chosen, not every attempt of their tasks
         return dict(snap, this_run=list(dict.fromkeys(chosen["trials"])))

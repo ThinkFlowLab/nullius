@@ -365,7 +365,7 @@ process.stdout.write(JSON.stringify(out));
                 job, snap = parse.parse_job(path), live.snapshot(path)
                 snapshots.append(rerun_page.web.runs._with_this_run(job, snap))
                 record = SimpleNamespace(again_of=lambda _: {"trials": [selected]})
-                with patch.object(rerun_page.web.runs.execution, "for_job", return_value=record):
+                with patch.object(rerun_page.web.runs.shared, "run_for", return_value=record):
                     self.assertEqual(rerun_page.web.runs._with_this_run(job, snap)["this_run"], [selected])
 
         with patch.object(run.Run, "phase", observe):
