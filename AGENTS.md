@@ -80,14 +80,6 @@ python3 app/tests/parallel.py
 uv run --no-project --with-requirements app/requirements.txt \
   python app/tests/parallel.py app/ui_tests
 
-# real-browser interactions (test-only dependency; install Chromium once)
-uv run --no-project --with-requirements app/ui_tests/browser/requirements.txt \
-  python -m playwright install chromium
-uv run --no-project --with-requirements app/requirements.txt \
-  --with-requirements app/ui_tests/browser/requirements.txt python app/ui_tests/browser/leaderboard.py
-uv run --no-project --with-requirements app/requirements.txt \
-  --with-requirements app/ui_tests/browser/requirements.txt python app/ui_tests/browser/mutations.py
-
 # one module; a route module under uv as above, with -s app/ui_tests
 NULLIUS_HOME=$(mktemp -d) python3 -m unittest discover -s app/tests -t app -p test_live.py
 
