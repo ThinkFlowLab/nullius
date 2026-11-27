@@ -4,6 +4,7 @@ Everything the benchmark's authors decide is their code, ``vitabench`` at the co
 ``standard.json`` pins, installed as this driver's environment and imported:
 
 units  - the dataset file's tasks, through the upstream's ``Task`` model
+describe - each task's instructions to the simulated user, their first sentence as its title
 setup  - the upstream agent's own prompt (``LLMAgent.system_prompt``) and its
          environment's tools, served by ``mcp_server.py``, which passes each call here
 turn   - the upstream's ``run_task`` in a thread: its Orchestrator, user simulator,
@@ -29,6 +30,7 @@ import json
 import os
 import queue
 import random
+import re
 import shutil
 import socket
 import sys
@@ -362,6 +364,17 @@ def units(dataset, setup=None):
     return {"units": list(tasks())}
 
 
+SENTENCE_END = re.compile(r"(?<=[。！？])|(?<=[.?!])\s+(?=[A-Z0-9])")
+
+
+def describe(dataset=None, **_):
+    out = {}
+    for unit, t in tasks().items():
+        text = str(t.instructions or "").strip()
+        out[unit] = {"title": SENTENCE_END.split(" ".join(text.split()), maxsplit=1)[0], "text": text}
+    return {"units": out}
+
+
 def setup(unit, dir, attempt=None):
     t = task(unit)
     _leave()
@@ -461,4 +474,4 @@ def _scored(st, t, c, dir):
 
 if __name__ == "__main__":
     atexit.register(_leave)                               # the last unit's socket folder, scored or not
-    serve({"units": units, "setup": setup, "turn": turn, "answer": answer, "score": score}, out=PROTOCOL)
+    serve({"units": units, "describe": describe, "setup": setup, "turn": turn, "answer": answer, "score": score}, out=PROTOCOL)

@@ -169,8 +169,8 @@ _TEMPLATE = re.compile(r"^(?:[A-Za-z0-9_./:=@+ -]|\{[a-z_]+\})*$")
 _VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,39}$")
 # What a version may say for itself; the rest of the file is shared.
 VERSIONED = ("upstream", "install", "start", "model", "env", "options", "caches", "fidelity", "proven")
-# What a benchmark's version may say for itself: its data, its driver, how it scores, who plays its user, its environments.
 MAX_RETRIES = 9                        # the most retries of a failed attempt (runner.retries, cli run --retries)
+# What a benchmark's version may say for itself: its data, its driver, how it scores, who plays its user, its environments.
 BENCH_VERSIONED = ("upstream", "datasets", "task_parts", "files", "driver", "mcp_servers", "score", "simulator", "limits", "controls", "environments",
                    "options", "host", "setups", "proven", "leaderboard")
 # What a benchmark option may need: embedding and reranker models through the relay,

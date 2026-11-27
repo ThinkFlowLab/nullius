@@ -133,6 +133,16 @@ class Upstream(unittest.TestCase):
             return d.request("score", unit=unit, dir=ws, transcript=[], answer="", judge=self.route)
         return s, ask, call, turn, score
 
+    def test_each_task_is_described_by_its_instructions_first_sentence_first(self):
+        for dataset, unit, title in (("cross", "A0812003", "这周六你和五位好友准备去北京体验一下真人 CS ，"),
+                                     ("delivery-en", "10711001", "It's pouring rain outside, and your stomach isn't feeling well today.")):
+            d = jsonl.Proc(self.argv, BENCH["_here"], self.env(dataset), os.path.join(self.tmp, "driver.log")).start()
+            self.addCleanup(d.close)
+            got = d.request("describe", dataset=dataset)["units"]
+            self.assertEqual(len(got), 100)
+            self.assertTrue(got[unit]["title"].startswith(title), got[unit])
+            self.assertTrue(got[unit]["text"].startswith(got[unit]["title"].rstrip()[:10]))
+
     def test_the_orchestrator_executes_each_call_and_the_users_stop_ends_it(self):
         s, ask, call, turn, score = self.opened("cross-en", "A0812003", ["Lunch, please.", "Thanks. ###STOP###"])
         self.assertIn("Current time: ", s["prompt"])
