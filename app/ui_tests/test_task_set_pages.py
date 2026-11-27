@@ -103,7 +103,7 @@ async function check(rows, detached, failed) {
   function picker(name) {
     const elements = new Map();
     const element = id => {
-      if (['tasks-chosen-ids', 'tasks-savebar', 'tasks-create', 'tasks-to-save'].includes(id)) return null;
+      if (['tasks-chosen-parts', 'tasks-savebar', 'tasks-create', 'tasks-to-save'].includes(id)) return null;
       if (!elements.has(id)) elements.set(id, {
         innerHTML: '', textContent: '', listeners: {}, attributes: {}, classList: {toggle() {}},
         addEventListener(type, callback) { this.listeners[type] = callback; },
