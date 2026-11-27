@@ -18,13 +18,15 @@ function mount(page, opts = {}) {
   // the dataset's own routes: listing, prepare, rows, save
   const route = kind => `${d.base || ''}${encodeURIComponent(here)}/${kind}`;
   const draftKey = `nullius-task-set:${d.bench}:${d.version || ''}:${d.set || ''}`;
-  let parts = json('tasks-chosen-parts', '{}');
-  try { const kept = JSON.parse(globalThis.sessionStorage.getItem(draftKey) || 'null'); if (kept && typeof kept === 'object') parts = kept; } catch { /* none kept */ }
+  // the builder's dialog gives its ticks back (onChange) and keeps no draft of a set
+  const draft = !opts.onChange;
+  let parts = draft ? json('tasks-chosen-parts', '{}') : {};
+  if (draft) try { const kept = JSON.parse(globalThis.sessionStorage.getItem(draftKey) || 'null'); if (kept && typeof kept === 'object') parts = kept; } catch { /* none kept */ }
   const chosen = new Set(opts.chosen || parts[here] || []);
   const changed = () => opts.onChange && opts.onChange([...chosen]);
   const keep = () => {
     if (chosen.size) parts[here] = [...chosen]; else delete parts[here];
-    try { globalThis.sessionStorage.setItem(draftKey, JSON.stringify(parts)); } catch { /* this page's alone */ }
+    if (draft) try { globalThis.sessionStorage.setItem(draftKey, JSON.stringify(parts)); } catch { /* this page's alone */ }
   };
   const total = () => Object.values(parts).reduce((n, ids) => n + ids.length, 0);
   // opened from a set: its members first; Show all browses the dataset

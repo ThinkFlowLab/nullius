@@ -220,11 +220,12 @@
   function setTaskSet(r, dataset, ref) {
     r.task_sets = {...(r.task_sets || {})};
     // tasks ticked to start with were ticked in the plan's list: another plan asks for them again
-    if (Array.isArray((r.start_with || {})[dataset])) setStartWith(r, dataset, '');
-    if (!ref) { delete r.task_sets[dataset]; return keepTaskSets(r); }
+    const unticked = ids => ids.forEach(id => { if (Array.isArray((r.start_with || {})[id])) setStartWith(r, id, ''); });
+    if (!ref) { delete r.task_sets[dataset]; unticked([dataset]); return keepTaskSets(r); }
     const b = standardBench(r), name = ref.split('@')[0];
     const set = b && b.datasets.flatMap(d => d.sets || []).find(s => s.name === name);
     const all = set && (set.datasets || []).length > 1 ? set.datasets.filter(id => b.datasets.some(d => d.id === id)) : [dataset];
+    unticked(all);
     r.datasets = [...new Set([...datasetsOf(r), ...all])];
     delete r.dataset;
     for (const id of all) r.task_sets[id] = ref;

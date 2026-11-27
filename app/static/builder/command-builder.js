@@ -906,8 +906,8 @@
     if (!x || !dialog || !globalThis.nulliusTasks) return;
     const u = b.units || {noun: 'unit', nouns: 'units'}, plan = ((rec.task_sets || {})[id] || '').split('@')[0], set = plan && (x.sets || []).find(s => s.name === plan);
     const page = document.getElementById('nb-tasks-list').content.firstElementChild.cloneNode(true);
-    const base = `/benchmarks/${encodeURIComponent(b.key)}/tasks/${encodeURIComponent(id)}`;
-    Object.assign(page.dataset, {listing: base + '/listing', prepare: base + '/prepare', rows: base + '/rows', csrf: schema.csrf || '',
+    // the tasks page's routes: this base, the dataset, then listing, prepare or rows
+    Object.assign(page.dataset, {base: `/benchmarks/${encodeURIComponent(b.key)}/tasks/`, dataset: id, csrf: schema.csrf || '',
       local: schema.local ? 'true' : 'false', nouns: u.nouns, version: b.version || '', within: set ? set.name : '',
       limit: rec.limit || '', options: JSON.stringify({...(rec.model_choice === 'leaderboard' ? (b.leaderboard || {}).bench_options : {}), ...rec.bench_options})});
     const go = page.querySelector('#tasks-list-go');

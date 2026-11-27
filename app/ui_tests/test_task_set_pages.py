@@ -113,13 +113,13 @@ async function check(rows, detached, failed) {
       return elements.get(id);
     };
     return {isConnected: true, element,
-      dataset: {writable: 'true', listing: '/' + name, rows: '/' + name + '/rows'},
+      dataset: {writable: 'true', base: '/', dataset: name},
       querySelector: selector => selector.startsWith('#') ? element(selector.slice(1)) : null,
       querySelectorAll: () => []};
   }
   const scope = {
     document: {getElementById: id => id === 'tasks-page' ? null : active.element(id),
-      querySelector: () => null, querySelectorAll: () => []},
+      querySelector: () => null, querySelectorAll: () => [], addEventListener() {}},
     URLSearchParams, window: {}, setTimeout, clearTimeout,
     nulliusFetch: url => new Promise((resolve, reject) => requests.push({url, resolve, reject}))
   };
