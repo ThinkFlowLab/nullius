@@ -174,9 +174,8 @@ class RunsByLaunch(unittest.TestCase):
         group = SimpleNamespace(job_ids=[], pending=["first", "second"], source="record", dataset="")
         first = SimpleNamespace(state="done", plan=SimpleNamespace(recipe={}, jobs=[]), refused=lambda _: None, never_ran=lambda _: False)
         second = SimpleNamespace(state="paused", plan=SimpleNamespace(recipe={}, jobs=[]), live_state=lambda _: "paused")
-        with patch("web.shared.run_for", side_effect=lambda key, job=None: {"first": first, "second": second}[key]), \
-             patch("web.runs._control_planned", return_value=""):
-            self.assertEqual(_launch_view(group, {}, {}, {})["paused"], "second")
+        with patch("web.runs._control_planned", return_value=""):
+            self.assertEqual(_launch_view(group, {}, {}, {}, {"first": first, "second": second}.get)["paused"], "second")
 
     def test_a_run_record_groups_its_jobs_and_names_the_ones_not_written_yet(self):
         plan = SimpleNamespace(name="sweep-0919", recipe={"agents": ["my-agent", "opencode", "claude-code"]}, runner="harbor",
