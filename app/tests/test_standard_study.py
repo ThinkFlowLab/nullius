@@ -593,10 +593,11 @@ class CommandLine(StudyCase):
         out = os.path.join(self.tmp, "o")
         need = ("--times", 2, "--max-usd", 0.1, "--json")
         job = ("--job", self.job, "--trial", "task-a__u0001")
-        for args, code, said in ((("study", out, *job), 2, "usage:"),
-                                 (("study", out, *need), 2, "usage:"),
-                                 (("study", out, "--job", self.job, *need), 2, "usage:"),
-                                 (("study", out, "--targets", "t.txt", "--every", 2, *need), 2, "usage:"),
+        usage = "usage: nullius standard study "
+        for args, code, said in ((("study", out, *job), 2, usage),
+                                 (("study", out, *need), 2, usage),
+                                 (("study", out, "--job", self.job, *need), 2, usage),
+                                 (("study", out, "--targets", "t.txt", "--every", 2, *need), 2, usage),
                                  (("study", out, "--job", os.path.join(self.tmp, "nowhere"), "--trial", "t__u1", *need), 3, "no such directory"),
                                  (("study", out, "--targets", os.path.join(self.tmp, "none.txt"), *need), 3, "cannot read the targets file"),
                                  (("study", out, *job, *need, "--arm", "b=[1]"), 2, "a change is [NAME, ARG...]"),
@@ -609,7 +610,10 @@ class CommandLine(StudyCase):
                 self.assertEqual(got.returncode, code, got.stderr)
                 self.assertIn(said, got.stderr)
                 self.assertEqual(got.stdout, "")
-                if code != 2 or said != "usage:":
+                if said == usage:
+                    self.assertTrue(got.stderr.startswith(usage), got.stderr)
+                    self.assertIn("\nnullius standard study: error: ", got.stderr)
+                else:
                     self.assertEqual(len(got.stderr.strip().splitlines()), 1, got.stderr)
         self.assertFalse(os.path.exists(out), "a refusal writes nothing")
 
