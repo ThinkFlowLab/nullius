@@ -56,6 +56,7 @@ class PartRunPage(unittest.TestCase):
         self.assertIn('id="tasks-run" class="warn"', html)
         self.assertEqual(text(html, r'<div class="row tot">.*?</div>'), "3 Trials of 6 planned")
         self.assertEqual(text(html, r'<a class="fx" data-o="not_run".*?</a>'), "Not run 3")
+        self.assertIn('data-o="not_run" href="/job/r1?outcome=not_run"', html)     # a link to the job's record, as the outcome links are
         self.assertNotIn('data-o="no_result"', html)
         rest = [f"t-{k}__u{k:04d}" for k in (3, 4, 5)]
         rows = {n: text(html, rf'<tr data-outcome="not_run"[^>]*data-trial="{n}".*?</tr>') for n in rest}
