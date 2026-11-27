@@ -138,7 +138,7 @@ A benchmark that names a cut in `limits.scored_cuts` still scores an agent's uni
 | Rate limit | After the [pause](../standard.md#a-run) |
 | Provider, network or setup error; agent crash; setup timeout | Yes |
 | Run or check out of time | Only if the provider was refusing the calls |
-| Wrong key, spent credit | No; three in a row stop the run |
+| Wrong key, spent credit, an agent's first call over the model's context window | No; three in a row stop the run |
 | A setup this machine lacks, a missing secret, a cap reached, Stop, a unit a guard asked to stop, a full context window, failed task | No |
 
 `conform` and `prove` retry a rate limit once.

@@ -100,7 +100,8 @@ OVERFLOW = "context window"
 COMPLETION = re.compile(r"^/(?:chat/completions|completions|messages|responses)$")
 _WHOLE = ((b"\x89PNG\r\n\x1a\n", b"IEND\xaeB`\x82", "image/png"), (b"\xff\xd8\xff", b"\xff\xd9", "image/jpeg"),
           (b"GIF87a", b";", "image/gif"), (b"GIF89a", b";", "image/gif"))
-_CONTEXT = re.compile(r"context[ _-]?(length|window|limit)|prompt is too long|token count .{0,40}exceeds", re.I)
+_CONTEXT = re.compile(r"context[ _-]?(length|window|limit)|prompt is too long|token count .{0,40}exceeds"
+                      r"|input length .{0,40}exceeds", re.I)          # the last: vLLM's, DeepInfra's
 
 
 def _cut(text, n=4000):
