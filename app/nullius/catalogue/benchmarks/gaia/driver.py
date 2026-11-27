@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import sys
 import urllib.request
@@ -23,6 +24,8 @@ SOURCE = json.loads((HERE / "data-source.json").read_text())
 CACHE = UPSTREAM / ".gaia-cache"
 ROWS = {}
 MARKER = "FINAL ANSWER:"
+# a sentence ends at . ? ! before a space, not after an initial or a title (M. Last, St. Thomas), or at a line's end
+SENTENCE_END = re.compile(r"(?<![\s.][A-Z][a-z])(?<![\s.][A-Z])[.?!](?=\s)|\n")
 
 
 def upstream_module(name):
@@ -96,12 +99,14 @@ def units(dataset, setup=None):
 
 
 def describe(dataset, **_):
-    """Each question's text and its level, read from the metadata its unit comes from."""
+    """Each question, titled by its first sentence, and its level, read from the metadata its unit comes from."""
     rows = load()
     out = {}
     for unit in units(dataset)["units"]:
-        text = rows[unit]["Question"]
-        out[unit] = {"title": text, "text": text, "categories": {"level": str(rows[unit]["Level"])}}
+        text = rows[unit]["Question"].strip()
+        end = SENTENCE_END.search(text)
+        title = text[:end.end()].strip() if end else text
+        out[unit] = {"title": title, "text": text, "categories": {"level": str(rows[unit]["Level"])}}
     return {"units": out}
 
 

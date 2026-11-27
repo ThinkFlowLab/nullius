@@ -173,6 +173,7 @@ class FailureTab(unittest.TestCase):
         stack = ExitStack()
         self.addCleanup(stack.close)
         stack.enter_context(patch.object(web.shared, "WS_HOME", str(tmp / "ws")))
+        stack.enter_context(patch.object(store, "home", return_value=str(tmp / "data")))
         stack.enter_context(patch.dict(web.app.config, TESTING=True))
         stack.enter_context(patch.dict(web.shared.STATE, {"workspace": None, "roots": [], "label": "", "job_roots": []}))
         stack.enter_context(patch.object(fa, "who", lambda: "Ann"))

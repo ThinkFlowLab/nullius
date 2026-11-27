@@ -782,11 +782,14 @@ def looks_like_job_dir(path: str) -> bool:
     )
 
 
-def find_job_dirs(roots) -> list[str]:
+def find_job_dirs(roots, strict=None) -> list[str]:
     """Return every job directory found under the given root paths.
 
     A root may itself be a job dir, or a parent containing job dirs (one level
-    down). Duplicates are dropped in first-seen order.
+    down). Duplicates are dropped in first-seen order. `strict`: for a reader
+    that must know every job (who owns a judgement), a test on a folder's name:
+    OSError when a root, or a folder in one whose name passes, cannot be
+    searched (`uid.searched`), so a hidden job is never taken for none.
     """
     found: list[str] = []
     seen: set[str] = set()
@@ -800,10 +803,17 @@ def find_job_dirs(roots) -> list[str]:
     for root in roots:
         if not os.path.isdir(root):
             continue
+        if strict:
+            try:
+                os.stat(os.path.join(root, "result.json"))
+            except FileNotFoundError:
+                pass
         if looks_like_job_dir(root):
             add(root)
         for name in sorted(os.listdir(root)):
             p = os.path.join(root, name)
+            if strict and strict(name):
+                job_uid.searched(p)
             if os.path.isdir(p) and looks_like_job_dir(p):
                 add(p)
     return found
@@ -1154,7 +1164,7 @@ def identity_of(cfg: dict, res: dict, agent_version: str = "") -> dict:
     """What tells a Nullius standard run from another, from its ``config.json``
     (``cfg``) and its ``result.json`` (``res``): the benchmark, its version and
     options; the agent as the run named it, the version its trials report
-    (``agent_version``) and its options, defaults included; the model; the
+    (``agent_version``) and its options, defaults included; the backend its units ran on; the model; the
     provider; the serving providers pinned by model (``served_by``) and who
     served (``served``); and the limits in force: time limits by phase, turns,
     model calls, attempts of each unit, retries, units at a time, and the
@@ -1171,7 +1181,7 @@ def identity_of(cfg: dict, res: dict, agent_version: str = "") -> dict:
     out = {"benchmark": word(std.get("benchmark")), "benchmark_version": word(std.get("benchmark_version")),
            "benchmark_options": _options(std.get("benchmark_options")),
            "agent": word(std.get("plugged")), "agent_version": word(agent_version),
-           "agent_options": _options(std.get("options")), "model": word(first.get("model_name"))}
+           "agent_options": _options(std.get("options")), "backend": word(std.get("backend")), "model": word(first.get("model_name"))}
     # a control asks no model unless it has a judge or a simulated user; the provider it records is then a default
     asks = out["model"] or std.get("judge") or std.get("simulator") or std.get("kind") != "control"
     out["provider"] = word(std.get("provider")) if asks else ""

@@ -172,7 +172,8 @@ class Driver(unittest.TestCase):
                 got = self.run_driver([{"op": "units", "dataset": "longmemeval_oracle"},
                                        {"op": "describe", "dataset": "longmemeval_oracle"}],
                                       {"question_type": kind}, questions=self.QUESTIONS)
-                expected = {qid: {"title": "Q?", "text": "Q?", "categories": {"question_type": category}}
+                expected = {qid: {"title": "Q?", "text": "Q?", "categories": {
+                    "question_type": category, "abstention": "yes" if qid.endswith("_abs") else "no"}}
                             for qid, category in self.QUESTIONS if kind == "all" or category == kind}
                 self.assertEqual(got[1], {"units": expected})
                 self.assertEqual(list(got[1]["units"]), got[0]["units"])

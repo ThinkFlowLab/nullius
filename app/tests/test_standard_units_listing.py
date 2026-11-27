@@ -37,6 +37,8 @@ with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "started"), "
 if os.environ.get("HF_TOKEN"):           # a licence bound for the driver, as the listing gave it
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "given"), "w") as f:
         f.write(os.environ["HF_TOKEN"])
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "endpoint"), "w") as f:
+    f.write(os.environ.get("HF_ENDPOINT", ""))           # where its downloads go
 KINDS = ("alpha", "beta", "gamma")
 N = 20 if os.environ.get("NULLIUS_OPTION_MODE") == "short" else 250
 IDS = [f"t{i:03d}" for i in range(N)]
@@ -142,17 +144,24 @@ class Categories(Scratch):
         self.assertTrue(all(t["categories"] == {"kind": "alpha", "size": "small"} for t in both["tasks"]))
 
     def test_each_value_is_counted_over_the_search_and_the_other_fields_filters(self):
-        got = units.find(self.b, "all")
-        self.assertEqual(got["categories"], {"kind": [{"value": "alpha", "count": 84}, {"value": "beta", "count": 83},
-                                                      {"value": "gamma", "count": 83}],
-                                             "size": [{"value": "large", "count": 125}, {"value": "small", "count": 125}]})
-        chosen = units.find(self.b, "all", categories={"kind": ["alpha"]})
+        named = dict(self.b, units=dict(self.b["units"], categories={"kind": {"label": "Kind of task", "names": {"alpha": "First"}}}))
+        got = units.find(named, "all")
+        self.assertEqual(got["categories"], {"kind": [{"value": "alpha", "name": "First", "count": 84},
+                                                      {"value": "beta", "name": "beta", "count": 83},
+                                                      {"value": "gamma", "name": "gamma", "count": 83}],
+                                             "size": [{"value": "large", "name": "large", "count": 125},
+                                                      {"value": "small", "name": "small", "count": 125}]})
+        self.assertEqual(got["fields"], {"kind": {"label": "Kind of task", "names": {"alpha": "First"}},
+                                         "size": {"label": "Size", "names": {}}})       # unnamed: the key, capitalised
+        chosen = units.find(named, "all", categories={"kind": ["alpha"]})
         # the field chosen keeps its other values' counts; the other field is counted over the alpha tasks
         self.assertEqual(chosen["categories"]["kind"], got["categories"]["kind"])
-        self.assertEqual(chosen["categories"]["size"], [{"value": "large", "count": 42}, {"value": "small", "count": 42}])
+        self.assertEqual(chosen["categories"]["size"], [{"value": "large", "name": "large", "count": 42},
+                                                           {"value": "small", "name": "small", "count": 42}])
         searched = units.find(self.b, "all", search="number 24", categories={"size": ["small"]})
         self.assertEqual(self.ids(searched), ["t241", "t243", "t245", "t247", "t249"])
-        self.assertEqual(searched["categories"]["size"], [{"value": "large", "count": 8}, {"value": "small", "count": 5}])
+        self.assertEqual(searched["categories"]["size"], [{"value": "large", "name": "large", "count": 8},
+                                                              {"value": "small", "name": "small", "count": 5}])
 
     def test_a_field_no_task_has_is_refused(self):
         with self.assertRaisesRegex(units.Refused, "--category colour: no such category; the categories are kind, size"):
@@ -417,6 +426,13 @@ class Licences(Scratch):
     def given(self):
         path = Path(self.b["_here"], "given")
         return path.read_text() if path.exists() else None
+
+    def test_the_driver_downloads_from_the_mirror_a_run_would(self):
+        with mock.patch.dict(os.environ, {"HF_ENDPOINT": "https://hf-mirror.example.org/"}):
+            units.listing(self.b, "all")
+        self.assertEqual(Path(self.b["_here"], "endpoint").read_text(), "https://hf-mirror.example.org")
+        units.listing(dict(self.b, options={}), "all")                  # the default: none set
+        self.assertEqual(Path(self.b["_here"], "endpoint").read_text(), "")
 
     def test_the_driver_gets_its_licence_and_none_held_is_refused_before_it_starts(self):
         self.b = gated(self.b)

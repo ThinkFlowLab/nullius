@@ -840,10 +840,15 @@ def _listed_units(path: str) -> list:
 
 
 def _set_rows(entry: dict) -> dict:
-    last = sets.latest(entry)
     return {"benchmark": entry["benchmark"], "name": entry["name"], "label": sets.label_of(entry), "id": entry["id"],
-            "units": len(last["units"]), "dataset": entry["dataset"], "version": entry.get("version") or "",
+            "units": sets.size(entry), "dataset": sets.datasets_of(entry)[0], "datasets": sets.datasets_of(entry),
+            "parts": {d: len(ids) for d, ids in sets.parts(entry).items()}, "version": entry.get("version") or "",
             "description": entry.get("description") or ""}
+
+
+def _parts_line(parts: dict) -> str:
+    """A set's datasets as a line says them: its one, or each with its number of ids."""
+    return next(iter(parts)) if len(parts) == 1 else ", ".join(f"{d} {n}" for d, n in parts.items())
 
 
 def _find_bench(key):
@@ -864,9 +869,17 @@ def cmd_set_create(a):
     if a.from_job is None and (a.outcome or a.unit):
         raise sets.Refused("--outcome and --unit choose a job's trials: give them with --from-job")
     seed = None
+    given = a.dataset or []
+    if a.units is None and len(given) > 1:
+        raise sets.Refused("--dataset once, but with --units: a set of several datasets is each --dataset D --units FILE")
+    a.dataset = given[0] if given else None
     if a.units is not None:
-        dataset = sets._dataset(b, a.dataset)
-        got = {"dataset": dataset, "units": _listed_units(a.units), "note": f"from {os.path.basename(a.units)}"}
+        # each --units FILE the ids of the --dataset beside it, in order: two or more pairs make a mixed set
+        if len(a.units) != max(1, len(given)) or (len(a.units) > 1 and len(set(given)) != len(given)):
+            raise sets.Refused("--dataset D --units FILE for each dataset of the set, each dataset once")
+        named = given or [None]
+        got = {"parts": {sets._dataset(b, d): _listed_units(f) for d, f in zip(named, a.units)},
+               "note": "from " + ", ".join(os.path.basename(f) for f in a.units)}
     elif listed:
         # the ids the listing matches today, under the benchmark's default options, or --sample of them drawn at
         # random; the note keeps the filter and the seed
@@ -887,9 +900,14 @@ def cmd_set_create(a):
         got = sets.from_job(b, a.from_job, a.outcome, a.unit)
         if a.dataset and a.dataset != got["dataset"]:
             raise sets.Refused(f"--dataset {a.dataset}: the job ran the dataset {got['dataset']}")
-    entry = sets.create(b, a.label, dataset=got["dataset"], units=got["units"], description=a.description, note=got["note"])
+    if "parts" in got:
+        entry = sets.create(b, a.label, parts=got["parts"], description=a.description, note=got["note"])
+    else:
+        entry = sets.create(b, a.label, dataset=got["dataset"], units=got["units"], description=a.description, note=got["note"])
+    n = sets.size(entry)
     print(f"wrote {sets.path_of(entry['benchmark'], entry['name'])}: {_named(entry)}, "
-          f"{len(got['units'])} {b['units']['nouns'] if len(got['units']) != 1 else b['units']['noun']} of {entry['dataset']}"
+          f"{n} {b['units']['nouns'] if n != 1 else b['units']['noun']} of "
+          + _parts_line({d: len(ids) for d, ids in sets.parts(entry).items()})
           + (f" at {sets.version_label(b, entry['version'])}" if entry.get("version") else "")
           + (f", drawn with --seed {seed}" if seed is not None else ""))
     return 0
@@ -910,7 +928,7 @@ def cmd_set_list(a):
         print(json.dumps(rows, indent=2))
         return 0
     for r in rows:
-        print(f"{r['benchmark']:<16} {r['name']:<24} {r['units']:>6} units of {r['dataset']}"
+        print(f"{r['benchmark']:<16} {r['name']:<24} {r['units']:>6} units of {_parts_line(r['parts'])}"
               + (f" at {r['version']}" if r["version"] else "")
               + (f"  {r['label']}" if r["label"] != r["name"] else "") + (f"  {r['description']}" if r["description"] else ""))
     return 0
@@ -921,19 +939,23 @@ def cmd_set_show(a):
     entry = sets.load(a.benchmark, name)
     got = sets.latest(entry, rev)
     if a.json:
+        listed = {"parts": got["parts"]} if "parts" in got else {"units": got["units"]}
         print(json.dumps({**{k: entry[k] for k in sets.HEADER if k in entry}, "label": sets.label_of(entry),
-                          "date": got["date"], "note": got["note"], "hash": got["hash"], "units": got["units"]}, indent=2))
+                          "date": got["date"], "note": got["note"], "hash": got["hash"], **listed}, indent=2))
         return 0
     bench = _find_bench(a.benchmark)
-    print(f"{_named(entry)}: {len(got['units'])} units of {entry['benchmark']} {entry['dataset']}"
+    each = sets.parts(entry, got)
+    print(f"{_named(entry)}: {sets.size(entry, got)} units of {entry['benchmark']} "
+          + _parts_line({d: len(ids) for d, ids in each.items()})
           + (f", made at {sets.version_label(bench, entry['version'])}" if entry.get("version") else ""))
     if entry.get("description"):
         print(f"  {entry['description']}")
     print(f"  id {entry['id']}")
     print(f"  {got['date']}  {got['hash'][:12]}" + (f"  {got['note']}" if got["note"] else ""))
-    print("units:")
-    for u in got["units"]:
-        print(f"  {u}")
+    for d, ids in each.items():
+        print(f"units of {d}:" if len(each) > 1 else "units:")
+        for u in ids:
+            print(f"  {u}")
     return 0
 
 
@@ -950,7 +972,7 @@ def cmd_set_delete(a):
     if entry is None:
         print(f"deleted {path}: an entry this version could not read")
         return 0
-    print(f"deleted {path}: {_named(entry)}, {len(sets.latest(entry)['units'])} units; jobs that ran it keep their record")
+    print(f"deleted {path}: {_named(entry)}, {sets.size(entry)} units; jobs that ran it keep their record")
     return 0
 
 
@@ -1017,7 +1039,9 @@ def cmd_units(a):
     print(f"{found['total']} of {found['of']} {words['nouns']} of {a.dataset}"
           + ("" if found["described"] else " (its driver gives ids alone: a search reads the ids)"))
     for field, values in found["categories"].items():
-        print(f"{field}: " + ", ".join(f"{v['value']} {v['count']}" for v in values))
+        said = found["fields"][field]["label"]                 # the field and the values as named, the key each takes
+        print((f"{said} ({field})" if said.lower() != field.replace("_", " ") else field) + ": "
+              + ", ".join(f"{v['name']}" + (f" ({v['value']})" if v["name"] != v["value"] else "") + f" {v['count']}" for v in values))
     for t in found["tasks"]:
         print(f"  {t['id']}" + (f"  {t['title']}" if t["title"] else ""))
     return 0
@@ -1135,7 +1159,7 @@ def _exit_on_term():
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="nullius.standard.cli", description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(prog="nullius standard", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list", help="every definition, and which pairs fit")
     c = sub.add_parser("check", help="check the definitions, or one file")
@@ -1275,9 +1299,12 @@ def main(argv=None):
     sc.add_argument("benchmark", metavar="BENCH")
     sc.add_argument("label", metavar="NAME",
                     help="any words; the name commands take is made from them (lower case, hyphens, -2 for a second one)")
-    sc.add_argument("--dataset", help="the dataset the set is cut from (from a job: the job's)")
+    sc.add_argument("--dataset", action="append", metavar="D",
+                    help="the dataset the set is cut from (from a job: the job's); with --units, once per file, "
+                         "for a set of several datasets")
     source = sc.add_mutually_exclusive_group()
-    source.add_argument("--units", metavar="FILE", help="the units a file lists, one id a line (# starts a comment)")
+    source.add_argument("--units", action="append", metavar="FILE",
+                        help="the units a file lists, one id a line (# starts a comment): the ids of the --dataset beside it")
     source.add_argument("--from-job", metavar="JOB_DIR", help="the units a standard job ran (each trial's full unit id)")
     sc.add_argument("--outcome", action="append", metavar="O,...",
                     help="with --from-job: the trials of these outcomes (the pages' names, or passed, failed, infra)")

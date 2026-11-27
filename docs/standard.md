@@ -459,6 +459,7 @@ An `answer` or `score` error that begins `EnvironmentSetupError: `, `VerifierErr
 | `limits.attempts` | How the upstream tells attempts apart; the driver is then sent `attempt` with `setup`, `turn` and `answer` |
 | `limits.scored_cuts` | The cuts after which an agent's unit is still scored: `time`, `calls`, `end` ([a unit cut at a limit](cli/run.md#a-unit-cut-at-a-limit)) |
 | `units.redistribute` | `false` when the data may not be redistributed: `cli prove` then records no unit id |
+| `units.categories` | `{FIELD: {label, names: {VALUE: name}}}`: how `describe`'s categories read on a listing; `--category` still takes the value |
 
 !!! note "Call the upstream, never copy it"
     The driver imports the upstream from `$NULLIUS_UPSTREAM` and calls its loader, prompts, scorer, judge and loop. Never patch its bugs: say it in the limitations; a fix is a fork's, brought in as a [version](#versions).
@@ -533,7 +534,7 @@ An agent or a capability may keep several versions in its one file: an older rel
 | Rule | Detail |
 | --- | --- |
 | `versions` | Each version's `upstream`, `install`, and when it must, `start`, `model` or `env`; `default` names the one offered |
-| Naming | `codex@2.2.2` wherever a key is taken; a bare `codex` is its default |
+| Naming | `codex@2.2.2` wherever a key is taken; a bare `codex` is its default; `locomo@main`, the name pages show, when one version has it |
 | `cli new version KEY VERSION` | Adds one from the default's block, nothing proven; a file without `versions` is turned into one first, proofs kept |
 | Proof per version | A version runs nothing until `cli conform KEY@VERSION` passes; without `versions`, a proof on another `upstream.version` does not count |
 | In jobs | In the job name (`…__codex-2.2.2`) and the trial's `agent_info` |

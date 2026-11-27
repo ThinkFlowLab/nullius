@@ -6,6 +6,6 @@
 {% set cols = [dict(key='icon', label='Mark', card='icon', table=false, class='bench-mark'), dict(key='title', label='Name', card='title', width='expand'),
                dict(key='evaluates', label='Evaluates', card='badge', class='std-tag', filter='dropdown', filter_icon='target'),
                dict(key='tasks', label='Tasks', card='stat', type='num'),
-               dict(key='category', label='Category', card='tag', class='cat-tag', filter='pills'), dict(key='origin', label='Origin', card='tag', class='origin-tag', filter='dropdown', filter_icon='origin'),
+               dict(key='category', label='Category', card='tag', class='cat-tag', filter='pills'), dict(key='origin', label='Origin', class='origin-tag', filter='dropdown', filter_icon='origin'),
                dict(key='runs', label='Runner', class='run-tag'), dict(key='domain', label='Domain', off=true)] %}
 {{ cards('nb-benchmarks', cols, items, search='Search benchmarks', choices=choices, sort=['title', 'tasks'], empty='No benchmark matches.', noun='benchmarks', layout=layout, default='cards') }}

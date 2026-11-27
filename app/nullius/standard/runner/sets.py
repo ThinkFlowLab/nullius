@@ -6,7 +6,10 @@ in git. A set is a group of tasks, run as a benchmark's own dataset is: it
 holds an id minted when it is made, its label and the name made from it, its
 description, the benchmark, the version of the benchmark it was made at, the
 dataset it is cut from, and its list, and nothing that binds a run (no
-benchmark option, no setup). The label is the text a person typed; the name
+benchmark option, no setup). A set may mix datasets: it then names them
+(``datasets``) and its list holds the ids of each (``parts``: {dataset: ids}),
+each dataset a job of its own when it runs; a set of one dataset is written as
+before. The label is the text a person typed; the name
 is what commands take: the label in lower case with hyphens, ``-2`` and on
 for a second equal one (``name_for``).
 
@@ -62,10 +65,10 @@ GROUPS = {
                classify.NO_PATCH, classify.AGENT_ERROR},
     "infra": set(classify.INFRA_OUTCOMES),
 }
-HEADER = ("id", "name", "label", "description", "benchmark", "version", "dataset")
+HEADER = ("id", "name", "label", "description", "benchmark", "version", "dataset", "datasets")
 # what an entry of the earlier format held beside its header: a run's options, bound to the set
 EARLIER = ("benchmark_version", "benchmark_options", "setup")
-REVISION = ("revision", "date", "note", "units", "hash")
+REVISION = ("revision", "date", "note", "units", "hash")       # a mixed set's: "parts" in place of "units"
 RECORD = ("id", "name", "revision", "hash", "units")
 # what the record of a newer job holds beside those: what its page shows, and what a run checks the set against
 RECORD_MORE = ("label", "version")
@@ -192,8 +195,33 @@ def content_hash(benchmark: str, dataset: str, units: Iterable[str]) -> str:
     return hashlib.sha256(json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
-def _hash_of(entry: dict, units: Iterable[str]) -> str:
+def parts_hash(benchmark: str, parts: dict) -> str:
+    """A mixed set's ``content_hash``: over the benchmark and each dataset's ids sorted."""
+    doc = {"benchmark": benchmark, "parts": {d: sorted(set(str(u) for u in ids)) for d, ids in parts.items()}}
+    return hashlib.sha256(json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+
+
+def _hash_of(entry: dict, units) -> str:
+    """The hash of a list of ``entry``: its ids, or a mixed set's {dataset: ids}."""
+    if "datasets" in entry:
+        return parts_hash(entry["benchmark"], units)
     return content_hash(entry["benchmark"], entry["dataset"], units)
+
+
+def datasets_of(entry: dict) -> List[str]:
+    """The datasets a set is cut from: its one, or a mixed set's, in order."""
+    return list(entry["datasets"]) if "datasets" in entry else [entry["dataset"]]
+
+
+def parts(entry: dict, rev: Optional[dict] = None) -> dict:
+    """{dataset: ids} of the set's list (its latest when ``rev`` is not given)."""
+    rev = rev or latest(entry)
+    return {d: list(rev["parts"][d]) for d in entry["datasets"]} if "datasets" in entry else {entry["dataset"]: list(rev["units"])}
+
+
+def size(entry: dict, rev: Optional[dict] = None) -> int:
+    """How many ids the set holds, every dataset's together."""
+    return sum(len(ids) for ids in parts(entry, rev).values())
 
 
 def _now() -> str:
@@ -223,9 +251,15 @@ def check(entry: dict, where: str) -> dict:
     if other:
         raise Refused(f"{where}: holds {', '.join(other)}, which a task set does not hold: a set is its dataset "
                       "and its ids, and a run gives its own options")
-    for k in ("id", "name", "benchmark", "dataset"):
+    mixed = "datasets" in entry
+    for k in ("id", "name", "benchmark") + (() if mixed else ("dataset",)):
         if not isinstance(entry.get(k), str) or not entry[k]:
             raise Refused(f"{where}: no {k}")
+    if mixed:
+        ds = entry["datasets"]
+        if ("dataset" in entry or not isinstance(ds, list) or len(ds) < 2 or len(set(ds)) != len(ds)
+                or any(not isinstance(d, str) or not d for d in ds)):
+            raise Refused(f"{where}: datasets names two or more datasets, each once, in place of dataset")
     check_name(entry["name"])
     _bench_key(entry["benchmark"])
     if not isinstance(entry.get("description"), str):
@@ -246,10 +280,21 @@ def check(entry: dict, where: str) -> dict:
             raise Refused(f"{where}: list {n} has no date")
         if not isinstance(r.get("note"), str):
             raise Refused(f"{where}: list {n}'s note is text")
-        if not isinstance(r.get("units"), list) or any(not isinstance(u, str) for u in r["units"]):
-            raise Refused(f"{where}: list {n} lists no units")
-        _ids(r["units"], f"{where}: list {n}")
-        if r.get("hash") != _hash_of(entry, r["units"]):
+        if mixed:
+            got = r.get("parts")
+            if not isinstance(got, dict) or sorted(got) != sorted(entry["datasets"]) or "units" in r:
+                raise Refused(f"{where}: list {n} holds the ids of each of its datasets (parts), and nothing else")
+            for d, ids in got.items():
+                if not isinstance(ids, list) or any(not isinstance(u, str) for u in ids):
+                    raise Refused(f"{where}: list {n} lists no units of {d}")
+                _ids(ids, f"{where}: list {n} of {d}")
+            listed = got
+        else:
+            if not isinstance(r.get("units"), list) or any(not isinstance(u, str) for u in r["units"]):
+                raise Refused(f"{where}: list {n} lists no units")
+            _ids(r["units"], f"{where}: list {n}")
+            listed = r["units"]
+        if r.get("hash") != _hash_of(entry, listed):
             raise Refused(f"{where}: list {n}'s hash is not that of its units and dataset: "
                           "the file was changed by hand")
     return entry
@@ -319,13 +364,14 @@ def entries(benchmark: Optional[str] = None, root: Optional[str] = None) -> Tupl
 
 def rows(benchmark: str, root: Optional[str] = None) -> List[dict]:
     """The readable entries of ``benchmark`` as a page lists them, by name: {name, label, description, dataset,
-    version, units, date}, ``units`` the number of its ids, ``date`` the day its list was made, ``version`` ""
-    for a set made before sets recorded one."""
+    datasets, parts, version, units, date}, ``dataset`` its first, ``parts`` {dataset: number of its ids}, ``units``
+    the number of its ids, ``date`` the day its list was made, ``version`` "" for a set made before sets recorded one."""
     out = []
     for e in entries(benchmark, root)[0]:
-        last = latest(e)
-        out.append({"name": e["name"], "label": label_of(e), "description": e.get("description") or "", "dataset": e["dataset"],
-                    "version": e.get("version") or "", "units": len(last["units"]), "date": last["date"]})
+        last, each = latest(e), parts(e)
+        out.append({"name": e["name"], "label": label_of(e), "description": e.get("description") or "",
+                    "dataset": datasets_of(e)[0], "datasets": datasets_of(e), "parts": {d: len(ids) for d, ids in each.items()},
+                    "version": e.get("version") or "", "units": size(e), "date": last["date"]})
     return out
 
 
@@ -375,19 +421,29 @@ def _dataset(bench: dict, dataset: Optional[str]) -> str:
     return dataset
 
 
-def create(bench: dict, label: str, *, dataset: str, units: List[str], description: str = "", note: str = "",
-           root: Optional[str] = None) -> dict:
+def create(bench: dict, label: str, *, dataset: Optional[str] = None, units: Optional[List[str]] = None,
+           parts: Optional[dict] = None, description: str = "", note: str = "", root: Optional[str] = None) -> dict:
     """A new entry labelled ``label``, its name made from it (``name_for``), at the version ``bench`` is; written.
-    A label another set has already gives the next free name."""
+    A label another set has already gives the next free name. Its list is ``units`` of ``dataset``, or ``parts``,
+    {dataset: units} in the order given: of one dataset, it is written as that dataset's list."""
     label = check_label(label)
+    given = dict(parts) if parts is not None else {dataset: units}
+    if parts is not None and (dataset is not None or units is not None):
+        raise Refused("a set's list is its units of one dataset, or its parts: give one or the other")
+    given = {_dataset(bench, d): _ids(ids or [], f"the set {label}" + (f" of {d}" if len(given) > 1 else ""))
+             for d, ids in given.items()}
+    if not given:
+        raise Refused(f"the set {label} lists no unit")
     entry = {"id": uuid.uuid4().hex, "name": name_for(bench["key"], label, root), "label": label,
              "description": description or "", "benchmark": bench["key"],
-             **({"version": version_of(bench)} if version_of(bench) else {}), "dataset": _dataset(bench, dataset)}
+             **({"version": version_of(bench)} if version_of(bench) else {}),
+             **({"datasets": list(given)} if len(given) > 1 else {"dataset": next(iter(given))})}
     path = path_of(bench["key"], entry["name"], root)
     if os.path.lexists(path):
         raise Refused(f"a task set {entry['name']!r} of {bench['key']} exists already ({path})")
-    ids = _ids(units, f"the set {label}")
-    entry["revisions"] = [{"revision": 1, "date": _now(), "note": note or "", "units": ids, "hash": _hash_of(entry, ids)}]
+    listed = given if len(given) > 1 else next(iter(given.values()))
+    entry["revisions"] = [{"revision": 1, "date": _now(), "note": note or "",
+                           "parts" if len(given) > 1 else "units": listed, "hash": _hash_of(entry, listed)}]
     write(entry, root)
     return entry
 
@@ -509,24 +565,34 @@ def from_job(bench: dict, job_dir: str, outcomes: Optional[List[str]] = None, na
             + (f": {'; '.join(said)}" if said else "")}
 
 
-def record(entry: dict, rev: Optional[dict] = None) -> dict:
+def record(entry: dict, rev: Optional[dict] = None, dataset: Optional[str] = None) -> dict:
     """What a job's config keeps of the set it ran (``standard.task_set``): its id, name, label, the number and
-    hash of its list, its units, and the version it was made at when it recorded one."""
+    hash of its list, its units, and the version it was made at when it recorded one. Of a mixed set, ``units``
+    are those of the job's ``dataset``, and ``parts`` the whole list, for ``import_path`` to make it again."""
     rev = rev or latest(entry)
+    each = parts(entry, rev)
+    mixed = "datasets" in entry
     return {"id": entry["id"], "name": entry["name"], "label": label_of(entry), "revision": rev["revision"],
-            "hash": rev["hash"], "units": rev["units"], **({"version": entry["version"]} if entry.get("version") else {})}
+            "hash": rev["hash"], "units": each[dataset] if mixed else rev["units"],
+            **({"parts": each} if mixed else {}), **({"version": entry["version"]} if entry.get("version") else {})}
 
 
 def for_run(bench: dict, ref: str, *, dataset: Optional[str] = None, units_given: bool = False,
             root: Optional[str] = None) -> Tuple[dict, str]:
-    """``run --set NAME``: (the record the job keeps, the dataset), the set's dataset taken over the run's.
-    A ``--units`` beside it, or another ``--dataset``, is refused. The run's benchmark options are its own, as
+    """``run --set NAME``: (the record the job keeps, the dataset), the set's dataset taken over the run's; of a
+    mixed set, the ``--dataset`` given, one of its, each a job of its own. A ``--units`` beside it, or another
+    ``--dataset``, is refused. The run's benchmark options are its own, as
     on the whole dataset: the run then refuses an id its driver does not list under them."""
     name, rev = split_ref(ref)
     if units_given:
         raise Refused(f"--set {ref} and --units: the set lists the units, give one or the other")
     entry = load(bench["key"], name, root)
     got = latest(entry, rev)
+    if "datasets" in entry:
+        if dataset not in entry["datasets"]:
+            raise Refused(f"--dataset{' ' + dataset if dataset else ''}: the task set {name} mixes the datasets "
+                          f"{', '.join(entry['datasets'])}; a run is one of them, each a job of its own")
+        return record(entry, got, dataset), dataset
     if dataset and dataset != entry["dataset"]:
         raise Refused(f"--dataset {dataset}: the task set {name} is cut from the dataset {entry['dataset']}")
     return record(entry, got), entry["dataset"]
@@ -545,12 +611,14 @@ def import_path(path: str, root: Optional[str] = None) -> Tuple[dict, bool]:
         missing = [k for k in RECORD if k not in rec]
         if missing:
             raise Refused(f"{path}: its task set's record has no {', '.join(missing)}")
+        mixed = isinstance(rec.get("parts"), dict)        # a mixed set: the job ran one of its datasets, and keeps all
         incoming = {"schema": SCHEMA, "id": rec["id"], "name": rec["name"],
                     **{k: rec[k] for k in RECORD_MORE if k in rec}, "description": "",
-                    "benchmark": cfg["standard"].get("benchmark"), "dataset": _job_dataset(cfg),
+                    "benchmark": cfg["standard"].get("benchmark"),
+                    **({"datasets": list(rec["parts"])} if mixed else {"dataset": _job_dataset(cfg)}),
                     "revisions": [{"revision": rec["revision"], "date": _now(),
                                    "note": f"from the job {cfg.get('job_name') or os.path.basename(path)}",
-                                   "units": rec["units"], "hash": rec["hash"]}]}
+                                   **({"parts": rec["parts"]} if mixed else {"units": rec["units"]}), "hash": rec["hash"]}]}
     elif os.path.isfile(path):
         incoming = _read(path)
     else:
@@ -569,8 +637,9 @@ def import_path(path: str, root: Optional[str] = None) -> Tuple[dict, bool]:
     here = load(bench, name, root)
     if here["id"] != incoming["id"]:
         raise Refused(f"a task set {name!r} of {bench} with another id is here already ({target})")
-    if here["dataset"] != incoming["dataset"]:
-        raise Refused(f"the set {name} here differs in its dataset: {here['dataset']!r}, not {incoming['dataset']!r}")
+    if datasets_of(here) != datasets_of(incoming):
+        raise Refused(f"the set {name} here differs in its datasets: {', '.join(datasets_of(here))}, "
+                      f"not {', '.join(datasets_of(incoming))}")
     mine, theirs = latest(here), latest(incoming)
     if mine["hash"] != theirs["hash"]:
         raise Refused(f"the set {name} holds another list here (hash {mine['hash'][:12]}, not {theirs['hash'][:12]}): "

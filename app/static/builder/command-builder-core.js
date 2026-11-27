@@ -62,6 +62,17 @@
   // A control that calls no model at all - on a benchmark with no judge - needs no key to run.
   // The agents, capabilities and controls a standard recipe runs, each its own job of the one run.
   const chosenOf = r => Array.isArray(r.others) ? r.others : (r.other ? [r.other] : []);
+  // A participant ticked or unticked; the selected version's procedure is one of them, on by default and back when
+  // none is left.
+  function toggleParticipant(r, key) {
+    const current = chosenOf(r), removing = current.includes(key);
+    r.others = removing ? current.filter(k => k !== key) : [...current, key];
+    const b = standardBench(r);
+    if (!r.others.length && !ownAgentsOf(b).length && (b.setups || []).some(s => s.key === 'original')) r.others = ['original'];
+    delete r.other;
+    if (r.options) delete r.options[key];
+    return r;
+  }
   // The datasets a standard recipe runs: each with each choice, a job each; dataset also accepts one key.
   const datasetsOf = r => Array.isArray(r.datasets) ? r.datasets : (r.dataset ? [r.dataset] : []);
   const standardKeyless = r => { const b = standardBench(r), c = chosenOf(r); return !!b && !b.judged && c.length > 0 && c.every(k => (b.controls || []).some(x => x.key === k)); };
@@ -204,12 +215,19 @@
     return keepStartWith(r);
   }
   // A chosen dataset's task set, NAME, run in place of all its tasks (recipe.py: task_sets, {dataset: NAME});
-  // '' for all of them. A dataset no longer chosen keeps none.
+  // '' for all of them. A set of several datasets is chosen for each of them, those not chosen yet added: each runs
+  // its part, a job of its own. A dataset no longer chosen keeps none.
   function setTaskSet(r, dataset, ref) {
     r.task_sets = {...(r.task_sets || {})};
-    if (ref) r.task_sets[dataset] = ref; else delete r.task_sets[dataset];
     // tasks ticked to start with were ticked in the plan's list: another plan asks for them again
     if (Array.isArray((r.start_with || {})[dataset])) setStartWith(r, dataset, '');
+    if (!ref) { delete r.task_sets[dataset]; return keepTaskSets(r); }
+    const b = standardBench(r), name = ref.split('@')[0];
+    const set = b && b.datasets.flatMap(d => d.sets || []).find(s => s.name === name);
+    const all = set && (set.datasets || []).length > 1 ? set.datasets.filter(id => b.datasets.some(d => d.id === id)) : [dataset];
+    r.datasets = [...new Set([...datasetsOf(r), ...all])];
+    delete r.dataset;
+    for (const id of all) r.task_sets[id] = ref;
     return keepTaskSets(r);
   }
   function keepTaskSets(r) {
@@ -237,7 +255,9 @@
     const r = createStandard(typeof raw.benchmark === 'string' ? raw.benchmark : '');
     for (const key of ['name', 'title', 'model', 'where', 'model_choice']) if (typeof raw[key] === 'string') r[key] = raw[key];
     const sets = Array.isArray(raw.datasets) ? raw.datasets.filter(k => typeof k === 'string') : typeof raw.dataset === 'string' && raw.dataset ? [raw.dataset] : null;
-    if (sets && sets.length) r.datasets = [...new Set(sets)];
+    // lists cut from one list overlap: a recipe naming two keeps the first (the builder draws one of each)
+    const b = standardBench(r), seen = new Set();
+    if (sets && sets.length) r.datasets = [...new Set(sets)].filter(id => { const w = wholeOf(b, id); return !seen.has(w) && seen.add(w); });
     if (raw.task_sets && typeof raw.task_sets === 'object' && !Array.isArray(raw.task_sets)) { r.task_sets = {...raw.task_sets}; keepTaskSets(r); }
     if (raw.start_with && typeof raw.start_with === 'object' && !Array.isArray(raw.start_with)) { r.start_with = {...raw.start_with}; keepStartWith(r); }
     const picked = Array.isArray(raw.others) ? raw.others.filter(k => typeof k === 'string') : typeof raw.other === 'string' && raw.other ? [raw.other] : null;
@@ -927,5 +947,10 @@
         at: String(d.at || ''), saved: typeof d.saved === 'string' ? d.saved : ''};
     } catch (e) { return e && e.message === RUNNER_GONE ? {recipe: null, gone: RUNNER_GONE} : null; }
   }
-  return {setTaskSet,keepTaskSets,setStartWith,keepStartWith,nestedDatasets,wholeOf,swapDataset,STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBase,standardBench,standardOthers,ownAgentsOf,ownChosen,runsOf,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
+  // What a recipe's Delete asks before anything goes, on the Recipes page and in the builder's Saved recipes; `h` names its dialog.
+  const deleteAsk = (item, h, esc) => `<div class="std-how-head"><h2 id="${h}">Delete recipe ${esc(item.name)}</h2></div><div class="launch-delete-acts"><button type="button" class="btn ghost" data-close autofocus>Keep it</button><button type="button" class="btn danger" data-delete="${esc(item.id)}">Delete recipe</button></div>`;
+  // A recipe nobody changed: Start over has nothing to ask about. A new one, or that one as a reloaded draft holds it
+  // (fromJSON fills in what a new one leaves out). The page's own values are compared as they are: reading would drop the bad ones.
+  const atDefaults = r => { const s = JSON.stringify(r); return s === JSON.stringify(prefill({})) || s === JSON.stringify(fromJSON(prefill({}))); };
+  return {setTaskSet,keepTaskSets,setStartWith,keepStartWith,nestedDatasets,wholeOf,swapDataset,STANDARD_PHASES,STEPS,STEP,runners,RUNNER_GONE,isStandard,standard,standardBase,standardBench,standardOthers,ownAgentsOf,ownChosen,runsOf,standardKeyless,paperModels,paperListed,paperOffered,leaderboard,setModelChoice,servedRoles,servedList,setServed,addServed,removeServed,setModelOf,servedModelOf,servedKey,servedCompiled,servedRow,stepShown,chosenOf,toggleParticipant,datasetsOf,whereList,machineLabel,createStandard,setStandardBenchmark,openingStep,runnersOf,runnerFor,benchKey,whereLabel,create,benchmarks,routeBlocker,dataset,sources,setBenchmark,parameters,scopes,validate,compile,runnable,fromJSON,fromJob,prefill,atDefaults,deleteAsk,review,copy,packDraft,unpackDraft,adapterPath,taskCount,PROVIDERS,PROVIDER_LABEL,PROVIDER_NEEDS,available,labelOf,needsOf,choiceOf,setChoice,providersOf,recipeProvider,providerBlocker,providerOf,bareModel,settleModel,agentModel,quote:q,path,defaults,needsCredentials,credentialBindings,declaredTimeouts,effectiveTimeouts,setPhaseMinutes,PHASES,harborExecutable,harborPin,harborProblem,harborKey,harborRepoUrl,harborLabel,repoLabel,agents,mergeAgents,setScanned,COMMON,agentById};
 });

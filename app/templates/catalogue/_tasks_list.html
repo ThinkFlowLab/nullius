@@ -18,13 +18,18 @@
       <label class="st-search tasks-find"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="tasks-q" placeholder="Words of an id, a title or a text" aria-label="Search the {{ nouns }}" autocomplete="off" spellcheck="false"></label>
       <div class="tasks-cats" id="tasks-cats"></div>
     </div>
-    <div class="tasks-sel" role="group" aria-label="Chosen {{ nouns }}">
-      <b id="tasks-chosen">0 chosen</b>
-      <button type="button" class="btn ghost sm" id="tasks-match" hidden>Select the matches</button>
-      {% if pick %}<span class="tasks-pick" id="tasks-pick" hidden><input type="text" id="tasks-n" inputmode="numeric" value="10" autocomplete="off" aria-label="How many {{ nouns }} to pick"><button type="button" class="btn ghost sm" id="tasks-pick-go">Pick at random</button></span>{% endif %}
-      <button type="button" class="btn ghost sm" id="tasks-show" aria-pressed="false" hidden>Show selected</button>
-      <details class="tasks-paste" id="tasks-paste-open"><summary class="btn ghost sm" aria-controls="tasks-paste-box">Paste ids</summary></details>
-      <button type="button" class="btn ghost sm" id="tasks-clear" hidden>Clear</button>
+    <div class="tasks-sel">
+      {#- the ways to choose, then what is chosen #}
+      <div class="tasks-add" role="group" aria-label="Choose {{ nouns }}">
+        <button type="button" class="btn ghost sm" id="tasks-match" hidden>Select all</button>
+        {% if pick %}<span class="tasks-pick" id="tasks-pick" hidden><input type="text" id="tasks-n" inputmode="numeric" value="10" autocomplete="off" aria-label="How many {{ nouns }} to pick"><input type="text" id="tasks-seed" inputmode="numeric" placeholder="Seed" autocomplete="off" aria-label="Seed: the same seed draws the same {{ nouns }}" title="The same seed draws the same {{ nouns }}; empty draws a new one"><button type="button" class="btn ghost sm" id="tasks-pick-go">Pick at random</button></span>{% endif %}
+        <details class="pop tasks-paste" id="tasks-paste-open"><summary class="btn ghost sm" aria-controls="tasks-paste-box">Paste ids</summary></details>
+      </div>
+      <div class="tasks-got" role="group" aria-label="Chosen {{ nouns }}">
+        <b id="tasks-chosen">0 chosen</b>
+        <button type="button" class="btn ghost sm" id="tasks-show" aria-pressed="false" hidden>Show selected</button>
+        <button type="button" class="btn ghost sm" id="tasks-clear" hidden>Clear</button>
+      </div>
     </div>
     {#- the box Paste ids opens, on its own line below the row #}
     <div class="tasks-paste-box" id="tasks-paste-box"><textarea class="mono small" id="tasks-paste" rows="4" aria-label="Ids to add" placeholder="One id a line, or separated by spaces or commas" spellcheck="false"></textarea>
@@ -36,7 +41,12 @@
         <tbody id="tasks-rows"></tbody>
       </table>
     </div>
-    <nav class="tasks-pages muted small" id="tasks-pages" aria-label="Pages" hidden>
-      <button type="button" class="btn ghost sm" data-page="prev">Previous</button><span id="tasks-page-of"></span><button type="button" class="btn ghost sm" data-page="next">Next</button>
+    {#- the shared pager's look (_tables.html pager); its pages are the listing's, asked of the server #}
+    <nav class="table-tools table-pager tasks-pages" id="tasks-pages" aria-label="Pages" hidden>
+      <label class="table-note">Show <select id="tasks-size"><option>10</option><option selected>25</option><option>100</option><option value="0">All</option></select></label>
+      <span class="header-spacer"></span>
+      <button type="button" class="btn sm ghost" data-page="prev" aria-label="Previous page"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
+      <span class="table-note" id="tasks-page-of"></span>
+      <button type="button" class="btn sm ghost" data-page="next" aria-label="Next page"><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
     </nav>
 {% endmacro %}

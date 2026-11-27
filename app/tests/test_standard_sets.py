@@ -71,7 +71,8 @@ class Scratch(unittest.TestCase):
 
     def make(self, label, text, *extra):
         name = sets.name_for("fakebench", label)
-        code, out, err = self.cli("set", "create", "fakebench", label, "--dataset", "all", "--units", self.file(text), *extra)
+        dataset = [] if "--dataset" in extra else ["--dataset", "all"]
+        code, out, err = self.cli("set", "create", "fakebench", label, *dataset, "--units", self.file(text), *extra)
         self.assertEqual(code, 0, err)
         return sets.load("fakebench", name)
 
@@ -156,7 +157,8 @@ class Frozen(Scratch):
         entry = sets.load("fakebench", "dev")
         self.assertEqual((sets.label_of(entry), sets.latest(entry)["units"]), ("dev", ["good", "model", "slow"]))
         self.assertEqual(sets.rows("fakebench"), [{"name": "dev", "label": "dev", "description": "from before", "dataset": "all",
-                                                   "version": "", "units": 3, "date": "2026-11-12T10:00:00Z"}])
+                                                   "datasets": ["all"], "parts": {"all": 3}, "version": "", "units": 3,
+                                                   "date": "2026-11-12T10:00:00Z"}])
         code, out, err = self.cli("set", "show", "fakebench", "dev")
         self.assertEqual(code, 0, err)
         self.assertTrue(out.startswith("dev: 3 units of fakebench all\n"), out)
@@ -631,6 +633,74 @@ class Running(Scratch):
         self.assertEqual(sorted(cfg["standard"]), ["backend", "benchmark", "benchmark_options", "control", "exchanges",
                                                    "exchanges_max_mb", "kind", "needs", "permissions_granted", "plugged",
                                                    "provider", "retries", "unsandboxed", "uuid"])
+
+
+class Mixed(Scratch):
+    """A set of several datasets: one list of ids each, made, shown, run one dataset a job, and imported whole."""
+
+    run_cli = Running.run_cli
+
+    def setUp(self):
+        super().setUp()
+        self.b["datasets"] = [*self.b["datasets"], {"id": "responding", "units": 3}]
+
+    def mix(self):
+        code, out, err = self.cli("set", "create", "fakebench", "Mix", "--dataset", "all", "--units", self.file("model\nslow\n", "a.txt"),
+                                  "--dataset", "responding", "--units", self.file("good\n", "b.txt"))
+        self.assertEqual(code, 0, err)
+        self.assertIn("3 tasks of all 2, responding 1", out)
+        return sets.load("fakebench", "mix")
+
+    def test_it_holds_each_datasets_ids_under_one_hash(self):
+        entry = self.mix()
+        rev = entry["revisions"][0]
+        self.assertEqual((entry["datasets"], "dataset" in entry, "units" in rev), (["all", "responding"], False, False))
+        self.assertEqual(sets.parts(entry), {"all": ["model", "slow"], "responding": ["good"]})
+        self.assertEqual(rev["hash"], sets.parts_hash("fakebench", {"responding": ["good"], "all": ["slow", "model"]}))
+        self.assertEqual(sets.rows("fakebench")[0]["parts"], {"all": 2, "responding": 1})
+        code, out, err = self.cli("set", "show", "fakebench", "mix")
+        self.assertEqual(code, 0, err)
+        self.assertIn("mix (Mix): 3 units of fakebench all 2, responding 1", out)
+        self.assertIn("units of all:\n  model\n  slow\nunits of responding:\n  good", out)
+        # one dataset's list is written as before: no parts
+        code, out, err = self.cli("set", "create", "fakebench", "One", "--dataset", "all", "--units", self.file("good\n"))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(sorted(read(sets.path_of("fakebench", "one"))), ["benchmark", "dataset", "description", "id", "label",
+                                                                          "name", "revisions", "schema"])
+
+    def test_a_list_short_of_a_dataset_or_a_pair_short_of_a_file_is_refused(self):
+        entry = self.mix()
+        path = sets.path_of("fakebench", "mix")
+        broken = read(path)
+        del broken["revisions"][0]["parts"]["responding"]
+        with open(path, "w") as f:
+            json.dump(broken, f)
+        with self.assertRaisesRegex(sets.Refused, "holds the ids of each of its datasets"):
+            sets.load("fakebench", "mix")
+        code, out, err = self.cli("set", "create", "fakebench", "Pair", "--dataset", "all", "--dataset", "responding",
+                                  "--units", self.file("good\n"))
+        self.assertEqual(code, 2)
+        self.assertIn("--dataset D --units FILE for each dataset of the set", err)
+        self.assertTrue(entry)
+
+    def test_a_run_is_one_of_its_datasets_and_its_job_keeps_the_whole_set(self):
+        entry = self.mix()
+        code, out, err = self.run_cli("--set", "mix", "--name", "none")
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("refused: --dataset: the task set mix mixes the datasets all, responding", out)
+        code, out, err = self.run_cli("--set", "mix", "--dataset", "responding", "--name", "second")
+        self.assertEqual(code, 0, out + err)
+        cfg = read(os.path.join(self.jobs, "second", "config.json"))
+        self.assertEqual(cfg["datasets"], [{"name": "fakebench/responding", "n_tasks": 1}])
+        rec = cfg["standard"]["task_set"]
+        self.assertEqual((rec["units"], rec["parts"], rec["hash"]),
+                         (["good"], {"all": ["model", "slow"], "responding": ["good"]}, entry["revisions"][0]["hash"]))
+        # elsewhere, the job brings the whole set
+        os.remove(sets.path_of("fakebench", "mix"))
+        code, out, err = self.cli("set", "import", os.path.join(self.jobs, "second"))
+        self.assertEqual(code, 0, err)
+        back = sets.load("fakebench", "mix")
+        self.assertEqual((back["id"], sets.parts(back)), (entry["id"], sets.parts(entry)))
 
 
 class Listing(Scratch):

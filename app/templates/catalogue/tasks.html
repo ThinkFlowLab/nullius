@@ -1,24 +1,26 @@
 {% extends "base.html" %}
 {% from '_page.html' import page_head %}
 {% from 'catalogue/_tasks_list.html' import tasks_list, tasks_state %}
-{% block title %}{{ label if entry else ds.label or ds.id }} · {{ title }} — Nullius{% endblock %}
-{% block crumb %}/ <a href="{{ url_for('benchmarks_page') }}">benchmarks</a> / <a href="{{ url_for('benchmark_page', key=bench.key) }}#task-sets">{{ bench.key }}</a> / {{ ds.id }}{% if entry %} / {{ label }}{% endif %}{% endblock %}
+{#- what the page is for: a set's name; on the application host, a new set cut from the dataset; else the dataset #}
+{% set heading = label if entry else 'New task set' if writable and not broken else ds.label or ds.id %}
+{% block title %}{{ heading }} · {{ title }} — Nullius{% endblock %}
+{% block crumb %}/ <a href="{{ url_for('benchmarks_page') }}">benchmarks</a> / <a href="{{ url_for('benchmark_page', key=bench.key) }}#task-sets">{{ bench.key }}</a> / {% if entry %}{{ label }}{% elif heading == 'New task set' %}new task set{% else %}{{ ds.id }}{% endif %}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='catalogue/catalogue.css') }}">{% endblock %}
 {% block body %}
 {#- One page for a dataset's tasks: the browser keeps the ids ticked, the server gives a page of 100 at a time
     (standard/runner/units.py). Opened from a set (?set=NAME), its tasks start ticked; a set does not change, and other
     ticks are saved as a new set. -#}
+{#- a dataset's routes are this base, its id, then listing, prepare, rows or save: the page goes from one dataset to
+    another in place (tasks.js) #}
 <article class="bench-page tasks-page" id="tasks-page"
-  data-listing="{{ url_for('benchmark_tasks_listing', key=bench.key, dataset=ds.id) }}"
-  data-prepare="{{ url_for('benchmark_tasks_prepare', key=bench.key, dataset=ds.id) }}"
-  data-rows="{{ url_for('benchmark_tasks_rows', key=bench.key, dataset=ds.id) }}"
-  data-save="{{ url_for('benchmark_tasks_save', key=bench.key, dataset=ds.id) }}"
+  data-base="{{ url_for('benchmark_tasks', key=bench.key, dataset='_')[:-1] }}"
   data-csrf="{{ csrf }}" data-writable="{{ 'true' if writable else 'false' }}" data-local="{{ 'true' if writable else 'false' }}"
-  data-nouns="{{ nouns }}" data-set="{{ entry.name if entry else '' }}" data-version="{{ version }}">
+  data-nouns="{{ nouns }}" data-set="{{ entry.name if entry else '' }}" data-version="{{ version }}"
+  data-bench="{{ bench.key }}" data-dataset="{{ ds.id }}">
   {% set mark %}<svg class="bench-mark" aria-hidden="true"><use href="{{ url_for('static', filename='catalogue/marks.svg') }}#bm-{{ bench.key }}"/></svg>{% endset %}
-  {% set tags %}<span class="cat-tag">{{ 'Task set' if entry else 'Tasks' }}</span><span class="origin-tag">{{ title }} · {{ ds.label or ds.id }}</span>{% endset %}
+  {% set tags %}<span class="cat-tag">{{ 'Tasks' if heading == (ds.label or ds.id) else 'Task set' }}</span><span class="origin-tag">{{ title }}</span>{% endset %}
   {% set actions %}
-      <a class="btn sm" href="{{ url_for('new_run', standard=bench.key, dataset=ds.id, set=entry.name if entry else none) }}">Build a run <span aria-hidden="true">→</span></a>
+      <a class="btn sm" id="tasks-build" href="{{ url_for('new_run', standard=bench.key, dataset=ds.id, set=entry.name if entry else none) }}">Build a run <span aria-hidden="true">→</span></a>
       {#- renaming and deleting ask first, in place; one question open at a time #}
       {% if writable and entry %}<details class="bench-delete tasks-rename" name="tasks-set-action">
         <summary class="btn ghost sm">Rename</summary>
@@ -29,7 +31,7 @@
           <button type="button" class="btn ghost" onclick="this.closest('details').open = false">Cancel</button>
         </form>
       </details>{% endif %}
-      {% if writable and (entry or broken) %}{% set n = rev.units|length if entry else 0 %}<details class="bench-delete" name="tasks-set-action">
+      {% if writable and (entry or broken) %}{% set n = total %}<details class="bench-delete" name="tasks-set-action">
         <summary class="btn ghost sm danger">Delete</summary>
         <form method="post" action="{{ url_for('benchmark_tasks_delete', key=bench.key, dataset=ds.id) }}" class="bench-delete-ask">
           <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="set" value="{{ entry.name if entry else broken }}">
@@ -39,20 +41,43 @@
         </form>
       </details>{% endif %}
   {% endset %}
-  {{ page_head(label if entry else ds.label or ds.id, sub=tags, actions=actions, mark=mark) }}
+  {{ page_head(heading, sub=tags, actions=actions, mark=mark) }}
   {% if entry and entry.description %}<p class="bench-domain">{{ entry.description }}</p>{% endif %}
   {% if writable and not entry and not broken %}<p class="bench-domain tasks-how">Tick the {{ nouns }} to keep, then save them as a task set.</p>{% endif %}
   {% if problem %}<p class="bench-blocked" role="note">{{ problem }}</p>{% endif %}
 
   {% if entry %}
   <div class="bench-facts tasks-facts">
-    <div><span>{{ nouns|capitalize }}</span><b>{{ rev.units|length }}</b></div>
-    <div><span>Dataset</span><b>{{ ds.label or ds.id }}</b></div>
+    <div><span>{{ nouns|capitalize }}</span><b>{{ total }}</b></div>
+    {% if parts|length > 1 %}<div><span>Datasets</span><b>{% for d, ids in parts.items() %}{{ pages[d].label if d in pages else d }} {{ ids|length }}{{ ', ' if not loop.last }}{% endfor %}</b></div>
+    {% else %}<div><span>Dataset</span><b>{{ ds.label or ds.id }}</b></div>{% endif %}
     {% if made_at %}<div><span>Made at</span><b>{{ made_at }}</b></div>{% endif %}
     <div><span>Date</span><b>{{ rev.date[:10] }}</b></div>
     <div><span>In commands</span><b class="mono">{{ entry.name }}</b></div>
     {% if rev.note %}<div><span>Note</span><b class="tasks-note">{{ rev.note }}</b></div>{% endif %}
   </div>
+  {% endif %}
+
+  {#- a new set's dataset, chosen here among the benchmark's whole lists (a cut is a filter of its own); a set keeps its own #}
+  {% set wholes = bench.datasets|rejectattr('subset_of')|list %}
+  {% if not entry and (wholes|length > 1 or ds not in wholes) %}
+  <label class="tasks-dataset muted small">Dataset<select id="tasks-dataset">
+    {%- for d in ([ds] if ds not in wholes else []) + wholes %}<option value="{{ d.id }}"{{ ' selected' if d.id == ds.id }}>{{ d.label or d.id }}{% if d.units %} · {{ d.units }}{% endif %}</option>{% endfor %}
+  </select></label>
+  {% endif %}
+  {#- what is chosen in each dataset, the one shown pressed: the others' pages a click away (tasks.js) #}
+  <div class="filter-pills tasks-parts" id="tasks-parts" role="group" aria-label="Chosen in each dataset" hidden></div>
+  {#- the set's name and the way to save it, above the list: no scroll to the bottom to save #}
+  {% if writable %}
+  <section class="bench-section tasks-save" aria-labelledby="tasks-save-title">
+    <h2 id="tasks-save-title">{{ 'Save as a new set' if entry else 'Save as task set' }}</h2>
+    <form class="tasks-form" id="tasks-create">
+      <label class="tasks-field muted small">Name<input type="text" name="name" maxlength="80" autocomplete="off"></label>
+      <label class="tasks-field tasks-wide muted small">Description<input type="text" name="description" maxlength="300" autocomplete="off"></label>
+      <button class="btn" type="submit">{{ 'Save as a new set' if entry else 'Save as task set' }}</button>
+    </form>
+    <p class="tasks-msg" id="tasks-msg" role="alert"></p>
+  </section>
   {% endif %}
 
   {{ tasks_state(nouns, writable) }}
@@ -67,18 +92,8 @@
     {% endif %}
   </section>
 
-  {% if writable %}
-  <section class="bench-section tasks-save" aria-labelledby="tasks-save-title">
-    <h2 id="tasks-save-title">{{ 'Save as a new set' if entry else 'Save as task set' }}</h2>
-    <form class="tasks-form" id="tasks-create">
-      <label class="tasks-field muted small">Name<input type="text" name="name" maxlength="80" autocomplete="off"></label>
-      <label class="tasks-field tasks-wide muted small">Description<input type="text" name="description" maxlength="300" autocomplete="off"></label>
-      <button class="btn" type="submit">{{ 'Save as a new set' if entry else 'Save as task set' }}</button>
-    </form>
-    <p class="tasks-msg" id="tasks-msg" role="alert"></p>
-  </section>
-  {% endif %}
 </article>
-<script id="tasks-chosen-ids" type="application/json">{{ (rev.units if rev else [])|tojson }}</script>
+<script id="tasks-chosen-parts" type="application/json">{{ parts|tojson }}</script>
+<script id="tasks-dataset-pages" type="application/json">{{ pages.items()|map('list')|list|tojson }}</script>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='catalogue/tasks.js') }}"></script>{% endblock %}

@@ -169,7 +169,7 @@ _VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,39}$")
 # What a version may say for itself; the rest of the file is shared.
 VERSIONED = ("upstream", "install", "start", "model", "env", "options", "caches", "fidelity", "proven")
 # What a benchmark's version may say for itself: its data, its driver, how it scores, who plays its user, its environments.
-BENCH_VERSIONED = ("upstream", "datasets", "files", "driver", "mcp_servers", "score", "simulator", "limits", "controls", "environments",
+BENCH_VERSIONED = ("upstream", "datasets", "task_parts", "files", "driver", "mcp_servers", "score", "simulator", "limits", "controls", "environments",
                    "options", "host", "setups", "proven", "leaderboard")
 # What a benchmark option may need: embedding and reranker models through the relay,
 # machine requirements (host), and digest-pinned auxiliary files.
@@ -226,6 +226,9 @@ def resolve(d: dict, version: Optional[str] = None) -> Optional[dict]:
             return None
         return dict(d, _version=v, _versions=[v], _default=v, _ref=d.get("key"))
     v = version or d.get("default")
+    if v not in vs and version:                         # its name as pages show it (``main``), when one version has it
+        named = [x for x in vs if isinstance(vs[x], dict) and version_name(dict(d, upstream=_version_upstream(d, x), _version=x)) == version]
+        v = named[0] if len(named) == 1 else v
     if v not in vs or not isinstance(vs[v], dict):
         return None
     block = vs[v]
@@ -256,12 +259,16 @@ def _version_upstream(d: dict, v: str) -> dict:
     return dict(up, **own, version=v)
 
 
+def version_identity(d: dict) -> str:
+    """The explicit release identity, or the pinned source commit of an unversioned definition."""
+    return str(d.get("_version") or (d.get("upstream") or {}).get("tested") or "")
+
+
 def origin_of(d: dict) -> str:
     """Where a resolved version comes from (``catalog.ORIGINS``): what its ``upstream.origin`` says, else
     ``experiment`` when its upstream lists ``fixes``, else its entry's (a benchmark's ``benchmark.json``), else official."""
     up = d.get("upstream") or {}
     return up.get("origin") or ("experiment" if up.get("fixes") else d.get("_origin") or "official")
-
 
 
 def fix_parts(fix: str) -> Tuple[str, str, str, str]:
@@ -282,6 +289,13 @@ def version_label(d: dict) -> str:
     return str(d.get("_version") or "")
 
 
+def version_name(d: dict) -> str:
+    """A version as pages and the builder name it: its release tag, else its branch, else its key. ``key@name``
+    names it too when no other version has that name."""
+    up = d.get("upstream") or {}
+    return str(up.get("tag") or (up.get("branch") if up.get("tested") else "") or d.get("_version") or "")
+
+
 def title(d: dict) -> str:
     """Its label, with the version when the file has ``versions`` (``Codex 2.2.2``)."""
     return f"{d['label']} {d['_version']}" if "@" in str(d.get("_ref") or "") else d["label"]
@@ -299,10 +313,14 @@ def version_of(d: dict) -> Optional[str]:
 
 
 def find(others: List[dict], ref: str) -> Optional[dict]:
-    """Among resolved definitions, the one ``ref`` names: ``key@version``, or a
-    bare key for its default version."""
+    """Among resolved definitions, the one ``ref`` names: ``key@version``, a
+    bare key for its default version, or ``key@name`` for the one version so
+    named (``version_name``)."""
+    key, name = split(ref)
+    named = [o for o in others if name and o["key"] == key and version_name(o) == name]
     return next((o for o in others if o.get("_ref") == ref), None) or \
-        next((o for o in others if o["key"] == ref and o.get("_version") == o.get("_default")), None)
+        next((o for o in others if o["key"] == ref and o.get("_version") == o.get("_default")), None) or \
+        (named[0] if len(named) == 1 else None)
 
 
 def job_word(d: dict) -> str:
@@ -1577,6 +1595,8 @@ def problems(d: dict, kind: str) -> List[str]:
             bad.append(f"{f}: say it")
     if "example" in d and (kind == "benchmark" or not isinstance(d["example"], bool)):
         bad.append("example: true or false, an agent's or a capability's")
+    if "company" in d and (kind != "agent" or not isinstance(d["company"], str) or not d["company"].strip()):
+        bad.append("company: nonempty text on an agent definition")
     bad += _upstream(d.get("upstream"))
     if kind == "benchmark":
         if d.get("family") not in FAMILIES:
@@ -1585,6 +1605,20 @@ def problems(d: dict, kind: str) -> List[str]:
         bad += _ports("needs", needs, d.get("family"))
         if isinstance(needs, list) and not needs:
             bad.append("needs: at least one port")
+        parts = d.get("task_parts", [])
+        seen_parts = {x.get("id") for x in (d.get("datasets") or []) if isinstance(x, dict)}
+        if not isinstance(parts, list):
+            bad.append("task_parts: a list of named task-prefix selections")
+        else:
+            for part in parts:
+                if (not isinstance(part, dict) or set(part) != {"id", "label", "prefixes"}
+                    or not isinstance(part["id"], str) or not part["id"] or part["id"] in seen_parts
+                    or not isinstance(part["label"], str) or not part["label"].strip()
+                    or not isinstance(part["prefixes"], list) or not part["prefixes"]
+                    or any(not isinstance(p, str) or not p for p in part["prefixes"])):
+                    bad.append("task_parts: unique id, label and nonempty task-name prefixes required")
+                else:
+                    seen_parts.add(part["id"])
         bad += _host(d)
         bad += _files(d)
         bad += _bench_options(d)
@@ -1649,6 +1683,12 @@ def problems(d: dict, kind: str) -> List[str]:
             bad.append("units: {noun, nouns}")
         if "redistribute" in u and not isinstance(u["redistribute"], bool):
             bad.append("units.redistribute: false when the data may not be redistributed")
+        cats = u.get("categories", {})
+        if not isinstance(cats, dict) or not all(
+                isinstance(c, dict) and set(c) <= {"label", "names"} and isinstance(c.get("label", ""), str)
+                and isinstance(c.get("names", {}), dict) and all(isinstance(v, str) and v for v in c.get("names", {}).values())
+                for c in cats.values()):
+            bad.append("units.categories: {FIELD: {label, names: {VALUE: name}}}, how a listing's categories read")
         lim = d.get("limits")
         if lim is not None:
             if not isinstance(lim, dict):

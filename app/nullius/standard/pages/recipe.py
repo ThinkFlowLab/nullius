@@ -124,7 +124,8 @@ def _capability_kind(b: dict) -> str:
 def benchmarks(cat) -> List[dict]:
     """The benchmarks the Benchmarks page and the builder's Benchmark step list: each of the catalogue's listed
     entries (``Catalog.listed_benchmarks``, whichever runner runs it) as ``b``, with its ``datasets``, its ``tasks``
-    and their ``unit`` (``Catalog.tasks_of``), what some of its options need of a machine (``host``, by label, None for nothing),
+    and their ``unit`` (``Catalog.tasks_of``), what it needs of a machine (``host``, each name's label, None for nothing: what its options need, and Docker when
+    its tasks run in images or Harbor runs it),
     what it is run with: ``family`` agent or capability (a benchmark only Harbor runs runs agents) and, for a
     capability, its ``kind``; ``versions``, another version's tasks and unit by version; and ``origins``, its versions'
     origins, each once, the default version's first."""
@@ -134,7 +135,7 @@ def benchmarks(cat) -> List[dict]:
         d = defs.get(b.key) or {}
         tasks, unit = cat.tasks_of(b)
         out.append({"b": b, "datasets": cat.datasets_of(b), "tasks": tasks, "unit": unit,
-                    "host": [hostreq.label(d, n) for n in sorted(d["host"])] if d.get("host") else None,
+                    "host": _machine_needs(b, d),
                     "family": d.get("family") or "agent", "kind": _capability_kind(d),
                     "origins": origins(d) if d else [b.origin],
                     # another version's tasks, when its datasets count differently (``Catalog.in_version``)
@@ -146,6 +147,25 @@ def origins(d: dict) -> List[str]:
     """The origins of a definition's versions, each once, its default version's first."""
     every = d.get("_origins") or {}
     return list(dict.fromkeys([every.get(d["_default"]) or definitions.origin_of(d), *every.values()]))
+
+
+def _machine_needs(b, d: dict) -> Optional[dict]:
+    """What a listed benchmark needs of a machine, each name's label: what its options need, and Docker when its
+    tasks run in images or Harbor runs it (a Harbor run needs ``docker ps`` to answer)."""
+    out = {n: hostreq.label(d, n) for n in sorted(d.get("host") or {})}
+    if "docker" not in out and ("harbor" in b.harness or any(e.get("image") for e in (d.get("environments") or {}).values())):
+        out["docker"] = "Docker"
+    return out or None
+
+
+def _short(label: str) -> str:
+    """A version's label as the builder names it: without its commit."""
+    return re.sub(r"\s*\([0-9a-f]{7,40}\)$", "", label)
+
+
+def procedure_label(b: dict) -> str:
+    """The selected benchmark version whose own procedure runs by default."""
+    return " · ".join(filter(None, (b["label"], _short(definitions.version_label(b) or ""))))
 
 
 def _bench_page(b: dict) -> dict:
@@ -160,10 +180,13 @@ def _bench_page(b: dict) -> dict:
     versioned = definitions.version_of(b) is not None
     task_sets = sets.rows(b["key"])
     return {"key": b["key"], "label": b["label"], "summary": b["summary"], "family": b["family"], "kind": _capability_kind(b),
+            "procedure": procedure_label(b),
+            "origin": definitions.origin_of(b),
             "ref": definitions.ref_of(b) if "_version" in b else b["key"],
             "version": b["_version"] if versioned else "",
             # its versions, each by the ref a recipe names it with (the bare key: the default)
             "versions": [{"ref": b["key"] if v == b.get("_default") else f"{b['key']}@{v}", "version": v, "default": v == b.get("_default"),
+                          "choice_label": _short((b.get("_labels") or {}).get(v) or v),
                           "label": (b.get("_labels") or {}).get(v) or v, "origin": (b.get("_origins") or {}).get(v) or "official"}
                          for v in b.get("_versions") or []] if versioned else [],
             "environments": {n: {"summary": e.get("summary", ""), "local_ok": bool(e.get("local_ok")), "network": e.get("network"),
@@ -210,9 +233,11 @@ def _bench_page(b: dict) -> dict:
                                        for c in controls],
                           "proofs": {k: status[d["id"]][k]["proven"] for k in ("units", "leak")},
                           "failed": {k: status[d["id"]][k]["failed"] for k in ("units", "leak") if status[d["id"]][k]["failed"]},
-                          # the user's task sets cut from it (standard/runner/sets.py), each with the version it was made at
-                          "sets": [dict(s, version_label=sets.version_label(b, s["version"]) if s["version"] else "")
-                                   for s in task_sets if s["dataset"] == d["id"]]}
+                          # the user's task sets cut from it (standard/runner/sets.py), each with the version it was made at;
+                          # a set of several datasets under each, its ``units`` its ids of this one
+                          "sets": [dict(s, units=s["parts"][d["id"]], whole=s["units"],
+                                        version_label=sets.version_label(b, s["version"]) if s["version"] else "")
+                                   for s in task_sets if d["id"] in s["parts"]]}
                          for d in b["datasets"]]}
 
 
@@ -469,6 +494,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     dss = [x for x in b["datasets"] if x["id"] in wanted]
     dss.sort(key=lambda x: wanted.index(x["id"]))
     unknown = [x for x in wanted if x not in {y["id"] for y in b["datasets"]}]
+    # lists cut from one list (subset_of) overlap: one of them a run, as the builder draws one of each
+    whole = {x["id"]: x.get("subset_of") or x["id"] for x in dss}
+    twice = [x for x in dss if [whole[y["id"]] for y in dss].count(whole[x["id"]]) > 1]
+    if twice:
+        add("dataset", f"{' and '.join(x.get('label') or x['id'] for x in twice)} share their tasks: choose one of them.")
     if not dss or unknown:
         add("dataset", f"Choose one or more of {b['label']}'s datasets" + (f" ({', '.join(unknown)} is not one)" if unknown else "") + ".")
     # a chosen dataset's task set (``task_sets``: {dataset: NAME}), run in place of all its tasks; a recipe from
@@ -500,10 +530,12 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         except sets.Refused as e:
             add("dataset", f"Task set {ref}: {e}.")
             continue
-        if entry["dataset"] != ds_id:
-            add("dataset", f"The task set {sets.label_of(entry)} is cut from the dataset {entry['dataset']}, not {ds_id}.")
+        part = sets.parts(entry, got).get(ds_id)
+        if part is None:
+            add("dataset", f"The task set {sets.label_of(entry)} is cut from the dataset{'s' if len(sets.datasets_of(entry)) > 1 else ''} "
+                           f"{', '.join(sets.datasets_of(entry))}, not {ds_id}.")
             continue
-        set_of[ds_id] = {"name": set_name, "label": sets.label_of(entry), "units": len(got["units"]), "ids": set(got["units"])}
+        set_of[ds_id] = {"name": set_name, "label": sets.label_of(entry), "units": len(part), "ids": set(part)}
     # a chosen dataset's plan begun on a part (``start_with``: {dataset: [ID, ...], the tasks the page ticked, or
     # from a recipe before it, N or set:NAME}): the rest run later
     start_of = {}                      # {dataset: {"value": the --start-with word, "units": N, "label": what Review says}}
@@ -585,7 +617,7 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         control = ref in definitions.CONTROLS
         given, opts = {}, {}
         if ref == "model":
-            add("agent", "Choose Original, then choose the model on the Model step.")
+            add("agent", "Use the selected benchmark version's procedure, then choose the model on the Model step.")
             continue
         own = definitions.own_agent(base, ref) if ":" in ref else None
         if ":" in ref and own is None:
@@ -1066,10 +1098,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
             return [STEP["agent"], "Check", f"{o['label']} ({o['key']}) · {o['source']} · {o['from']}"]
         if p.get("agent"):
             return [STEP["agent"], "Participant", f"{p['agent']['label']} · {p['agent'].get('benchmark_label') or b['label']}'s own"]
-        if p.get("setup"):
-            original = (b.get("setups") or {}).get("original") or {}
-            label = original.get("reference_agent") or ("No agent · Original" if side == "agent" else "Original " + (_bench_page(b)["kind"] or "capability"))
-            return [STEP["agent"], "Participant", label]
+        if p.get("setup"):                                                          # the version's own procedure
+            return [STEP["agent"], "Participant", f"{b['label']} · its own procedure"]
         proven = ", ".join(f"{q} {r.get('passed', '')}".strip() for q, r in (o.get("proven") or {}).items() if q in b["needs"])
         return [STEP["agent"], "Agent" if side == "agent" else "Capability", f"{o['label']} · {protocol(o)} · proven {proven}"]
     out["review"] = [[STEP["benchmark"], "Benchmark", f"{b['label']} · needs {', '.join(b['needs'])}"],

@@ -16,6 +16,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 APP = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(APP))
@@ -80,6 +81,15 @@ class Detection(unittest.TestCase):
         other = tempfile.mkdtemp()
         write_doc(other, "t.json", '{"version": 2, "eval": {')
         self.assertFalse(atif.detect(other))
+
+
+def cut_at_config(dump):
+    """*dump*, failing on the job's ``config.json``: a refresh cut short before it publishes."""
+    def cut(path, data):
+        if os.path.basename(path) == "config.json":
+            raise OSError("cut short")
+        return dump(path, data)
+    return cut
 
 
 class Conversion(unittest.TestCase):
@@ -149,18 +159,23 @@ class Conversion(unittest.TestCase):
                 self.assertEqual(held["a__b"], "s-first")
 
     def test_a_gone_document_keeps_its_name_from_a_job_without_reservations_and_from_a_longer_name(self):
-        src = tempfile.mkdtemp()
-        write_doc(src, "a/b.json", minimal(session_id="s-gone"))
-        write_doc(src, "c.json", minimal())
-        job_dir, _ = self.convert(src)
-        config = json.loads(Path(job_dir, "config.json").read_text())
-        del config["trial_documents"]                        # as a conversion before them wrote it
-        Path(job_dir, "config.json").write_text(json.dumps(config))
-        os.remove(os.path.join(src, "a", "b.json"))
-        self.convert(src)                                    # its folder is pruned, its name kept
-        write_doc(src, "a__b.json", minimal(session_id="s-new"))
-        _, job = self.convert(src)
-        self.assertNotIn("a__b", {t.trial_name for t in job.trials})
+        for cut in (False, True):
+            with self.subTest(cut_before_config=cut):
+                src = tempfile.mkdtemp()
+                write_doc(src, "a/b.json", minimal(session_id="s-gone"))
+                write_doc(src, "c.json", minimal())
+                job_dir, _ = self.convert(src, job_name=f"cut-{cut}")
+                config = json.loads(Path(job_dir, "config.json").read_text())
+                del config["trial_documents"]                # as a conversion before them wrote it
+                Path(job_dir, "config.json").write_text(json.dumps(config))
+                os.remove(os.path.join(src, "a", "b.json"))
+                if cut:                                      # a first refresh cut short before its config
+                    with mock.patch.object(atif, "_dump", cut_at_config(atif._dump)), self.assertRaises(OSError):
+                        self.convert(src, job_name=f"cut-{cut}")
+                self.convert(src, job_name=f"cut-{cut}")     # its folder is pruned, its name kept
+                write_doc(src, "a__b.json", minimal(session_id="s-new"))
+                _, job = self.convert(src, job_name=f"cut-{cut}")
+                self.assertNotIn("a__b", {t.trial_name for t in job.trials})
 
         src = tempfile.mkdtemp()                             # a gone file named like another's longer name
         longer = "a__b__" + hashlib.sha256(b"a/b.json").hexdigest()[:8]
