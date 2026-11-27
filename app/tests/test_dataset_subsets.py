@@ -73,6 +73,14 @@ class Declared(unittest.TestCase):
         self.assertEqual(out["errors"], [], out["errors"])
         self.assertIn("--dataset test_nogdrive ", out["shards"][0]["command"])
         self.assertEqual(next(r for r in out["review"] if r[1] == "Dataset")[2], "Without Google Drive · 361 tasks")
+        # two lists of one family share their tasks: refused, the builder drawing one of each
+        gaia = definitions.get("benchmark", "gaia")
+        out = recipe.compile({"version": 1, "harness": "standard", "name": "g", "title": "t", "benchmark": "gaia",
+                              "datasets": ["gaia-validation-level1", "gaia-validation-level2"], "others": ["nop"],
+                              "provider": "openai", "model": "", "where": "local", "concurrency": 1},
+                             {"benchmark": [gaia], "agent": [], "capability": []})
+        self.assertIn("Validation · Level 1 and Validation · Level 2 share their tasks: choose one of them.",
+                      [e["message"] for e in out["errors"]])
 
 
 if __name__ == "__main__":

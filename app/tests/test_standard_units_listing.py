@@ -37,6 +37,8 @@ with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "started"), "
 if os.environ.get("HF_TOKEN"):           # a licence bound for the driver, as the listing gave it
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "given"), "w") as f:
         f.write(os.environ["HF_TOKEN"])
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "endpoint"), "w") as f:
+    f.write(os.environ.get("HF_ENDPOINT", ""))           # where its downloads go
 KINDS = ("alpha", "beta", "gamma")
 N = 20 if os.environ.get("NULLIUS_OPTION_MODE") == "short" else 250
 IDS = [f"t{i:03d}" for i in range(N)]
@@ -416,6 +418,13 @@ class Licences(Scratch):
     def given(self):
         path = Path(self.b["_here"], "given")
         return path.read_text() if path.exists() else None
+
+    def test_the_driver_downloads_from_the_mirror_a_run_would(self):
+        with mock.patch.dict(os.environ, {"HF_ENDPOINT": "https://hf-mirror.example.org/"}):
+            units.listing(self.b, "all")
+        self.assertEqual(Path(self.b["_here"], "endpoint").read_text(), "https://hf-mirror.example.org")
+        units.listing(dict(self.b, options={}), "all")                  # the default: none set
+        self.assertEqual(Path(self.b["_here"], "endpoint").read_text(), "")
 
     def test_the_driver_gets_its_licence_and_none_held_is_refused_before_it_starts(self):
         self.b = gated(self.b)

@@ -227,11 +227,13 @@
   // kept in the set's note while the chosen are the ones drawn
   $('tasks-pick-go')?.addEventListener('click', async () => {
     let got;
-    try { got = await (await nulliusFetch(query({ids: 1, sample: $('tasks-n').value.trim()}))).json(); }
+    const seed = ($('tasks-seed') || {}).value?.trim();        // set create --seed: the same seed, the same draw
+    try { got = await (await nulliusFetch(query({ids: 1, sample: $('tasks-n').value.trim(), ...(seed ? {seed} : {})}))).json(); }
     catch { return window.nulliusNotify?.('The tasks could not be drawn. Reload the page.', {error: true}); }
     if (!got.ok || !got.ready) return window.nulliusNotify?.(got.error || 'The list is not ready.', {error: true});
     chosen.clear(); got.ids.forEach(id => chosen.add(id));
     drawn = {ids: new Set(got.ids), seed: got.seed, note: got.note};
+    if ($('tasks-seed')) $('tasks-seed').value = got.seed;                  // the draw's seed, to draw it again
     setShowing(true); load();
   });
   $('tasks-clear')?.addEventListener('click', () => { chosen.clear(); load(); });

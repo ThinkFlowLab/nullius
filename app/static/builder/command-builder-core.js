@@ -225,7 +225,9 @@
     const r = createStandard(typeof raw.benchmark === 'string' ? raw.benchmark : '');
     for (const key of ['name', 'title', 'model', 'where', 'model_choice']) if (typeof raw[key] === 'string') r[key] = raw[key];
     const sets = Array.isArray(raw.datasets) ? raw.datasets.filter(k => typeof k === 'string') : typeof raw.dataset === 'string' && raw.dataset ? [raw.dataset] : null;
-    if (sets && sets.length) r.datasets = [...new Set(sets)];
+    // lists cut from one list overlap: a recipe naming two keeps the first (the builder draws one of each)
+    const b = standardBench(r), seen = new Set();
+    if (sets && sets.length) r.datasets = [...new Set(sets)].filter(id => { const w = wholeOf(b, id); return !seen.has(w) && seen.add(w); });
     if (raw.task_sets && typeof raw.task_sets === 'object' && !Array.isArray(raw.task_sets)) { r.task_sets = {...raw.task_sets}; keepTaskSets(r); }
     const picked = Array.isArray(raw.others) ? raw.others.filter(k => typeof k === 'string') : typeof raw.other === 'string' && raw.other ? [raw.other] : null;
     if (picked) r.others = [...new Set(picked)];

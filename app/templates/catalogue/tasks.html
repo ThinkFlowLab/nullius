@@ -97,7 +97,7 @@
       {#- the ways to choose, then what is chosen #}
       <div class="tasks-add" role="group" aria-label="Choose {{ nouns }}">
         <button type="button" class="btn ghost sm" id="tasks-match" hidden>Select all</button>
-        {% if writable %}<span class="tasks-pick" id="tasks-pick" hidden><input type="text" id="tasks-n" inputmode="numeric" value="10" autocomplete="off" aria-label="How many {{ nouns }} to pick"><button type="button" class="btn ghost sm" id="tasks-pick-go">Pick at random</button></span>{% endif %}
+        {% if writable %}<span class="tasks-pick" id="tasks-pick" hidden><input type="text" id="tasks-n" inputmode="numeric" value="10" autocomplete="off" aria-label="How many {{ nouns }} to pick"><input type="text" id="tasks-seed" inputmode="numeric" placeholder="Seed" autocomplete="off" aria-label="Seed: the same seed draws the same {{ nouns }}" title="The same seed draws the same {{ nouns }}; empty draws a new one"><button type="button" class="btn ghost sm" id="tasks-pick-go">Pick at random</button></span>{% endif %}
         <details class="pop tasks-paste" id="tasks-paste-open"><summary class="btn ghost sm" aria-controls="tasks-paste-box">Paste ids</summary></details>
       </div>
       <div class="tasks-got" role="group" aria-label="Chosen {{ nouns }}">

@@ -92,7 +92,8 @@
         }
       },
       "persona": {
-        "label": "Persona"
+        "label": "Persona",
+        "names": {"None": "No persona"}
       }
     }
   },

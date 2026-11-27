@@ -470,6 +470,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     dss = [x for x in b["datasets"] if x["id"] in wanted]
     dss.sort(key=lambda x: wanted.index(x["id"]))
     unknown = [x for x in wanted if x not in {y["id"] for y in b["datasets"]}]
+    # lists cut from one list (subset_of) overlap: one of them a run, as the builder draws one of each
+    whole = {x["id"]: x.get("subset_of") or x["id"] for x in dss}
+    twice = [x for x in dss if [whole[y["id"]] for y in dss].count(whole[x["id"]]) > 1]
+    if twice:
+        add("dataset", f"{' and '.join(x.get('label') or x['id'] for x in twice)} share their tasks: choose one of them.")
     if not dss or unknown:
         add("dataset", f"Choose one or more of {b['label']}'s datasets" + (f" ({', '.join(unknown)} is not one)" if unknown else "") + ".")
     # a chosen dataset's task set (``task_sets``: {dataset: NAME}), run in place of all its tasks; a recipe from

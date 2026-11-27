@@ -263,7 +263,7 @@ def _start(bench: dict, ds: dict, values: dict, work: str, licences=None) -> jso
                               "NULLIUS_UPSTREAM": up or "", "NULLIUS_DATASET": data or "",
                               "NULLIUS_DATASET_ID": ds["id"], "PYTHONPATH": run.driver_path(),
                               "PYTHONDONTWRITEBYTECODE": "1", "NULLIUS_VERSION": str(bench.get("_version") or ""),
-                              **run.option_env(values)})
+                              **run.option_env(values), **run.data_env()})          # the Hugging Face mirror, as a run's
     try:
         args = (cmd, cwd, env, os.path.join(work, "driver.log"))
         return (_ListingProc(*args, credentials) if credentials else jsonl.Proc(*args)).start()

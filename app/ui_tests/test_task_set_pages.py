@@ -202,7 +202,7 @@ class TheTasksPagesData(Case):
         self.assertEqual(got["note"], "matched by --category kind=alpha; drawn by --sample 5 --seed 7")
         drawn = self.listing(ids=1, sample=5)                 # no seed: one drawn, and given
         self.assertEqual(drawn["ids"], units.draw([f"t{i:03d}" for i in range(250)], 5, drawn["seed"])[0])
-        for sample, said in (("251", "--sample 251: the list holds 250"), ("x", "--sample x: a whole number from 1")):
+        for sample, said in (("251", "251 at random: the list holds 250."), ("x", "x at random: a whole number from 1.")):
             r = self.client.get(f"/benchmarks/described/tasks/all/listing?ids=1&sample={sample}"); self.addCleanup(r.close)
             self.assertEqual((r.status_code, r.get_json()["error"]), (400, said))
         self.post("/benchmarks/described/tasks/all/save", {"name": "five", "units": got["ids"], "note": got["note"]})
@@ -218,13 +218,13 @@ class TheTasksPagesData(Case):
                     self.addCleanup(r.close)
                     self.assertEqual(r.status_code, 400)
                     self.assertEqual(r.get_json(), {"ok": False,
-                        "error": f"--{field} {word}: a whole number from {minimum}"})
+                        "error": (f"{word} at random" if field == "sample" else f"Seed {word}") + f": a whole number from {minimum}."})
 
     def test_an_unknown_category_is_refused_plainly(self):
         units.listing(self.b, "all")
         r = self.client.get("/benchmarks/described/tasks/all/listing?cat=colour=red"); self.addCleanup(r.close)
         self.assertEqual(r.status_code, 400)
-        self.assertIn("no such category", r.get_json()["error"])
+        self.assertTrue(r.get_json()["error"].startswith("Category colour: no such category"), r.get_json()["error"])
 
     def test_the_rows_of_chosen_ids_say_which_the_listing_does_not_hold(self):
         units.listing(self.b, "all")
@@ -769,6 +769,13 @@ class TheBenchmarksOwnSets(Case):
         self.assertEqual((got["small"]["datasets"], got["small"].get("task_sets")), (["test_small"], None))
         self.assertEqual(re.findall(r'aria-pressed="true"[^>]*>.*?<strong>(.*?)</strong>', got["mine"]), ["Chrome tabs"])
         self.assertEqual((got["whole"]["datasets"], got["whole"].get("task_sets")), (["test_all"], None))
+
+    def test_a_saved_recipe_of_two_lists_of_one_family_keeps_the_first(self):
+        got = self.node_program(
+            "const r=C.fromJSON({version:1,harness:'standard',benchmark:'gaia',others:['original'],"
+            "datasets:['gaia-validation-level1','gaia-validation-level2'],task_sets:{'gaia-validation-level2':'x'}});"
+            "process.stdout.write(JSON.stringify({datasets:r.datasets,sets:r.task_sets||null}));")
+        self.assertEqual(got, {"datasets": ["gaia-validation-level1"], "sets": None})
 
     def test_a_benchmark_that_declares_nothing_is_drawn_as_before(self):
         got = self.node_program("const b=C.standardBench(C.createStandard('open-telco'));"

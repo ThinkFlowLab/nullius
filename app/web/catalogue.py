@@ -109,7 +109,7 @@ def benchmark_page(key):
                           data={d.key: sources.of(d, b.harness, std_def, only=len(vds) == 1) for d in vds},
                           current=(x["version"] == v) if v else x["default"], **(_proven(page) if page else {})))
     shown = next(x for x in views if x["current"])
-    std, ds, data = shown["std"], cat.datasets_of(b), shown["data"]
+    std, data = shown["std"], shown["data"]
     versions = views if len(views) > 1 else []
     jobs = {j.job_id for j in shared._jobs_for_request()} if std else set()
     # the user's sets, each with the version it was made at as this benchmark's definition names it
@@ -172,7 +172,7 @@ def _listing_state(bench: dict, dataset: str) -> dict:
         say = f"The list of {nouns} cannot be made here: {got['reason']}. Ids can still be pasted."
     elif got["state"] == "full" and not got["preparing"]:
         say = f"List the {nouns} to choose from, or paste their ids."
-        about = f"Listing fetches {fetched}." if fetched else "Listing starts the benchmark's driver on this machine."
+        about = f"Listing fetches {fetched}." if fetched else ""
     else:
         say = f"Preparing the list of {nouns}" + (f": fetching {fetched}." if fetched else ".") + " Ids can be pasted meanwhile."
     return dict(got, say=say, about=about, link=link)
@@ -234,7 +234,10 @@ def benchmark_tasks_listing(key, dataset):
                 return jsonify(ok=True, ready=True, total=got["total"], ids=ids)
             # Pick N at random: N of the matches, drawn as set create --sample draws them, its seed in the note
             n, seed = (_whole(request.args.get(k)) for k in ("sample", "seed"))
-            ids, seed = units.draw(ids, n, seed)
+            try:
+                ids, seed = units.draw(ids, n, seed)
+            except units.Refused as e:       # said in the page's words, not the command's flags
+                return jsonify(ok=False, error=_page_words(e)), 400
             return jsonify(ok=True, ready=True, total=got["total"], ids=ids, seed=seed,
                            note=units.sample_note(n, seed, request.args.get("q", ""), cats))
         size = request.args.get("size", "")       # the page's Show: 10, 25 or 100 a page, or 0 for all
@@ -242,8 +245,19 @@ def benchmark_tasks_listing(key, dataset):
                          page=int(page) if page.isdigit() and int(page) >= 1 else 1,
                          size=(int(size) or None) if size in ("10", "25", "100", "0") else units.PAGE)
     except units.Refused as e:
-        return jsonify(ok=False, error=str(e)), 400
+        return jsonify(ok=False, error=_page_words(e)), 400
     return jsonify(ok=True, ready=True, **got)
+
+
+def _page_words(e: Exception) -> str:
+    """A refusal of ``units`` as the page says it, its flag the page's word: ``--sample 900: the list holds 165`` as
+    ``900 at random: the list holds 165.``, ``--seed 7`` as ``Seed 7``, ``--category kind`` as ``Category kind``."""
+    said = str(e)
+    for flag, word in (("--sample ", "{} at random"), ("--seed ", "Seed {}"), ("--category ", "Category {}")):
+        if said.startswith(flag):
+            value, _, rest = said[len(flag):].partition(":")
+            said = word.format(value) + ":" + rest
+    return said.rstrip(".") + "."
 
 
 def _whole(word):
@@ -274,7 +288,8 @@ def benchmark_tasks_prepare(key, dataset):
         try:
             units.listing(bench, dataset)
         except (units.Refused, OSError) as e:
-            _PREPARING[identity]["error"] = str(e)
+            with _PREPARING_LOCK:
+                _PREPARING[identity]["error"] = str(e)
     with _PREPARING_LOCK:
         job = _PREPARING.get(identity)
         if not (job and job["thread"].is_alive()):
