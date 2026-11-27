@@ -75,7 +75,9 @@
   }
   // The datasets a standard recipe runs: each with each choice, a job each; dataset also accepts one key.
   const datasetsOf = r => Array.isArray(r.datasets) ? r.datasets : (r.dataset ? [r.dataset] : []);
-  const standardKeyless = r => { const b = standardBench(r), c = chosenOf(r); return !!b && !b.judged && c.length > 0 && c.every(k => (b.controls || []).some(x => x.key === k)); };
+  // The run asks a judge: the benchmark's official one, or its experiment judge once a model is named for it.
+  const judgesRun = r => { const b = standardBench(r); return !!b && (b.judged || (!!b.experiment_judge && !!String(r.judge_model || '').trim())); };
+  const standardKeyless = r => { const b = standardBench(r), c = chosenOf(r); return !!b && !judgesRun(r) && c.length > 0 && c.every(k => (b.controls || []).some(x => x.key === k)); };
   // Where a standard recipe runs: a list of machines, 'local' or a host's entry; one machine is kept as a word.
   const whereList = r => Array.isArray(r.where) ? r.where : [r.where || 'local'];
   const stepShown = (r, i) => i !== STEP.setup;
@@ -118,7 +120,7 @@
   function servedRoles(r) {
     const b = standardBench(r);
     if (!b || r.provider !== 'openrouter' || standardKeyless(r)) return [];
-    return SERVED_ROLES.filter(k => k === 'model' || (k === 'simulator' && b.simulator) || (k === 'judge' && b.judge));
+    return SERVED_ROLES.filter(k => k === 'model' || (k === 'simulator' && b.simulator) || (k === 'judge' && (b.judge || judgesRun(r))));
   }
   // A field's text, "deepinfra, together", as the pin's list, every part kept for the server to check ("a,,b" is
   // refused in sight, as the option refuses it); a field with nothing in it pins nothing.
@@ -389,7 +391,7 @@
     if (!isStandard(r)) return [['chat']];
     const b = standardBench(r), all = standard().agents.concat(standard().capabilities);
     const out = chosenOf(r).filter(k => !((b && b.controls) || []).some(c => c.key === k)).map(k => (all.find(o => o.key === k) || {}).apis || ['chat']);
-    if (b && b.judged) out.push(['chat']);
+    if (judgesRun(r)) out.push(['chat']);
     return out.length ? out : [['chat']];
   }
   const serving = (p, apis) => !PROVIDER_INFO[p].protocols || apis.some(a => PROVIDER_INFO[p].protocols.includes(a));

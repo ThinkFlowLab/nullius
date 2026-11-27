@@ -26,12 +26,12 @@ class Parts(unittest.TestCase):
         with open(os.path.join(self.job, "config.json"), "w") as f:
             json.dump({"job_name": "job", "runner": "standard"}, f)
 
-    def trial(self, name, f1s):
+    def trial(self, name, f1s, **more):
         d = os.path.join(self.job, name)
         parts = {"n": len(f1s), "by": "category",
                  "parts": [{"n": i + 1, "text": f"q{i}", "group": 1 + i % 2, "score": s} for i, s in enumerate(f1s)]}
         job.write_trial(d, job="job", bench=BENCH, other={"key": "original", "_kind": "upstream"}, model="m", unit=name,
-                        t0=0, t1=1, produce=(0, 1), score={"reward": sum(f1s) / len(f1s), "parts": parts, "detail": {}},
+                        t0=0, t1=1, produce=(0, 1), score={"reward": sum(f1s) / len(f1s), "parts": parts, "detail": {}, **more},
                         exception=None, calls=[], trajectory=None)
         return d
 
@@ -52,6 +52,16 @@ class Parts(unittest.TestCase):
         self.assertEqual(sorted(g["group"] for g in j.score_by_group), ["1", "2"])
         with open(os.path.join(self.job, "conv-a", "verifier", "score.json")) as f:
             self.assertNotIn("parts", json.load(f))      # the parts live in parts.json, said once
+
+    def test_a_complement_is_weighed_by_its_own_count_and_kept_apart_from_the_mean(self):
+        self.trial("conv-a", [1.0] * 4, complement={"label": "Mem0 judge", "score": 1.0, "n": 2})
+        self.trial("conv-b", [0.0] * 12, complement={"label": "Mem0 judge", "score": 0.25, "n": 8})
+        self.trial("conv-c", [0.5] * 2, complement={"label": "Mem0 judge", "score": 0.5, "n": 0})   # over nothing: none
+        j = parse.parse_job(self.job)
+        self.assertEqual(j.complement, {"label": "Mem0 judge", "score": (2 * 1.0 + 8 * 0.25) / 10, "n": 10})
+        self.assertAlmostEqual(j.mean_score, 5 / 18)                                         # the F1, unchanged
+        self.trial("conv-d", [1.0], complement={"label": "another judge", "score": 1.0, "n": 1})
+        self.assertEqual(parse.parse_job(self.job).complement, {})                           # two judges: no one number
 
 
 if __name__ == "__main__":

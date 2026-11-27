@@ -32,7 +32,7 @@ DEFAULT_TRACE_NAME = "trace.json"
 # The shape this module produces. A workspace caches parsed Jobs keyed on it,
 # so bump it when a Trial or Job field is added, renamed or means something
 # new — otherwise a cache written by the old parse is read back as current.
-SCHEMA = "22"
+SCHEMA = "23"
 
 # What a rate-limit record in `agent/gateway.log` looks like. The agent's SDK
 # retries a 429 below the harness, so a limit the run survived leaves nothing in result.json —
@@ -223,6 +223,15 @@ def count_rate_limits(path: str) -> int | None:
     return count
 
 
+def _complement(ver_res) -> dict:
+    """A trial's ``verifier_result.complement``, when it is whole: {label, score, n}."""
+    c = ver_res.get("complement") if isinstance(ver_res, dict) else None
+    if (isinstance(c, dict) and isinstance(c.get("label"), str) and type(c.get("score")) in (int, float)
+            and type(c.get("n")) is int and c["n"] > 0):
+        return {"label": c["label"], "score": float(c["score"]), "n": c["n"]}
+    return {}
+
+
 def _iso(ts: str | None):
     """A stamp as an aware datetime. Harbor writes its stamps without a zone,
     in UTC; the standard, OpenTelemetry and zoned ATIF imports write one. A
@@ -316,6 +325,10 @@ class Trial:
     # score counting nothing, as in the trial's own mean; and that field's word.
     part_groups: dict = field(default_factory=dict)
     parts_by: str = ""
+    # A second score beside that one, never in its place - an experiment
+    # judge's share of answers right - with its label and how many parts it is
+    # over: {label, score, n}. Empty when the trial has none.
+    complement: dict = field(default_factory=dict)
     # Names of the tests that failed.
     f2p_failures: list = field(default_factory=list)
     p2p_failures: list = field(default_factory=list)
@@ -594,6 +607,16 @@ class Job:
         return sum(s * n for s, n in scored) / sum(n for _, n in scored) if scored else None
 
     @property
+    def complement(self) -> dict:
+        """The trials' second score (``Trial.complement``), weighed by its parts as ``mean_score`` is:
+        {label, score, n}; empty when no trial has one. Trials whose labels differ give none."""
+        got = [t.complement for t in self.trials if t.complement]
+        if not got or len({c["label"] for c in got}) > 1:
+            return {}
+        n = sum(c["n"] for c in got)
+        return {"label": got[0]["label"], "score": sum(c["score"] * c["n"] for c in got) / n, "n": n}
+
+    @property
     def mean_score_planned(self):
         """The mean score over every trial the run planned (``n_planned``), a
         trial with no score - one that ended on an error, one never run -
@@ -853,6 +876,7 @@ def parse_trial(job_id: str, trial_dir: str) -> Trial | None:
         score=score,
         part_groups=part_groups,
         parts_by=parts_by,
+        complement=_complement(ver_res),
         n_parts=(ver_res.get("parts") or {}).get("n") if isinstance(ver_res, dict) and isinstance(ver_res.get("parts"), dict)
         and isinstance((ver_res.get("parts") or {}).get("n"), int) and not isinstance((ver_res.get("parts") or {}).get("n"), bool) else None,
         exception_type=exc_type,

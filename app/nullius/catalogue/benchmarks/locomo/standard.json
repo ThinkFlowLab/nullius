@@ -73,7 +73,12 @@
   },
   "score": {
     "kind": "score",
-    "says": "token F1 of the answer against the reference, by LoCoMo's own eval_question_answering (task_eval/evaluation.py): its normalisation and Porter stemming, category 1 by comma-separated parts, category 3 against the reference's part before the first ';' (categories 1 to 4); a conversation's score is the mean over its questions"
+    "says": "token F1 of the answer against the reference, by LoCoMo's own eval_question_answering (task_eval/evaluation.py): its normalisation and Porter stemming, category 1 by comma-separated parts, category 3 against the reference's part before the first ';' (categories 1 to 4); a conversation's score is the mean over its questions",
+    "experiment_judge": {
+      "label": "Mem0 judge",
+      "model": "gpt-4o-mini",
+      "says": "Mem0's LLM judge, as Mem0 scored LoCoMo (mem0ai/mem0 evaluation/metrics/llm_judge.py at aae5989): each answer of categories 1 to 4 against the whole reference, CORRECT or WRONG; the share marked CORRECT. Beside the F1, never LoCoMo's score."
+    }
   },
   "options": {
     "rag_mode": {
@@ -257,7 +262,12 @@
       },
       "score": {
         "kind": "score",
-        "says": "token F1 of the answer against the reference, by LoCoMo's own eval_question_answering (task_eval/evaluation.py), category 5 scored 1 when the answer says it is not mentioned, else 0: its normalisation and Porter stemming, category 1 by comma-separated parts, category 3 against the reference's part before the first ';' (categories 1 to 5); a conversation's score is the mean over its questions"
+        "says": "token F1 of the answer against the reference, by LoCoMo's own eval_question_answering (task_eval/evaluation.py), category 5 scored 1 when the answer says it is not mentioned, else 0: its normalisation and Porter stemming, category 1 by comma-separated parts, category 3 against the reference's part before the first ';' (categories 1 to 5); a conversation's score is the mean over its questions",
+        "experiment_judge": {
+          "label": "Mem0 judge",
+          "model": "gpt-4o-mini",
+          "says": "Mem0's LLM judge, as Mem0 scored LoCoMo (mem0ai/mem0 evaluation/metrics/llm_judge.py at aae5989): each answer of categories 1 to 4 against the whole reference, CORRECT or WRONG; the share marked CORRECT. Beside the F1, never LoCoMo's score."
+        }
       }
     }
   }

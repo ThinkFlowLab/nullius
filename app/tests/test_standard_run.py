@@ -1136,6 +1136,15 @@ class RunTest(unittest.TestCase):
                         judge_model="anthropic/claude-x", simulator_model="openai/gpt-5")
         self.assertEqual((typed.judge_model, typed.simulator_model), ("anthropic/claude-x", "openai/gpt-5"))   # what was typed goes as typed
 
+    def test_an_experiment_judge_runs_only_as_the_model_the_run_names(self):
+        b = definitions.get("benchmark", "fakebench", ROOT)
+        b["score"] = dict(b["score"], experiment_judge={"label": "A judge", "model": "its-source-model", "says": "a judge"})
+        o, env = definitions.get("agent", "fake", ROOT), dict(self.env, OPENROUTER_API_KEY="k")
+        none = run.Run(b, o, model="m", provider="openrouter", env=env, unsandboxed=True, jobs_root=self.tmp)
+        named = run.Run(b, o, model="m", provider="openrouter", env=env, unsandboxed=True, jobs_root=self.tmp, judge_model="openai/gpt-4o-mini")
+        self.assertEqual((none.judge_model, none.judge(None, "u")), (None, {}))          # never its source's model by default
+        self.assertEqual(named.judge_model, "openai/gpt-4o-mini")
+
     def test_a_judge_refused_by_its_provider_is_the_units_infrastructure_not_a_miss(self):
         here = os.path.join(self.tmp, "judged")
         os.makedirs(here)
