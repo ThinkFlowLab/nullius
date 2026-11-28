@@ -72,6 +72,22 @@ def job_with_feed(root, job_id, *, feed=True, ended=False):
     return parse.parse_job(str(job_dir))
 
 
+class LiveBoardLayout(unittest.TestCase):
+    def test_seven_counts_use_one_row_only_on_wide_screens(self):
+        css = (APP_DIR / "static/runs/live-board.css").read_text()
+        selector = ".lb-stats:has(> .lb-stat:nth-child(7))"
+        wide = re.search(r"@media \(min-width: (\d+)px\)\s*\{\s*" + re.escape(selector)
+                         + r"\s*\{([^}]+)\}\s*\}", css)
+        self.assertIsNotNone(wide)
+        self.assertGreater(int(wide[1]), 1000)
+        self.assertLessEqual(int(wide[1]), 1280)
+        self.assertIn("grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, 1.2fr))", wide[2])
+        self.assertNotIn(selector, css[:wide.start()] + css[wide.end():])
+        for width, columns in ((1000, 3), (640, 6)):
+            self.assertRegex(css, rf"@media \(max-width: {width}px\)\s*\{{\s*\.lb-stats\s*\{{\s*"
+                                  rf"grid-template-columns: repeat\({columns}, minmax\(0, 1fr\)\)")
+
+
 class LiveBoard(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -14,7 +14,9 @@
     PYTHONPATH=app python3 -m nullius.standard.cli merge JOB_DIR... -o OUT [--force]
     PYTHONPATH=app python3 -m nullius.standard.cli set create|list|show|rename|delete|import ...
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --set NAME
+    PYTHONPATH=app python3 -m nullius.standard.cli run ... --start-with N|FILE|set:NAME|ids:ID,ID...
     PYTHONPATH=app python3 -m nullius.standard.cli units BENCHMARK --dataset D [--search TEXT] [--category FIELD=VALUE ...] [--json]
+    PYTHONPATH=app python3 -m nullius.standard.cli rerun JOB_DIR (--unit ID ... | --units FILE | --unfinished | --next N | --set NAME) [--reason TEXT] [-j N] [--retries N] [--max-usd USD]
     PYTHONPATH=app python3 -m nullius.standard.cli fidelity AGENT --model M [--provider P] [--option NAME=VALUE ...] [--passes N] --unsandboxed
 
 An agent runs commands as you on the local backend, which is not a sandbox:
@@ -46,7 +48,11 @@ shard of the dataset's units (``standard/runner/shard.py``: by the unit id's has
 ``--limit``), the job recording its shard and its launch (``--launch``); ``--units FILE``
 runs only the units a file lists (``run.units_file``: one id a line), read on
 the machine the command runs on, ``--from-run`` or not; ``merge``
-puts a launch's shard jobs together into one job (``standard/runner/merge.py``). ``set``
+puts a launch's shard jobs together into one job (``standard/runner/merge.py``); ``rerun`` runs
+chosen tasks of an ended job again in that job, with its settings, each earlier
+try kept (``standard/runner/rerun.py``). ``run --start-with`` plans the whole and
+starts with some of it; ``rerun --next``, ``--set`` or ``--unfinished`` runs the
+rest in the job later. ``set``
 keeps a named list of a benchmark's units in the user catalogue, frozen once
 made (``standard/runner/sets.py``), and ``run --set NAME`` runs one: its dataset taken
 from it, the job recording which set ran. ``units`` lists a
@@ -96,7 +102,7 @@ from nullius.standard.backends import boat
 from nullius.standard.calls import exchanges, relay
 from nullius.standard.contract import definitions, match, ports, proofs
 from nullius.standard.proofs import conform, fidelity, pins, prove
-from nullius.standard.runner import job, merge, run, sets, shard
+from nullius.standard.runner import job, merge, rerun, run, sets, shard
 from nullius.standard.runner import units as unit_list
 
 ENV_FILE = paths.settings_file()
@@ -606,6 +612,11 @@ def cmd_run(a):
             price_list.update()
         except ValueError as e:
             unreachable = str(e)
+    try:
+        start = start_with(b, a.start_with, dataset) if a.start_with is not None else None
+    except (run.Refused, sets.Refused) as e:
+        print("refused:", e)
+        return 2
     held, spill = licences(b, from_run=a.from_run)
     try:
         job, failed = run.run_and_report(b, other, model=a.model or "", provider=a.provider, dataset=dataset, limit=a.limit,
@@ -619,6 +630,7 @@ def cmd_run(a):
                       exchanges=a.exchanges, exchanges_max_mb=a.exchanges_max_mb,
                       **({"units_file": run.units_file(a.units)} if a.units is not None else {}),
                       **({"task_set": task_set} if task_set else {}),
+                      **({"start_with": start} if start else {}),
                       **({"served_by": run.served_by(a.served_by, a.model or "")} if a.served_by else {}),
                       **({"reasoning": run.reasoning(a.reasoning, a.model or "")} if a.reasoning else {}),
                       **({"env": run_env(a.provider)} if a.from_run else {}))
@@ -633,6 +645,47 @@ def cmd_run(a):
     # by its exit status, so a launch of several agents pauses rather than running the next into the same error.
     # A run its spending cap stopped did what was asked of it: no failure
     return 3 if failed else 0
+
+
+def start_with(bench: dict, value: str, dataset: str | None = None) -> dict:
+    """``run --start-with``: the tasks a run starts with (``run.Run``'s ``start_with``). A whole number is a count,
+    ``set:NAME`` a task set of the benchmark (of a set of several datasets, its list of the run's ``dataset``),
+    ``ids:ID,ID,...`` the units named there (the run builder's form), anything else a file of ids
+    (``run.units_file``)."""
+    value = value.strip()
+    if value.isdigit():
+        if int(value) < 1:
+            raise run.Refused(f"--start-with {value}: begin with one unit at least")
+        return {"count": int(value)}
+    if value.startswith("ids:"):
+        ids = value[4:].split(",")
+        if not value[4:] or any(not u or u != u.strip() or u.startswith("#") for u in ids):
+            raise run.Refused(f"--start-with ids:ID,ID,...: ids separated by commas, none empty or with a space around it")
+        twice = sorted({u for u in ids if ids.count(u) > 1})
+        if twice:
+            raise run.Refused(f"--start-with ids: {', '.join(twice)} given more than once")
+        return {"ids": ids}
+    if value.startswith("set:"):
+        return set_units(bench["key"], value[4:], dataset, "--start-with set:")
+    try:
+        return {"units_file": run.units_file(value)}
+    except run.Refused as e:
+        raise run.Refused(str(e).replace("--units", "--start-with", 1))
+
+
+def set_units(benchmark: str, ref: str, dataset: str | None, flag: str) -> dict:
+    """The task set ``ref`` as the tasks of a run of ``dataset``: {"task_set": its record, "dataset": its dataset}. Of
+    a set of several datasets, its list of ``dataset``, refused when it holds none; of a set of one, that one, for
+    the run to check against its own."""
+    name, rev = sets.split_ref(ref)
+    entry = sets.load(benchmark, name)
+    got = sets.latest(entry, rev)
+    if "datasets" not in entry:
+        return {"task_set": sets.record(entry, got), "dataset": entry["dataset"]}
+    if dataset not in entry["datasets"]:
+        raise sets.Refused(f"{flag}{ref}: the task set {name} mixes the datasets {', '.join(entry['datasets'])}"
+                           + (f", not {dataset}" if dataset else "; give --dataset, one of them"))
+    return {"task_set": sets.record(entry, got, dataset), "dataset": dataset}
 
 
 def boat_credentials(a, bench, other, vals) -> dict:
@@ -668,8 +721,8 @@ def boat_credentials(a, bench, other, vals) -> dict:
 def _boat_units(a, b, other) -> int:
     """A benchmark whose units boot VMs of their own, on Boat: each unit whole in a Boat VM (``boat_units``)."""
     from nullius.standard.runner import boat_units
-    if a.units or a.shard:
-        print("refused: whole-task Boat runs do not accept --units or --shard; choose a dataset and --limit")
+    if a.units or a.shard or a.start_with is not None:
+        print("refused: whole-task Boat runs do not accept --units, --shard or --start-with; choose a dataset and --limit")
         return 2
     ds = a.dataset or b["datasets"][0]["id"]
     vals, bad = definitions.bench_options_of(b, ds, options(a.bench_option),
@@ -1012,6 +1065,72 @@ def cmd_units(a):
     return 0
 
 
+RERUN_EPILOG = """examples:
+  nullius standard rerun jobs_standard/JOB --unit HumanEval/12 --reason "the provider failed"
+  nullius standard rerun jobs_standard/JOB --units again.txt --max-usd 2
+  nullius standard rerun jobs_standard/JOB --unfinished --max-usd 5
+  nullius standard rerun jobs_standard/JOB --next 20
+  nullius standard rerun jobs_standard/JOB --set chrome-tabs
+
+exit codes:
+  0  the tasks ran, or --unfinished or --set found none to run (a refusal on stderr otherwise)
+  2  refused before anything moved, or a bad flag
+  3  no such job directory"""
+
+
+def cmd_rerun(a):
+    if not os.path.isdir(a.job):
+        print(f"no such directory: {a.job}", file=sys.stderr)
+        return 3
+    try:
+        ids = list(a.unit or []) + (run.units_file(a.units)["units"] if a.units is not None else [])
+        with open(os.path.join(a.job, "config.json"), encoding="utf-8") as f:
+            cfg = json.load(f)
+        std = cfg.get("standard") or {}
+        given = std.get("constraints") or {}
+        ran = str(((cfg.get("datasets") or [{}])[0] or {}).get("name") or "").partition("/")[2]
+    except run.Refused as e:
+        print("refused:", e, file=sys.stderr)
+        return 2
+    except (OSError, ValueError, AttributeError):
+        std, given, ran = {}, {}, ""
+    if isinstance(given, dict) and given.get("cpu_set") is not None:
+        try:
+            limits.confine(given)                # before any thread, as for its run
+        except OSError as e:
+            print(f"refused: constraints: cpu_set: {e.strerror or e}", file=sys.stderr)
+            return 2
+    unreachable = None
+    if a.max_usd is not None:
+        try:
+            price_list.update()
+        except ValueError as e:
+            unreachable = str(e)
+    # started by Nullius (--from-run): the key it was handed, and on a host the licences its launcher handed it
+    bench = definitions.get("benchmark", str(std.get("benchmark_ref") or std.get("benchmark") or "")) if isinstance(std, dict) else None
+    held, spill = licences(bench, from_run=a.from_run) if bench else (None, None)
+    provider = str(std.get("provider") or "openai") if isinstance(std, dict) else "openai"
+    try:
+        chosen = None
+        if a.task_set is not None:
+            # a set of the job's benchmark: its tasks the job planned and has not run
+            chosen = set_units(str(std.get("benchmark") or "") if isinstance(std, dict) else "", a.task_set, ran or None, "--set ")
+        got = rerun.rerun(a.job, ids, reason=a.reason or "", concurrency=a.concurrency, retries=a.retries,
+                          max_usd=a.max_usd, prices_unreachable=unreachable, licences=held, every_unfinished=a.unfinished,
+                          count=a.next, task_set=chosen, **({"env": run_env(provider)} if a.from_run else {}))
+    except sets.NotFound as e:
+        print("refused:", e, file=sys.stderr)
+        return 3
+    except (run.Refused, sets.Refused) as e:
+        print("refused:", e, file=sys.stderr)
+        return 2
+    finally:
+        if spill:
+            shutil.rmtree(spill, ignore_errors=True)
+    print(got["job"])
+    return 0
+
+
 def cmd_fidelity(a):
     o = definitions.get("agent", a.other)
     if not o:
@@ -1120,6 +1239,10 @@ def main(argv=None):
                            help="only the units of this task set (nullius standard set): its dataset is the run's, the "
                                 "options the run's own; the job's config records the set")
             p.add_argument("--limit", type=int)
+            p.add_argument("--start-with", metavar="N|FILE|set:NAME|ids:ID,ID...",
+                           help="plan the whole (the dataset, or what --units, --set, --limit name) and start with some of it: "
+                                "its first N units, the units a file lists, a task set's, or the units named after ids:, "
+                                "separated by commas; the rest stay planned with no attempt, for rerun to run in the job later")
             p.add_argument("-j", "--concurrency", type=int, default=4)
             p.add_argument("--judge-model", help="a benchmark scored by a model: this judge instead of its official one; "
                                                  "one with an experiment judge (LoCoMo's): run it, as this model")
@@ -1250,6 +1373,28 @@ def main(argv=None):
                     help="the tasks of this category's value (repeatable: values of one field widen, fields narrow)")
     un.add_argument("--json", action="store_true",
                     help="one JSON document: total, of, described, tasks and each category's values with their counts")
+    rr = sub.add_parser("rerun", help="run chosen tasks of an ended job again in that job, each earlier try kept",
+                        formatter_class=argparse.RawDescriptionHelpFormatter, epilog=RERUN_EPILOG)
+    rr.add_argument("job", metavar="JOB_DIR", help="a job of the standard that has ended")
+    named = rr.add_mutually_exclusive_group()
+    named.add_argument("--unit", action="append", metavar="ID",
+                       help="a trial's name, or a unit's id for each of its attempts (repeatable): run again whatever its result")
+    named.add_argument("--units", metavar="FILE", help="the ids a file lists, one a line (# starts a comment)")
+    named.add_argument("--unfinished", action="store_true",
+                       help="every planned trial with no result (never begun or killed), cut off by the run's spending cap, "
+                            "or ended by a Stop; excludes scores and agent errors")
+    named.add_argument("--next", type=int, metavar="N",
+                       help="the next N planned tasks with no result, in the plan's order, each with all its attempts")
+    named.add_argument("--set", dest="task_set", metavar="NAME",
+                       help="the planned tasks with no result that this task set of the job's dataset names")
+    rr.add_argument("--reason", help="why, kept in the job's record of the re-run")
+    rr.add_argument("-j", "--concurrency", type=int, help="units at once (default: the job's)")
+    rr.add_argument("--retries", type=_retries, default=RETRIES, metavar="N",
+                    help=f"run a failed try again, up to N times, as a run's --retries; 0 to {MAX_RETRIES}, default {RETRIES}")
+    rr.add_argument("--max-usd", type=float, metavar="USD",
+                    help="the job's spending cap from now on, for this run and every later one: each later run of the job has what the runs before it left")
+    rr.add_argument("--from-run", action="store_true",
+                    help="started by Nullius: the key is OPENAI_API_KEY (and OPENAI_BASE_URL), saved settings are not read")
     tr = sub.add_parser("traces", help="give past standard trials a trace, from the files they kept")
     tr.add_argument("root", metavar="DIR", help="a job, or a folder of jobs")
     tr.add_argument("--dry-run", action="store_true", help="say what it would write, and write nothing")
@@ -1260,13 +1405,13 @@ def main(argv=None):
     for parser in (ap, *sub.choices.values(), *ss.choices.values()):
         parser.allow_abbrev = False
     a = ap.parse_args(argv)
-    if a.cmd in ("run", "prove", "conform", "fidelity"):
+    if a.cmd in ("run", "prove", "conform", "fidelity", "rerun"):
         _exit_on_term()
         progress.ECHO = sys.stderr           # each stage as a line (nullius/progress.py): stdout stays the job and its units
     if not getattr(a, "from_run", False):
         settings.load(ENV_FILE)
     return {"list": cmd_list, "check": cmd_check, "fit": cmd_fit, "pins": cmd_pins, "new": cmd_new, "conform": cmd_conform, "run": cmd_run,
-            "fidelity": cmd_fidelity, "prove": cmd_prove, "merge": cmd_merge, "traces": cmd_traces,
+            "fidelity": cmd_fidelity, "prove": cmd_prove, "merge": cmd_merge, "rerun": cmd_rerun, "traces": cmd_traces,
             "set": cmd_set, "units": cmd_units}[a.cmd](a)
 
 

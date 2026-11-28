@@ -9,7 +9,9 @@ from flask import abort, jsonify, request, url_for
 from nullius import execution, hosts, prerequisites, prices, providers, settings
 from nullius.harbor import source as harbor_source
 from nullius.standard.backends import boat
+from nullius.standard.calls import ledger
 from nullius.standard.pages import recipe as standard_recipe
+from nullius.standard.runner import rerun
 
 from .core import app
 from . import shared
@@ -220,6 +222,124 @@ def _start(plan: execution.Plan):
     summary, jobs = started[0].summary(), plan.jobs
     destination = url_for("job", job_id=str(jobs[0].get("name"))) if len(jobs) == 1 else url_for("index", view="launch")
     return jsonify(ok=True, open=destination, **summary)
+
+
+REASON_MAX = 200
+
+
+def again_offer(job, ex) -> dict | None:
+    """What the job's page offers to run its tasks again: {"where": the machine it ran on} when the server can,
+    {"why": one line} when it cannot - no record of where it ran (``ex``: the run that writes this very folder,
+    ``shared.run_for``), still running, merged from its shards' jobs, its host gone from Settings - and None for a
+    job that is not the standard's."""
+    if not job.standard:
+        return None
+    if job.merged_from:
+        return {"why": "Merged from its shards' jobs: run a task again in its shard's job."}
+    if ex is None or ex.plan.runner != standard_recipe.HARNESS:
+        return {"why": "Not started from here: no record of where it ran."}
+    if ex.state in execution.ALIVE or job.is_running or job.is_preparing:
+        return {"why": "Still running: more tasks can be started once it has ended."}
+    if ex.plan.host is not None and ex.plan.host.entry not in {h.entry for h in _hosts()}:
+        return {"why": f"Its host, {ex.plan.host.label}, is no longer in Settings."}
+    return {"where": ex.plan.host.label if ex.plan.host else "this machine"}
+
+
+@app.route("/job/<job_id>/rerun", methods=["POST"])
+def job_rerun(job_id):
+    """Run the trials the job page ticked again, in the job, where its run ran: this machine, or the host the
+    run was sent to (``Execution.again``); a task it planned with no result runs there too. Same guards as Run.
+    Refused, and nothing started, for a job the page offers no button for (``again_offer``), a trial the job
+    does not hold, a host that no longer holds the job, or a provider whose key is not set here."""
+    shared._require_csrf()
+    if not shared._local_client():
+        abort(403, description="Runs are started from a browser on the application host only.")
+    j = shared._find_job(shared._jobs_for_request(), job_id)
+    if j is None:
+        abort(404)
+    ex = shared.run_for(job_id, j)
+    offer = again_offer(j, ex)
+    if offer is None or offer.get("why"):
+        return jsonify(ok=False, error=(offer or {}).get("why") or "Only a job of the Nullius standard is run again."), 409
+    body = request.get_json(silent=True) or {}
+    from . import runs as runs_web
+    held = {t.trial_name for t in j.trials} | {t for w in runs_web.waiting_of(j) for t in w["trials"]}   # and the tasks with no result
+    picked = list(dict.fromkeys(t for t in body.get("trials") or [] if isinstance(t, str))) if isinstance(body.get("trials"), list) else []
+    if not picked:
+        return jsonify(ok=False, error="Tick the tasks to run again."), 400
+    unknown = [t for t in picked if t not in held]
+    if unknown:
+        return jsonify(ok=False, error=f"{job_id} holds no trial {', '.join(unknown[:3])}"), 400
+    reason = " ".join(str(body.get("reason") or "").split())
+    if len(reason) > REASON_MAX:
+        return jsonify(ok=False, error=f"The reason is one line of at most {REASON_MAX} characters."), 400
+    budget = job_cap(j, ex, settle=True)        # one cap for the job: this run has what the runs before it left
+    if budget and budget["closed"]:
+        said = rerun.spent_out(budget, "change it to run more.")
+        return jsonify(ok=False, error=said[0].upper() + said[1:]), 409
+    recipe = ex.plan.recipe or {}
+    missing = "" if ex.plan.keyless else provider_problem(recipe.get("provider") or "openai", recipe.get("endpoint"))
+    if missing:
+        return jsonify(ok=False, error=missing), 400
+    gone = ex.holds(job_id)
+    if gone:
+        return jsonify(ok=False, error=gone), 409
+    n = 1 + sum(1 for p in ex.plan.parts if p.get("again"))
+    try:
+        ex.again(standard_recipe.again(job_id, picked, reason=reason, max_usd=budget["max_usd"] if budget and budget["changed"] else None, n=n))
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 409
+    return jsonify(ok=True, **ex.summary())
+
+
+def job_cap(job, ex, settle: bool = False) -> dict | None:
+    """The job's one spending cap as its page shows it and its next run has it (``rerun.budget``): the cap
+    set on the page (``Plan.caps``) where it differs from the job's own, else the job's. ``settle``: a cap set on the
+    page that the job's record now holds is dropped from the run's record. None for a job with no cap."""
+    if not job.standard:
+        return None
+    set_here = (ex.plan.caps or {}).get(job.job_id) if ex is not None else None
+    try:
+        got = rerun.budget(job.dir, cap=set_here)
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+    if settle and set_here is not None and got is not None and not got["changed"]:
+        with ex._turn:
+            ex.plan.caps = {k: v for k, v in ex.plan.caps.items() if k != job.job_id}
+            ex._save()
+    return got
+
+
+@app.route("/job/<job_id>/cap", methods=["POST"])
+def job_cap_change(job_id):
+    """A new spending cap for the whole job, from its next run on: kept in its run's record (``Plan.caps``) and
+    handed to that run as ``rerun --max-usd``. Refused where the page offers no next run (``again_offer``: a run
+    of the job under way), and for a cap at or under what the job has spent."""
+    shared._require_csrf()
+    if not shared._local_client():
+        abort(403, description="Runs are started from a browser on the application host only.")
+    j = shared._find_job(shared._jobs_for_request(), job_id)
+    if j is None:
+        abort(404)
+    ex = shared.run_for(job_id, j)
+    offer = again_offer(j, ex)
+    if offer is None or offer.get("why"):
+        return jsonify(ok=False, error=(offer or {}).get("why") or "Only a job of the Nullius standard has a cap to change."), 409
+    try:
+        cap = float((request.get_json(silent=True) or {}).get("max_usd"))
+    except (TypeError, ValueError):
+        cap = -1.0
+    if not 0 < cap < float("inf"):
+        return jsonify(ok=False, error="The spending cap is an amount in USD above zero."), 400
+    now = rerun.budget(j.dir, cap=cap)
+    # nothing left (float noise included), or a cap that reads as the spend the page shows
+    if now["left_usd"] <= 0 or ledger.usd(cap) == ledger.usd(now["spent_usd"]):
+        return jsonify(ok=False, error=f"The cap must be above what this run has spent, {ledger.usd(now['spent_usd'])} USD."), 400
+    with ex._turn:
+        caps = {k: v for k, v in (ex.plan.caps or {}).items() if k != job_id}
+        ex.plan.caps = caps if not now["changed"] else dict(caps, **{job_id: cap})
+        ex._save()
+    return jsonify(ok=True, max_usd=cap, left_usd=now["left_usd"])
 
 
 @app.route("/run/<run_id>")

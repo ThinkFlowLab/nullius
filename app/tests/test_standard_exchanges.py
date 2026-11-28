@@ -29,8 +29,9 @@ from nullius.standard.backends import container
 from nullius.standard.calls import exchanges, relay
 from nullius.standard.contract import definitions
 from nullius.standard.pages import recipe
+from nullius.standard.protocols import acp
 from nullius.standard.requirements import install
-from nullius.standard.runner import pace as pacing, run
+from nullius.standard.runner import pace as pacing, rerun, run
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "standard", "catalogue")
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -900,7 +901,12 @@ class TheRun(WithUpstream):
         return code, out.buffer.getvalue(), err.getvalue()
 
     def test_off_and_a_bad_value_and_the_command_line(self):
-        job_dir = self.go(exchanges="off", name="off")
+        job_dir = self.go(exchanges="off", exchanges_max_mb=1, name="off")
+        # a task that calls the model, run again in the job, keeps the job's choice
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
+        with mock.patch.object(rerun, "resolve", return_value=(b, definitions.get("agent", "fake", ROOT))):
+            got = rerun.rerun(job_dir, ["model"], env=self.env, say=lambda s: None, root=ROOT)
+        self.assertEqual([x["unit"] for x in got["replaced"]], ["model"])
         for root, dirs, _ in os.walk(job_dir):
             self.assertNotIn(exchanges.FOLDER, dirs, root)
         with open(os.path.join(job_dir, "config.json")) as f:
@@ -918,6 +924,21 @@ class TheRun(WithUpstream):
             self.assertEqual((given["exchanges"], given["exchanges_max_mb"]), ("whole", 256))
             standard_cli.main(["run", "fakebench", "fake", "--model", "m-1", "--from-run", "--exchanges", "text", "--exchanges-max-mb", "64"])
             self.assertEqual((given["exchanges"], given["exchanges_max_mb"]), ("text", 64))
+
+    def test_a_task_run_again_keeps_the_jobs_bound(self):
+        job_dir = self.go(exchanges_max_mb=1, name="bound")
+        b = dict(definitions.get("benchmark", "fakebench", ROOT), datasets=[{"id": "responding", "units": 3}])
+        # the task run again asks one call past the bound of 1 MB, and its model answers short
+        real, big = acp.Client.prompt, "model " + "x" * 1_100_000
+        short = lambda h: (h.rfile.read(int(h.headers["Content-Length"])), h.reply(200, json.dumps(CHAT).encode(), "application/json"))
+        with mock.patch.object(rerun, "resolve", return_value=(b, definitions.get("agent", "fake", ROOT))), \
+                mock.patch.object(acp.Client, "prompt", lambda c, sid, given, timeout=600, **kw: real(c, sid, big, timeout=timeout, **kw)), \
+                mock.patch.object(Upstream, "do_POST", short):
+            got = rerun.rerun(job_dir, ["model"], env=self.env, say=lambda s: None, root=ROOT)
+        self.assertEqual([x["now"] for x in got["replaced"]], [{"reward": 0.0}])          # the turn ended, with no error
+        name = got["replaced"][0]["trial"]
+        (line,) = exchanges.lines(os.path.join(job_dir, name, ".work", "relay", exchanges.FOLDER), name.rsplit("__", 1)[1])
+        self.assertIn("bound of 1 MB", line.get("cut") or "")
 
 
 class Recipe(unittest.TestCase):

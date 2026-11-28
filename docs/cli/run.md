@@ -3,7 +3,7 @@
 One benchmark and one agent, capability, control or setup, into a job.
 
 ```bash title="Run"
-nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE | --set NAME] [--limit N] [-j N] \
+nullius standard run <benchmark>[@version] <other> [--model M] [--dataset D] [--units FILE | --set NAME] [--limit N] [--start-with N|FILE|set:NAME|ids:ID,ID...] [-j N] \
     [--unsandboxed | --backend container|boat] [--option NAME=VALUE]... [--bench-option NAME=VALUE]... \
     [--price MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]]... [--max-usd USD] [--max-usd-per-unit USD] [--timeout PHASE=SECONDS]... [--max-turns N] [--max-calls N] \
     [--constraint KEY=VALUE]... \
@@ -16,6 +16,7 @@ nullius standard run humaneval reference --model gpt-5-mini --limit 2 --unsandbo
 nullius standard run humaneval oracle --limit 6
 nullius standard run humaneval oracle --units tasks.txt
 nullius standard run humaneval oracle --set first-ten
+nullius standard run humaneval oracle --start-with 10
 nullius standard run locomo original --model gpt-3.5-turbo-4k
 nullius standard run locomo model --model gpt-4o-mini
 ```
@@ -29,6 +30,7 @@ nullius standard run locomo model --model gpt-4o-mini
 | `--dataset`, `--limit`, `-j` | One dataset, the first N units, N at a time |
 | `--units FILE` | Only the units the file lists: [below](#a-list-of-units) |
 | `--set NAME` | Only the units of a [task set](task-sets.md), in its dataset |
+| `--start-with N\|FILE\|set:NAME\|ids:ID,ID...` | Plan the whole, start with some of it: [below](#plan-the-whole-start-with-some-of-it) |
 | `--unsandboxed` | An agent runs as you; else `--backend container` |
 | `--backend` | `local` (default); `container`, each unit in a container with its relay; or [`boat`](../standard.md#the-boat-backend), a VM per unit |
 | `--boat-size` | Boat's VM size: `small` (default), `default`, `large`, `xlarge` |
@@ -126,6 +128,7 @@ A benchmark that names a cut in `limits.scored_cuts` still scores an agent's uni
 | Cached input | Estimated as if not cached, so a unit can be cut off short of its cap |
 | The result | `result.json` carries `budget` |
 | From the builder | *Limits*: one cap shared in equal parts by the run's jobs, and one per unit |
+| Later runs | The job's one cap: each later run of the job has what the runs before it left ([Run tasks again](rerun.md)) |
 | Shards | A shard's cap is its own: [Shard and merge](shard-and-merge.md) |
 
 ## Retries
@@ -140,7 +143,7 @@ A benchmark that names a cut in `limits.scored_cuts` still scores an agent's uni
 | Wrong key, spent credit, an agent's first call over the model's context window | No; three in a row stop the run |
 | A setup this machine lacks, a missing secret, a cap reached, Stop, a unit a guard asked to stop, a full context window, failed task | No |
 
-`conform` and `prove` retry a rate limit once.
+`conform` and `prove` retry a rate limit once. Chosen tasks of an ended job run again by hand: [Run tasks again](rerun.md).
 
 ## A list of units
 
@@ -163,6 +166,24 @@ HumanEval/12
 | Where it is read | On the machine the command runs on, from the directory it starts in |
 | The builder | A recipe has no field for a list |
 | A named list | A [task set](task-sets.md) keeps one, frozen: `--set NAME` |
+
+## Plan the whole, start with some of it
+
+`--start-with` plans the whole run and starts with some of it; the rest stay planned, run later in the same job by [`rerun`](rerun.md).
+
+| The start | Runs first |
+| --- | --- |
+| `N` | The plan's first N units, in its order |
+| `FILE` | The units a file lists, as [a list of units](#a-list-of-units) |
+| `set:NAME` | The units of a [task set](task-sets.md) of the run's dataset |
+| `ids:ID,ID,...` | The units named, separated by commas with no space |
+
+| Rule | Detail |
+| --- | --- |
+| Refused | A unit outside the plan, more units than it holds, another dataset's set, `--shard`, or a [VM benchmark on Boat](../standard.md#the-boat-backend). |
+| Attempts | A unit begun gets all its `--attempts`; a unit not begun has none. |
+| The record | `config.json` keeps the plan's size, `datasets[0].n_tasks`, and the start, `standard.start_with`. |
+| The rates | Over the tasks run; the job's page and `runs show` say how many have run. |
 
 ## Serving providers
 

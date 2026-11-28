@@ -48,6 +48,7 @@ from nullius.standard.contract import definitions, match, ports
 from nullius.standard.proofs import prove
 from nullius.standard.requirements import hostreq
 from nullius.standard.runner import run, sets
+from nullius.standard.runner import units as listing
 from nullius.standard.runner.retries import MAX_RETRIES
 
 CHOOSE_PROVIDER = "Choose a provider: OpenRouter, OpenAI, Anthropic or a custom provider."
@@ -540,6 +541,70 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                            f"{', '.join(sets.datasets_of(entry))}, not {ds_id}.")
             continue
         set_of[ds_id] = {"name": set_name, "label": sets.label_of(entry), "units": len(part), "ids": set(part)}
+    # a chosen dataset's plan started on some of it (``start_with``: {dataset: [ID, ...], the tasks the page ticked, or
+    # from a recipe before it, N or set:NAME}): the rest run later
+    start_of = {}                      # {dataset: {"value": the --start-with word, "units": N, "label": what Review says}}
+    asked = recipe.get("start_with") or {}
+    if not isinstance(asked, dict) or not all(isinstance(k, str) and (isinstance(v, str) or isinstance(v, list) and all(isinstance(i, str) for i in v))
+                                              for k, v in asked.items()):
+        add("dataset", "Start with is a dataset with its tasks each.")
+        asked = {}
+    for ds_id, given in asked.items():
+        if ds_id not in {x["id"] for x in dss}:
+            add("dataset", f"Start with {'its tasks' if isinstance(given, list) else given} is for {ds_id}, a dataset not chosen.")
+            continue
+        if isinstance(given, list):
+            # the tasks ticked, given inline: ids:A,B,... (an id with a comma or a space cannot be)
+            ids = list(dict.fromkeys(given))
+            if not ids:
+                add("dataset", "Start with: tick at least one task, or start with all of it.")
+            elif any(not i or "," in i or i != i.strip() for i in ids):
+                add("dataset", "Start with: an id holding a comma or a space cannot be ticked here; give the tasks in a file.")
+            elif ds_id in set_of and set(ids) - set_of[ds_id]["ids"]:
+                add("dataset", f"Start with: {len(set(ids) - set_of[ds_id]['ids'])} of the tasks ticked are not in the task set "
+                               f"{set_of[ds_id]['label']}.")
+            else:
+                start_of[ds_id] = {"value": "ids:" + ",".join(ids), "units": len(ids), "label": "the tasks ticked"}
+            continue
+        if given.isdigit():
+            if int(given) < 1:
+                add("dataset", "Start with a number of tasks of at least 1.")
+                continue
+            start_of[ds_id] = {"value": given, "units": int(given), "label": f"the first {int(given)}"}
+            continue
+        if not given.startswith("set:"):
+            add("dataset", "Start with all of the tasks, a number of them, or a task set.")
+            continue
+        try:
+            set_name, rev = sets.split_ref(given[4:])
+        except sets.Refused as e:
+            add("dataset", f"Start with {given[4:]}: {e}.")
+            continue
+        try:
+            if not os.path.isfile(sets.path_of(b["key"], set_name)):
+                add("dataset", f"{b['label']} has no task set {set_name} to start with: choose another, or start with all.")
+                continue
+            entry = sets.load(b["key"], set_name)
+        except sets.Refused as e:
+            add("dataset", sets.plain(e, b["key"], set_name))
+            continue
+        try:
+            got = sets.latest(entry, rev)
+        except sets.Refused as e:
+            add("dataset", f"Start with {given[4:]}: {e}.")
+            continue
+        part = sets.parts(entry, got).get(ds_id)
+        if part is None:
+            add("dataset", f"Start with: the task set {sets.label_of(entry)} is cut from the dataset{'s' if len(sets.datasets_of(entry)) > 1 else ''} "
+                           f"{', '.join(sets.datasets_of(entry))}, not {ds_id}.")
+            continue
+        outside = set(part) - set_of[ds_id]["ids"] if ds_id in set_of else set()
+        if outside:
+            add("dataset", f"Start with: the task set {sets.label_of(entry)} names {len(outside)} of {ds_id}'s tasks outside "
+                           f"the task set {set_of[ds_id]['label']}.")
+            continue
+        start_of[ds_id] = {"value": f"set:{set_name}", "units": len(part),
+                           "label": f"task set {sets.label_of(entry)}"}
     side = "agent" if b["family"] == "agent" else "capability"
     # A control the benchmark declares (nop, oracle) is a choice beside the agents or capabilities: it runs
     # nothing as you and calls no model - a judged benchmark's judge only - so it asks for neither.
@@ -787,6 +852,20 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         alone = refs and {"original" if ref == "original" or (":" in ref and definitions.own_agent(base, ref)) else ref for ref in refs} == {"original"}
         units = (((b.get("setups") or {}).get("original") or {}).get("units") if alone else None) or b.get("units") or {}
         add("limits", f"Number of {units.get('nouns', 'units')}: a whole number of at least 1, or empty for all.", field="limit")
+    # the tasks ticked, against the plan a lower number or another option left: read from the listing the task
+    # picker made (its definition is ``base``, the label not yet the title), and only when it is in the cache, so
+    # compiling starts nothing; ids pasted where no listing is cached are checked by the run at its start
+    for ds_id, start in start_of.items():
+        given = (recipe.get("start_with") or {}).get(ds_id)
+        if not isinstance(given, list) or listing.state(base, ds_id, chosen_opts)["state"] != "cached":
+            continue
+        plan = listing.find(base, ds_id, chosen_opts, size=None, within=set_of.get(ds_id, {}).get("ids"),
+                            limit=limit if isinstance(limit, int) else None)
+        start["planned"] = plan["total"]
+        dropped = [i for i in given if i not in {t["id"] for t in plan["tasks"]}]
+        if dropped:
+            errors.append({"step": STEP["dataset"], "dataset": ds_id, "dropped": dropped,
+                           "message": "Start with: tasks outside the current plan: " + ", ".join(dropped) + "."})
     # empty: one at a time; on Boat, as many as the account runs at once (the run caps it to that, boat.slots)
     conc = _int(recipe.get("concurrency") or (MAX_CONCURRENT if backend == "boat" else 1), 1, MAX_CONCURRENT)
     if conc is None:
@@ -794,6 +873,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     targets, why_not = where_of(recipe.get("where", "local"))
     if why_not:
         add("where", why_not)
+    elif start_of and len(targets) > 1:
+        add("where", "A run started on some of its plan runs on one machine: choose one, or start with all.")
     elif backend == "container" and "local" in targets and docker_unusable is not None:
         why = docker_unusable()
         if why:
@@ -935,6 +1016,18 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     total = sum(each) if all(each) else None
     n = sum(min(limit, t) for t in each) if isinstance(limit, int) and total else (limit or total)
     of = len(targets)
+    # a plan started on some of it: what it plans and what it starts with, by dataset
+    planned_of = {x["id"]: min(limit, e) if isinstance(limit, int) and e else (limit if isinstance(limit, int) else e)
+                  for x, e in zip(dss, each)}
+    planned_of.update({ds_id: s["planned"] for ds_id, s in start_of.items() if "planned" in s})
+    planned = sum(planned_of.values()) if all(planned_of.values()) else None
+    starts = [start_of.get(x["id"], {}).get("units", planned_of[x["id"]]) for x in dss]
+    begin = sum(starts) if all(starts) else None
+    for ds_id, s in start_of.items():
+        if planned_of.get(ds_id) and s["units"] > planned_of[ds_id]:
+            add("dataset", f"Start with {s['units']} {nouns}: {ds_id} plans {planned_of[ds_id]}.")
+    if errors:
+        return out
     many = len(dss) > 1
     pairs = [(x, p) for x in dss for p in picks]
 
@@ -952,7 +1045,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
         m = p["model"] if p.get("setup") else model
         words = ["nullius", "standard", "run", definitions.ref_of(b), o["_ref"], *(["--model", m] if m else []), "--provider", provider,
                  "--dataset", d["id"], *(["--set", set_of[d["id"]]["name"]] if d["id"] in set_of else []),
-                 *(["--limit", str(limit)] if isinstance(limit, int) else []), "-j", str(conc),
+                 *(["--limit", str(limit)] if isinstance(limit, int) else []),
+                 *(["--start-with", start_of[d["id"]]["value"]] if d["id"] in start_of else []), "-j", str(conc),
                  *[w for k, v in options_for_pick(d, p).items() for w in ("--bench-option", f"{k}={v}")],
                  *(["--attempts", str(repeat)] if repeat > 1 else []),
                  *(["--retries", str(retries)] if retries else []),
@@ -1032,6 +1126,20 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                        "providers": {s["name"]: s["provider"] for s in declared if s.get("provider")}}
 
 
+    noun_one = (b.get("units") or {}).get("noun", "unit")
+    if picks and all(p.get("setup") for p in picks):
+        noun_one = picks[0]["o"]["units"]["noun"]
+
+    def first_words(ds_id: str) -> str:
+        """What a start runs first and what it leaves for later, in a sentence of Review."""
+        m, whole = start_of[ds_id]["units"], planned_of.get(ds_id)
+        rest = (whole - m) if whole else None
+        ran = f"{m} {noun_one if m == 1 else nouns} {'runs' if m == 1 else 'run'} first ({start_of[ds_id]['label']})"
+        if rest == 0:
+            return ran + ", and nothing is left for later"
+        left = "the rest stay" if rest is None else f"the other {rest} {'stays' if rest == 1 else 'stay'}"
+        return f"{ran}; {left} planned, to run later from the job's page"
+
     def row(p: dict) -> list:
         o = p["o"]
         if p["control"]:
@@ -1045,8 +1153,11 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     out["review"] = [[STEP["benchmark"], "Benchmark", f"{b['label']} · needs {', '.join(b['needs'])}"],
                      [STEP["runner"], "Runner", "Nullius"],
                      [STEP["dataset"], "Datasets" if many else "Dataset",
-                      ", ".join(f"{x.get('label') or x['id']}" + (f" · task set {set_of[x['id']]['label']} · {set_of[x['id']]['units']} {bench_nouns}"
-                                                                   if x["id"] in set_of else f" · {x['units']} {bench_nouns}" if x.get("units") else "") for x in dss)],
+                      ", ".join(f"{x.get('label') or x['id']}" + (f" · task set {set_of[x['id']]['label']}"
+                                                                   + ("" if x["id"] in start_of else f" · {set_of[x['id']]['units']} {bench_nouns}")
+                                                                   if x["id"] in set_of else f" · {x['units']} {bench_nouns}" if x.get("units") and x["id"] not in start_of else "")
+                                # started on some of the plan: what runs first, and what stays for later
+                                + (f" · {first_words(x['id'])}" if x["id"] in start_of else "") for x in dss)],
                      *[[STEP["limits" if (b.get("options") or {})[k].get("limit") else "dataset" if (b.get("options") or {})[k].get("step") else "agent"], (b.get("options") or {})[k].get("label") or k.replace("_", " ").capitalize(),
                         _shown((b.get("options") or {})[k], v, per_ds[next(x["id"] for x in dss if per_ds[x["id"]].get(k) == v)]) + ("" if k in chosen_opts else " (its default)")
                         + ("" if all(per_ds[x["id"]].get(k) == v for x in dss) else f" · {', '.join(x.get('label') or x['id'] for x in dss if per_ds[x['id']].get(k) == v)}")]
@@ -1068,10 +1179,12 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
                       + "".join(f" · {SERVED_LABEL[r_]} reasoning {', '.join(out['own_reasoning'][r_])} ({'the agent' if r_ == 'model' else 'the benchmark'}'s)"
                                 if r_ in out["own_reasoning"] else f" · {SERVED_LABEL[r_]} reasoning {levels[r_]}"
                                 for r_ in roles if r_ in levels or r_ in out["own_reasoning"])],
-                     [STEP["limits"], "Scope", f"{'first ' + str(n) if isinstance(limit, int) else 'all ' + str(total or '')} {nouns}"
+                     [STEP["limits"], "Scope", (f"{begin} first, {planned - begin if planned else 'the rest'} later" if start_of and begin
+                      else f"{planned or 'all'} planned, {begin or 'all'} to begin" if set_of or start_of
+                      else f"{'first ' + str(n) if isinstance(limit, int) else 'all ' + str(total or '')} {nouns}")
                       + (" of each shard" if of > 1 and isinstance(limit, int) else "")
                       + (" · as many at a time as Boat allows" if backend == "boat" and not recipe.get("concurrency") else f" · {conc} at a time")
-                      + (" of each dataset" if many and isinstance(limit, int) else "")
+                      + (" of each dataset" if many and isinstance(limit, int) and not (set_of or start_of) else "")
                       + (f" · {len(pairs)} jobs, one after the other" if len(pairs) > 1 else "")
                       + (f" · {repeat} attempts each (pass^1 to pass^{repeat})" if repeat > 1 else "")
                       + (f" · up to {retries} {'retry' if retries == 1 else 'retries'} an attempt" if retries else "")
@@ -1107,8 +1220,8 @@ def compile(recipe: dict, defs: Optional[Dict[str, List[dict]]] = None, *,
     if any(p["control"] for p in picks) and any(definitions.own_image(e) for e in (b.get("environments") or {}).values()):
         notes.append(f"Each {(b.get('units') or {}).get('noun', 'unit')} of {b['label']} is its own image: the control "
                      "runs in it, so docker is needed where it runs, whatever the backend.")
-    # Run asks first before every task of the datasets; a task set is a choice of tasks made already
-    if not isinstance(limit, int) and not set_of:
+    # Run asks first before every task of the datasets; a task set or a start on some tasks is a choice of tasks made already
+    if not isinstance(limit, int) and not set_of and not start_of:
         out["confirm"] = f"Run all {total or ''} {nouns} of {b['label']}{' (' + ', '.join(x.get('label') or x['id'] for x in dss) + ')' if many else ''} with {', '.join(p['o']['label'] for p in picks)}?".replace("  ", " ")
     return out
 
@@ -1136,6 +1249,20 @@ def where_of(where) -> tuple:
 
 def where_label(target: str) -> str:
     return "this machine" if target == "local" else hosts.parse(target).label
+
+
+def again(job: str, trials: List[str], *, reason: str = "", max_usd: Optional[float] = None, n: int = 1) -> dict:
+    """The part that runs the trials ``trials`` of the ended job ``job`` again, in that job, where its run ran
+    (``execution.Execution.again``): ``cli rerun`` on the job's folder under ``$NULLIUS_JOBS``, from the same
+    tree a run's command is, with the key it is handed (``--from-run``). ``n``: its number among the run's re-runs."""
+    words = [*(w for t in trials for w in ("--unit", t)), *(["--reason", reason] if reason else []),
+             *(["--max-usd", f"{max_usd:.6f}".rstrip("0").rstrip(".")] if max_usd else []), "--from-run"]
+    command = ('nullius standard rerun "${NULLIUS_JOBS:-jobs_standard}"/' + shlex.quote(job) + " "
+               + " ".join(shlex.quote(w) for w in words))
+    k = len(trials)
+    return {"id": f"again-{n}", "label": f"{k} {'task' if k == 1 else 'tasks'} of {job} again", "again": job,
+            "trials": list(trials), "script": "#!/usr/bin/env bash\n# Chosen tasks of an ended job, run again in that job.\n"
+                                              + _script(command)}
 
 
 def conformance(kind: str, key: str, *, model: str, provider: str, unsandboxed: bool, stamp: str, backend: str = "local") -> dict:

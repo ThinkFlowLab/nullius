@@ -78,7 +78,7 @@ workspace root. `nullius paths` shows the active location.
 | Page | Shows |
 | --- | --- |
 | `/runs` | Runs by launch; `?view=all` the flat table |
-| `/job/<id>` | Trials, or the live board while it runs |
+| `/job/<id>` | Trials, or the live board while it runs; chosen tasks run again |
 | `/trial/<job>/<name>` | Conversation, trace, artifacts, judgement |
 | `/job/<id>/reconcile` | Outcome versus judged failure cause |
 | `/job/<id>/feasibility` | Oracle and nop brackets, broken tasks |

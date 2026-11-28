@@ -1,0 +1,18 @@
+{
+ "id": "job",
+ "started_at": "2026-01-01T00:00:00+00:00",
+ "finished_at": "2026-01-01T00:00:00+00:00",
+ "n_total_trials": 3,
+ "stats": {
+  "n_completed_trials": 3,
+  "n_errored_trials": 0,
+  "n_cancelled_trials": 0,
+  "n_running_trials": 0,
+  "n_pending_trials": 0,
+  "n_retries": 0
+ },
+ "served": {
+  "calls": {},
+  "unnamed": 1
+ }
+}

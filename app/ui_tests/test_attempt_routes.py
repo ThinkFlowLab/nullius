@@ -265,17 +265,18 @@ class AttemptRoutes(unittest.TestCase):
             (False, kept, "Attempt 2 · Try 2", '1<span class="faint">/1</span>'),
             (False, "/trial/retried-run/0001__u0000r3", "Attempt 3", '<span class="faint">0/1</span>')])
 
-    def test_no_retries_column_without_the_runs_limit(self):
-        # a trial that says it was retried, in a run that allowed none: Harbor
-        # says no attempt's retries, so there is no count to put over a limit
+    def test_tries_without_the_runs_limit_show_their_count_and_no_limit(self):
+        # a trial that says it was tried before, in a run that allowed no retries (run again by hand): the job's
+        # page shows the column with its count and no limit to put it over; the attempts page has no column
         run = written_job(self.root, "unlimited-run", [("u__a", "u", 0, 1, None), ("u__b", "u", 2, 0, None)])
         path = self.root / "unlimited-run" / "u__a" / "result.json"
         res = json.loads(path.read_text()); res["standard"] = {"unit": "u", "retries": 1}; path.write_text(json.dumps(res))
         run = parse.parse_job(str(self.root / "unlimited-run"))
         self.assertEqual(run.retries, 0)
         self.stack.enter_context(patch.object(workspace, "load_jobs", return_value=[run]))
-        self.assertNotIn("Retries</th>", self.get("/job/unlimited-run"))
-        self.assertNotIn("run-retries", self.get("/job/unlimited-run"))
+        html = self.get("/job/unlimited-run")
+        self.assertIn('<th scope="col" class="num">Retries</th>', html)
+        self.assertEqual(re.findall(r'<td class="num run-retries">(.*?)</td>', html), ["1", '<span class="faint">0</span>'])
         self.assertNotIn("Retries</th>", self.get("/trial/unlimited-run/u__a/attempts"))
 
     def test_an_unknown_trial_has_no_attempts_page(self):

@@ -643,6 +643,7 @@ already accepts arbitrary models needs only the `original` method.
 | Recorded | `standard.setup` in the config and each trial: its name, the model `asked` and `sent`, `comparable_with_paper`, and the benchmark's own agent that ran (`agent`), whose key is also the job's agent (`agent_info.name`) |
 | Attempts | `cli run --attempts K` runs each unit K times; `result.json` carries [`pass_hat_k`](field-guide.md#attempts) |
 | Retries | `cli run --retries N` runs a failed attempt again: [which failures](cli/run.md#retries) |
+| Run again by hand | `cli rerun JOB_DIR` runs chosen or unfinished tasks of an ended job again in it ([Run tasks again](cli/rerun.md)) |
 
 ### A benchmark's own agents
 

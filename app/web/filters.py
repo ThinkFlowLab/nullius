@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 from flask import g, jsonify, render_template, request, url_for
@@ -39,6 +40,34 @@ def _runtime(minutes):
     if minutes is None:
         return "—"
     return f"{minutes * 60:.0f}s" if minutes < 1 else f"{minutes:.0f}m"
+
+
+@app.template_filter("try_mark")
+def _try_mark(t, job) -> str:
+    """How a try a person asked for after the run ended is named: "first run, in a later run of the job" for a task of the plan
+    a later run began (the job's run of that time lists it as begun), "run again by hand" otherwise."""
+    base = re.sub(r"\.try-\d+$", "", t.trial_name)
+    later = any(r["at"] == t.rerun.get("at") and base in {b["trial"] for b in r.get("begun") or []} for r in job.reruns)
+    return "first run, in a later run of the job" if later else "run again by hand"
+
+
+@app.template_filter("n_tasks")
+def _n_tasks(trials) -> int:
+    """How many tasks a standard job's trial names hold: a task's attempts (``<unit>__uNNNNrK``) count once."""
+    return len({re.sub(r"(__u\d+)r\d+$", r"\1", t) for t in trials})
+
+
+@app.template_filter("run_min")
+def _run_min(job):
+    """The minutes a job ran: its first run's start to finish, and each later run's in it (``Job.reruns``) added;
+    None without the first run's times."""
+    total = job.duration_min
+    for r in job.reruns if total is not None else ():
+        try:
+            total += (datetime.fromisoformat(r["finished_at"]) - datetime.fromisoformat(r["at"])).total_seconds() / 60.0
+        except (TypeError, ValueError):
+            continue                                 # a later run whose times are not both recorded
+    return total
 
 
 @app.template_filter("hitrate")

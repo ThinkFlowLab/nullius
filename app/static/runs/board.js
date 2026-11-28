@@ -160,7 +160,73 @@
   document.addEventListener('focusout', hide);
   addEventListener('scroll', hide, { passive: true });
 
+  // ---- tasks to run again: a tick per trial, the rows the filters show at once, the count, then the question ----
+  // a task with no result (data-first, "none" when its run ended with none) is run, not run again: the words say which
+  const ticks = $$('#trial-rows .pick-row'), ask = $('#rerun-ask');
+  if (ticks.length && ask) {
+    const pickN = $('#pick-count'), go = $('#rerun-open'), form = $('form', ask), err = $('[data-error]', ask);
+    const chosen = () => ticks.filter(x => x.checked), first = x => 'first' in x.dataset;
+    const tasks = n => n + (n === 1 ? ' task' : ' tasks');
+    const where = $('p.muted', ask), again = where.textContent;
+    const recount = () => { const c = chosen(), n = c.length; pickN.textContent = n + ' chosen'; go.disabled = !n;
+      go.textContent = n && c.every(first) ? 'Run selected' : 'Run selected again'; };
+    ticks.forEach(x => x.addEventListener('change', recount));
+    $('#pick-shown').addEventListener('click', () => { rows.forEach(r => { const x = $('.pick-row', r); if (x && r.matched) x.checked = true; }); recount(); });
+    // the rest, or a set's tasks not yet run: those rows ticked alone, then the same question
+    $$('#rerun-pick [data-pick]').forEach(b => b.addEventListener('click', () => {
+      const want = new Set(b.dataset.pick.split(' ')); ticks.forEach(x => { x.checked = want.has(x.value); });
+      const menu = b.closest('details'); if (menu) menu.open = false;
+      recount(); go.click();
+    }));
+    go.addEventListener('click', () => {
+      // tasks with no result alone: one short question, no names and no reason; else the names, and a reason asked
+      const picked = chosen(), fresh = picked.filter(first).length, short = picked.length > 0 && fresh === picked.length;
+      const words = short ? `Run the ${tasks(picked.length)} ${picked.some(x => x.dataset.first === 'none') ? 'with no result' : 'not yet run'}, on ${ask.dataset.where}?`
+        : 'Run ' + tasks(picked.length) + (!fresh ? ' again' : fresh < picked.length ? ', ' + (picked.length - fresh) + ' again' : '');
+      $('#rerun-ask-h').textContent = words;
+      $('[data-go]', ask).textContent = short ? 'Run' : words;
+      where.textContent = fresh && where.dataset.first ? where.dataset.first : again;
+      const names = $('[data-names]', ask), reason = $('[data-reason]', ask);
+      where.hidden = names.hidden = reason.hidden = short;
+      if (short) form.elements.reason.value = '';
+      names.replaceChildren(...(short ? [] : picked).map(x => { const li = document.createElement('li'); li.textContent = x.getAttribute('aria-label').replace(/^Choose /, ''); return li; }));
+      err.hidden = true; $('[data-go]', ask).disabled = 'spent' in $('[data-go]', ask).dataset; ask.showModal();
+    });
+    form.addEventListener('submit', async e => {
+      if (!e.submitter || e.submitter.value !== 'run') return;
+      e.preventDefault();
+      const b = e.submitter; b.disabled = true; err.hidden = true;
+      try {
+        const r = await nulliusFetch(ask.dataset.post, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': ask.dataset.csrf },
+          body: JSON.stringify({ trials: chosen().flatMap(x => (x.dataset.trials || x.value).split(' ')), reason: form.elements.reason.value }) });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.ok) { const u = new URL(location.href); u.searchParams.delete('view'); location.assign(u); return; }
+        throw new Error(j.error || 'refused: HTTP ' + r.status);
+      } catch (x) { err.textContent = String(x.message || x); err.hidden = false; b.disabled = false; }
+    });
+    recount();
+  }
+
   apply();
+
+  // ---- the job's one spending cap: Change asks for the cap from the job's next run on ----
+  const capAsk = $('#cap-ask'), capOpen = $('#cap-change');
+  if (capAsk && capOpen) {
+    const capForm = $('form', capAsk), capErr = $('[data-error]', capAsk);
+    capOpen.addEventListener('click', () => { capErr.hidden = true; capAsk.showModal(); });
+    capForm.addEventListener('submit', async e => {
+      if (!e.submitter || e.submitter.value !== 'save') return;
+      e.preventDefault();
+      const b = e.submitter; b.disabled = true; capErr.hidden = true;
+      try {
+        const r = await nulliusFetch(capAsk.dataset.post, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': capAsk.dataset.csrf },
+          body: JSON.stringify({ max_usd: capForm.elements.max_usd.value }) });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.ok) { location.reload(); return; }
+        throw new Error(j.error || 'refused: HTTP ' + r.status);
+      } catch (x) { capErr.textContent = String(x.message || x); capErr.hidden = false; b.disabled = false; }
+    });
+  }
 })();
 
 // Each checkbox independently excludes one flag kind. The GET form works without JavaScript.

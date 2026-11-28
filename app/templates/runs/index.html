@@ -52,7 +52,8 @@
         {%- if kind == 'control' %}
         <td class="num"><span class="faint" title="A check on the tasks, not a score">—</span></td>
         {%- else %}
-        <td class="num">{% if j and j.scored_only %}<span class="faint" title="Scored, not solved: no pass or fail in this benchmark">—</span>{% elif j and part == 'fold' %}{{ j.n_resolved }}<span class="faint">/{{ j.trials|length }}</span>{% if r.not_run %}<span class="la-gap" title="{{ r.notes|join('; ') }}">{{ r.not_run }} of {{ r.total }} not run</span>{% endif %}{% elif j %}{{ j.n_resolved }}<span class="faint">/{{ j.n_planned or j.trials|length }}</span>{% else %}<span class="faint">0{% if g.n_tasks %}/{{ g.n_tasks }}{% endif %}</span>{% endif %}</td>
+        <td class="num">{% if j and j.scored_only %}<span class="faint" title="Scored, not solved: no pass or fail in this benchmark">—</span>{% elif j and part == 'fold' %}{{ j.n_resolved }}<span class="faint">/{{ j.trials|length }}</span>{% if r.not_run %}<span class="la-gap" title="{{ r.notes|join('; ') }}">{{ r.not_run }} of {{ r.total }} not run</span>{% endif %}{% elif j and j.start_with %}{{ j.n_resolved }}<span class="faint">/{{ j.trials|length }}</span>{% elif j %}{{ j.n_resolved }}<span class="faint">/{{ j.n_planned or j.trials|length }}</span>{% else %}<span class="faint">0{% if g.n_tasks %}/{{ g.n_tasks }}{% endif %}</span>{% endif %}
+          {%- if j and j.start_with and part != 'fold' and j.n_tasks_run < j.n_tasks %}<span class="la-gap" title="Started on some of its plan: the rates and the mean are over the tasks run">{{ j.n_tasks_run }} of {{ j.n_tasks }} tasks run</span>{% endif %}</td>
         {%- endif %}
         <td class="num lh-more">{% if j and (j.total_input_tokens or j.total_output_tokens) %}{{ (j.total_input_tokens + j.total_output_tokens)|tokens(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
         <td class="num lh-more">{% if j and j.total_cost_usd is not none %}{{ j.total_cost_usd|usd(j.kind) }}{% else %}<span class="faint">—</span>{% endif %}</td>
@@ -222,7 +223,7 @@
       {# present/planned exposes a partial run; the tooltip carries Harbor's
          retry and error counters, which have nowhere else to live. #}
       <td data-col="trials" data-sort="{{ j.trials|length }}" class="align-right"
-          title="{{ j.trials|length }} on disk{% if j.n_planned %} of {{ j.n_planned }} planned{% endif %}{% if j.n_retries %} · {{ j.n_retries }} retried{% endif %}{% if j.n_errored_trials %} · {{ j.n_errored_trials }} errored{% endif %}">
+          title="{{ j.trials|length }} on disk{% if j.n_planned %} of {{ j.n_planned }} planned{% endif %}{% if j.start_with %} · started on some of its plan, {{ j.n_tasks_run }} of {{ j.n_tasks }} tasks run{% endif %}{% if j.n_retries %} · {{ j.n_retries }} retried{% endif %}{% if j.n_errored_trials %} · {{ j.n_errored_trials }} errored{% endif %}">
         {{- j.trials|length }}{% if j.n_planned and j.n_planned != j.trials|length %}<small class="faint">/{{ j.n_planned }}</small>{% endif -%}
       </td>
       {% if v %}

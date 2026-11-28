@@ -32,7 +32,7 @@ Benchmarks measure performance. Kits check that an agent or capability implement
 
 ## Attempts and retries {#attempts}
 
-An attempt is one run of a task, counted whatever its result. A retry reruns an attempt after an infrastructure or agent failure; its last try is the trial.
+An attempt is one run of a task, counted whatever its result. A retry reruns an attempt after an infrastructure or agent failure; its last try is the trial. A task run again by hand ([`standard rerun`](cli/rerun.md)) is a further try of its attempt, or its first if never begun. A job [started on some of its plan](cli/run.md#plan-the-whole-start-with-some-of-it) has its rates over the tasks run.
 
 Standard runs with repeated, scored attempts record both measures in `pass_hat_k`. They answer different questions.
 
@@ -153,13 +153,14 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `total_cache_tokens` | The part of those served from cache, as each trial's `result.json` records it. | derived | any |
 | `total_output_tokens` | Completion tokens. | derived | any |
 | `total_cost_usd` | The trials' recorded costs and their retried tries', summed: an estimate, not a bill. Shows — when none recorded one. | derived | any |
-| `duration_min` | The whole run, start to finish. | derived | any |
+| `duration_min` | The first run, start to finish; the job's page adds each later run. | derived | any |
 | `budget` | A standard run's spending cap, from `result.json`: `max_usd` and `spent_usd`, whether it `stopped` the run, the units `cut_off` and `not_run`, and with a cap per unit `unit_max_usd` and `over_unit`. Empty without a cap. | measured | any |
 | `agent_label` | The agent's name: the class of a `module:Class` path, or the trials' own name when the config gives none. | measured | any |
 | `agent_version` | The version the trial's `agent_info` reports. | measured | any |
 | `is_control` | An `oracle` or `nop` run: a check on the tasks, kept out of rankings and totals. Its row reads as a verdict, not a rate. A standard run is one only when its benchmark declares that control. On a benchmark that scores, a control's score of 1 reads as accepted and 0 as rejected. | measured | any |
 | `is_running` | The job records running or pending trials. Numbers are partial. | measured | any |
 | `n_planned / n_retries` | Planned trials from the run record or task count, and retries recorded by the harness. Repeated attempts are separate trials, not retries. | measured | any |
+| `n_tasks_run · start_with` | Tasks with a trial, of `n_tasks` planned; `start_with`, the tasks a standard job started with. | measured | any |
 | `retries` | Retries a standard run allows each attempt (`--retries`); 0 elsewhere. | measured | any |
 | `identity` | A standard run's setup: benchmark, agent, backend, model, provider, limits. Empty elsewhere. | measured | any |
 | `dataset` | The dataset folder, `name@version` for a registry fetch, or the task names' shared prefix. | measured | any |
@@ -185,7 +186,7 @@ How the agent worked, not whether it won. Computed over layer 3.
 | `n_steps / n_tool_calls` | Trajectory steps and tool calls; empty placeholder calls are not counted. | measured | any |
 | `exception_type` | What ended the trial, if anything. It decides the infra / agent split. | measured | any |
 | `ended_by` | What ended the agent's work: `agent`, the benchmark's own end, or a limit (`time`, `calls`, `end`). | measured | standard |
-| `n_retries` | Retries a standard run's attempt took. | measured | any |
+| `n_retries` | Retries a standard run's attempt took, runs again by hand included. | measured | any |
 | `n_rate_limited_retries` | 429s counted in `agent/gateway.log`: on Harbor, the ones the agent's SDK retried and survived; on a standard run, every model call the relay saw refused with 429. No log: no count, never 0. | inferred | any |
 
 ## Standard run records

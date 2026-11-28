@@ -110,6 +110,7 @@ nav:
           - Fidelity: cli/fidelity.md
           - Shard and merge: cli/shard-and-merge.md
           - Task sets: cli/task-sets.md
+          - Run tasks again: cli/rerun.md
           - Pages from a shell: cli/pages.md
           - Exit codes and output: cli/exit-codes.md
       - Settings:

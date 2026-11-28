@@ -30,6 +30,10 @@ Foreign results open the same way: [Open existing results](getting-started.md#op
 | 3 | Conversation and tool calls | Which actions led there? |
 | 4 | Trace and artifacts | Which calls failed or ran slowly? What files were produced? |
 
+## Run tasks again
+
+On an ended standard job, the tasks ticked on its page run again in that job, where it ran, and the new result takes each task's place. A job [started on some of its plan](cli/run.md#plan-the-whole-start-with-some-of-it) runs the rest the same way, its rates over the tasks run ([`nullius standard rerun`](cli/rerun.md)).
+
 ## Check the task
 
 - **Controls:** the `nop` and `oracle` jobs beside the agent's ([Core concepts](concepts.md#benchmark)).

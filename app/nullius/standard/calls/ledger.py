@@ -119,14 +119,24 @@ class Ledger:
         self.path = path
 
     @classmethod
-    def create(cls, path: str, max_usd: Optional[float] = None, unit_max_usd: Optional[float] = None) -> "Ledger":
-        """``max_usd``: the run's cap, or None for a run with a cap per unit alone. ``unit_max_usd``: each unit's."""
+    def create(cls, path: str, max_usd: Optional[float] = None, unit_max_usd: Optional[float] = None,
+               seen: Optional[dict] = None) -> "Ledger":
+        """``max_usd``: the run's cap, or None for a run with a cap per unit alone. ``unit_max_usd``: each unit's.
+        ``seen``: the replies earlier runs of the job had from each model ([count, output tokens]), so that a later
+        run's first calls are booked at their average, not guessed."""
         os.makedirs(os.path.dirname(path), exist_ok=True)
         led = cls(path)
         led._write({"max_usd": None if max_usd is None else float(max_usd),
                     "unit_max_usd": None if unit_max_usd is None else float(unit_max_usd),
-                    "spent_usd": 0.0, "unsettled_usd": 0.0, "held": {}, "closed": False, "seen": {}, "units": {}, "of": {}})
+                    "spent_usd": 0.0, "unsettled_usd": 0.0, "held": {}, "closed": False, "seen": dict(seen or {}), "units": {}, "of": {}})
         return led
+
+    def replies(self) -> dict:
+        """The replies this ledger has had from each model, {model: [count, output tokens]}; {} when it cannot be read."""
+        try:
+            return {m: list(v) for m, v in self._read()["seen"].items()}
+        except (OSError, ValueError, KeyError, TypeError):
+            return {}
 
     @contextlib.contextmanager
     def _locked(self):

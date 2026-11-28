@@ -19,16 +19,21 @@
 
 {# An attempt's tries, when its runner kept the ones before its last
    (parse.tries): one tab each, the last the one that counts. `current` is the
-   try on screen. #}
+   try on screen. A try a person asked for after the run ended says so, with
+   the reason they gave (parse.Trial.rerun), on its tab and under the tabs; a task
+   of the plan a later run began says it was its first run. #}
 {% macro try_tabs(job, tries, current, workspace=none) -%}
 <nav class="try-tabs" aria-label="Tries of this attempt">
   {%- for n, t in tries %}
   <a class="try-tab oc-{{ t.outcome }}" data-keep-tab
      href="{{ url_for('trial', job_id=job.job_id, trial_name=t.trial_name, workspace=workspace) }}"
-     title="Try {{ n }}: {{ t.outcome_label }}"{% if t.trial_name == current.trial_name %} aria-current="page"{% endif %}>Try {{ n }}
+     title="Try {{ n }}: {{ t.outcome_label }}{% if t.rerun %}, {{ t|try_mark(job) }}{% if t.rerun.reason %}: {{ t.rerun.reason }}{% endif %}{% endif %}"{% if t.trial_name == current.trial_name %} aria-current="page"{% endif %}>Try {{ n }}
+    {%- if t.rerun %}<span class="try-by muted">{{ t|try_mark(job) }}</span>{% endif %}
     {%- if t.dur_total is not none %}<span class="try-dur">{{ t.dur_total|secs }}</span>{% endif %}</a>
   {%- endfor %}
 </nav>
+{%- if current.rerun and current.rerun.reason %}
+<p class="try-why muted small" id="try-why">{{ (current|try_mark(job))|capitalize }}: {{ current.rerun.reason }}</p>{% endif %}
 {%- endmacro %}
 
 {# How a run did at one task over its attempts, as its adjusted rate reads

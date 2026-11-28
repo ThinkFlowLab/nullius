@@ -380,6 +380,23 @@ class SurfacedFields(unittest.TestCase):
     """The reader exposes agent versions and job statistics, including the
     running-trial count that distinguishes active jobs from completed ones."""
 
+    def test_planned_tasks_run_distinguishes_ids_with_the_same_display_name(self):
+        units = ["group/1", "group-1", "t2", "t3", "t4", "t5"]
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_json(os.path.join(tmp, "config.json"),
+                        {"standard": {"benchmark": "fakebench", "repeat": 2},
+                         "datasets": [{"name": "fakebench/all", "n_tasks": 6}]})
+            for k, unit in enumerate(units):
+                for attempt in (1, 2):
+                    name = f"{unit.replace('/', '-')}__u{k:04d}r{attempt}"
+                    _write_json(os.path.join(tmp, name, "result.json"),
+                                {"task_name": f"fakebench/{unit.replace('/', '-')}", "trial_name": name,
+                                 "standard": {"unit": unit}, "verifier_result": {"rewards": {"reward": 1}}})
+                parsed = parse.parse_job(tmp)
+                self.assertEqual(parsed.n_tasks_run, k + 1)
+                self.assertEqual(len(parsed.trials), (k + 1) * 2)
+            self.assertEqual(parsed.n_tasks_run, parsed.n_tasks)
+
     def _job(self, result):
         with tempfile.TemporaryDirectory() as tmp:
             _write_json(os.path.join(tmp, "result.json"), result)

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from '_page.html' import page_head %}
+{% from 'catalogue/_tasks_list.html' import tasks_list, tasks_state %}
 {#- what the page is for: a set's name; on the application host, a new set cut from the dataset; else the dataset #}
 {% set heading = label if entry else 'New task set' if writable and not broken else ds.label or ds.id %}
 {% block title %}{{ heading }} · {{ title }} — Nullius{% endblock %}
@@ -79,51 +80,10 @@
   </section>
   {% endif %}
 
-  {#- before a first listing: what to do, and the way to do it: the listing started on a click, or where a licence it
-      needs is set #}
-  <div class="bench-blocked tasks-state" id="tasks-state" role="status" hidden>
-    <span id="tasks-state-text"></span>
-    <a id="tasks-state-link" href="{{ url_for('settings_page') }}" hidden></a>
-    {% if writable %}<div class="tasks-list" id="tasks-list" hidden><button type="button" class="btn sm" id="tasks-list-go">List {{ nouns }}</button>
-      <span class="muted small" id="tasks-list-about"></span></div>{% endif %}
-  </div>
+  {{ tasks_state(nouns, writable) }}
 
   <section class="bench-section tasks-browse" aria-label="{{ nouns|capitalize }}">
-    <div class="tasks-bar" id="tasks-bar" hidden>
-      <label class="st-search tasks-find"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="tasks-q" placeholder="Words of an id, a title or a text" aria-label="Search the {{ nouns }}" autocomplete="off" spellcheck="false"></label>
-      <div class="tasks-cats" id="tasks-cats"></div>
-    </div>
-    <div class="tasks-sel">
-      {#- the ways to choose, then what is chosen #}
-      <div class="tasks-add" role="group" aria-label="Choose {{ nouns }}">
-        <button type="button" class="btn ghost sm" id="tasks-match" hidden>Select all</button>
-        {% if writable %}<span class="tasks-pick" id="tasks-pick" hidden><input type="text" id="tasks-n" inputmode="numeric" value="10" autocomplete="off" aria-label="How many {{ nouns }} to pick"><input type="text" id="tasks-seed" inputmode="numeric" placeholder="Seed" autocomplete="off" aria-label="Seed: the same seed draws the same {{ nouns }}" title="The same seed draws the same {{ nouns }}; empty draws a new one"><button type="button" class="btn ghost sm" id="tasks-pick-go">Pick at random</button></span>{% endif %}
-        <details class="pop tasks-paste" id="tasks-paste-open"><summary class="btn ghost sm" aria-controls="tasks-paste-box">Paste ids</summary></details>
-      </div>
-      <div class="tasks-got" role="group" aria-label="Chosen {{ nouns }}">
-        <b id="tasks-chosen">0 chosen</b>
-        <button type="button" class="btn ghost sm" id="tasks-show" aria-pressed="false" hidden>Show selected</button>
-        <button type="button" class="btn ghost sm" id="tasks-clear" hidden>Clear</button>
-      </div>
-    </div>
-    {#- the box Paste ids opens, on its own line below the row #}
-    <div class="tasks-paste-box" id="tasks-paste-box"><textarea class="mono small" id="tasks-paste" rows="4" aria-label="Ids to add" placeholder="One id a line, or separated by spaces or commas" spellcheck="false"></textarea>
-      <button type="button" class="btn sm" id="tasks-paste-add">Add</button></div>
-    <p class="tasks-count muted small" id="tasks-count" aria-live="polite"></p>
-    <div class="tasks-scroll">
-      <table class="grid tasks-table" id="tasks-table" hidden>
-        <thead><tr><th scope="col" class="tasks-tick"><span class="sr">Chosen</span></th><th scope="col">Task</th><th scope="col" id="tasks-cat-head">Category</th></tr></thead>
-        <tbody id="tasks-rows"></tbody>
-      </table>
-    </div>
-    {#- the shared pager's look (_tables.html pager); its pages are the listing's, asked of the server #}
-    <nav class="table-tools table-pager tasks-pages" id="tasks-pages" aria-label="Pages" hidden>
-      <label class="table-note">Show <select id="tasks-size"><option>10</option><option selected>25</option><option>100</option><option value="0">All</option></select></label>
-      <span class="header-spacer"></span>
-      <button type="button" class="btn sm ghost" data-page="prev" aria-label="Previous page"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
-      <span class="table-note" id="tasks-page-of"></span>
-      <button type="button" class="btn sm ghost" data-page="next" aria-label="Next page"><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
-    </nav>
+    {{ tasks_list(nouns, pick=writable) }}
     {% if writable %}
     <div class="tasks-savebar" id="tasks-savebar">
       <b id="tasks-bar-chosen">0 chosen</b>

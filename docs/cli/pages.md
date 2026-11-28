@@ -28,6 +28,7 @@ Each page's command, or why there is none.
 | A benchmark's *Prove it* | `nullius standard prove KEY` ([Prove](prove.md)) |
 | *Prove its ports* | `nullius standard conform KEY` ([Conform](conform.md)) |
 | `/run` | `nullius standard run` per dataset and choice, `--shard I/N` per machine ([Run](run.md)) |
+| A job's *Run selected again*, *Run the rest*, *Run a set* | `nullius standard rerun JOB_DIR --unit ID`, `--unfinished`, `--set NAME` ([Run tasks again](rerun.md)) |
 
 ## While the app runs
 
