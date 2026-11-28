@@ -177,13 +177,13 @@ def _free(name: str, taken) -> str:
     return next(c for c in (f"{name[:NAME_MAX - len(str(i)) - 1].rstrip('-')}-{i}" for i in range(2, 1000)) if c not in taken)
 
 
-def create(home_dir: str, roots, label: str = "") -> Workspace:
+def create(home_dir: str, roots, label: str = "", *, opened: bool = True) -> Workspace:
     taken = {ws.name for ws in list_all(home_dir)}
     name = slug(label)
     name = _free(name, taken) if name else random_name(taken)
     now = _now()
     ws = Workspace(name=name, label=label.strip() or name, roots=list(roots),
-                   created=now, opened=now, dir=os.path.join(home_dir, name))
+                   created=now, opened=now if opened else "", closed=not opened, dir=os.path.join(home_dir, name))
     save(ws)
     return ws
 

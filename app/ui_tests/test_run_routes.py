@@ -79,7 +79,7 @@ class RunRoutes(unittest.TestCase):
             return 0, ""
         self.stack.enter_context(patch.object(execution, "subprocess_run", run))
         self.stack.enter_context(patch.object(execution, "docker_here", lambda sh, needs="": None))           # docker answers here, as the probe says it does there
-        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: self.adopted.extend(ex.jobs for ex in runs)))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into="": self.adopted.extend(ex.jobs for ex in runs)))
         self.adopted = []
         self.client = web.app.test_client()
         r = self.client.get("/new-run"); self.addCleanup(r.close)
@@ -172,6 +172,32 @@ class RunRoutes(unittest.TestCase):
         self.assertEqual(web.execute.begin(plans), ([], execution.name_taken("twice"), 409))
         self.assertEqual((dict(execution.EXECUTIONS), self.adopted), ({}, []))                   # nothing started, the free name included
         self.assertFalse((self.tmp / "runs" / "fresh").exists())
+
+    def test_a_launch_refuses_a_linked_workspace_before_starting(self):
+        home = self.tmp / "workspaces"
+        home.mkdir()
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        inside = home / "inside"
+        inside.mkdir()
+        linked = home / "trials"
+        run = SimpleNamespace(jobs=str(self.tmp / "runs" / "launch" / "jobs"), summary=lambda: {"id": "launch"})
+        with patch.object(web.shared, "WS_HOME", str(home)), patch.object(execution, "start", return_value=run) as start:
+            for target in (outside, inside, self.tmp / "absent"):
+                with self.subTest(target=target):
+                    linked.symlink_to(target, target_is_directory=True)
+                    try:
+                        r = self.post({"name": "launch", "script": "true", "workspace": "trials"})
+                        self.assertEqual(r.status_code, 400)
+                        self.assertIn("symbolic link", r.json["error"])
+                        start.assert_not_called()
+                        self.assertFalse((target / "workspace.json").exists())
+                    finally:
+                        linked.unlink()
+            runs, problem, status = web.execute.begin([], "../outside")
+            self.assertEqual((runs, status), ([], 400))
+            self.assertIn("inside the workspaces folder", problem)
+            start.assert_not_called()
 
     def test_a_single_run_opens_its_job_page_before_harbor_writes_the_job(self):
         r = self.post({"name": "tau3-x3", "script": "true", "where": "local", "jobs": [{"name": "tau3-x3", "agent": "oracle", "dataset": "tau3-x3"}]})
@@ -400,6 +426,22 @@ class ReopenAtStart(unittest.TestCase):
         self.root.rmdir()                                      # roots gone: it opens as the open action does
         self.assertEqual(self.restart().roots, [str(self.root)])
 
+    def test_a_launch_destination_does_not_replace_the_workspace_reopened(self):
+        with patch.object(workspace, "_now", return_value="2000-01-01T00:00:00+00:00"):
+            ws = workspace.create(self.home, [str(self.root)], label="existing")
+            web.shared.open_workspace(ws)
+        filed = []
+        run = SimpleNamespace(jobs=str(self.tmp / "runs" / "launch" / "jobs"), file_under=filed.append)
+        web.shared.adopt_runs([run], "destination")
+        destination = workspace.load(self.home, "destination")
+        self.assertEqual((destination.opened, destination.closed), ("", True))
+        self.assertEqual((destination.roots, filed), ([run.jobs], ["destination"]))
+        self.assertIs(web.shared.STATE["workspace"], ws)
+        self.assertEqual(self.restart().name, ws.name)
+        web.shared.open_workspace(destination)
+        self.assertTrue(workspace.load(self.home, destination.name).opened)
+        self.assertEqual(self.restart().name, destination.name)
+
     def test_a_second_server_on_the_runs_folder_stops_with_one_line(self):
         refused = execution.Followed("another Nullius follows the runs in /r: stop it before starting this one")
         with patch.object(execution, "restore", side_effect=refused), self.assertRaises(SystemExit) as end:
@@ -517,6 +559,33 @@ class ResumeIntoWorkspace(unittest.TestCase):
         self.assertNotEqual(again.name, self.ws.name)
         self.assertEqual(again.roots, [self.jobs])
         self.assertEqual(workspace.load(self.home, self.ws.name).roots, self.held + [self.jobs])   # added when it started, left as it is
+
+    def test_a_run_posted_with_a_workspace_goes_into_it_and_the_open_one_stays_open(self):
+        """``workspace``: the run's jobs go into that workspace, made under that name when there is none; the open
+        one keeps its roots and stays open; the record names it for a restart, and the answer's job address names it.
+        A name that is not one starts nothing."""
+        def post(name, into):
+            r = self.client.post("/run", data=json.dumps({"name": name, "script": "", "where": "local", "workspace": into,
+                                                          "jobs": [{"name": name}], "parts": [{"id": "a", "label": "a", "script": "echo a"}]}),
+                                 content_type="application/json", headers={"Origin": "http://localhost", "X-CSRF-Token": self.csrf}); self.addCleanup(r.close)
+            if r.status_code == 200:
+                execution.EXECUTIONS[r.json["id"]].thread.join(10)
+            return r
+        first, second = (str(self.tmp / "runs" / n / "jobs") for n in ("q1", "q2"))
+        r = post("q1", "trials")
+        self.assertEqual((r.status_code, r.json["open"]), (200, "/job/q1?workspace=trials"))     # not the open workspace's
+        made = workspace.load(self.home, "trials")
+        self.assertEqual((made.label, made.roots), ("trials", [first]))
+        self.assertEqual(web.shared.STATE["workspace"].name, self.ws.name)
+        self.assertEqual(workspace.load(self.home, self.ws.name).roots, self.held + [self.jobs])
+        self.assertEqual(json.loads((self.tmp / "runs" / "q1" / "run.json").read_text())["workspace"], "trials")
+        self.assertEqual(post("q2", "trials").status_code, 200)                                  # one there already: added to
+        self.assertEqual(workspace.load(self.home, "trials").roots, [first, second])
+        before = sorted(w.name for w in workspace.list_all(self.home))
+        r = post("q3", "Not a name")
+        self.assertEqual((r.status_code, r.json), (400, {"ok": False, "error": "A workspace's name is lowercase letters, digits and dashes."}))
+        self.assertFalse((self.tmp / "runs" / "q3").exists())
+        self.assertEqual(sorted(w.name for w in workspace.list_all(self.home)), before)
 
 
 class Credentials(unittest.TestCase):

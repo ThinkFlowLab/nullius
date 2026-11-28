@@ -343,10 +343,13 @@ def adopt_roots(roots, label="", new=False, into=""):
     return ws
 
 
-def adopt_runs(runs):
+def adopt_runs(runs, into=""):
     """Runs just started: their jobs into a workspace as ``adopt_roots`` puts
-    them, each record naming it for a restart to put them back."""
-    ws = adopt_roots([ex.jobs for ex in runs])
+    them - ``into``, made under that name when there is none, the open one
+    left as it is - each record naming it for a restart to put them back."""
+    if into and workspace.load(WS_HOME, into) is None:
+        workspace.create(WS_HOME, [], into, opened=False)
+    ws = adopt_roots([ex.jobs for ex in runs], into=into)
     for ex in runs:
         ex.file_under(ws.name)
 

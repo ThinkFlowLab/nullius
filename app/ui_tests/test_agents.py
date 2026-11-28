@@ -48,7 +48,7 @@ class Tabs(unittest.TestCase):
             self.started.append(plan)
             return SimpleNamespace(jobs=str(self.tmp / "runs" / plan.name / "jobs"), summary=lambda: {})
         self.stack.enter_context(patch.object(execution, "start", start))
-        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into="": None))
         self.client = web.app.test_client()
 
     def test_capability_source_retains_pin_and_install_details(self):
@@ -379,7 +379,7 @@ class BuilderStandard(unittest.TestCase):
             self.started.append(plan)
             return SimpleNamespace(jobs=str(self.tmp / "runs" / plan.name / "jobs"), summary=lambda: {"id": plan.name + "-1"})
         self.stack.enter_context(patch.object(execution, "start", start))
-        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into="": None))
         self.client = web.app.test_client()
         r = self.client.get("/new-run"); self.addCleanup(r.close)
         self.schema = json.loads(re.search(r'<script id="nb-schema" type="application/json">(.*?)</script>', r.get_data(as_text=True), re.S).group(1))
@@ -451,6 +451,78 @@ class BuilderStandard(unittest.TestCase):
             self.assertIn(why, r.get_json()["error"])
         self.assertEqual(self.started, [])
 
+    def test_recipes_launch_starts_the_plan_run_starts_into_the_workspace_it_names(self):
+        """`nullius recipes launch` asks the server what the builder asks it: a saved recipe, on a host, starts the
+        plan Run starts for the same recipe, into the workspace named; the launch's key is printed. --dry-run prints the
+        Review step's rows and starts nothing. Run's question is refused without --yes and a recipe that is not there
+        exits 3, nothing started."""
+        import contextlib, datetime, io
+        from nullius import prerequisites
+        from nullius.recipes import cli as recipes, store
+        client, into = self.client, []
+        class Here(recipes.Server):                                            # the server, through the test client
+            def send(self, method, path, body=None):
+                r = client.open(path, method=method, headers={"Origin": "http://localhost", **({"X-CSRF-Token": self.token} if self.token else {})},
+                                **({} if body is None else {"data": json.dumps(body), "content_type": "application/json"}))
+                try:
+                    return r.status_code, r.get_data(as_text=True)
+                finally:
+                    r.close()
+        self.stack.enter_context(patch.dict(os.environ, {"NULLIUS_HOME": str(self.tmp / "home")}))
+        self.stack.enter_context(patch.object(recipes, "Server", Here))
+        self.stack.enter_context(patch.object(prerequisites, "check_host", lambda host, needs, setups=None, standard=False: []))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into_="": into.append(into_)))
+        store.save(self.recipe(name="fake", title="fake on two"))
+        got = recipes.launch(Here("http://localhost"), store.listing()[0]["recipe"], ["me@bench"], "trials", now=datetime.datetime(2026, 1, 1, 12, 0, 0))
+        self.assertEqual((got["launch"], into), ("run:fake-0101-120000-1", ["trials"]))
+        self.assertEqual(self.post("/run", {"name": "fake-0101-120000", "where": "me@bench", "recipe": self.recipe(where="me@bench", title="fake on two")}).get_json()["ok"], True)
+        shell, page = self.started
+        self.assertEqual(shell.to_dict(), page.to_dict())                                  # the same launch
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(recipes.main(["launch", "fake on two", "--server", "http://localhost"]), 0)
+        self.assertRegex(out.getvalue(), r"^launch run:fake-\d{4}-\d{6}-1\n")
+        self.assertEqual(into[-1], "")                                                    # no workspace named: the open one, as Run
+        held = (list(self.started), list(into))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(recipes.main(["launch", "fake on two", "--dry-run", "--workspace", "dry", "--server", "http://localhost"]), 0)
+            self.assertEqual(recipes.main(["launch", "fake on two", "--dry-run", "--json", "--server", "http://localhost"]), 0)
+        shown, doc = out.getvalue().split("Not launched: --dry-run\n")
+        self.assertRegex(shown, r"^Benchmark: .*\nRunner: Nullius\n(.*\n)*Scope: first 2 .*\n(.*\n)*Prerequisites, this machine: ready\n")
+        self.assertEqual((json.loads(doc)["refused"], json.loads(doc)["prerequisites"]["ready"]), ("", True))
+        self.assertEqual((self.started, into), held)                                       # no run, no workspace
+        self.started.clear()
+        store.save(self.recipe(name="every", title="every unit", limit=""))
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(recipes.main(["launch", "every unit", "--server", "http://localhost"]), 4)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(recipes.main(["launch", "every unit", "--dry-run", "--server", "http://localhost"]), 4)
+            self.assertIn("\nScope: all ", out.getvalue())
+            self.assertEqual(recipes.main(["launch", "nowhere", "--server", "http://localhost"]), 3)
+        self.assertIn("--yes answers yes", err.getvalue())
+        self.assertEqual(self.started, [])
+        saved = store.save(self.recipe(name="missing-key", title="missing key", provider="openrouter"))
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(recipes.main(["launch", "missing key", "--dry-run", "--json", "--server", "http://localhost"]), 4)
+        refused = self.post("/run", {"recipe": saved["recipe"]})
+        self.assertEqual(refused.status_code, 400)
+        self.assertEqual(json.loads(out.getvalue())["refused"], refused.get_json()["error"])
+        self.assertIn("OPENROUTER_API_KEY", json.loads(out.getvalue())["refused"])
+        self.assertEqual(self.started, [])
+
+    def test_review_and_run_allow_a_keyless_recipe_without_a_provider_key(self):
+        compiler = web.execute.standard_recipe
+        catalogue = compiler._all()
+        catalogue["benchmark"][0]["controls"] = {"nop": {"source": "nullius", "from": "Nothing runs."}}
+        recipe = self.recipe(other="nop", provider="openrouter", model="")
+        with patch.object(compiler, "_all", return_value=catalogue):
+            self.assertTrue(compiler.compile(recipe)["keyless"])
+            review = self.post("/new-run/runner", {"recipe": recipe}).get_json()
+            self.assertEqual((review["errors"], review["provider_error"]), ([], ""))
+            run = self.post("/run", {"recipe": recipe})
+            self.assertTrue(run.get_json()["ok"], run.get_json())
+        self.assertTrue(self.started[0].keyless)
+
 
 class StandardPieces(unittest.TestCase):
     """What the pages say of the standard beyond a pair: an agent's options,
@@ -469,7 +541,7 @@ class StandardPieces(unittest.TestCase):
             self.started.append(plan)
             return SimpleNamespace(jobs=str(self.tmp / "runs" / plan.name / "jobs"), summary=lambda: {"id": plan.name})
         self.stack.enter_context(patch.object(execution, "start", start))
-        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into="": None))
         self.client = web.app.test_client()
 
     def get(self, url):

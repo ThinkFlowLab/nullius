@@ -15,6 +15,7 @@ From a source checkout, replace `nullius` with
 | [Task flags](flags.md) | `nullius flags list`, `set`, `accept`, `remove`, `copy`, `import`, `feasibility` |
 | [Definitions](definitions.md) | `nullius standard list`, `check`, `fit`, `pins`, `new` |
 | [Run a benchmark](run.md) | `nullius standard run` |
+| [Launch a recipe](recipes.md) | `nullius recipes list`, `launch` |
 | [Prove a benchmark](prove.md) | `nullius standard prove` |
 | [Conform an agent or a capability](conform.md) | `nullius standard conform` |
 | [Fidelity](fidelity.md) | `nullius standard fidelity` |

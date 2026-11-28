@@ -533,7 +533,7 @@ class Runs(Case):
         self.stack.enter_context(patch.object(execution, "subprocess_run", run))
         self.stack.enter_context(patch.object(execution, "docker_here", lambda sh, needs="", program="docker": None))
         self.adopted = []
-        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs: self.adopted.extend(ex.plan.name for ex in runs)))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda runs, into="": self.adopted.extend(ex.plan.name for ex in runs)))
 
     def scripted(self, script="echo started; echo \"key=${#OPENAI_API_KEY}\""):
         """A recipe of the first two problems, whose run is this test's script in place of the standard's command."""
@@ -728,7 +728,7 @@ class OverASocket(Case):
         runs = Runs("test_a_run_is_followed_listed_and_stopped_by_its_id")
         runs.stack, runs.adopted = self.stack, []
         recipe = Runs.scripted(runs, "echo one; echo two")
-        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda started: None))
+        self.stack.enter_context(patch.object(web.shared, "adopt_runs", lambda started, into="": None))
         self.stack.enter_context(patch.object(execution, "docker_here", lambda sh, needs="", program="docker": None))
         nx = client.Client(self.url, self.runner)
         nx.save_recipe(dict(recipe, title="Nightly"))

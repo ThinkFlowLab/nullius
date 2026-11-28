@@ -27,7 +27,9 @@ Each page's command, or why there is none.
 | Save, rename or delete a task set | `nullius standard set create`, `--from-job` for a job's; `set rename`, `set delete` |
 | A benchmark's *Prove it* | `nullius standard prove KEY` ([Prove](prove.md)) |
 | *Prove its ports* | `nullius standard conform KEY` ([Conform](conform.md)) |
-| `/run` | `nullius standard run` per dataset and choice, `--shard I/N` per machine ([Run](run.md)) |
+| `/run` | `nullius standard run` per dataset and choice, `--shard I/N` per machine, in the shell ([Run](run.md)) |
+| `/new-run`: its Review, its Run | `nullius recipes launch <recipe> [--dry-run]`, through the server ([Launch a recipe](recipes.md)); `nullius remote check` and `run` against a served Nullius |
+| `/recipes` | `nullius recipes list [--json]` |
 
 ## While the app runs
 
@@ -52,7 +54,6 @@ Each page's command, or why there is none.
 | `/judge/…` | `judge.cli job <root> <id> --confirm`; today `nullius remote judge` against a served Nullius |
 | Rename or delete a workspace | `nullius workspace rename`, `nullius workspace delete --yes` |
 | Unlink a workspace's root, delete its folder | `workspace.forget`, `execution.delete`; today `POST /workspaces/<name>/roots/unlink` and `/roots/delete` |
-| `/new-run` | `recipes.cli`; today `POST /new-run/runner`, or `nullius remote check` and `run` against a served Nullius |
 | Delete a launch | `execution.delete`; today `POST /launch/<key>/delete` |
 | `/launches`, add a launch to a workspace | today `POST /launch/<key>/add` |
 

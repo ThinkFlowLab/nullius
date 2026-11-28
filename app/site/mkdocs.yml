@@ -105,6 +105,7 @@ nav:
           - Task flags: cli/flags.md
           - Definitions: cli/definitions.md
           - Run a benchmark: cli/run.md
+          - Launch a recipe: cli/recipes.md
           - Prove a benchmark: cli/prove.md
           - Conform an agent or a capability: cli/conform.md
           - Fidelity: cli/fidelity.md
