@@ -16,6 +16,10 @@
     PYTHONPATH=app python3 -m nullius.standard.cli run ... --set NAME
     PYTHONPATH=app python3 -m nullius.standard.cli units BENCHMARK --dataset D [--search TEXT] [--category FIELD=VALUE ...] [--json]
     PYTHONPATH=app python3 -m nullius.standard.cli fidelity AGENT --model M [--provider P] [--option NAME=VALUE ...] [--passes N] --unsandboxed
+    PYTHONPATH=app python3 -m nullius.standard.cli replay JOB_DIR TRIAL --call N --times K --max-usd USD [changes] [--read CMD] [-j N] [--dry-run] [--out DIR] [--json]
+    PYTHONPATH=app python3 -m nullius.standard.cli replay JOB_DIR TRIAL --list [--read CMD] [--json]
+    PYTHONPATH=app python3 -m nullius.standard.cli study DIR --times K --max-usd USD [--targets FILE] [--job JOB_DIR --trial TRIAL ... [--every N] [--where REGEX]] [--arm NAME=CHANGES ...] [--read CMD] [--yes REGEX] [--compare A B] [-j N] [--stop-after N] [--dry-run] [--json]
+    PYTHONPATH=app python3 -m nullius.standard.cli recount DIR [--read CMD] [--yes REGEX] [--compare A B] [--json]
 
 An agent runs commands as you on the local backend, which is not a sandbox:
 an agent's run or conformance check there is refused without ``--unsandboxed``.
@@ -41,7 +45,11 @@ why the rest cannot; ``conform`` runs the kits and writes what passed into
 each check K times, held by a majority); ``run`` runs a benchmark into a job under ``--jobs`` (``jobs_standard/``);
 ``fidelity`` drives an agent over
 ACP and through its own command, compares the requests its model was sent, and
-writes the verdict into ``proofs.json`` (``standard/proofs/fidelity.py``). ``--shard I/N`` runs one
+writes the verdict into ``proofs.json`` (``standard/proofs/fidelity.py``); ``replay`` sends one
+recorded call of a trial again K times under a spending cap, as it was or changed, and
+counts the answers (``standard/runner/replay.py``); ``study`` does it for calls of several trials under named arms of
+changes, one cap for all, and compares the arms call by call, and ``recount`` reads a kept study or replay
+again by another rule (``standard/runner/study.py``). ``--shard I/N`` runs one
 shard of the dataset's units (``standard/runner/shard.py``: by the unit id's hash, then
 ``--limit``), the job recording its shard and its launch (``--launch``); ``--units FILE``
 runs only the units a file lists (``run.units_file``: one id a line), read on
@@ -1047,6 +1055,328 @@ def cmd_prove(a):
     return 0 if all(r["ok"] for checks in got.values() for r in checks.values()) else 1
 
 
+REPLAY_EPILOG = """\
+changes, applied in this order, each recorded with the request's sha256 before and after:
+  --through CMD, --system FILE, --tools FILE, --tool-description NAME TEXT, --replace OLD NEW,
+  --drop-last K, --param FIELD=JSON, --model M, --served-by SLUG[,SLUG...], --provider P
+  (a TEXT, OLD or NEW that starts with @ is the text of that file)
+
+examples:
+  nullius standard replay jobs_standard/JOB TRIAL --list
+  nullius standard replay jobs_standard/JOB TRIAL --call 8 --times 8 --max-usd 0.5 --dry-run
+  nullius standard replay jobs_standard/JOB TRIAL --call 8 --times 8 --max-usd 0.5 --json
+  nullius standard replay jobs_standard/JOB TRIAL --call 8 --times 8 --max-usd 0.5 --replace @old.txt @new.txt
+
+exit codes:
+  0  done: every send made under the cap, or the dry run or the list printed
+  1  unexpected error (a traceback: report it)
+  2  usage, or refused: a change that does not apply, a stored conversation, no price, no key, a folder in use,
+     a send whose most cost has no bound or passes the cap
+  3  input not found: no such job, trial, exchange record or call
+  4  the operation could not be completed: a request that is not whole in the record, or no send answered
+With --json, stdout is exactly one JSON document; everything else goes to stderr.
+"""
+
+
+def _text_arg(v: str) -> str:
+    """An option's text, or the text of the file it names after ``@``."""
+    from nullius.standard.runner import replay as rp
+    if not v.startswith("@"):
+        return v
+    try:
+        with open(v[1:], encoding="utf-8") as f:
+            return f.read()
+    except OSError as e:
+        raise rp.Refused(f"cannot read {v[1:]}: {e.strerror or e}")
+
+
+def replay_changes(a) -> list:
+    """The changes a replay's options name, in the order the help gives."""
+    from nullius.standard.runner import replay as rp
+    out = []
+    if a.through:
+        out.append(rp.through(a.through))
+    if a.system:
+        out.append(rp.system_text(_text_arg("@" + a.system)))
+    if a.tools:
+        try:
+            out.append(rp.tools(json.loads(_text_arg("@" + a.tools))))
+        except ValueError as e:
+            raise rp.Refused(f"--tools {a.tools}: not JSON ({e})")
+    for name, text in a.tool_description or []:
+        out.append(rp.tool_description(name, _text_arg(text)))
+    for old, new in a.replace or []:
+        out.append(rp.replace_text(_text_arg(old), _text_arg(new)))
+    if a.drop_last is not None:
+        out.append(rp.drop_last(a.drop_last))
+    for pair in a.param or []:
+        name, eq, value = pair.partition("=")
+        try:
+            value = json.loads(value) if eq else ValueError
+        except ValueError:
+            value = ValueError
+        if value is ValueError:
+            raise rp.Refused(f"--param {pair!r}: FIELD=JSON, the value as JSON (a number, true, null, \"text\")")
+        out.append(rp.set_field(name.strip(), value))
+    if a.model:
+        out.append(rp.model(a.model))
+    if a.served_by is not None:
+        out.append(rp.served_by([s.strip() for s in a.served_by.split(",") if s.strip()]))
+    if a.provider:
+        out.append(rp.provider(a.provider))
+    return out
+
+
+def _cut_line(text: str, n: int = 150) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= n else text[:n - 1] + "…"
+
+
+def _said_replay(doc: dict, dry: bool) -> None:
+    from nullius.standard.calls.ledger import usd
+    s, r = doc["source"], doc["request"]
+    print(("dry run, nothing sent: " if dry else "") + f"call {s['call']} of {s['trial']}, POST {r['path']}, "
+          f"{r['bytes']} bytes, sha256 {r['sha256'][:16]}" + (" (the recorded one)" if r["unchanged"] else " (changed)"))
+    print(f"  {r['model']} on {r['provider']} ({r['endpoint']})" + (f", served by {','.join(r['served_by'])}" if r["served_by"] else "")
+          + f"; key from {r['key_setting']} ({r['key_header']})")
+    for c in doc["changes"]:
+        print(f"  change {c['name']}: {c['sha256_before'][:16]} -> {c['sha256_after'][:16]}")
+    e = doc["estimate_usd"]
+    print(f"  estimate {usd(e['per_call'])} USD a call, {usd(e['all'])} USD for {doc['times']} (no upper bound), cap {usd(doc['max_usd'])} USD"
+          + ("" if doc.get("fits") is None else ": fits" if doc["fits"] else ": over the cap, the last sends would be refused")
+          + (f"; the recorded call cost {usd(e['recorded_call'])} USD" if isinstance(e.get("recorded_call"), (int, float)) else ""))
+    b = doc["booked_usd"]
+    print(f"  booked {usd(b['per_call'])} USD a send until its answer, the most it can cost ({b['output_tokens']} output tokens)"
+          if b["per_call"] is not None else "  no bound on an answer's length: a send is refused until one is set")
+    if dry:
+        return
+    n, sp = doc["sends"], doc["spend"]
+    print(f"  {n['answered']} answered, {n['failed']} failed, {n['refused']} refused, {n['not_sent']} not sent; "
+          f"spent {usd(sp.get('spent_usd') or 0.0)} USD of {usd(doc['max_usd'])}" + (f"; stopped: {doc['stopped']}" if doc.get("stopped") else ""))
+    print(f"  rule: {doc['rule'].get('name')}; the recorded answer is marked *")
+    for row in doc["counts"]:
+        print(f"  {row['count']:>5} {'*' if row['recorded'] else ' '} {_cut_line(row['label'])}")
+    print(f"  folder: {doc['out']}")
+
+
+def cmd_replay(a):
+    from nullius.standard.runner import replay as rp
+    try:
+        if a.list:
+            rows = rp.calls(a.job_dir, a.trial, rule=rp.command_rule(a.read) if a.read else None)
+            if a.json:
+                json.dump(rows, sys.stdout, indent=1)
+                print()
+            else:
+                print(f"{'n':>4}  {'status':>6}  {'bytes':>10}  whole  model" + ("  recorded answer" if a.read else ""))
+                for c in rows:
+                    print(f"{c['n']:>4}  {str(c['status']):>6}  {str(c['bytes'] or '-'):>10}  {'yes' if c['whole'] else 'no ':<5}  "
+                          f"{c['model'] or '-'}" + (" (side)" if c["side"] else "") + (f"  {c['why']}" if c["why"] else "")
+                          + (f"  {_cut_line(c['label'], 100)}" if a.read else ""))
+            return 0
+        given = {}
+        for p in a.price or []:
+            try:
+                name, row = price_list.parse(p)
+            except ValueError as e:
+                raise rp.Refused(str(e))
+            given[name] = row
+        src = rp.source(a.job_dir, a.trial, a.call)
+        prep = rp.prepare(src, replay_changes(a), prices=given)
+        if a.dry_run:
+            doc = dict(prep.summary(a.times, a.max_usd), dry_run=True)
+        else:
+            doc = rp.send(prep, a.times, a.max_usd, a.out or rp.default_out(src),
+                          rule=rp.command_rule(a.read) if a.read else None, concurrency=a.concurrency)
+    except rp.NotFound as e:
+        print(str(e), file=sys.stderr)
+        return 3
+    except rp.NotWhole as e:
+        print(str(e), file=sys.stderr)
+        return 4
+    except rp.Refused as e:
+        print("refused:", e, file=sys.stderr)
+        return 2
+    if a.json:
+        json.dump(doc, sys.stdout, indent=1, ensure_ascii=False)
+        print()
+    else:
+        _said_replay(doc, a.dry_run)
+    return 0 if a.dry_run or doc["sends"]["answered"] else 4
+
+
+STUDY_EPILOG = """\
+targets: --targets FILE (lines JOB_DIR TRIAL CALL), and the calls of --job's trials (--trial, repeatable):
+  every one, every Nth (--every N: its number a multiple of N), or those whose recorded answer the rule
+  (--read) labels with a match of --where REGEX
+arms: the call as recorded, then each --arm NAME=CHANGES; CHANGES is a JSON list of [NAME, ARG...], or @FILE:
+  ["replace_text", OLD, NEW], ["system_text", TEXT], ["tool_description", TOOL, TEXT], ["tools", [...]],
+  ["drop_last", K], ["set_field", FIELD, VALUE], ["model", M], ["served_by", [SLUG...]], ["provider", P],
+  ["through", CMD]
+the same command again goes on with a study that stopped: only what was not answered is sent, under the
+same cap or a new --max-usd above what was spent; a study whose targets, arms, rule or model changed is refused
+
+examples:
+  nullius standard study studies/s1 --job jobs_standard/JOB --trial TRIAL --every 4 --times 4 --max-usd 0.6 \\
+      --arm 'short=[["replace_text", "Act now.", "Act now. Answer in one action."]]' --dry-run
+  nullius standard study studies/s1 --targets targets.txt --arm short=@short.json --times 4 --max-usd 0.6 --json
+  nullius standard recount studies/s1 --read 'python3 read.py' --json
+
+exit codes:
+  0  done: every send answered, or stopped as --stop-after asked, or the dry run printed
+  1  unexpected error (a traceback: report it)
+  2  usage, or refused: a change that does not apply, a plan unlike the study's, no price, no key, a folder in use,
+     a send whose most cost has no bound or does not fit what is left, a cap not above what was spent
+  3  input not found: no such job, trial, exchange record, call, targets file or study
+  4  the operation could not be completed: a request not whole in the record, or the study stopped before its end
+With --json, stdout is exactly one JSON document; everything else goes to stderr.
+"""
+
+RECOUNT_EPILOG = """\
+examples:
+  nullius standard recount studies/s1 --read 'python3 read.py'
+  nullius standard recount replays/JOB/TRIAL/call-8__TIME --read 'python3 read.py' --json
+
+exit codes:
+  0  counted: the counts written to recounts/ in the folder, beside the earlier ones
+  1  unexpected error (a traceback: report it)
+  2  usage, or refused: a pattern that is no regular expression, arms the study does not have
+  3  input not found: the folder holds no study and no replay
+With --json, stdout is exactly one JSON document; everything else goes to stderr.
+"""
+
+
+def _prices_given(given) -> dict:
+    from nullius.standard.runner import replay as rp
+    out = {}
+    for p in given or []:
+        try:
+            name, row = price_list.parse(p)
+        except ValueError as e:
+            raise rp.Refused(str(e))
+        out[name] = row
+    return out
+
+
+def _said_table(doc: dict) -> None:
+    arms = [a["name"] for a in doc["plan"]["arms"]] if "plan" in doc else list(doc["table"][0]["arms"]) if doc["table"] else []
+    width = max([len(f"{r['target']} {r['name']}") for r in doc["table"]] + [6])
+    print(f"  {'target':<{width}}  " + "  ".join(f"{a:>9}" for a in arms) + "  recorded answer")
+    for r in doc["table"]:
+        print(f"  {r['target'] + ' ' + r['name']:<{width}}  " + "  ".join(f"{c['yes']}/{c['answered']:<4}".rjust(9) for c in r["arms"].values())
+              + f"  {_cut_line(r['recorded'] or '-', 60)}")
+    t = doc.get("test")
+    if t:
+        ties = f" ({', '.join(t['tie_names'])})" if t["tie_names"] else ""
+        print(f"  {t['b']} against {t['a']}: {len(t['higher'])} higher, {len(t['lower'])} lower, {len(t['ties'])} "
+              f"tie{'' if len(t['ties']) == 1 else 's'}{ties}" + (f", {len(t['not_counted'])} not counted" if t["not_counted"] else "")
+              + f"; sign test, two-sided p = {t['p_two_sided']:.4g}")
+    print("  counts (* the recorded answer):")
+    for c in doc["counts"]:
+        for arm, rows in c["arms"].items():
+            print(f"  {c['target']} {arm}: " + " | ".join(f"{x['count']}{'*' if x['recorded'] else ''} {_cut_line(x['label'], 80)}"
+                                                    for x in rows if x["count"] or x["recorded"]))
+
+
+def _said_study(doc: dict) -> None:
+    from nullius.standard.calls.ledger import usd
+    if doc.get("dry_run"):
+        s = doc["sends"]
+        print(f"dry run, nothing sent: {len(doc['targets'])} targets x {len(doc['arms'])} arms x {doc['times']} sends = {s['all']}; "
+              f"{s['to_send']} to send" + (f" (the study goes on: {s['answered']} answered)" if doc["goes_on"] else ""))
+        for t in doc["targets"]:
+            cost = t.get("recorded_cost_usd")
+            print(f"  {t['target']} {t['trial']} call {t['call']}: {t['bytes']} bytes"
+                  + (f", the recorded call cost {usd(cost)} USD" if isinstance(cost, (int, float)) else "") + "; "
+                  + ", ".join(f"{a['arm']} {usd(a['estimate_usd'])} USD a call" + ("" if a["unchanged"] else " (changed)")
+                              + (f", booked at {usd(a['booked_usd'])}" if a["booked_usd"] is not None else ", no bound on its answer")
+                              for a in t["arms"]))
+        print(f"  estimate {usd(doc['estimate_usd'])} USD for {s['to_send']} (an estimate, no upper bound), cap {usd(doc['max_usd'])} USD, "
+              f"spent {usd(doc['spent_usd'])}" + (": fits" if doc["fits"] else ": over the cap, the last sends would be refused"))
+        return
+    n = sum(r["arms"][a]["answered"] for r in doc["table"] for a in r["arms"])
+    sp = doc["spend"]
+    print(f"study {doc['out']}: {n} of {n + doc['left']} answered ({doc['state']}), spent {usd(sp.get('spent_usd') or 0.0)} USD "
+          f"of {usd(doc['max_usd'])}" + (f"; stopped: {doc['starts'][-1]['stopped']}" if doc["left"] and doc["starts"][-1].get("stopped") else ""))
+    print(f"  rule: {doc['plan']['rule'].get('command') or doc['plan']['rule'].get('name')}; yes: {doc['yes'].get('pattern') or doc['yes']['name']}")
+    _said_table(doc)
+
+
+def _on_term_interrupt():
+    """A study stopped by TERM ends as by Ctrl-C: what is in flight is answered and written, nothing more is sent."""
+    def stopped(signum, frame):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, stopped)
+
+
+def cmd_study(a):
+    from nullius.standard.runner import replay as rp, study as sd
+    try:
+        rule = rp.command_rule(a.read) if a.read else None
+        targets = sd.read_targets(a.targets) if a.targets else []
+        if a.job:
+            targets += sd.targets(a.job, a.trial, every=a.every or 1, where=a.where, rule=rule)
+        if not targets:
+            raise rp.Refused("no target: the trials named hold no call that can be sent again" + (" and that --where finds" if a.where else ""))
+        arms = []
+        for spec in a.arm or []:
+            name, eq, text = spec.partition("=")
+            if not eq:
+                raise rp.Refused(f"--arm {spec!r}: NAME=CHANGES, CHANGES a JSON list of [NAME, ARG...] or @FILE")
+            try:
+                changes = json.loads(_text_arg(text))
+            except ValueError as e:
+                raise rp.Refused(f"--arm {name}: not JSON ({e})")
+            arms.append(sd.Arm(name.strip(), sd.changes_of(changes)))
+        if not a.dry_run:
+            _on_term_interrupt()
+        doc = sd.study(a.out, targets, arms, a.times, a.max_usd, rule=rule, yes=a.yes, compare=a.compare,
+                       prices=_prices_given(a.price), concurrency=a.concurrency, stop_after=a.stop_after, dry_run=a.dry_run,
+                       say=lambda line: print(line, file=sys.stderr, flush=True))
+    except rp.NotFound as e:
+        print(str(e), file=sys.stderr)
+        return 3
+    except rp.NotWhole as e:
+        print(str(e), file=sys.stderr)
+        return 4
+    except rp.Refused as e:
+        print("refused:", e, file=sys.stderr)
+        return 2
+    if a.json:
+        json.dump(doc, sys.stdout, indent=1, ensure_ascii=False)
+        print()
+    else:
+        _said_study(doc)
+    if a.dry_run or doc["state"] == "done":
+        return 0
+    return 0 if str(doc["starts"][-1].get("stopped") or "").startswith("stopped after") else 4
+
+
+def cmd_recount(a):
+    from nullius.standard.runner import replay as rp, study as sd
+    try:
+        doc = sd.recount(a.folder, rule=rp.command_rule(a.read) if a.read else None, yes=a.yes, compare=a.compare)
+    except rp.NotFound as e:
+        print(str(e), file=sys.stderr)
+        return 3
+    except rp.Refused as e:
+        print("refused:", e, file=sys.stderr)
+        return 2
+    if a.json:
+        json.dump(doc, sys.stdout, indent=1, ensure_ascii=False)
+        print()
+        return 0
+    print(f"recount of the {doc['of']} in {a.folder}: {doc['read']} answers read again, rule "
+          f"{doc['rule'].get('command') or doc['rule'].get('name')}; written to {doc['file']}")
+    if doc["of"] == "study":
+        _said_table(doc)
+    else:
+        for row in doc["counts"]:
+            print(f"  {row['count']:>5} {'*' if row['recorded'] else ' '} {_cut_line(row['label'])}")
+    return 0
+
+
 def _exit_on_term():
     """Stop sends SIGTERM, whose default skips cleanup and can leave containers running. The first TERM is an exit, which runs every ``finally``; a
     second one (Stop signals the group, then the process) is ignored so it
@@ -1255,11 +1585,98 @@ def main(argv=None):
     tr.add_argument("--dry-run", action="store_true", help="say what it would write, and write nothing")
     v.add_argument("--from-run", action="store_true",
                    help="started by Nullius: the key is OPENAI_API_KEY (and OPENAI_BASE_URL), saved settings are not read")
+    rp = sub.add_parser("replay", help="send one recorded model call of a trial again K times under a spending cap, and count the answers",
+                        description="Send one recorded model call of a trial again, as it was or changed, K times under a "
+                                    "spending cap; read each answer by a rule and count the distinct answers. Everything "
+                                    "is kept in one folder outside the run's tree. The key comes from the environment, "
+                                    "then the saved settings, by the provider's setting name.",
+                        epilog=REPLAY_EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
+    rp.add_argument("job_dir", metavar="JOB_DIR", help="a job's folder, whose trials saved their exchange record")
+    rp.add_argument("trial", metavar="TRIAL", help="a trial's name (an earlier try: NAME.try-N)")
+    rp.add_argument("--list", action="store_true",
+                    help="list the trial's recorded calls instead: number, status, size, and whether the request is whole")
+    rp.add_argument("--call", type=int, metavar="N", help="the call to send again, as the call record numbers it (n)")
+    rp.add_argument("--times", type=int, metavar="K", help="how many times to send it")
+    rp.add_argument("--max-usd", type=float, metavar="USD",
+                    help="the replay's spending cap: each send is booked at the most it can cost, and none ends past it")
+    rp.add_argument("--through", metavar="CMD",
+                    help="a command that reads the request's JSON on stdin and prints the request to send (run without a key)")
+    rp.add_argument("--system", metavar="FILE", help="the system text replaced by this file's text")
+    rp.add_argument("--tools", metavar="FILE", help="the tools replaced by this file's JSON list, in the request's own form")
+    rp.add_argument("--tool-description", nargs=2, action="append", metavar=("NAME", "TEXT"),
+                    help="the description of the tool NAME replaced by TEXT (repeatable)")
+    rp.add_argument("--replace", nargs=2, action="append", metavar=("OLD", "NEW"),
+                    help="OLD replaced by NEW in the system text or a message; OLD must appear exactly once (repeatable)")
+    rp.add_argument("--drop-last", type=int, metavar="K", help="the last K messages left out")
+    rp.add_argument("--param", action="append", metavar="FIELD=JSON",
+                    help="a top-level parameter set (temperature=0, max_tokens=2048); null removes it (repeatable)")
+    rp.add_argument("--model", help="another model; the request's pin is left out unless --served-by gives one")
+    rp.add_argument("--served-by", metavar="SLUG[,SLUG...]",
+                    help="on OpenRouter, only these serving providers, in this order; an empty value: no pin")
+    rp.add_argument("--provider", choices=sorted(providers.PROVIDERS),
+                    help="another provider than the job's; one that does not route to serving providers takes no pin")
+    rp.add_argument("--price", action="append", metavar="MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]",
+                    help="a price in USD per million tokens, over the job's and your price list (repeatable)")
+    rp.add_argument("--read", metavar="CMD",
+                    help="the reading rule: a command that reads one reply's body on stdin and prints its label "
+                         "(default: the first tool call's name and arguments; run without a key)")
+    rp.add_argument("-j", "--concurrency", type=int, default=1, metavar="N", help="sends in flight at once (default 1)")
+    rp.add_argument("--dry-run", action="store_true", help="print what would be sent, its estimated cost and its booking; send nothing")
+    rp.add_argument("--out", metavar="DIR",
+                    help="the replay's folder, new or empty, outside the job (default replays/<job>/<trial>/call-<N>__<time>)")
+    rp.add_argument("--json", action="store_true", help="one JSON document on stdout")
+    sy = sub.add_parser("study", help="send recorded model calls of several trials again, as recorded and changed, and compare them call by call",
+                        description="Send recorded model calls of several trials again, each K times as recorded and under "
+                                    "each named arm of changes, under one spending cap; read each answer by one rule kept "
+                                    "before the first send; count the answers by target and arm and compare two arms with "
+                                    "an exact sign test. Everything is kept in one folder outside every run's tree.",
+                        epilog=STUDY_EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sy.add_argument("out", metavar="DIR", help="the study's folder: new, or the study's own to go on with it")
+    sy.add_argument("--targets", metavar="FILE", help="a file of lines JOB_DIR TRIAL CALL, one target each (# starts a comment)")
+    sy.add_argument("--job", metavar="JOB_DIR", help="a job whose trials (--trial) give targets")
+    sy.add_argument("--trial", action="append", metavar="TRIAL", help="a trial of --job: its calls are targets (repeatable)")
+    sy.add_argument("--every", type=int, metavar="N", help="only every Nth call of the trials: its number a multiple of N")
+    sy.add_argument("--where", metavar="REGEX", help="only the calls whose recorded answer the rule labels with a match")
+    sy.add_argument("--arm", action="append", metavar="NAME=CHANGES",
+                    help="an arm after the call as recorded: its changes as a JSON list of [NAME, ARG...], or @FILE (repeatable)")
+    sy.add_argument("--times", type=int, metavar="K", help="sends of each target under each arm")
+    sy.add_argument("--max-usd", type=float, metavar="USD",
+                    help="the study's spending cap, over all its starts, each send booked at the most it can cost; a new one above the spend replaces it")
+    sy.add_argument("--price", action="append", metavar="MODEL=INPUT,OUTPUT[,CACHED,WRITE,WRITE_1H]",
+                    help="a price in USD per million tokens, over the job's and your price list (repeatable)")
+    sy.add_argument("--read", metavar="CMD",
+                    help="the reading rule: a command that reads one answer as JSON on stdin and prints its label "
+                         "(default: the first tool call's name and arguments; run without a key)")
+    sy.add_argument("--yes", metavar="REGEX", help="an answer reads yes when its label matches (default: the label is the recorded answer's)")
+    sy.add_argument("--compare", nargs=2, metavar=("A", "B"), help="the two arms of the sign test (default: the first two)")
+    sy.add_argument("-j", "--concurrency", type=int, default=1, metavar="N", help="sends in flight at once (default 1)")
+    sy.add_argument("--stop-after", type=int, metavar="N", help="at most N sends in this start; the same command again goes on")
+    sy.add_argument("--dry-run", action="store_true", help="print the number of sends and the estimate; send nothing, write nothing")
+    sy.add_argument("--json", action="store_true", help="one JSON document on stdout")
+    rc = sub.add_parser("recount", help="count a kept study or replay again with another rule, with no send",
+                        description="Read the answers a study or a replay kept again by another rule, with no send and no "
+                                    "key; the counts are written to recounts/ in its folder, beside the earlier ones.",
+                        epilog=RECOUNT_EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
+    rc.add_argument("folder", metavar="DIR", help="a study's folder (study.json) or a replay's (replay.json)")
+    rc.add_argument("--read", metavar="CMD", help="the reading rule: a command, as study --read (default: the first tool call)")
+    rc.add_argument("--yes", metavar="REGEX", help="a study: an answer reads yes when its label matches (default: the study's reading)")
+    rc.add_argument("--compare", nargs=2, metavar=("A", "B"), help="a study: the two arms of the sign test (default: the study's)")
+    rc.add_argument("--json", action="store_true", help="one JSON document on stdout")
     # Bootstrap decides whether settings may be read before these modules are
     # imported. Keep --from-run exact here too, so --from-r cannot bypass it.
     for parser in (ap, *sub.choices.values(), *ss.choices.values()):
         parser.allow_abbrev = False
     a = ap.parse_args(argv)
+    if a.cmd == "replay" and not a.list and (a.call is None or a.times is None or a.max_usd is None):
+        rp.error("--call N, --times K and --max-usd USD go together (or --list)")
+    if a.cmd == "replay" and a.list and (a.call is not None or a.dry_run):
+        rp.error("--list goes alone, with --read and --json or without")
+    if a.cmd == "study" and (a.times is None or a.max_usd is None or not (a.targets or a.job)):
+        sy.error("--times K, --max-usd USD and the targets (--targets FILE, or --job JOB_DIR --trial TRIAL) go together")
+    if a.cmd == "study" and bool(a.job) != bool(a.trial):
+        sy.error("--job JOB_DIR and --trial TRIAL go together")
+    if a.cmd == "study" and (a.every or a.where) and not a.job:
+        sy.error("--every and --where take the calls of --job's trials")
     if a.cmd in ("run", "prove", "conform", "fidelity"):
         _exit_on_term()
         progress.ECHO = sys.stderr           # each stage as a line (nullius/progress.py): stdout stays the job and its units
@@ -1267,7 +1684,8 @@ def main(argv=None):
         settings.load(ENV_FILE)
     return {"list": cmd_list, "check": cmd_check, "fit": cmd_fit, "pins": cmd_pins, "new": cmd_new, "conform": cmd_conform, "run": cmd_run,
             "fidelity": cmd_fidelity, "prove": cmd_prove, "merge": cmd_merge, "traces": cmd_traces,
-            "set": cmd_set, "units": cmd_units}[a.cmd](a)
+            "set": cmd_set, "units": cmd_units,
+            "replay": cmd_replay, "study": cmd_study, "recount": cmd_recount}[a.cmd](a)
 
 
 if __name__ == "__main__":

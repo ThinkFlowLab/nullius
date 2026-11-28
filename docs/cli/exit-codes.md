@@ -24,8 +24,8 @@ A refusal is one line on stderr, nothing partial written; the standard's command
 | Streams | stdout for output, stderr for diagnostics; `--json` is one document |
 | Job id | The job directory's name, everywhere |
 | Secrets | Read commands make no model call and never print credentials. Job content is redacted |
-| Writes | Reads write nothing, open no socket; import under `-o`; the standard its jobs, and a user definition on `new`, `prove`, `conform`, `fidelity`; migration writes only with `--apply`; `flags` writes only the job's `failure-analysis.json` |
-| Paid actions | `nullius remote judge JOB TRIAL` asks one trial; a whole job needs `--yes` |
+| Writes | Reads write nothing, open no socket; import under `-o`; the standard its jobs, and a user definition on `new`, `prove`, `conform`, `fidelity`; `replay` and `study` their own folder, `recount` a file in it; migration writes only with `--apply`; `flags` writes only the job's `failure-analysis.json` |
+| Paid actions | `nullius remote judge JOB TRIAL` asks one trial; a whole job needs `--yes`; `standard replay` and `standard study` send only under their required `--max-usd`, nothing on `--dry-run` |
 
 <div class="grid cards" markdown>
 

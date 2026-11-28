@@ -108,6 +108,7 @@ nav:
           - Prove a benchmark: cli/prove.md
           - Conform an agent or a capability: cli/conform.md
           - Fidelity: cli/fidelity.md
+          - Replay a model call: cli/replay.md
           - Shard and merge: cli/shard-and-merge.md
           - Task sets: cli/task-sets.md
           - Pages from a shell: cli/pages.md

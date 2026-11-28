@@ -109,6 +109,7 @@ A benchmark that names a cut in `limits.scored_cuts` still scores an agent's uni
 | `off` | No exchange record: the call record in `agent/calls.jsonl` alone. |
 | The bound | `--exchanges-max-mb`, 256 MB a unit by default; later calls are marked `cut`. |
 | Not kept | The judge's and the simulated user's calls: their call record alone. |
+| A request sent again | A recorded call sent K times, as it was or changed: [Replay a model call](replay.md) |
 | The result | `config.json`: `standard.exchanges` and `standard.exchanges_max_mb`. |
 
 ## A spending cap
